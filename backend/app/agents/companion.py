@@ -1,6 +1,7 @@
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -44,7 +45,24 @@ def to_message_history(turns: list[Turn]) -> list[ModelMessage]:
     return history
 
 
-def get_companion_agent(provider: ChatProvider | None = None) -> Agent:
+def get_companion_agent(
+    provider: ChatProvider | None = None,
+    *,
+    clock: Callable[[], str] | None = None,
+) -> Agent:
     provider = provider if provider is not None else get_provider()
+    # ponytail: injectable clock so tool tests never touch the wall clock
+    current_time = clock if clock is not None else _local_time
     model = FunctionModel(provider_function(provider), model_name="liai-provider")
-    return Agent(model, system_prompt=COMPANION_SYSTEM_PROMPT)
+    agent = Agent(model, system_prompt=COMPANION_SYSTEM_PROMPT)
+
+    @agent.tool
+    def get_current_time(_ctx: RunContext[None]) -> str:
+        """Return the current local time as an ISO-8601 string."""
+        return current_time()
+
+    return agent
+
+
+def _local_time() -> str:
+    return datetime.now().astimezone().isoformat()

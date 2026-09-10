@@ -53,8 +53,13 @@ def get_companion_agent(
     provider = provider if provider is not None else get_provider()
     # ponytail: injectable clock so tool tests never touch the wall clock
     current_time = clock if clock is not None else _local_time
-    model = FunctionModel(provider_function(provider), model_name="liai-provider")
-    agent = Agent(model, system_prompt=COMPANION_SYSTEM_PROMPT)
+    # ponytail: native model drives the tool loop for providers that
+    # offer one; others keep the deterministic FunctionModel echo
+    agent = Agent(
+        provider.create_tool_model()
+        or FunctionModel(provider_function(provider), model_name="liai-provider"),
+        system_prompt=COMPANION_SYSTEM_PROMPT,
+    )
 
     @agent.tool
     def get_current_time(_ctx: RunContext[None]) -> str:

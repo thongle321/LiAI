@@ -1,0 +1,125 @@
+/** Chat state: messages, session ownership, connection, in-flight guard. */
+
+import { create } from "zustand";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import { getHealth, postChat } from "../lib/api.ts";
+import type { ApiError } from "../types/api.ts";
+import type { KeyValueStorage } from "../lib/storage.ts";
+
+export const SESSION_KEY = "liai_session_id";
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  error?: ApiError;
+}
+
+export type Connection = "unknown" | "up" | "down";
+
+interface ChatState {
+  messages: ChatMessage[];
+  sessionId: string | null;
+  connection: Connection;
+  sending: boolean;
+  loadSession: () => Promise<void>;
+  checkHealth: () => Promise<void>;
+  send: (text: string) => Promise<void>;
+  retry: (messageId: string) => Promise<void>;
+  newConversation: () => Promise<void>;
+}
+
+const asyncStorage: KeyValueStorage = {
+  getItem: (key) => AsyncStorage.getItem(key),
+  setItem: (key, value) => AsyncStorage.setItem(key, value),
+  removeItem: (key) => AsyncStorage.removeItem(key),
+};
+
+let nextId = 0;
+function newId(): string {
+  nextId += 1;
+  return `${Date.now()}-${nextId}`;
+}
+
+export function createChatStore(storage: KeyValueStorage) {
+  return create<ChatState>()((set, get) => {
+    async function runSend(id: string, text: string): Promise<void> {
+      try {
+        const res = await postChat(text, get().sessionId ?? undefined);
+        if (get().sessionId !== res.session_id) {
+          await storage.setItem(SESSION_KEY, res.session_id);
+        }
+        set((s) => ({
+          sessionId: res.session_id,
+          sending: false,
+          messages: [
+            ...s.messages,
+            { id: newId(), role: "assistant", text: res.reply },
+          ],
+        }));
+      } catch (err) {
+        set((s) => ({
+          sending: false,
+          messages: s.messages.map((m) =>
+            m.id === id
+              ? { ...m, error: err as ApiError }
+              : m,
+          ),
+        }));
+      }
+    }
+
+    return {
+      messages: [],
+      sessionId: null,
+      connection: "unknown",
+      sending: false,
+
+      loadSession: async () => {
+        const sessionId = await storage.getItem(SESSION_KEY);
+        if (sessionId) set({ sessionId });
+      },
+
+      checkHealth: async () => {
+        try {
+          await getHealth();
+          set({ connection: "up" });
+        } catch {
+          set({ connection: "down" });
+        }
+      },
+
+      send: async (text: string) => {
+        const trimmed = text.trim();
+        if (trimmed === "" || get().sending) return;
+        const id = newId();
+        set((s) => ({
+          sending: true,
+          messages: [...s.messages, { id, role: "user", text: trimmed }],
+        }));
+        await runSend(id, trimmed);
+      },
+
+      retry: async (messageId: string) => {
+        if (get().sending) return;
+        const message = get().messages.find((m) => m.id === messageId);
+        if (!message || !message.error) return;
+        set((s) => ({
+          sending: true,
+          messages: s.messages.map((m) =>
+            m.id === messageId ? { ...m, error: undefined } : m,
+          ),
+        }));
+        await runSend(messageId, message.text);
+      },
+
+      newConversation: async () => {
+        await storage.removeItem(SESSION_KEY);
+        set({ sessionId: null, messages: [], sending: false });
+      },
+    };
+  });
+}
+
+export const useChatStore = createChatStore(asyncStorage);

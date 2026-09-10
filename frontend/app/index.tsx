@@ -10,59 +10,15 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { useChatStore, type ChatMessage, type Connection } from "../store/chat";
+import { Bubble } from "../components/Bubble.tsx";
+import { Connecting, Unavailable } from "../components/Unavailable.tsx";
+import { useChatStore, type Connection } from "../store/chat.ts";
 
 const CONNECTION_DOT_CLASS: Record<Connection, string> = {
   unknown: "bg-gray-400",
   up: "bg-green-500",
   down: "bg-red-500",
 };
-
-function Bubble({ message, onRetry }: { message: ChatMessage; onRetry: () => void }) {
-  if (message.error) {
-    return (
-      <Pressable
-        onPress={onRetry}
-        className="self-start max-w-[80%] rounded-2xl bg-red-100 px-4 py-2 my-1"
-      >
-        <Text className="text-red-700">
-          {message.error.message} — tap to retry
-        </Text>
-      </Pressable>
-    );
-  }
-  const mine = message.role === "user";
-  return (
-    <View
-      className={`max-w-[80%] rounded-2xl px-4 py-2 my-1 ${
-        mine ? "self-end bg-blue-500" : "self-start bg-gray-200"
-      }`}
-    >
-      <Text className={mine ? "text-white" : "text-gray-900"}>
-        {message.text}
-      </Text>
-    </View>
-  );
-}
-
-function Unavailable({ onRetry }: { onRetry: () => void }) {
-  return (
-    <View className="flex-1 items-center justify-center px-8">
-      <Text className="text-lg text-gray-900 text-center">
-        Backend unreachable
-      </Text>
-      <Text className="text-sm text-gray-500 text-center mt-1">
-        Start the backend, then retry.
-      </Text>
-      <Pressable
-        onPress={onRetry}
-        className="mt-4 rounded-full bg-blue-500 px-6 py-2"
-      >
-        <Text className="text-white font-semibold">Retry</Text>
-      </Pressable>
-    </View>
-  );
-}
 
 export default function ChatScreen() {
   const messages = useChatStore((s) => s.messages);
@@ -75,20 +31,22 @@ export default function ChatScreen() {
   const newConversation = useChatStore((s) => s.newConversation);
   const [draft, setDraft] = useState("");
 
-  function handleSend(): void {
-    const text = draft;
-    setDraft("");
-    void send(text);
-  }
-
   useEffect(() => {
     void loadSession().then(() => checkHealth());
   }, [loadSession, checkHealth]);
 
+  async function handleSend(): Promise<void> {
+    const text = draft;
+    if (await send(text)) setDraft("");
+  }
+
+  const dot = CONNECTION_DOT_CLASS[connection];
+  const canSend = !sending && draft.trim() !== "";
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
       <View className="flex-row items-center px-4 py-3 border-b border-gray-200">
-        <View className={`h-2.5 w-2.5 rounded-full ${CONNECTION_DOT_CLASS[connection]}`} />
+        <View className={`h-2.5 w-2.5 rounded-full ${dot}`} />
         <Text className="flex-1 text-center text-lg font-semibold text-gray-900">
           LiAI
         </Text>
@@ -97,7 +55,9 @@ export default function ChatScreen() {
         </Pressable>
       </View>
 
-      {connection !== "up" ? (
+      {connection === "unknown" ? (
+        <Connecting />
+      ) : connection === "down" ? (
         <Unavailable onRetry={() => void checkHealth()} />
       ) : (
         <KeyboardAvoidingView
@@ -122,14 +82,14 @@ export default function ChatScreen() {
               placeholder="Message LiAI"
               multiline
               editable={!sending}
-              onSubmitEditing={handleSend}
+              onSubmitEditing={() => void handleSend()}
               className="flex-1 rounded-full bg-gray-100 px-4 py-2 text-gray-900"
             />
             <Pressable
-              disabled={sending || draft.trim() === ""}
-              onPress={handleSend}
+              disabled={!canSend}
+              onPress={() => void handleSend()}
               className={`ml-2 rounded-full px-4 py-2 ${
-                sending || draft.trim() === "" ? "bg-gray-300" : "bg-blue-500"
+                canSend ? "bg-blue-500" : "bg-gray-300"
               }`}
             >
               <Text className="text-white font-semibold">Send</Text>

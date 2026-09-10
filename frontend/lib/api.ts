@@ -17,7 +17,7 @@ import type {
   ChatRequest,
   ChatResponse,
   HealthResponse,
-} from "../types/api.js";
+} from "../types/api.ts";
 
 export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";

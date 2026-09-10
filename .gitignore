@@ -1,3 +1,6 @@
+# Scratch planning docs — local only, never committed
+.scratch/
+
 # Secrets — server-only, never committed
 backend/.env
 

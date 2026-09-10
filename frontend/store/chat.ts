@@ -1,7 +1,7 @@
 /** Chat state: messages, session ownership, connection, in-flight guard. */
 
 import { create } from "zustand";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 
 import { getHealth, postChat } from "../lib/api.ts";
 import type { ApiError } from "../types/api.ts";
@@ -25,15 +25,27 @@ interface ChatState {
   sending: boolean;
   loadSession: () => Promise<void>;
   checkHealth: () => Promise<void>;
-  send: (text: string) => Promise<void>;
-  retry: (messageId: string) => Promise<void>;
+  send: (text: string) => Promise<boolean>;
+  retry: (messageId: string) => Promise<boolean>;
   newConversation: () => Promise<void>;
 }
 
+// ponytail: lazy import keeps the native module out of plain-Node tests;
+// Metro still bundles it statically for the app.
+async function rnStorage(): Promise<AsyncStorageStatic> {
+  const mod = await import("@react-native-async-storage/async-storage");
+  // CJS/ESM interop differs between Metro and Node; the static lives on default.
+  return (mod.default ?? mod) as unknown as AsyncStorageStatic;
+}
+
 const asyncStorage: KeyValueStorage = {
-  getItem: (key) => AsyncStorage.getItem(key),
-  setItem: (key, value) => AsyncStorage.setItem(key, value),
-  removeItem: (key) => AsyncStorage.removeItem(key),
+  getItem: async (key) => (await rnStorage()).getItem(key),
+  setItem: async (key, value) => {
+    await (await rnStorage()).setItem(key, value);
+  },
+  removeItem: async (key) => {
+    await (await rnStorage()).removeItem(key);
+  },
 };
 
 let nextId = 0;
@@ -92,19 +104,20 @@ export function createChatStore(storage: KeyValueStorage) {
 
       send: async (text: string) => {
         const trimmed = text.trim();
-        if (trimmed === "" || get().sending) return;
+        if (trimmed === "" || get().sending) return false;
         const id = newId();
         set((s) => ({
           sending: true,
           messages: [...s.messages, { id, role: "user", text: trimmed }],
         }));
         await runSend(id, trimmed);
+        return true;
       },
 
       retry: async (messageId: string) => {
-        if (get().sending) return;
+        if (get().sending) return false;
         const message = get().messages.find((m) => m.id === messageId);
-        if (!message || !message.error) return;
+        if (!message || !message.error) return false;
         set((s) => ({
           sending: true,
           messages: s.messages.map((m) =>
@@ -112,6 +125,7 @@ export function createChatStore(storage: KeyValueStorage) {
           ),
         }));
         await runSend(messageId, message.text);
+        return true;
       },
 
       newConversation: async () => {

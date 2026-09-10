@@ -64,6 +64,12 @@ describe("chat store", () => {
     assert.equal(storage.data["liai_session_id"], "s1");
   });
 
+  it("blocked sends return false and change nothing", async () => {
+    const useStore = createChatStore(memoryStorage());
+    assert.equal(await useStore.getState().send("   "), false);
+    assert.deepEqual(useStore.getState().messages, []);
+  });
+
   it("ignores a second send while one is in flight", async () => {
     let resolveFetch!: (r: Response) => void;
     mockFetch(
@@ -74,7 +80,7 @@ describe("chat store", () => {
     );
     const useStore = createChatStore(memoryStorage());
     const first = useStore.getState().send("one");
-    await useStore.getState().send("two");
+    assert.equal(await useStore.getState().send("two"), false);
     assert.equal(useStore.getState().messages.length, 1);
     resolveFetch(jsonResponse({ reply: "Echo", session_id: "s1" }));
     await first;

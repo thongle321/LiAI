@@ -37,7 +37,7 @@ The mobile application is responsible for:
 
 - Expo Router
 
-- NativeWind
+- Uniwind
 
 - Zustand
 
@@ -136,9 +136,9 @@ For any UI task:
 
 ## Styling Rules
 
-Use NativeWind classes. Do not use StyleSheet unless it is not possible
+Use Uniwind classes. Do not use StyleSheet unless it is not possible
 to style with className.
-Use the NativeWind version installed in this project. Check
+Use the Uniwind version installed in this project. Check
 package.json. Do not upgrade without approval.
 Reuse class patterns through utilities in global.css.
 
@@ -161,7 +161,7 @@ Use StyleSheet or inline styles for:
 - Pressable or TouchableOpacity pressed states
 
 - Shadows (different per platform)
-  Everywhere else, use NativeWind.
+  Everywhere else, use Uniwind.
 
 ---
 

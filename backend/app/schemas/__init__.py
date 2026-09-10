@@ -5,6 +5,7 @@ from .chat import (
     HistoryMessage,
     HistoryResponse,
 )
+from .realtime import RealtimeTokenResponse
 
 __all__ = [
     "ChatRequest",
@@ -12,4 +13,5 @@ __all__ = [
     "HealthResponse",
     "HistoryMessage",
     "HistoryResponse",
+    "RealtimeTokenResponse",
 ]

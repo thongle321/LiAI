@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,12 +9,14 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .agents import get_companion_agent
 from .agents.companion import to_message_history
 from .memory import Turn, get_store
+from .realtime.tokens import mint_realtime_token
 from .schemas import (
     ChatRequest,
     ChatResponse,
     HealthResponse,
     HistoryMessage,
     HistoryResponse,
+    RealtimeTokenResponse,
 )
 
 app = FastAPI(title="LiAI backend")
@@ -73,6 +77,21 @@ async def history(session_id: str | None = None) -> HistoryResponse | JSONRespon
         )
     except Exception as exc:
         return _error(503, "store_error", str(exc))
+
+
+@app.post("/api/realtime/token", response_model=RealtimeTokenResponse)
+async def realtime_token() -> RealtimeTokenResponse | JSONResponse:
+    # ponytail: no session minted here; qa creates one per answered question
+    try:
+        token, call_id, user_id = mint_realtime_token()
+    except Exception as exc:
+        return _error(500, "internal_error", str(exc))
+    return RealtimeTokenResponse(
+        token=token,
+        call_id=call_id,
+        user_id=user_id,
+        api_key=os.getenv("STREAM_API_KEY", ""),
+    )
 
 
 @app.post("/api/chat", response_model=ChatResponse)

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -20,6 +22,16 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     session_id: str
+
+
+class HistoryMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class HistoryResponse(BaseModel):
+    session_id: str
+    messages: list[HistoryMessage]
 
 
 class ErrorDetail(BaseModel):

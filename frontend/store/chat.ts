@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 
-import { getHealth, postChat } from "../lib/api.ts";
+import { getHealth, getHistory, postChat } from "../lib/api.ts";
 import type { ApiError } from "../types/api.ts";
 import type { KeyValueStorage } from "../lib/storage.ts";
 
@@ -91,6 +91,25 @@ export function createChatStore(storage: KeyValueStorage) {
       loadSession: async () => {
         const sessionId = await storage.getItem(SESSION_KEY);
         if (sessionId) set({ sessionId });
+        // ponytail: best-effort hydration, never a second gate — chat works
+        // with or without history, so any failure leaves state untouched.
+        try {
+          const res = await getHistory(sessionId ?? undefined);
+          if (!Array.isArray(res.messages)) return;
+          if (res.session_id !== sessionId) {
+            await storage.setItem(SESSION_KEY, res.session_id);
+          }
+          set({
+            sessionId: res.session_id,
+            messages: res.messages.map((m) => ({
+              id: newId(),
+              role: m.role,
+              text: m.content,
+            })),
+          });
+        } catch {
+          // keep whatever is already in state
+        }
       },
 
       checkHealth: async () => {

@@ -37,7 +37,13 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 describe("chat store", () => {
   beforeEach(() => {
-    mockFetch(async () => jsonResponse({ reply: "Echo", session_id: "s1" }));
+    mockFetch(async (url) => {
+      if (String(url).includes("/api/history")) {
+        const sid = new URL(String(url)).searchParams.get("session_id");
+        return jsonResponse({ session_id: sid ?? "s1", messages: [] });
+      }
+      return jsonResponse({ reply: "Echo", session_id: "s1" });
+    });
   });
 
   it("loads a persisted session_id", async () => {
@@ -145,5 +151,54 @@ describe("chat store", () => {
     });
     await useStore.getState().checkHealth();
     assert.equal(useStore.getState().connection, "down");
+  });
+
+  it("hydrates the transcript from the server on loadSession", async () => {
+    mockFetch(async (url) => {
+      if (String(url).includes("/api/history")) {
+        return jsonResponse({
+          session_id: "s1",
+          messages: [
+            { role: "user", content: "hello" },
+            { role: "assistant", content: "Echo: hello" },
+          ],
+        });
+      }
+      return jsonResponse({ reply: "Echo", session_id: "s1" });
+    });
+    const storage = memoryStorage({ liai_session_id: "s1" });
+    const useStore = createChatStore(storage);
+    await useStore.getState().loadSession();
+    assert.deepEqual(
+      useStore.getState().messages.map((m) => [m.role, m.text]),
+      [
+        ["user", "hello"],
+        ["assistant", "Echo: hello"],
+      ],
+    );
+  });
+
+  it("adopts a freshly minted session_id during hydration", async () => {
+    mockFetch(async (url) => {
+      if (String(url).includes("/api/history"))
+        return jsonResponse({ session_id: "fresh", messages: [] });
+      return jsonResponse({ reply: "Echo", session_id: "fresh" });
+    });
+    const storage = memoryStorage({ liai_session_id: "stale" });
+    const useStore = createChatStore(storage);
+    await useStore.getState().loadSession();
+    assert.equal(useStore.getState().sessionId, "fresh");
+    assert.equal(storage.data["liai_session_id"], "fresh");
+  });
+
+  it("leaves the transcript alone when hydration fails", async () => {
+    mockFetch(async () => {
+      throw new TypeError("fetch failed");
+    });
+    const storage = memoryStorage({ liai_session_id: "s1" });
+    const useStore = createChatStore(storage);
+    await useStore.getState().loadSession();
+    assert.equal(useStore.getState().sessionId, "s1");
+    assert.deepEqual(useStore.getState().messages, []);
   });
 });

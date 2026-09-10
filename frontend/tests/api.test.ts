@@ -3,7 +3,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { getHealth, postChat } from "../lib/api.ts";
+import { getHealth, getHistory, postChat } from "../lib/api.ts";
 import type { ApiError } from "../types/api.ts";
 
 function mockFetch(
@@ -111,5 +111,33 @@ describe("getHealth", () => {
     } catch (err) {
       assert.equal((err as ApiError).code, "not_found");
     }
+  });
+});
+
+describe("getHistory", () => {
+  it("appends session_id when continuing and parses turns", async () => {
+    let url = "";
+    mockFetch(async (u) => {
+      url = String(u);
+      return jsonResponse({
+        session_id: "s1",
+        messages: [{ role: "user", content: "hi" }],
+      });
+    });
+    const res = await getHistory("s1");
+    assert.ok(url.endsWith("/api/history?session_id=s1"));
+    assert.equal(res.session_id, "s1");
+    assert.deepEqual(res.messages, [{ role: "user", content: "hi" }]);
+  });
+
+  it("omits the query string when starting fresh", async () => {
+    let url = "";
+    mockFetch(async (u) => {
+      url = String(u);
+      return jsonResponse({ session_id: "new", messages: [] });
+    });
+    const res = await getHistory();
+    assert.ok(url.endsWith("/api/history"));
+    assert.deepEqual(res.messages, []);
   });
 });

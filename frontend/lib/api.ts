@@ -17,6 +17,7 @@ import type {
   ChatRequest,
   ChatResponse,
   HealthResponse,
+  HistoryResponse,
 } from "../types/api.ts";
 
 export const API_BASE_URL =
@@ -88,6 +89,14 @@ export function postChat(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+/** Fetch stored turns. Pass the stored session_id to resume, omit for fresh. */
+export function getHistory(sessionId?: string): Promise<HistoryResponse> {
+  const path = sessionId
+    ? `/api/history?session_id=${encodeURIComponent(sessionId)}`
+    : "/api/history";
+  return request<HistoryResponse>(path, { method: "GET" });
 }
 
 /** Cheap reachability probe for app start. Does not create a chat turn. */

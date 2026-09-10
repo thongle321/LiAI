@@ -1,3 +1,15 @@
-from .chat import ChatRequest, ChatResponse, HealthResponse
+from .chat import (
+    ChatRequest,
+    ChatResponse,
+    HealthResponse,
+    HistoryMessage,
+    HistoryResponse,
+)
 
-__all__ = ["ChatRequest", "ChatResponse", "HealthResponse"]
+__all__ = [
+    "ChatRequest",
+    "ChatResponse",
+    "HealthResponse",
+    "HistoryMessage",
+    "HistoryResponse",
+]

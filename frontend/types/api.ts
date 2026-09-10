@@ -18,6 +18,16 @@ export interface HealthResponse {
   status: string;
 }
 
+export interface HistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface HistoryResponse {
+  session_id: string;
+  messages: HistoryMessage[];
+}
+
 export type ApiErrorCode =
   | "invalid_request"
   | "llm_error"

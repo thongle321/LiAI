@@ -7,7 +7,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .agents import get_companion_agent
 from .agents.companion import to_message_history
 from .memory import Turn, get_store
-from .schemas import ChatRequest, ChatResponse, HealthResponse
+from .schemas import (
+    ChatRequest,
+    ChatResponse,
+    HealthResponse,
+    HistoryMessage,
+    HistoryResponse,
+)
 
 app = FastAPI(title="LiAI backend")
 
@@ -48,6 +54,25 @@ async def http_handler(request: Request, exc: StarletteHTTPException) -> JSONRes
 @app.exception_handler(Exception)
 async def unhandled_handler(request: Request, exc: Exception) -> JSONResponse:
     return _error(500, "internal_error", str(exc))
+
+
+@app.get("/api/history", response_model=HistoryResponse)
+async def history(session_id: str | None = None) -> HistoryResponse | JSONResponse:
+    store = get_store()
+    try:
+        if session_id is None:
+            return HistoryResponse(session_id=store.create(), messages=[])
+        turns = store.get(session_id)
+        if turns is None:
+            return HistoryResponse(session_id=store.create(), messages=[])
+        return HistoryResponse(
+            session_id=session_id,
+            messages=[
+                HistoryMessage(role=t.role, content=t.content) for t in turns
+            ],
+        )
+    except Exception as exc:
+        return _error(503, "store_error", str(exc))
 
 
 @app.post("/api/chat", response_model=ChatResponse)

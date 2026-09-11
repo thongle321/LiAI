@@ -154,21 +154,6 @@ def test_narration_tick_skips_when_busy_or_empty() -> None:
     assert _run(go()) == []
 
 
-def test_narration_interval_parsing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from app.realtime.ws import DEFAULT_NARRATION_GAP, narration_gap
-
-    monkeypatch.setenv("VISION_NARRATION_GAP_SECONDS", "10")
-    assert narration_gap() == 10.0
-    monkeypatch.setenv("VISION_NARRATION_GAP_SECONDS", "garbage")
-    assert narration_gap() == DEFAULT_NARRATION_GAP
-    monkeypatch.setenv("VISION_NARRATION_GAP_SECONDS", "0")
-    assert narration_gap() == DEFAULT_NARRATION_GAP
-    monkeypatch.delenv("VISION_NARRATION_GAP_SECONDS", raising=False)
-    assert narration_gap() == DEFAULT_NARRATION_GAP
-
-
 def test_live_loop_captions_over_socket(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -176,7 +161,6 @@ def test_live_loop_captions_over_socket(
         return "live view"
 
     monkeypatch.setattr(vlm, "describe_frame", fake_describe)
-    monkeypatch.setenv("VISION_NARRATION_GAP_SECONDS", "1")
     with client.websocket_connect("/api/vision/ws") as ws:
         ws.send_json({"type": "frame", "jpeg": FAKE_B64})
         msg = ws.receive_json()
@@ -237,7 +221,6 @@ def test_question_preempts_inflight_narration(
         return f"canned view for: {question}"
 
     monkeypatch.setattr(vlm, "describe_frame", slow_describe)
-    monkeypatch.setenv("VISION_NARRATION_GAP_SECONDS", "0.1")
     with client.websocket_connect("/api/vision/ws") as ws:
         ws.send_json({"type": "frame", "jpeg": FAKE_B64})
         assert started.wait(timeout=10)

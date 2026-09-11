@@ -4,8 +4,6 @@ import asyncio
 import base64
 import dataclasses
 import difflib
-import math
-import os
 
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import TypeAdapter
@@ -17,8 +15,8 @@ _adapter = TypeAdapter(VisionClientMessage)
 
 # Q4: self-pacing loop — throughput is inference-bound, this is only the
 # gap between tick starts (anti-hot-loop on instant skips/failures).
-DEFAULT_NARRATION_GAP = 0.5
-MIN_NARRATION_GAP = 0.1
+# Fixed constant by decision: env is for secrets/URLs, not tunables.
+NARRATION_GAP = 0.5
 # Q5: near-identical captions still go to the client, but only novel
 # ones cost a Turn in history.
 DEDUP_RATIO = 0.9
@@ -31,17 +29,6 @@ class SocketState:
     narration: asyncio.Task[str] | None = None
     last_caption: str = ""
     closed: bool = False
-
-
-def narration_gap() -> float:
-    """Per-socket minimum gap between narration ticks: env-tunable."""
-    try:
-        seconds = float(os.getenv("VISION_NARRATION_GAP_SECONDS", ""))
-    except ValueError:
-        return DEFAULT_NARRATION_GAP
-    if not math.isfinite(seconds) or seconds < MIN_NARRATION_GAP:
-        return DEFAULT_NARRATION_GAP
-    return seconds
 
 
 async def send_error(websocket: WebSocket, message: str) -> None:
@@ -123,9 +110,7 @@ async def handle_vision_socket(websocket: WebSocket) -> None:
     # ponytail: session minted lazily on first stored turn (answer or caption)
     state = SocketState()
     lock = asyncio.Lock()
-    task = asyncio.create_task(
-        narration_loop(websocket, lock, state, narration_gap())
-    )
+    task = asyncio.create_task(narration_loop(websocket, lock, state, NARRATION_GAP))
     try:
         while True:
             try:

@@ -1,8 +1,8 @@
 /** Vision screen: camera frames + questions over /api/vision/ws.
  *
- * expo-camera interval snapshots (~1 fps, jpg/q0.7) go out as
- * {type:"frame"}; answers arrive as {type:"answer"}. Works in Expo Go
- * (no native WebRTC). Text chat stays in app/index.
+ * expo-camera interval snapshots (~1 fps, jpg/q0.5) go out as frames;
+ * answers arrive as text. Works in Expo Go (no native WebRTC).
+ * Text chat stays in app/index. Wire shapes live in lib/vision.ts.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -11,24 +11,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 
-import { API_BASE_URL } from "../lib/api.ts";
-
-interface ServerMessage {
-  type: string;
-  text?: unknown;
-  session_id?: unknown;
-  error?: unknown;
-}
-
-function errorMessage(value: unknown): string {
-  if (typeof value !== "object" || value === null) return "Request failed";
-  const error = (value as { error?: unknown }).error;
-  if (typeof error !== "object" || error === null) return "Request failed";
-  const message = (error as { message?: unknown }).message;
-  return typeof message === "string" && message !== ""
-    ? message
-    : "Request failed";
-}
+import {
+  frameMessage,
+  parseServerMessage,
+  questionMessage,
+  visionSocketUrl,
+} from "../lib/vision.ts";
 
 export default function VisionScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -40,28 +28,24 @@ export default function VisionScreen() {
   const [draft, setDraft] = useState("");
 
   useEffect(() => {
-    const ws = new WebSocket(
-      `${API_BASE_URL.replace(/^http/, "ws")}/api/vision/ws`,
-    );
+    const ws = new WebSocket(visionSocketUrl());
     socket.current = ws;
     ws.onopen = () => setPhase("open");
     ws.onerror = () => {
       setProblem("Could not reach the vision stream");
       setPhase("failed");
     };
+    ws.onclose = () => {
+      socket.current = null;
+      setProblem("Vision stream closed");
+      setPhase("failed");
+    };
     ws.onmessage = (event: { data?: unknown }) => {
-      if (typeof event.data !== "string") return;
-      let msg: ServerMessage;
-      try {
-        msg = JSON.parse(event.data) as ServerMessage;
-      } catch {
-        return;
-      }
-      if (msg.type === "answer" && typeof msg.text === "string") {
-        const text = msg.text as string;
-        setEntries((prev) => [...prev, text]);
+      const msg = parseServerMessage(event.data);
+      if (msg.type === "answer") {
+        setEntries((prev) => [...prev, msg.text]);
       } else if (msg.type === "error") {
-        setProblem(errorMessage(msg));
+        setProblem(msg.message);
       }
     };
     const timer = setInterval(() => {
@@ -78,7 +62,7 @@ export default function VisionScreen() {
         })
         .then((photo) => {
           if (photo.base64 && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "frame", jpeg: photo.base64 }));
+            ws.send(frameMessage(photo.base64));
           }
         })
         .catch(() => undefined);
@@ -96,7 +80,7 @@ export default function VisionScreen() {
     if (!ws || ws.readyState !== WebSocket.OPEN || text === "") return;
     setDraft("");
     setEntries((prev) => [...prev, `You: ${text}`]);
-    ws.send(JSON.stringify({ type: "question", text }));
+    ws.send(questionMessage(text));
   }
 
   if (!permission) {
@@ -154,10 +138,7 @@ export default function VisionScreen() {
           <Text className="text-blue-400">Ask</Text>
         </Pressable>
       </View>
-      <Pressable
-        onPress={() => router.back()}
-        className="items-center py-2"
-      >
+      <Pressable onPress={() => router.back()} className="items-center py-2">
         <Text className="text-red-400">Close</Text>
       </Pressable>
     </SafeAreaView>

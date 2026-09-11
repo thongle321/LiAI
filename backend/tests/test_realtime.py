@@ -5,16 +5,25 @@ Fake-gated: VLM stubbed, synthetic JPEG, no camera/network/keys.
 """
 
 import base64
+import io
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 import app.realtime.vlm as vlm
 from app.main import app
 
 client = TestClient(app)
 
-FAKE_JPEG = bytes.fromhex("ffd8ffe000104a46494600010100000100010000") + bytes(64) + bytes.fromhex("ffd9")
+
+def _tiny_jpeg() -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), (255, 0, 0)).save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+FAKE_JPEG = _tiny_jpeg()
 FAKE_B64 = base64.b64encode(FAKE_JPEG).decode()
 
 

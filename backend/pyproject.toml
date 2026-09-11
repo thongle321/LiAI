@@ -9,9 +9,9 @@ dependencies = [
     "supabase>=2.31.0",
     "pydantic-ai-slim[openrouter]>=2.42.0",
     "ruff>=0.16.6",
-    "vision-agents>=0.6.9",
-    "vision-agents-plugins-huggingface[transformers]>=0.6.9",
-    "vision-agents-plugins-getstream>=0.6.9",
+    "torch>=2.14.0",
+    "transformers>=5.17.0",
+    "pillow>=12.3.0",
 ]
 
 [dependency-groups]

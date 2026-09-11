@@ -1,24 +1,37 @@
-"""Frame Q&A: user question in, stored companion reply out.
+"""Frame Q&A: JPEG + question in, stored companion reply out.
 
-Pipeline: local VLM describes the live view (framework-fed frames) →
+Pipeline: validate frame (fail-safe) → local VLM describes →
 Pydantic AI composes with personality/tools (existing companion agent)
-→ existing store persists exactly user + final text (Q6 transcript
-rule carries over). Malformed input fails before the VLM (fail-safe).
+→ existing store persists exactly user + final text.
 """
 
 from ..agents import get_companion_agent
 from ..memory import Turn, get_store
-from .vlm import ask_view
+from . import vlm
+
+MAX_FRAME_BYTES = 2 * 1024 * 1024
 
 
-async def answer_about_view(question: str) -> tuple[str, str]:
+def validate_jpeg(jpeg: bytes) -> None:
+    """Shared ingestion guard (socket layer and qa use the same rule)."""
+    if len(jpeg) > MAX_FRAME_BYTES:
+        raise ValueError("frame exceeds size cap")
+    if len(jpeg) < 4 or jpeg[0:3] != b"\xff\xd8\xff":
+        raise ValueError("not a JPEG frame")
+
+
+async def answer_about_frame(
+    question: str, jpeg: bytes, session_id: str | None = None
+) -> tuple[str, str]:
     if not question.strip():
         raise ValueError("question must not be empty")
-    seen = await ask_view(question)
+    validate_jpeg(jpeg)
+    seen = await vlm.describe_frame(jpeg, question)
     prompt = f"Question about the current camera view: {question}\nWhat the camera shows: {seen}"
     result = await get_companion_agent().run(prompt)
     reply = str(result.output)
-    session_id = get_store().create()
-    get_store().append(session_id, Turn(role="user", content=question))
-    get_store().append(session_id, Turn(role="assistant", content=reply))
+    store = get_store()
+    session_id = session_id or store.create()
+    store.append(session_id, Turn(role="user", content=question))
+    store.append(session_id, Turn(role="assistant", content=reply))
     return reply, session_id

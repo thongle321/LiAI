@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import Constants from "expo-constants";
 
 import { Bubble } from "../components/Bubble.tsx";
 import { Connecting, Unavailable } from "../components/Unavailable.tsx";
@@ -44,8 +43,6 @@ export default function ChatScreen() {
 
   const dot = CONNECTION_DOT_CLASS[connection];
   const canSend = !sending && draft.trim() !== "";
-  // ponytail: native WebRTC needs a dev-client build; Expo Go keeps text chat
-  const showCamera = Constants.appOwnership !== "expo";
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
@@ -54,14 +51,9 @@ export default function ChatScreen() {
         <Text className="flex-1 text-center text-lg font-semibold text-gray-900">
           LiAI
         </Text>
-        {showCamera && (
-          <Pressable
-            onPress={() => router.push("/call")}
-            className="px-2 py-1"
-          >
-            <Text className="text-blue-500">Camera</Text>
-          </Pressable>
-        )}
+        <Pressable onPress={() => router.push("/vision")} className="px-2 py-1">
+          <Text className="text-blue-500">Vision</Text>
+        </Pressable>
         <Pressable onPress={() => void newConversation()} className="px-2 py-1">
           <Text className="text-blue-500">New</Text>
         </Pressable>

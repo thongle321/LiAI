@@ -3,7 +3,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { getHealth, getHistory, getRealtimeToken, postChat } from "../lib/api.ts";
+import { getHealth, getHistory, postChat } from "../lib/api.ts";
 import type { ApiError } from "../types/api.ts";
 
 function mockFetch(
@@ -86,27 +86,6 @@ describe("postChat", () => {
     } catch (err) {
       assert.equal((err as ApiError).code, "timeout");
     }
-  });
-});
-
-describe("getRealtimeToken", () => {
-  it("posts to the token endpoint and returns token fields", async () => {
-    let seen = "";
-    mockFetch(async (url) => {
-      seen = String(url);
-      return jsonResponse({
-        token: "tok",
-        call_id: "call-1",
-        user_id: "caller-1",
-        api_key: "key",
-      });
-    });
-    const res = await getRealtimeToken();
-    assert.equal(res.token, "tok");
-    assert.equal(res.call_id, "call-1");
-    assert.equal(res.user_id, "caller-1");
-    assert.equal(res.api_key, "key");
-    assert.ok(seen.endsWith("/api/realtime/token"));
   });
 });
 

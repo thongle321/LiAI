@@ -18,7 +18,6 @@ import type {
   ChatResponse,
   HealthResponse,
   HistoryResponse,
-  RealtimeTokenResponse,
 } from "../types/api.ts";
 
 export const API_BASE_URL =
@@ -98,13 +97,6 @@ export function getHistory(sessionId?: string): Promise<HistoryResponse> {
     ? `/api/history?session_id=${encodeURIComponent(sessionId)}`
     : "/api/history";
   return request<HistoryResponse>(path, { method: "GET" });
-}
-
-/** Mint a realtime call token. Response carries the publishable api_key. */
-export function getRealtimeToken(): Promise<RealtimeTokenResponse> {
-  return request<RealtimeTokenResponse>("/api/realtime/token", {
-    method: "POST",
-  });
 }
 
 /** Cheap reachability probe for app start. Does not create a chat turn. */

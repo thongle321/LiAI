@@ -28,13 +28,6 @@ export interface HistoryResponse {
   messages: HistoryMessage[];
 }
 
-export interface RealtimeTokenResponse {
-  token: string;
-  call_id: string;
-  user_id: string;
-  api_key: string;
-}
-
 export type ApiErrorCode =
   | "invalid_request"
   | "llm_error"

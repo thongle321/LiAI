@@ -1,6 +1,6 @@
-import os
+import base64
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,14 +9,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .agents import get_companion_agent
 from .agents.companion import to_message_history
 from .memory import Turn, get_store
-from .realtime.tokens import mint_realtime_token
+from .realtime.qa import answer_about_frame, validate_jpeg
 from .schemas import (
     ChatRequest,
     ChatResponse,
     HealthResponse,
     HistoryMessage,
     HistoryResponse,
-    RealtimeTokenResponse,
 )
 
 app = FastAPI(title="LiAI backend")
@@ -79,19 +78,88 @@ async def history(session_id: str | None = None) -> HistoryResponse | JSONRespon
         return _error(503, "store_error", str(exc))
 
 
-@app.post("/api/realtime/token", response_model=RealtimeTokenResponse)
-async def realtime_token() -> RealtimeTokenResponse | JSONResponse:
-    # ponytail: no session minted here; qa creates one per answered question
-    try:
-        token, call_id, user_id = mint_realtime_token()
-    except Exception as exc:
-        return _error(500, "internal_error", str(exc))
-    return RealtimeTokenResponse(
-        token=token,
-        call_id=call_id,
-        user_id=user_id,
-        api_key=os.getenv("STREAM_API_KEY", ""),
-    )
+@app.websocket("/api/vision/ws")
+async def vision_ws(websocket: WebSocket) -> None:
+    await websocket.accept()
+    # ponytail: session minted lazily on first answered question
+    session_id: str | None = None
+    latest: bytes | None = None
+    while True:
+        try:
+            msg = await websocket.receive_json()
+        except WebSocketDisconnect:
+            return
+        except Exception:
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "error": {"code": "invalid_request", "message": "malformed message"},
+                }
+            )
+            continue
+        kind = msg.get("type") if isinstance(msg, dict) else None
+        if kind == "frame":
+            try:
+                raw = base64.b64decode(msg.get("jpeg", ""), validate=True)
+            except Exception:
+                raw = b""
+            try:
+                validate_jpeg(raw)
+            except ValueError:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "error": {"code": "invalid_request", "message": "bad frame"},
+                    }
+                )
+                continue
+            latest = raw
+        elif kind == "question":
+            question = msg.get("text", "")
+            if not isinstance(question, str) or not question.strip():
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "error": {"code": "invalid_request", "message": "empty question"},
+                    }
+                )
+                continue
+            if latest is None:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "error": {"code": "invalid_request", "message": "no frame yet"},
+                    }
+                )
+                continue
+            try:
+                reply, session_id = await answer_about_frame(
+                    question, latest, session_id
+                )
+            except ValueError as exc:
+                code = "invalid_request"
+                await websocket.send_json(
+                    {"type": "error", "error": {"code": code, "message": str(exc)}}
+                )
+                continue
+            except Exception as exc:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "error": {"code": "llm_error", "message": str(exc)},
+                    }
+                )
+                continue
+            await websocket.send_json(
+                {"type": "answer", "text": reply, "session_id": session_id}
+            )
+        else:
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "error": {"code": "invalid_request", "message": "unknown type"},
+                }
+            )
 
 
 @app.post("/api/chat", response_model=ChatResponse)

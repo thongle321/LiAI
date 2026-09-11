@@ -103,6 +103,33 @@ def test_text_chat_unaffected_by_vision() -> None:
     assert resp.json()["reply"] == "Echo: hi"
 
 
+def test_startup_preloads_vlm_weights(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.realtime.vlm as vlm_module
+    from app.main import app as app_module
+
+    loaded = False
+
+    def fake_load() -> None:
+        nonlocal loaded
+        loaded = True
+
+    monkeypatch.setattr(vlm_module, "_load", fake_load)
+    # conftest no-ops warmup; restore the real one to prove lifespan calls it
+    monkeypatch.setattr(vlm_module, "warmup", lambda: vlm_module._load())
+    _run(_enter_lifespan(app_module))
+    assert loaded
+
+
+async def _enter_lifespan(app: object) -> None:
+    from app.main import lifespan
+
+    gen = lifespan(app)  # type: ignore[operator]
+    await gen.__aenter__()
+    await gen.__aexit__(None, None, None)
+
+
 class FakeSocket:
     def __init__(self) -> None:
         self.sent: list[dict] = []

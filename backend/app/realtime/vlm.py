@@ -26,6 +26,11 @@ _model: AutoModelForImageTextToText | None = None
 _processor: AutoProcessor | None = None
 
 
+def warmup() -> None:
+    """Preload weights (server lifespan); lazy _load stays for tests."""
+    _load()
+
+
 def _load() -> tuple[AutoModelForImageTextToText, AutoProcessor]:
     global _model, _processor
     if _model is not None and _processor is not None:

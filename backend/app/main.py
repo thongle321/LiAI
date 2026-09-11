@@ -1,3 +1,6 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .agents import get_companion_agent
 from .agents.companion import to_message_history
 from .memory import Turn, get_store
+from .realtime import vlm
 from .realtime.ws import handle_vision_socket
 from .schemas import (
     ChatRequest,
@@ -16,7 +20,13 @@ from .schemas import (
     HistoryResponse,
 )
 
-app = FastAPI(title="LiAI backend")
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    vlm.warmup()
+    yield
+
+
+app = FastAPI(title="LiAI backend", lifespan=lifespan)
 
 # ponytail: open CORS for dev only, restrict origins when auth/prod lands
 app.add_middleware(

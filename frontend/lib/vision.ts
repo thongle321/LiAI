@@ -39,11 +39,9 @@ export function parseServerMessage(data: unknown): VisionServerMessage {
   }
   if (typeof msg !== "object" || msg === null) return { type: "other" };
   const record = msg as Record<string, unknown>;
-  if (record.type === "answer") {
-    return { type: "answer", text: messageText(record.text) };
-  }
-  if (record.type === "caption") {
-    return { type: "caption", text: messageText(record.text) };
+  const kind = record.type;
+  if (kind === "answer" || kind === "caption") {
+    return { type: kind, text: messageText(record.text) };
   }
   if (record.type === "error") {
     const error = record.error;

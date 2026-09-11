@@ -103,6 +103,14 @@ def test_text_chat_unaffected_by_vision() -> None:
     assert resp.json()["reply"] == "Echo: hi"
 
 
+class FakeSocket:
+    def __init__(self) -> None:
+        self.sent: list[dict] = []
+
+    async def send_json(self, msg: dict) -> None:
+        self.sent.append(msg)
+
+
 def test_narration_tick_sends_caption_and_persists(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -114,22 +122,48 @@ def test_narration_tick_sends_caption_and_persists(
     monkeypatch.setattr(vlm, "describe_frame", fake_describe)
     from app.realtime.ws import SocketState, narration_tick
 
-    sent: list[dict] = []
-
-    class FakeSocket:
-        async def send_json(self, msg: dict) -> None:
-            sent.append(msg)
-
     import asyncio
 
+    ws = FakeSocket()
     state = SocketState(latest=FAKE_JPEG)
-    _run(narration_tick(FakeSocket(), asyncio.Lock(), state))  # type: ignore[arg-type]
-    assert len(sent) == 1
-    assert sent[0]["type"] == "caption"
-    assert "a red square" in sent[0]["text"]
-    turns = get_store().get(sent[0]["session_id"])
+    _run(narration_tick(ws, asyncio.Lock(), state))  # type: ignore[arg-type]
+    assert len(ws.sent) == 1
+    assert ws.sent[0]["type"] == "caption"
+    assert "a red square" in ws.sent[0]["text"]
+    turns = get_store().get(ws.sent[0]["session_id"])
     assert turns is not None and len(turns) == 1
     assert turns[0].role == "assistant"
+
+
+def test_narration_tick_survives_vlm_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    async def flaky_describe(image: bytes, question: str) -> str:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("VLM exploded")
+        return "recovered view"
+
+    monkeypatch.setattr(vlm, "describe_frame", flaky_describe)
+    from app.realtime.ws import SocketState, narration_tick
+
+    async def two_ticks() -> FakeSocket:
+        import asyncio
+
+        ws = FakeSocket()
+        state = SocketState(latest=FAKE_JPEG)
+        lock = asyncio.Lock()
+        await narration_tick(ws, lock, state)  # type: ignore[arg-type]
+        assert state.narration is None
+        await narration_tick(ws, lock, state)  # type: ignore[arg-type]
+        return ws
+
+    ws = _run(two_ticks())
+    assert [m["type"] for m in ws.sent] == ["caption"]
+    assert "recovered view" in ws.sent[0]["text"]
 
 
 def test_narration_tick_skips_when_busy_or_empty() -> None:
@@ -137,21 +171,15 @@ def test_narration_tick_skips_when_busy_or_empty() -> None:
 
     from app.realtime.ws import SocketState, narration_tick
 
-    async def go() -> list[dict]:
-        sent: list[dict] = []
-
-        class FakeSocket:
-            async def send_json(self, msg: dict) -> None:
-                sent.append(msg)
-
+    async def run_skips() -> list[dict]:
         ws = FakeSocket()
         await narration_tick(ws, asyncio.Lock(), SocketState(latest=None))
         locked = asyncio.Lock()
         await locked.acquire()
         await narration_tick(ws, locked, SocketState(latest=FAKE_JPEG))
-        return sent
+        return ws.sent
 
-    assert _run(go()) == []
+    assert _run(run_skips()) == []
 
 
 def test_live_loop_captions_over_socket(
@@ -177,23 +205,18 @@ def test_duplicate_captions_send_but_persist_once(
     monkeypatch.setattr(vlm, "describe_frame", fake_describe)
     from app.realtime.ws import SocketState, narration_tick
 
-    async def go() -> tuple[list[dict], SocketState]:
+    async def run_two_ticks() -> tuple[FakeSocket, SocketState]:
         import asyncio
 
-        sent: list[dict] = []
-
-        class FakeSocket:
-            async def send_json(self, msg: dict) -> None:
-                sent.append(msg)
-
+        ws = FakeSocket()
         state = SocketState(latest=FAKE_JPEG)
         lock = asyncio.Lock()
-        await narration_tick(FakeSocket(), lock, state)  # type: ignore[arg-type]
-        await narration_tick(FakeSocket(), lock, state)  # type: ignore[arg-type]
-        return sent, state
+        await narration_tick(ws, lock, state)  # type: ignore[arg-type]
+        await narration_tick(ws, lock, state)  # type: ignore[arg-type]
+        return ws, state
 
-    sent, state = _run(go())
-    assert [m["type"] for m in sent] == ["caption", "caption"]
+    ws, state = _run(run_two_ticks())
+    assert [m["type"] for m in ws.sent] == ["caption", "caption"]
     assert state.session_id is not None
     turns = get_store().get(state.session_id)
     assert turns is not None and len(turns) == 1

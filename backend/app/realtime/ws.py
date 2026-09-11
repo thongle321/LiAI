@@ -81,6 +81,10 @@ async def narration_tick(
             if state.narration is not None and not state.closed:
                 raise
             return
+        except Exception:
+            return
+        finally:
+            state.narration = None
         try:
             if not is_duplicate(caption, state.last_caption):
                 state.session_id = store_caption(caption, state.session_id)
@@ -90,8 +94,6 @@ async def narration_tick(
             )
         except Exception:
             return
-        finally:
-            state.narration = None
 
 
 async def narration_loop(

@@ -9,7 +9,9 @@ collection never needs weights; tests patch describe_frame.
 from __future__ import annotations
 
 import io
+import logging
 import os
+import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -18,17 +20,24 @@ if TYPE_CHECKING:
 MODEL_ID = os.getenv("VISION_MODEL_ID", "LiquidAI/LFM2.5-VL-450M")
 MAX_NEW_TOKENS = 64
 
+logger = logging.getLogger(__name__)
+
 _model: AutoModelForImageTextToText | None = None
 _processor: AutoProcessor | None = None
 
 
 def _load() -> tuple[AutoModelForImageTextToText, AutoProcessor]:
     global _model, _processor
-    if _model is None or _processor is None:
-        from transformers import AutoModelForImageTextToText, AutoProcessor
+    if _model is not None and _processor is not None:
+        logger.debug("vlm cache hit")
+        return _model, _processor
+    from transformers import AutoModelForImageTextToText, AutoProcessor
 
-        _model = AutoModelForImageTextToText.from_pretrained(MODEL_ID)
-        _processor = AutoProcessor.from_pretrained(MODEL_ID)
+    logger.info("vlm cache miss — loading %s", MODEL_ID)
+    started = time.monotonic()
+    _model = AutoModelForImageTextToText.from_pretrained(MODEL_ID)
+    _processor = AutoProcessor.from_pretrained(MODEL_ID)
+    logger.info("vlm loaded in %.1fs", time.monotonic() - started)
     return _model, _processor
 
 

@@ -35,9 +35,11 @@ export default function VisionScreen() {
       setProblem("Could not reach the vision stream");
       setPhase("failed");
     };
-    ws.onclose = () => {
+    ws.onclose = (event: { code?: unknown; reason?: unknown }) => {
       socket.current = null;
-      setProblem("Vision stream closed");
+      const code = typeof event.code === "number" ? event.code : "?";
+      const reason = typeof event.reason === "string" ? event.reason : "";
+      setProblem(`Vision stream closed (${code}${reason ? ` ${reason}` : ""})`);
       setPhase("failed");
     };
     ws.onmessage = (event: { data?: unknown }) => {

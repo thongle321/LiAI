@@ -4,6 +4,7 @@ import asyncio
 import base64
 import dataclasses
 import difflib
+import logging
 
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import TypeAdapter
@@ -12,6 +13,8 @@ from ..schemas.vision import VisionClientMessage
 from .qa import answer_about_frame, caption_frame, store_caption, validate_jpeg
 
 _adapter = TypeAdapter(VisionClientMessage)
+
+logger = logging.getLogger(__name__)
 
 # Q4: self-pacing loop — throughput is inference-bound, this is only the
 # gap between tick starts (anti-hot-loop on instant skips/failures).
@@ -131,7 +134,8 @@ async def handle_vision_socket(websocket: WebSocket) -> None:
         while True:
             try:
                 raw_msg = await websocket.receive_json()
-            except WebSocketDisconnect:
+            except WebSocketDisconnect as exc:
+                logger.info("vision socket disconnected code=%s", exc.code)
                 return
             except Exception:
                 if not await send_error(websocket, "malformed message"):

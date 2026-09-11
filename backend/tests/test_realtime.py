@@ -162,6 +162,24 @@ def test_narration_tick_sends_caption_and_persists(
     assert turns[0].role == "assistant"
 
 
+def test_send_on_closing_socket_is_clean_exit() -> None:
+    """Exiting the Vision tab races frames against the closing handshake:
+    sends must report False, never raise (no ASGI traceback)."""
+    from fastapi import WebSocketDisconnect
+
+    from app.realtime.ws import send_error, send_json
+
+    class ClosingSocket:
+        async def send_json(self, msg: dict) -> None:
+            raise WebSocketDisconnect(code=1006)
+
+    async def go() -> tuple[bool, bool]:
+        ws = ClosingSocket()
+        return await send_json(ws, {"type": "answer"}), await send_error(ws, "bad frame")  # type: ignore[arg-type]
+
+    assert _run(go()) == (False, False)
+
+
 def test_narration_tick_survives_vlm_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -31,9 +31,23 @@ class SocketState:
     closed: bool = False
 
 
-async def send_error(websocket: WebSocket, message: str) -> None:
-    await websocket.send_json(
-        {"type": "error", "error": {"code": "invalid_request", "message": message}}
+async def send_json(websocket: WebSocket, payload: dict) -> bool:
+    """Send, treating a closing socket as clean exit (not a crash).
+
+    Exiting the Vision tab races in-flight frames against the closing
+    handshake; a send that lands mid-close raises WebSocketDisconnect.
+    """
+    try:
+        await websocket.send_json(payload)
+    except (WebSocketDisconnect, RuntimeError):
+        return False
+    return True
+
+
+async def send_error(websocket: WebSocket, message: str) -> bool:
+    return await send_json(
+        websocket,
+        {"type": "error", "error": {"code": "invalid_request", "message": message}},
     )
 
 
@@ -120,27 +134,32 @@ async def handle_vision_socket(websocket: WebSocket) -> None:
             except WebSocketDisconnect:
                 return
             except Exception:
-                await send_error(websocket, "malformed message")
+                if not await send_error(websocket, "malformed message"):
+                    return
                 continue
             try:
                 msg = _adapter.validate_python(raw_msg)
             except Exception:
-                await send_error(websocket, "unknown type")
+                if not await send_error(websocket, "unknown type"):
+                    return
                 continue
             if msg.type == "frame":
                 try:
                     raw = base64.b64decode(msg.jpeg, validate=True)
                     validate_jpeg(raw)
                 except ValueError:
-                    await send_error(websocket, "bad frame")
+                    if not await send_error(websocket, "bad frame"):
+                        return
                     continue
                 state.latest = raw
             else:
                 if not msg.text.strip():
-                    await send_error(websocket, "empty question")
+                    if not await send_error(websocket, "empty question"):
+                        return
                     continue
                 if state.latest is None:
-                    await send_error(websocket, "no frame yet")
+                    if not await send_error(websocket, "no frame yet"):
+                        return
                     continue
                 await cancel_narration(state)
                 async with lock:
@@ -149,19 +168,24 @@ async def handle_vision_socket(websocket: WebSocket) -> None:
                             msg.text, state.latest, state.session_id
                         )
                     except ValueError as exc:
-                        await send_error(websocket, str(exc))
+                        if not await send_error(websocket, str(exc)):
+                            return
                         continue
                     except Exception as exc:
-                        await websocket.send_json(
+                        if not await send_json(
+                            websocket,
                             {
                                 "type": "error",
                                 "error": {"code": "llm_error", "message": str(exc)},
-                            }
-                        )
+                            },
+                        ):
+                            return
                         continue
-                await websocket.send_json(
-                    {"type": "answer", "text": reply, "session_id": state.session_id}
-                )
+                if not await send_json(
+                    websocket,
+                    {"type": "answer", "text": reply, "session_id": state.session_id},
+                ):
+                    return
     finally:
         state.closed = True
         await cancel_narration(state)

@@ -61,8 +61,9 @@ export default function VisionScreen() {
           quality: 0.5,
           imageType: "jpg",
           exif: false,
-          // Q1: skip the still pipeline so continuous capture doesn't flicker
-          skipProcessing: true,
+          // skipProcessing discarded on purpose: it drops the quality
+          // pipeline, ships full-res frames, and the server rejects them
+          shutterSound: false,
         })
         .then((photo) => {
           if (photo.base64 && ws.readyState === WebSocket.OPEN) {

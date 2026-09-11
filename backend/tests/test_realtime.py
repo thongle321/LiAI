@@ -180,6 +180,49 @@ def test_send_on_closing_socket_is_clean_exit() -> None:
     assert _run(go()) == (False, False)
 
 
+def test_describe_frame_keeps_loop_responsive() -> None:
+    """1006 regression: sync torch inference must not block the event
+    loop, or the phone's socket times out with no ping/pong answered."""
+    import time
+
+    import app.realtime.vlm as vlm_module
+
+    real_sync = vlm_module._describe_sync
+
+    def slow_sync(image: bytes, question: str) -> str:
+        time.sleep(0.5)
+        return "slow view"
+
+    async def go() -> tuple[int, float]:
+        import asyncio
+        import time
+
+        vlm_module._describe_sync = slow_sync
+        try:
+            beats = 0
+
+            async def heartbeat() -> None:
+                nonlocal beats
+                for _ in range(5):
+                    await asyncio.sleep(0.1)
+                    beats += 1
+
+            started = time.monotonic()
+            caption = await asyncio.gather(
+                vlm_module.describe_frame(FAKE_JPEG, "What?"), heartbeat()
+            )
+            assert caption[0] == "slow view"
+            return beats, time.monotonic() - started
+        finally:
+            vlm_module._describe_sync = real_sync
+
+    # Blocking loop: 0.5s frozen + 0.5s heartbeat = >=1.0s.
+    # Worker thread: both run together ~= 0.5s.
+    beats, elapsed = _run(go())
+    assert beats == 5
+    assert elapsed < 0.9
+
+
 def test_narration_tick_survives_vlm_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

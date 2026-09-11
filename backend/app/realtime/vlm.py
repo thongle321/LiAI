@@ -8,6 +8,7 @@ collection never needs weights; tests patch describe_frame.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import logging
 import os
@@ -47,6 +48,15 @@ def _load() -> tuple[AutoModelForImageTextToText, AutoProcessor]:
 
 
 async def describe_frame(image: bytes, question: str) -> str:
+    """Non-blocking wrapper: sync torch work runs in a worker thread.
+
+    Inference blocks the event loop for minutes on CPU; a blocked loop
+    answers no websocket ping/pong and the phone times out (1006).
+    """
+    return await asyncio.to_thread(_describe_sync, image, question)
+
+
+def _describe_sync(image: bytes, question: str) -> str:
     from PIL import Image
 
     model, processor = _load()

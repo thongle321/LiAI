@@ -1,7 +1,7 @@
 /** Vision socket protocol helpers (mirrors backend/app/realtime/ws.py).
  *
  * JSON text messages: {type:"frame",jpeg} / {type:"question",text} out,
- * {type:"answer",text,session_id} / {type:"error",error} in.
+ * {type:"answer"|"caption",text} / {type:"error",error} in.
  * Screen owns camera + rendering; everything wire-shaped lives here.
  */
 
@@ -21,6 +21,7 @@ export function questionMessage(text: string): string {
 
 export type VisionServerMessage =
   | { type: "answer"; text: string }
+  | { type: "caption"; text: string }
   | { type: "error"; message: string }
   | { type: "other" };
 
@@ -40,6 +41,9 @@ export function parseServerMessage(data: unknown): VisionServerMessage {
   const record = msg as Record<string, unknown>;
   if (record.type === "answer") {
     return { type: "answer", text: messageText(record.text) };
+  }
+  if (record.type === "caption") {
+    return { type: "caption", text: messageText(record.text) };
   }
   if (record.type === "error") {
     const error = record.error;

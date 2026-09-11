@@ -38,6 +38,13 @@ describe("parseServerMessage", () => {
     assert.deepEqual(msg, { type: "answer", text: "a chair" });
   });
 
+  it("reads captions", () => {
+    const msg = parseServerMessage(
+      JSON.stringify({ type: "caption", text: "a room", session_id: "s" }),
+    );
+    assert.deepEqual(msg, { type: "caption", text: "a room" });
+  });
+
   it("reads error envelopes", () => {
     const msg = parseServerMessage(
       JSON.stringify({ type: "error", error: { code: "x", message: "bad" } }),

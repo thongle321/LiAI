@@ -44,6 +44,8 @@ export default function VisionScreen() {
       const msg = parseServerMessage(event.data);
       if (msg.type === "answer") {
         setEntries((prev) => [...prev, msg.text]);
+      } else if (msg.type === "caption") {
+        setEntries((prev) => [...prev, `Live: ${msg.text}`]);
       } else if (msg.type === "error") {
         setProblem(msg.message);
       }

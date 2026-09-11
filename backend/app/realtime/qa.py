@@ -13,6 +13,9 @@ from . import vlm
 
 MAX_FRAME_BYTES = 2 * 1024 * 1024
 
+# ponytail: fixed narration prompt (Q1) — tunable later with continuous understanding
+NARRATION_PROMPT = "Describe what you see."
+
 
 def validate_jpeg(jpeg: bytes) -> None:
     """Shared ingestion guard (socket layer and qa use the same rule).
@@ -48,3 +51,21 @@ async def answer_about_frame(
     store.append(session_id, Turn(role="user", content=question))
     store.append(session_id, Turn(role="assistant", content=reply))
     return reply, session_id
+
+
+async def narrate_frame(
+    jpeg: bytes, session_id: str | None = None
+) -> tuple[str, str]:
+    """Caption the latest frame without a user question (Q2).
+
+    VLM description goes out directly (no companion turn): a tick is
+    an observation, not a conversation turn. Persists an
+    assistant-only Turn so history records what happened and nothing
+    that didn't.
+    """
+    validate_jpeg(jpeg)
+    caption = await vlm.describe_frame(jpeg, NARRATION_PROMPT)
+    store = get_store()
+    session_id = session_id or store.create()
+    store.append(session_id, Turn(role="assistant", content=caption))
+    return caption, session_id

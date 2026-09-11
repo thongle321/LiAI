@@ -53,19 +53,15 @@ async def answer_about_frame(
     return reply, session_id
 
 
-async def narrate_frame(
-    jpeg: bytes, session_id: str | None = None
-) -> tuple[str, str]:
-    """Caption the latest frame without a user question (Q2).
-
-    VLM description goes out directly (no companion turn): a tick is
-    an observation, not a conversation turn. Persists an
-    assistant-only Turn so history records what happened and nothing
-    that didn't.
-    """
+async def caption_frame(jpeg: bytes) -> str:
+    """Describe the frame without persisting (tick dedups before storing)."""
     validate_jpeg(jpeg)
-    caption = await vlm.describe_frame(jpeg, NARRATION_PROMPT)
+    return await vlm.describe_frame(jpeg, NARRATION_PROMPT)
+
+
+def store_caption(caption: str, session_id: str | None = None) -> str:
+    """Persist a caption as an assistant-only Turn; returns the session."""
     store = get_store()
     session_id = session_id or store.create()
     store.append(session_id, Turn(role="assistant", content=caption))
-    return caption, session_id
+    return session_id

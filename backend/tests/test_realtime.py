@@ -157,16 +157,16 @@ def test_narration_tick_skips_when_busy_or_empty() -> None:
 def test_narration_interval_parsing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.realtime.ws import DEFAULT_NARRATION_INTERVAL, narration_interval
+    from app.realtime.ws import DEFAULT_NARRATION_GAP, narration_gap
 
-    monkeypatch.setenv("VISION_NARRATION_INTERVAL_SECONDS", "10")
-    assert narration_interval() == 10.0
-    monkeypatch.setenv("VISION_NARRATION_INTERVAL_SECONDS", "garbage")
-    assert narration_interval() == DEFAULT_NARRATION_INTERVAL
-    monkeypatch.setenv("VISION_NARRATION_INTERVAL_SECONDS", "0")
-    assert narration_interval() == DEFAULT_NARRATION_INTERVAL
-    monkeypatch.delenv("VISION_NARRATION_INTERVAL_SECONDS", raising=False)
-    assert narration_interval() == DEFAULT_NARRATION_INTERVAL
+    monkeypatch.setenv("VISION_NARRATION_GAP_SECONDS", "10")
+    assert narration_gap() == 10.0
+    monkeypatch.setenv("VISION_NARRATION_GAP_SECONDS", "garbage")
+    assert narration_gap() == DEFAULT_NARRATION_GAP
+    monkeypatch.setenv("VISION_NARRATION_GAP_SECONDS", "0")
+    assert narration_gap() == DEFAULT_NARRATION_GAP
+    monkeypatch.delenv("VISION_NARRATION_GAP_SECONDS", raising=False)
+    assert narration_gap() == DEFAULT_NARRATION_GAP
 
 
 def test_live_loop_captions_over_socket(
@@ -176,9 +176,80 @@ def test_live_loop_captions_over_socket(
         return "live view"
 
     monkeypatch.setattr(vlm, "describe_frame", fake_describe)
-    monkeypatch.setenv("VISION_NARRATION_INTERVAL_SECONDS", "1")
+    monkeypatch.setenv("VISION_NARRATION_GAP_SECONDS", "1")
     with client.websocket_connect("/api/vision/ws") as ws:
         ws.send_json({"type": "frame", "jpeg": FAKE_B64})
         msg = ws.receive_json()
     assert msg["type"] == "caption"
     assert "live view" in msg["text"]
+
+
+def test_duplicate_captions_send_but_persist_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_describe(image: bytes, question: str) -> str:
+        return "a red square"
+
+    monkeypatch.setattr(vlm, "describe_frame", fake_describe)
+    from app.realtime.ws import SocketState, narration_tick
+
+    async def go() -> tuple[list[dict], SocketState]:
+        import asyncio
+
+        sent: list[dict] = []
+
+        class FakeSocket:
+            async def send_json(self, msg: dict) -> None:
+                sent.append(msg)
+
+        state = SocketState(latest=FAKE_JPEG)
+        lock = asyncio.Lock()
+        await narration_tick(FakeSocket(), lock, state)  # type: ignore[arg-type]
+        await narration_tick(FakeSocket(), lock, state)  # type: ignore[arg-type]
+        return sent, state
+
+    sent, state = _run(go())
+    assert [m["type"] for m in sent] == ["caption", "caption"]
+    assert state.session_id is not None
+    turns = get_store().get(state.session_id)
+    assert turns is not None and len(turns) == 1
+
+
+def test_question_preempts_inflight_narration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import threading
+    import time
+
+    started = threading.Event()
+    release = threading.Event()
+
+    async def slow_describe(image: bytes, question: str) -> str:
+        if question == "Describe what you see.":
+            started.set()
+            # ponytail: blocking wait on a threading event keeps the app-loop
+            # test honest — the caption genuinely never finishes on its own
+            while not release.is_set():
+                import asyncio
+
+                await asyncio.sleep(0.01)
+            return "stale caption"
+        return f"canned view for: {question}"
+
+    monkeypatch.setattr(vlm, "describe_frame", slow_describe)
+    monkeypatch.setenv("VISION_NARRATION_GAP_SECONDS", "0.1")
+    with client.websocket_connect("/api/vision/ws") as ws:
+        ws.send_json({"type": "frame", "jpeg": FAKE_B64})
+        assert started.wait(timeout=10)
+        time.sleep(0.2)  # let the tick enter its blocked await
+        ws.send_json({"type": "question", "text": "What do you see?"})
+        # Answer must arrive while the narration is still blocked: the
+        # question preempted it instead of queueing behind it.
+        first = ws.receive_json()
+        release.set()
+        # Loop resumed after preemption: the next tick captions again.
+        resumed = ws.receive_json()
+    assert first["type"] == "answer"
+    assert "canned view for: What do you see?" in first["text"]
+    assert resumed["type"] == "caption"
+    assert "stale caption" in resumed["text"]

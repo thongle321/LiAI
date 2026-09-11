@@ -61,6 +61,8 @@ export default function VisionScreen() {
           quality: 0.5,
           imageType: "jpg",
           exif: false,
+          // Q1: skip the still pipeline so continuous capture doesn't flicker
+          skipProcessing: true,
         })
         .then((photo) => {
           if (photo.base64 && ws.readyState === WebSocket.OPEN) {
@@ -111,7 +113,8 @@ export default function VisionScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "black" }}>
-      <CameraView ref={camera} style={{ flex: 1 }} facing="back" />
+      {/* Q1: no shutter animation on continuous capture */}
+      <CameraView ref={camera} style={{ flex: 1 }} facing="back" animateShutter={false} />
       <View className="max-h-40">
         <FlatList
           data={entries}

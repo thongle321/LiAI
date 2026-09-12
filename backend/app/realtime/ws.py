@@ -32,6 +32,8 @@ class SocketState:
     narration: asyncio.Task[str] | None = None
     last_caption: str = ""
     closed: bool = False
+    frame_logged: bool = False
+    no_frame_logged: bool = False
 
 
 async def send_json(websocket: WebSocket, payload: dict) -> bool:
@@ -86,7 +88,11 @@ async def narration_tick(
         or lock.locked()
         or (state.narration is not None and not state.narration.done())
     ):
+        if state.latest is None and not state.no_frame_logged:
+            state.no_frame_logged = True
+            logger.warning("narration tick: no frame received yet")
         return
+    state.no_frame_logged = False
     async with lock:
         task = state.narration = asyncio.create_task(caption_frame(state.latest))
         try:
@@ -107,6 +113,7 @@ async def narration_tick(
             if not is_duplicate(caption, state.last_caption):
                 state.session_id = store_caption(caption, state.session_id)
             state.last_caption = caption
+            logger.info("caption sent: %s", caption[:80])
             await websocket.send_json(
                 {"type": "caption", "text": caption, "session_id": state.session_id}
             )
@@ -158,6 +165,9 @@ async def handle_vision_socket(websocket: WebSocket) -> None:
                         return
                     continue
                 state.latest = raw
+                if not state.frame_logged:
+                    state.frame_logged = True
+                    logger.info("first frame received (%d bytes)", len(raw))
             else:
                 if not msg.text.strip():
                     if not await send_error(websocket, "empty question"):

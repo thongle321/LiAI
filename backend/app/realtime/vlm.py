@@ -1,7 +1,7 @@
 """VLM boundary: JPEG + question in, description out.
 
-llama.cpp via llama-cpp-python behind the seam — GPU-offloaded GGUF
-(LFM2.5-VL) instead of transformers-on-CPU. GGUF + mmproj download from
+llama.cpp via llama-cpp-python behind the seam — quantized GGUF
+(LFM2.5-VL) on CPU instead of transformers. GGUF + mmproj download from
 the Hub on first load; VISION_GGUF_REPO/_FILE/_MMPROJ_FILE/_GPU_LAYERS/
 _CTX/_MAX_TOKENS/_MAX_EDGE swap them without code changes. The stack stays lazy so CI collection never needs weights;
 tests patch describe_frame.
@@ -22,8 +22,9 @@ if TYPE_CHECKING:
 MODEL_REPO = os.getenv("VISION_GGUF_REPO", "LiquidAI/LFM2.5-VL-450M-GGUF")
 MODEL_FILE = os.getenv("VISION_GGUF_FILE", "LFM2.5-VL-450M-Q4_K_M.gguf")
 MMPROJ_FILE = os.getenv("VISION_MMPROJ_FILE", "mmproj-LFM2.5-VL-450m-Q8_0.gguf")
-# ponytail: -1 = full GPU offload (450M fits any recent NVIDIA card); 0 = CPU
-N_GPU_LAYERS = int(os.getenv("VISION_GPU_LAYERS", "-1"))
+# ponytail: CPU-only (0); set VISION_GPU_LAYERS=-1 with a CUDA runtime
+# on PATH for full GPU offload
+N_GPU_LAYERS = int(os.getenv("VISION_GPU_LAYERS", "0"))
 # ponytail: 8192 covers 512px image tokens + question + short caption
 N_CTX = int(os.getenv("VISION_CTX", "8192"))
 # ponytail: 32 tokens halves generation time vs 64; captions stay one sentence

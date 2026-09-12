@@ -10,6 +10,7 @@ import { FlatList, Pressable, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import { deleteAsync } from "expo-file-system/legacy";
 
 import {
   frameMessage,
@@ -73,6 +74,12 @@ export default function VisionScreen() {
         .then((photo) => {
           if (photo.base64 && ws.readyState === WebSocket.OPEN) {
             ws.send(frameMessage(photo.base64));
+          }
+          // PocketPal unlink: we send base64 only; the cache file is waste
+          if (photo.uri) {
+            void deleteAsync(photo.uri, { idempotent: true }).catch(
+              () => undefined,
+            );
           }
         })
         .catch(() => undefined)

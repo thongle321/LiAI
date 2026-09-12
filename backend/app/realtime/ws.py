@@ -94,6 +94,7 @@ async def narration_tick(
         return
     state.no_frame_logged = False
     async with lock:
+        logger.info("captioning frame (%d bytes)...", len(state.latest))
         task = state.narration = asyncio.create_task(caption_frame(state.latest))
         try:
             caption = await task

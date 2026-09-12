@@ -6,6 +6,8 @@ backend/.env
 
 # Python
 backend/.venv/
+# machine-local CUDA wheel (see backend/pyproject.toml [tool.uv.sources])
+backend/*.whl
 __pycache__/
 *.pyc
 

@@ -9,10 +9,12 @@ dependencies = [
     "supabase>=2.31.0",
     "pydantic-ai-slim[openrouter]>=2.42.0",
     "ruff>=0.16.6",
-    "torch>=2.14.0",
-    "transformers>=5.17.0",
+    "huggingface-hub>=0.23.0",
     "pillow>=12.3.0",
-    "torchvision>=0.29.0",
+    # ponytail: version resolved to the machine-local CUDA wheel via
+    # [tool.uv.sources] below (win/amd64, cu131); portable installs
+    # should point it at an index release instead
+    "llama-cpp-python",
 ]
 
 [dependency-groups]
@@ -25,6 +27,9 @@ testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+[tool.uv.sources]
+llama-cpp-python = { path = "./llama_cpp_python-0.3.49+cu131-cp312-cp312-win_amd64.whl" }
 
 [build-system]
 requires = ["hatchling"]

@@ -1,5 +1,9 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+logging.getLogger("app").setLevel(logging.INFO)
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
@@ -19,6 +23,7 @@ from .schemas import (
     HistoryMessage,
     HistoryResponse,
 )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:

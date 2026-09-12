@@ -22,6 +22,8 @@ export default function VisionScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const camera = useRef<CameraView | null>(null);
   const socket = useRef<WebSocket | null>(null);
+  // PocketPal pattern: a slow capture must not overlap the next tick
+  const capturing = useRef(false);
   const [phase, setPhase] = useState("connecting");
   const [problem, setProblem] = useState("");
   const [entries, setEntries] = useState<string[]>([]);
@@ -55,7 +57,8 @@ export default function VisionScreen() {
     const timer = setInterval(() => {
       if (ws.readyState !== WebSocket.OPEN) return;
       const ref = camera.current;
-      if (!ref) return;
+      if (!ref || capturing.current) return;
+      capturing.current = true;
       void ref
         .takePictureAsync({
           base64: true,
@@ -72,7 +75,10 @@ export default function VisionScreen() {
             ws.send(frameMessage(photo.base64));
           }
         })
-        .catch(() => undefined);
+        .catch(() => undefined)
+        .finally(() => {
+          capturing.current = false;
+        });
     }, 1000);
     return () => {
       clearInterval(timer);

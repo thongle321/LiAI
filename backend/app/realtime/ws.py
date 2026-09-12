@@ -150,6 +150,11 @@ async def handle_vision_socket(websocket: WebSocket) -> None:
                 if not await send_error(websocket, "malformed message"):
                     return
                 continue
+            if isinstance(raw_msg, dict) and raw_msg.get("type") == "frame":
+                logger.info(
+                    "frame message received (%d chars)",
+                    len(str(raw_msg.get("jpeg", ""))),
+                )
             try:
                 msg = _adapter.validate_python(raw_msg)
             except Exception:

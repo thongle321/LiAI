@@ -116,7 +116,9 @@ export default function VisionScreen() {
             });
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(frameMessage(jpeg));
-              setCaptureStatus("frame sent");
+              const kb = Math.round(jpeg.length / 1024);
+              console.log(`[vision] frame sent (${kb} KB)`);
+              setCaptureStatus(`frame sent (${kb} KB)`);
             }
           } finally {
             await deleteAsync(uri, { idempotent: true }).catch(

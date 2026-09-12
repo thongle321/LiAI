@@ -33,6 +33,7 @@ export default function VisionScreen() {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice("back");
   const camera = useRef<Camera | null>(null);
+  const ready = useRef(false);
   const socket = useRef<WebSocket | null>(null);
   // PocketPal pattern: a slow capture must not overlap the next tick
   const capturing = useRef(false);
@@ -69,7 +70,7 @@ export default function VisionScreen() {
     const timer = setInterval(() => {
       if (ws.readyState !== WebSocket.OPEN) return;
       const ref = camera.current;
-      if (!ref || capturing.current) return;
+      if (!ref || capturing.current || !ready.current) return;
       capturing.current = true;
       void ref
         .takeSnapshot({ quality: 50 })
@@ -87,7 +88,14 @@ export default function VisionScreen() {
             );
           }
         })
-        .catch(() => undefined)
+        .catch((e: unknown) => {
+          const detail =
+            typeof e === "object" && e !== null && "message" in e
+              ? String((e as { message: unknown }).message)
+              : String(e);
+          console.error("[vision] snapshot failed", detail);
+          setProblem(`Capture failed: ${detail}`);
+        })
         .finally(() => {
           capturing.current = false;
         });
@@ -136,7 +144,21 @@ export default function VisionScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "black" }}>
       {/* video required on iOS: takeSnapshot reads the video pipeline */}
-      <Camera ref={camera} style={{ flex: 1 }} device={device} isActive photo video />
+      <Camera
+        ref={camera}
+        style={{ flex: 1 }}
+        device={device}
+        isActive
+        photo
+        video
+        onInitialized={() => {
+          ready.current = true;
+        }}
+        onError={(e: { message?: unknown }) => {
+          console.error("[vision] camera error", e.message);
+          setProblem(`Camera error: ${String(e.message ?? e)}`);
+        }}
+      />
       <View className="max-h-40">
         <FlatList
           data={entries}

@@ -75,15 +75,19 @@ export default function VisionScreen() {
       void ref
         .takeSnapshot({ quality: 50 })
         .then(async (snapshot) => {
+          // VisionCamera returns a bare path; expo-file-system needs a URI.
+          const uri = snapshot.path.startsWith("file://")
+            ? snapshot.path
+            : `file://${snapshot.path}`;
           try {
-            const jpeg = await readAsStringAsync(snapshot.path, {
+            const jpeg = await readAsStringAsync(uri, {
               encoding: EncodingType.Base64,
             });
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(frameMessage(jpeg));
             }
           } finally {
-            await deleteAsync(snapshot.path, { idempotent: true }).catch(
+            await deleteAsync(uri, { idempotent: true }).catch(
               () => undefined,
             );
           }

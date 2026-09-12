@@ -99,6 +99,7 @@ async def narration_tick(
                 raise
             return
         except Exception:
+            logger.warning("narration caption failed", exc_info=True)
             return
         finally:
             state.narration = None
@@ -110,6 +111,7 @@ async def narration_tick(
                 {"type": "caption", "text": caption, "session_id": state.session_id}
             )
         except Exception:
+            logger.warning("narration caption send failed", exc_info=True)
             return
 
 

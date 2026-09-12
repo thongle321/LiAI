@@ -67,13 +67,41 @@ export default function VisionScreen() {
         setProblem(msg.message);
       }
     };
+    // Last skip reason logged, so a wedged capture can't go silent.
+    // Transitions only — no per-tick spam.
+    let lastSkip = "";
+    const skip = (reason: string): void => {
+      if (reason !== lastSkip) {
+        lastSkip = reason;
+        console.log(`[vision] capture skipped: ${reason}`);
+      }
+    };
     const timer = setInterval(() => {
-      if (ws.readyState !== WebSocket.OPEN) return;
+      if (ws.readyState !== WebSocket.OPEN) {
+        skip("socket not open");
+        return;
+      }
       const ref = camera.current;
-      if (!ref || capturing.current || !ready.current) return;
+      if (!ref) {
+        skip("no camera ref");
+        return;
+      }
+      if (!ready.current) {
+        skip("camera not initialized");
+        return;
+      }
+      if (capturing.current) {
+        skip("previous capture still in flight");
+        return;
+      }
+      lastSkip = "";
       capturing.current = true;
-      void ref
-        .takeSnapshot({ quality: 50 })
+      // A snapshot promise that never settles would wedge the guard
+      // forever — time out so the next tick retries.
+      const timeout = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("snapshot timed out")), 5000);
+      });
+      void Promise.race([ref.takeSnapshot({ quality: 50 }), timeout])
         .then(async (snapshot) => {
           // VisionCamera returns a bare path; expo-file-system needs a URI.
           const uri = snapshot.path.startsWith("file://")

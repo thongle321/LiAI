@@ -41,6 +41,7 @@ export default function VisionScreen() {
   const [problem, setProblem] = useState("");
   const [entries, setEntries] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
+  const [captureStatus, setCaptureStatus] = useState("starting…");
 
   useEffect(() => {
     const ws = new WebSocket(visionSocketUrl());
@@ -74,6 +75,7 @@ export default function VisionScreen() {
       if (reason !== lastSkip) {
         lastSkip = reason;
         console.log(`[vision] capture skipped: ${reason}`);
+        setCaptureStatus(`waiting: ${reason}`);
       }
     };
     const timer = setInterval(() => {
@@ -95,6 +97,7 @@ export default function VisionScreen() {
         return;
       }
       lastSkip = "";
+      setCaptureStatus("capturing…");
       capturing.current = true;
       // A snapshot promise that never settles would wedge the guard
       // forever — time out so the next tick retries.
@@ -113,6 +116,7 @@ export default function VisionScreen() {
             });
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(frameMessage(jpeg));
+              setCaptureStatus("frame sent");
             }
           } finally {
             await deleteAsync(uri, { idempotent: true }).catch(
@@ -200,6 +204,7 @@ export default function VisionScreen() {
           )}
         />
       </View>
+      <Text className="px-4 py-1 text-gray-400">{captureStatus}</Text>
       {phase === "failed" && (
         <Text className="px-4 py-1 text-red-400">{problem}</Text>
       )}

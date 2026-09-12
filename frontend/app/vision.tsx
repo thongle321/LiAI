@@ -1,7 +1,9 @@
 /** Vision screen: camera frames + questions over /api/vision/ws.
  *
- * expo-camera interval snapshots (~1 fps, jpg/q0.5) go out as frames;
- * answers arrive as text. Works in Expo Go (no native WebRTC).
+ * react-native-vision-camera preview with periodic takeSnapshot() reads
+ * from the live preview buffer — no still-photo pipeline, no shutter
+ * flicker. Snapshots go out as base64 frames; answers arrive as text.
+ * Requires a dev-client build (not Expo Go).
  * Text chat stays in app/index. Wire shapes live in lib/vision.ts.
  */
 
@@ -9,8 +11,16 @@ import { useEffect, useRef, useState } from "react";
 import { FlatList, Pressable, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { CameraView, useCameraPermissions } from "expo-camera";
-import { deleteAsync } from "expo-file-system/legacy";
+import {
+  Camera,
+  useCameraDevice,
+  useCameraPermission,
+} from "react-native-vision-camera";
+import {
+  deleteAsync,
+  EncodingType,
+  readAsStringAsync,
+} from "expo-file-system/legacy";
 
 import {
   frameMessage,
@@ -20,8 +30,9 @@ import {
 } from "../lib/vision.ts";
 
 export default function VisionScreen() {
-  const [permission, requestPermission] = useCameraPermissions();
-  const camera = useRef<CameraView | null>(null);
+  const { hasPermission, requestPermission } = useCameraPermission();
+  const device = useCameraDevice("back");
+  const camera = useRef<Camera | null>(null);
   const socket = useRef<WebSocket | null>(null);
   // PocketPal pattern: a slow capture must not overlap the next tick
   const capturing = useRef(false);
@@ -33,11 +44,11 @@ export default function VisionScreen() {
   useEffect(() => {
     const ws = new WebSocket(visionSocketUrl());
     socket.current = ws;
-    ws.onopen = () => setPhase("open");
     ws.onerror = () => {
       setProblem("Could not reach the vision stream");
       setPhase("failed");
     };
+    ws.onopen = () => setPhase("open");
     ws.onclose = (event: { code?: unknown; reason?: unknown }) => {
       socket.current = null;
       const code = typeof event.code === "number" ? event.code : "?";
@@ -61,23 +72,17 @@ export default function VisionScreen() {
       if (!ref || capturing.current) return;
       capturing.current = true;
       void ref
-        .takePictureAsync({
-          base64: true,
-          // ponytail: no client resize API; q0.5 trims typical phones under the 2MB server cap
-          quality: 0.5,
-          imageType: "jpg",
-          exif: false,
-          // skipProcessing discarded on purpose: it drops the quality
-          // pipeline, ships full-res frames, and the server rejects them
-          shutterSound: false,
-        })
-        .then((photo) => {
-          if (photo.base64 && ws.readyState === WebSocket.OPEN) {
-            ws.send(frameMessage(photo.base64));
-          }
-          // PocketPal unlink: we send base64 only; the cache file is waste
-          if (photo.uri) {
-            void deleteAsync(photo.uri, { idempotent: true }).catch(
+        .takeSnapshot({ quality: 50 })
+        .then(async (snapshot) => {
+          try {
+            const jpeg = await readAsStringAsync(snapshot.path, {
+              encoding: EncodingType.Base64,
+            });
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(frameMessage(jpeg));
+            }
+          } finally {
+            await deleteAsync(snapshot.path, { idempotent: true }).catch(
               () => undefined,
             );
           }
@@ -103,21 +108,11 @@ export default function VisionScreen() {
     ws.send(questionMessage(text));
   }
 
-  if (!permission) {
-    return (
-      <SafeAreaView style={{ flex: 1 }} className="items-center justify-center">
-        <Text>Requesting camera…</Text>
-      </SafeAreaView>
-    );
-  }
-  if (!permission.granted) {
+  if (!hasPermission) {
     return (
       <SafeAreaView style={{ flex: 1 }} className="items-center justify-center">
         <Text className="px-8 text-center">Camera access is needed.</Text>
-        <Pressable
-          onPress={() => void requestPermission()}
-          className="mt-4 px-4 py-2"
-        >
+        <Pressable onPress={() => void requestPermission()} className="mt-4 px-4 py-2">
           <Text className="text-blue-500">Grant access</Text>
         </Pressable>
         <Pressable onPress={() => router.back()} className="mt-2 px-4 py-2">
@@ -127,10 +122,21 @@ export default function VisionScreen() {
     );
   }
 
+  if (!device) {
+    return (
+      <SafeAreaView style={{ flex: 1 }} className="items-center justify-center">
+        <Text>No camera device found.</Text>
+        <Pressable onPress={() => router.back()} className="mt-2 px-4 py-2">
+          <Text className="text-blue-500">Back</Text>
+        </Pressable>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "black" }}>
-      {/* Q1: no shutter animation on continuous capture */}
-      <CameraView ref={camera} style={{ flex: 1 }} facing="back" animateShutter={false} />
+      {/* video required on iOS: takeSnapshot reads the video pipeline */}
+      <Camera ref={camera} style={{ flex: 1 }} device={device} isActive photo video />
       <View className="max-h-40">
         <FlatList
           data={entries}

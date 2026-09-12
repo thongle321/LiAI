@@ -19,6 +19,7 @@
     "react-native-reanimated": "^4.5.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
+    "react-native-vision-camera": "^4.7.3",
     "react-native-worklets": "0.10.1",
     "react-refresh": "^0.19.0",
     "tailwindcss": "^4.3.3",
@@ -36,8 +37,8 @@
   },
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tests/tsconfig.json",
     "test": "node --test tests/*.test.ts"

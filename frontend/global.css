@@ -1,2 +1,171 @@
 @import "tailwindcss";
 @import "uniwind";
+
+/* LiAI design system — dystopian dark (see prompt_material/design_system.png).
+ * TS mirror: themes/tokens.ts (keep in sync). Families below must match
+ * the expo-font names loaded in app/_layout.tsx exactly (no fallbacks
+ * on native). */
+
+@theme {
+  --color-primary: #dce87d;
+  --color-primary-hover: #b7d866;
+  --color-primary-pressed: #a7af4a;
+  --color-on-primary: #0b0c0c;
+  --color-success: #22c55e;
+  --color-warning: #f6c945;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+  --color-base: #0b0c0c;
+  --color-surface-1: #141515;
+  --color-surface-2: #202122;
+  --color-surface-3: #2a2a2e;
+  --color-border: #3f3f46;
+  --color-secondary-text: #a1a1aa;
+  --color-primary-text: #e5e7eb;
+  --color-inverse-text: #f7f7f8;
+
+  --font-sans: 'Raleway_400Regular';
+  --font-sans-medium: 'Raleway_500Medium';
+  --font-sans-semibold: 'Raleway_600SemiBold';
+
+  --text-h1: 32px;
+  --text-h1--line-height: 40px;
+  --text-h2: 24px;
+  --text-h2--line-height: 32px;
+  --text-h3: 18px;
+  --text-h3--line-height: 26px;
+  --text-h4: 16px;
+  --text-h4--line-height: 24px;
+  --text-body-lg: 16px;
+  --text-body-lg--line-height: 24px;
+  --text-body-md: 14px;
+  --text-body-md--line-height: 20px;
+  --text-body-sm: 12px;
+  --text-body-sm--line-height: 16px;
+  --text-caption: 11px;
+  --text-caption--line-height: 14px;
+
+  --radius-btn: 12px;
+  --radius-card: 16px;
+  --radius-input: 12px;
+}
+
+/* Dark-only app: light + dark carry the same tokens (Uniwind requires
+ * identical variable sets per variant). */
+@layer theme {
+  :root {
+    @variant light {
+      --color-background: #0b0c0c;
+      --color-foreground: #e5e7eb;
+      --color-card: #141515;
+      --color-border: #3f3f46;
+      --color-muted: #a1a1aa;
+      --color-primary: #dce87d;
+      --color-danger: #ef4444;
+      --color-success: #22c55e;
+    }
+    @variant dark {
+      --color-background: #0b0c0c;
+      --color-foreground: #e5e7eb;
+      --color-card: #141515;
+      --color-border: #3f3f46;
+      --color-muted: #a1a1aa;
+      --color-primary: #dce87d;
+      --color-danger: #ef4444;
+      --color-success: #22c55e;
+    }
+  }
+}
+
+/* BEM bundles — multi-property patterns reused across screens.
+ * Flat selectors only. For property conflicts with Tailwind
+ * utilities, wrap usage with cn(). */
+
+/* Buttons: .btn + .btn--primary | .btn--secondary | .btn--destructive */
+.btn {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  padding-left: 24px;
+  padding-right: 24px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.btn--primary {
+  background-color: #dce87d;
+  color: #0b0c0c;
+}
+.btn--secondary {
+  background-color: transparent;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #3f3f46;
+  color: #e5e7eb;
+}
+.btn--destructive {
+  background-color: #ef4444;
+  color: #f7f7f8;
+}
+.btn--circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Inputs: .input + optional .input--error (focused border is lime by default) */
+.input {
+  background-color: #2a2a2e;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #3f3f46;
+  border-radius: 12px;
+  padding-left: 16px;
+  padding-right: 16px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  color: #e5e7eb;
+}
+.input--error {
+  border-color: #ef4444;
+}
+
+/* Cards: .card + optional .card--highlighted (hover/focus ring) */
+.card {
+  background-color: #141515;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #3f3f46;
+  border-radius: 16px;
+  padding: 16px;
+}
+.card--highlighted {
+  border-color: #dce87d;
+}
+.card--error {
+  border-color: #ef4444;
+}
+
+/* Status dots: .status-dot + .status-dot--online | --warning | --error | --info | --offline */
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+.status-dot--online {
+  background-color: #22c55e;
+}
+.status-dot--warning {
+  background-color: #f6c945;
+}
+.status-dot--error {
+  background-color: #ef4444;
+}
+.status-dot--info {
+  background-color: #3b82f6;
+}
+.status-dot--offline {
+  background-color: #a1a1aa;
+}

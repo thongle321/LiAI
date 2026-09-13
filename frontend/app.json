@@ -38,7 +38,8 @@
           "cameraPermissionText": "LiAI needs the camera to see what you see.",
           "enableFrameProcessors": false
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "router": {},

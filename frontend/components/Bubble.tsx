@@ -13,10 +13,12 @@ export function Bubble({
     return (
       <Pressable
         onPress={onRetry}
-        className="self-start max-w-[80%] rounded-2xl bg-red-100 px-4 py-2 my-1"
+        className="card card--error self-start max-w-[80%] my-1"
       >
-        <Text className="text-gray-900">{message.text}</Text>
-        <Text className="text-red-700 mt-1">
+        <Text className="font-sans text-body-md text-primary-text">
+          {message.text}
+        </Text>
+        <Text className="mt-1 font-sans text-body-sm text-error">
           {message.error.message} — tap to retry
         </Text>
       </Pressable>
@@ -25,11 +27,13 @@ export function Bubble({
   const mine = message.role === "user";
   return (
     <View
-      className={`max-w-[80%] rounded-2xl px-4 py-2 my-1 ${
-        mine ? "self-end bg-blue-500" : "self-start bg-gray-200"
+      className={`my-1 max-w-[80%] rounded-card px-4 py-2 ${
+        mine ? "self-end bg-primary" : "self-start bg-surface-2"
       }`}
     >
-      <Text className={mine ? "text-white" : "text-gray-900"}>
+      <Text
+        className={`font-sans text-body-md ${mine ? "text-on-primary" : "text-primary-text"}`}
+      >
         {message.text}
       </Text>
     </View>

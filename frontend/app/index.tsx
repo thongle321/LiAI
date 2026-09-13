@@ -16,9 +16,9 @@ import { Connecting, Unavailable } from "../components/Unavailable.tsx";
 import { useChatStore, type Connection } from "../store/chat.ts";
 
 const CONNECTION_DOT_CLASS: Record<Connection, string> = {
-  unknown: "bg-gray-400",
-  up: "bg-green-500",
-  down: "bg-red-500",
+  unknown: "status-dot status-dot--offline",
+  up: "status-dot status-dot--online",
+  down: "status-dot status-dot--error",
 };
 
 export default function ChatScreen() {
@@ -45,17 +45,17 @@ export default function ChatScreen() {
   const canSend = !sending && draft.trim() !== "";
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
-      <View className="flex-row items-center px-4 py-3 border-b border-gray-200">
-        <View className={`h-2.5 w-2.5 rounded-full ${dot}`} />
-        <Text className="flex-1 text-center text-lg font-semibold text-gray-900">
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#0B0C0C" }}>
+      <View className="flex-row items-center border-b border-border bg-base px-4 py-3">
+        <View className={dot} />
+        <Text className="flex-1 text-center font-sans-semibold text-h3 text-primary">
           LiAI
         </Text>
         <Pressable onPress={() => router.push("/vision")} className="px-2 py-1">
-          <Text className="text-blue-500">Vision</Text>
+          <Text className="font-sans text-body-md text-primary">Vision</Text>
         </Pressable>
         <Pressable onPress={() => void newConversation()} className="px-2 py-1">
-          <Text className="text-blue-500">New</Text>
+          <Text className="font-sans text-body-md text-primary">New</Text>
         </Pressable>
       </View>
 
@@ -77,26 +77,33 @@ export default function ChatScreen() {
             contentContainerClassName="p-4"
           />
           {sending && (
-            <Text className="px-4 pb-1 text-sm text-gray-400">LiAI…</Text>
+            <Text className="px-4 pb-1 font-sans text-body-sm text-secondary-text">LiAI…</Text>
           )}
-          <View className="flex-row items-center px-4 py-2 border-t border-gray-200">
+          <View className="flex-row items-center border-t border-border bg-base px-4 py-2">
             <TextInput
               value={draft}
               onChangeText={setDraft}
               placeholder="Message LiAI"
+              placeholderTextColor="#A1A1AA"
               multiline
               editable={!sending}
               onSubmitEditing={() => void handleSend()}
-              className="flex-1 rounded-full bg-gray-100 px-4 py-2 text-gray-900"
+              className="input flex-1 font-sans"
             />
             <Pressable
               disabled={!canSend}
               onPress={() => void handleSend()}
-              className={`ml-2 rounded-full px-4 py-2 ${
-                canSend ? "bg-blue-500" : "bg-gray-300"
+              className={`btn ml-2 ${
+                canSend ? "btn--primary" : "btn--secondary"
               }`}
             >
-              <Text className="text-white font-semibold">Send</Text>
+              <Text
+                className={`font-sans-semibold ${
+                  canSend ? "text-on-primary" : "text-secondary-text"
+                }`}
+              >
+                Send
+              </Text>
             </Pressable>
           </View>
         </KeyboardAvoidingView>

@@ -32,7 +32,6 @@ class SocketState:
     narration: asyncio.Task[str] | None = None
     last_caption: str = ""
     closed: bool = False
-    frame_logged: bool = False
     no_frame_logged: bool = False
 
 
@@ -94,7 +93,6 @@ async def narration_tick(
         return
     state.no_frame_logged = False
     async with lock:
-        logger.info("captioning frame (%d bytes)...", len(state.latest))
         task = state.narration = asyncio.create_task(caption_frame(state.latest))
         try:
             caption = await task
@@ -114,7 +112,7 @@ async def narration_tick(
             if not is_duplicate(caption, state.last_caption):
                 state.session_id = store_caption(caption, state.session_id)
             state.last_caption = caption
-            logger.info("caption sent: %s", caption[:80])
+            logger.info('content = "%s"', caption)
             await websocket.send_json(
                 {"type": "caption", "text": caption, "session_id": state.session_id}
             )
@@ -151,11 +149,6 @@ async def handle_vision_socket(websocket: WebSocket) -> None:
                 if not await send_error(websocket, "malformed message"):
                     return
                 continue
-            if isinstance(raw_msg, dict) and raw_msg.get("type") == "frame":
-                logger.info(
-                    "frame message received (%d chars)",
-                    len(str(raw_msg.get("jpeg", ""))),
-                )
             try:
                 msg = _adapter.validate_python(raw_msg)
             except Exception:
@@ -171,9 +164,6 @@ async def handle_vision_socket(websocket: WebSocket) -> None:
                         return
                     continue
                 state.latest = raw
-                if not state.frame_logged:
-                    state.frame_logged = True
-                    logger.info("first frame received (%d bytes)", len(raw))
             else:
                 if not msg.text.strip():
                     if not await send_error(websocket, "empty question"):

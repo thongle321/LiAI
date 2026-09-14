@@ -1,5 +1,7 @@
 import { Pressable, Text, View } from "react-native";
+import { Bot, CheckCheck, Image } from "lucide-react-native";
 
+import { colors } from "../themes/tokens.ts";
 import type { ChatMessage } from "../store/chat.ts";
 
 /** HH:MM for the design's timestamp row under each bubble. */
@@ -40,16 +42,19 @@ export function Bubble({
             {message.text}
           </Text>
         </View>
-        <Text className="mt-1 font-sans text-caption text-secondary-text">
-          {formatTime(message.at)} ✓✓
-        </Text>
+        <View className="mt-1 flex-row items-center">
+          <Text className="font-sans text-caption text-secondary-text">
+            {formatTime(message.at)}
+          </Text>
+          <CheckCheck size={12} color={colors.secondaryText} />
+        </View>
       </View>
     );
   }
   return (
     <View className="my-1 max-w-[85%] flex-row self-start">
       <View className="mr-2 mt-1 h-8 w-8 items-center justify-center rounded-full bg-surface-3">
-        <Text className="font-sans-semibold text-body-md text-primary">✦</Text>
+        <Bot size={16} color={colors.primary} />
         <View className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border border-base bg-success" />
       </View>
       <View className="flex-1">
@@ -59,7 +64,7 @@ export function Bubble({
           </Text>
           {message.image !== undefined && (
             <View className="mt-2 aspect-video items-center justify-center rounded-card border border-border bg-surface-2">
-              <Text className="text-h1 text-secondary-text">▦</Text>
+              <Image size={40} color={colors.secondaryText} />
             </View>
           )}
         </View>

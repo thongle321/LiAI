@@ -10,6 +10,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import { Menu, Plus, Send } from "lucide-react-native";
+
+import { colors } from "../themes/tokens.ts";
 
 import { Bubble } from "../components/Bubble.tsx";
 import { BottomNav, type ChatTab } from "../components/BottomNav.tsx";
@@ -86,7 +89,7 @@ export default function ChatScreen() {
           LiAI
         </Text>
         <Pressable onPress={() => setMenuOpen((o) => !o)} className="px-2 py-1">
-          <Text className="text-body-lg text-primary">☰</Text>
+          <Menu size={22} color={colors.primary} />
         </Pressable>
       </View>
       {menuOpen && (
@@ -147,7 +150,7 @@ export default function ChatScreen() {
               onPress={() => router.push("/vision")}
               className="h-9 w-9 items-center justify-center rounded-full border border-border"
             >
-              <Text className="text-body-lg text-primary">＋</Text>
+              <Plus size={22} color={colors.primary} />
             </Pressable>
             <TextInput
               value={draft}
@@ -160,11 +163,10 @@ export default function ChatScreen() {
               className="flex-1 px-3 font-sans text-body-md text-primary-text"
             />
             <Pressable disabled={!canSend} onPress={() => void handleSend()} className="px-2 py-1">
-              <Text
-                className={`text-h3 ${canSend ? "text-primary" : "text-secondary-text"}`}
-              >
-                ➤
-              </Text>
+              <Send
+                size={22}
+                color={canSend ? colors.primary : colors.secondaryText}
+              />
             </Pressable>
           </View>
         </KeyboardAvoidingView>

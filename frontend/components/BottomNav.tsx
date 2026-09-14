@@ -1,12 +1,21 @@
 import { Pressable, Text, View } from "react-native";
+import {
+  Ellipsis,
+  Eye,
+  MessageCircle,
+  Mic,
+  type LucideIcon,
+} from "lucide-react-native";
+
+import { colors } from "../themes/tokens.ts";
 
 export type ChatTab = "chat" | "voice" | "vision" | "more";
 
-const TABS: { id: ChatTab; label: string; glyph: string }[] = [
-  { id: "chat", label: "Chat", glyph: "💬" },
-  { id: "voice", label: "Voice", glyph: "🎙" },
-  { id: "vision", label: "Vision", glyph: "👁" },
-  { id: "more", label: "More", glyph: "⋯" },
+const TABS: { id: ChatTab; label: string; Icon: LucideIcon }[] = [
+  { id: "chat", label: "Chat", Icon: MessageCircle },
+  { id: "voice", label: "Voice", Icon: Mic },
+  { id: "vision", label: "Vision", Icon: Eye },
+  { id: "more", label: "More", Icon: Ellipsis },
 ];
 
 /** Design's bottom tab bar (Tools removed per spec). */
@@ -27,11 +36,10 @@ export function BottomNav({
             onPress={() => onSelect(t.id)}
             className="flex-1 items-center py-1"
           >
-            <Text
-              className={`text-body-lg ${selected ? "text-primary" : "text-secondary-text"}`}
-            >
-              {t.glyph}
-            </Text>
+            <t.Icon
+              size={22}
+              color={selected ? colors.primary : colors.secondaryText}
+            />
             <Text
               className={`font-sans text-caption ${selected ? "text-primary" : "text-secondary-text"}`}
             >

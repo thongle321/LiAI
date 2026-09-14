@@ -97,8 +97,6 @@ components/
 
 constants/
 
-data/
-
 hooks/
 
 lib/
@@ -121,8 +119,7 @@ or business logic.
 **components/** is for reusable UI. Create a component when it is
 reused in multiple places, when it makes a screen easier to read, or
 when it represents a clear UI concept. Examples for this app:
-Bubble, BottomNav, VoicePanel, VisionPanel. Do not create components too early.
-**data/** holds hardcoded content. Keep it typed.
+Bubble, BottomNav, InteractionPanel. Do not create components too early.
 **store/** holds Zustand stores. Examples of state to keep here:
 chat messages, session id, connection, sending flag. Persist with AsyncStorage when needed.
 **lib/** holds external service helpers (api.ts, cn.ts).

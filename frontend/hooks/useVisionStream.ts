@@ -9,18 +9,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { Camera } from "react-native-vision-camera";
-import {
-  deleteAsync,
-  EncodingType,
-  readAsStringAsync,
-} from "expo-file-system/legacy";
 
 import {
   frameMessage,
   parseServerMessage,
-  questionMessage,
   visionSocketUrl,
 } from "../lib/vision.ts";
+import { snapshotToBase64 } from "../lib/snapshot.ts";
 
 export type VisionPhase = "connecting" | "open" | "failed";
 
@@ -96,30 +91,12 @@ export function useVisionStream(
       lastSkip = "";
       setCaptureStatus("capturing…");
       capturing.current = true;
-      // A snapshot promise that never settles would wedge the guard
-      // forever — time out so the next tick retries.
-      const timeout = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("snapshot timed out")), 5000);
-      });
-      void Promise.race([ref.takeSnapshot({ quality: 50 }), timeout])
-        .then(async (snapshot) => {
-          // VisionCamera returns a bare path; expo-file-system needs a URI.
-          const uri = snapshot.path.startsWith("file://")
-            ? snapshot.path
-            : `file://${snapshot.path}`;
-          try {
-            const jpeg = await readAsStringAsync(uri, {
-              encoding: EncodingType.Base64,
-            });
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(frameMessage(jpeg));
-              const kb = Math.round(jpeg.length / 1024);
-              setCaptureStatus(`frame sent (${kb} KB)`);
-            }
-          } finally {
-            await deleteAsync(uri, { idempotent: true }).catch(
-              () => undefined,
-            );
+      void snapshotToBase64(() => ref.takeSnapshot({ quality: 50 }))
+        .then((jpeg) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(frameMessage(jpeg));
+            const kb = Math.round(jpeg.length / 1024);
+            setCaptureStatus(`frame sent (${kb} KB)`);
           }
         })
         .catch((e: unknown) => {
@@ -141,19 +118,11 @@ export function useVisionStream(
     };
   }, []); // refs stable, read via .current — never resubscribe
 
-  async function sendQuestion(text: string): Promise<void> {
-    const ws = socket.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN || text === "") return;
-    appendEntry(`You: ${text}`);
-    ws.send(questionMessage(text));
-  }
-
   return {
     phase,
     problem,
     entries,
     captureStatus,
-    sendQuestion,
     setProblem,
   };
 }

@@ -15,15 +15,13 @@ import {
   useCameraDevice,
   useCameraPermission,
 } from "react-native-vision-camera";
-import { deleteAsync, EncodingType, readAsStringAsync } from "expo-file-system/legacy";
 
 import { colors } from "../themes/tokens.ts";
 import { BottomNav, type ChatTab } from "./BottomNav.tsx";
 import { useVisionStream } from "../hooks/useVisionStream.ts";
+import { snapshotToBase64 } from "../lib/snapshot.ts";
 
-export type PanelMode = ChatTab;
-
-const MODE_LABEL: Record<PanelMode, string> = {
+const MODE_LABEL: Record<ChatTab, string> = {
   chat: "Type a message…",
   voice: "Listening…",
   vision: "Ask LiAI about this",
@@ -31,27 +29,17 @@ const MODE_LABEL: Record<PanelMode, string> = {
 };
 
 export function InteractionPanel({
-  draft,
-  setDraft,
-  canSend,
   sending,
   onSend,
-  attachment,
-  onRemoveAttachment,
-  onCapture,
   onNewConversation,
 }: {
-  draft: string;
-  setDraft: (s: string) => void;
-  canSend: boolean;
   sending: boolean;
-  onSend: () => void;
-  attachment: string | null;
-  onRemoveAttachment: () => void;
-  onCapture: (dataUri: string) => void;
+  onSend: (text: string, image?: string) => Promise<boolean>;
   onNewConversation: () => void;
 }) {
-  const [mode, setMode] = useState<PanelMode>("chat");
+  const [mode, setMode] = useState<ChatTab>("chat");
+  const [draft, setDraft] = useState("");
+  const [attachment, setAttachment] = useState<string | null>(null);
   const [plusOpen, setPlusOpen] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [camProblem, setCamProblem] = useState<string | null>(null);
@@ -62,34 +50,32 @@ export function InteractionPanel({
   const camera = useRef<Camera | null>(null);
   const ready = useRef(false);
 
-  function pick(mode: PanelMode): void {
+  function pick(next: ChatTab): void {
     setPlusOpen(false);
-    if (mode !== "vision") setCamLive(false);
-    setMode((m) => (m === mode && mode !== "chat" ? "chat" : mode));
+    if (next !== "vision") setCamLive(false);
+    setMode((m) => (m === next && next !== "chat" ? "chat" : next));
+  }
+
+  const canSend = !sending && draft.trim() !== "";
+
+  async function handleSend(): Promise<void> {
+    if (await onSend(draft, attachment ?? undefined)) {
+      setDraft("");
+      setAttachment(null);
+    }
   }
 
   async function capture(): Promise<void> {
     const cam = camera.current;
     // Gate: snapshot on a zero-size/uninitialized preview throws
     // "width and height must be > 0" — wait for onInitialized.
-    if (cam === null || capturing || !ready.current || !camLive) return;
+    if (cam === null || capturing || !camLive) return;
     setCapturing(true);
     setCamProblem(null);
     try {
-      const timeout = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("snapshot timed out")), 5000);
-      });
-      const snapshot = await Promise.race([cam.takeSnapshot({ quality: 50 }), timeout]);
-      const uri = snapshot.path.startsWith("file://")
-        ? snapshot.path
-        : `file://${snapshot.path}`;
-      try {
-        const jpeg = await readAsStringAsync(uri, { encoding: EncodingType.Base64 });
-        onCapture(`data:image/jpeg;base64,${jpeg}`);
-        setMode("chat");
-      } finally {
-        await deleteAsync(uri, { idempotent: true }).catch(() => undefined);
-      }
+      const jpeg = await snapshotToBase64(() => cam.takeSnapshot({ quality: 50 }));
+      setAttachment(`data:image/jpeg;base64,${jpeg}`);
+      setMode("chat");
     } catch (e: unknown) {
       setCamProblem(e instanceof Error ? e.message : String(e));
     } finally {
@@ -162,11 +148,6 @@ export function InteractionPanel({
           <Text className="mt-3 text-center font-sans text-body-sm text-secondary-text">
             Ask LiAI about this
           </Text>
-          {camProblem !== null && (
-            <Text className="mt-1 text-center font-sans text-body-sm text-error">
-              {camProblem}
-            </Text>
-          )}
           <Pressable
             onPress={() => void capture()}
             disabled={!hasPermission || device === undefined || capturing || !camLive}
@@ -186,8 +167,8 @@ export function InteractionPanel({
               {capturing ? "Capturing…" : camLive ? "Capture" : "Starting camera…"}
             </Text>
           </Pressable>
-          {device !== undefined && (
-            <VisionLive camera={camera} ready={ready} />
+          {hasPermission && device !== undefined && (
+            <VisionLive camera={camera} ready={ready} extraProblem={camProblem} />
           )}
         </View>
       )}
@@ -209,7 +190,7 @@ export function InteractionPanel({
           <Text className="ml-2 flex-1 font-sans text-body-sm text-secondary-text">
             Photo attached
           </Text>
-          <Pressable onPress={onRemoveAttachment} className="px-2 py-1">
+          <Pressable onPress={() => setAttachment(null)} className="px-2 py-1">
             <X size={18} color={colors.secondaryText} />
           </Pressable>
         </View>
@@ -240,7 +221,7 @@ export function InteractionPanel({
           placeholderTextColor="#A1A1AA"
           multiline
           editable={!sending}
-          onSubmitEditing={onSend}
+          onSubmitEditing={() => void handleSend()}
           className="flex-1 px-3 font-sans text-body-md text-primary-text"
         />
         <Pressable onPress={() => pick("voice")} className="px-1 py-1">
@@ -249,7 +230,7 @@ export function InteractionPanel({
             color={mode === "voice" ? colors.primary : colors.secondaryText}
           />
         </Pressable>
-        <Pressable disabled={!canSend} onPress={onSend} className="px-2 py-1">
+        <Pressable disabled={!canSend} onPress={() => void handleSend()} className="px-2 py-1">
           <Send size={22} color={canSend ? colors.primary : colors.secondaryText} />
         </Pressable>
       </View>
@@ -267,12 +248,15 @@ import type { Camera as VisionCameraView } from "react-native-vision-camera";
 function VisionLive({
   camera,
   ready,
+  extraProblem,
 }: {
   camera: RefObject<VisionCameraView | null>;
   ready: RefObject<boolean>;
+  extraProblem: string | null;
 }) {
   const { phase, problem, entries, captureStatus } = useVisionStream(camera, ready);
   const tail = entries.slice(-3);
+  const status = extraProblem ?? (phase === "failed" ? problem : captureStatus);
   return (
     <View className="mt-2 rounded-card border border-border bg-surface-1 px-3 py-2">
       {tail.map((e, i) => (
@@ -281,7 +265,7 @@ function VisionLive({
         </Text>
       ))}
       <Text className="mt-1 font-sans text-caption text-secondary-text">
-        {phase === "failed" ? problem : captureStatus}
+        {status}
       </Text>
     </View>
   );

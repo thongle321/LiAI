@@ -97,10 +97,9 @@ async def history(session_id: str | None = None) -> HistoryResponse | JSONRespon
 
 
 def _decode_image(data_uri: str) -> bytes:
-    """Accept a bare base64 payload or a data-uri; reject anything else."""
-    payload = data_uri.split(",", 1)[-1] if "," in data_uri else data_uri
+    """Bare base64 payload or data-uri; anything else raises ValueError."""
     try:
-        return base64.b64decode(payload, validate=True)
+        return base64.b64decode(data_uri.split(",", 1)[-1], validate=True)
     except ValueError:
         raise ValueError("image must be base64-encoded JPEG") from None
 

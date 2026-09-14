@@ -13,6 +13,10 @@ export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   text: string;
+  /** Local creation time (ms) for the design's timestamp row. */
+  at: number;
+  /** Optional image ref — bubble shows the design's picture box when set. */
+  image?: string;
   error?: ApiError;
 }
 
@@ -67,7 +71,7 @@ export function createChatStore(storage: KeyValueStorage) {
           sending: false,
           messages: [
             ...s.messages,
-            { id: newId(), role: "assistant", text: res.reply },
+            { id: newId(), role: "assistant", text: res.reply, at: Date.now() },
           ],
         }));
       } catch (err) {
@@ -105,6 +109,7 @@ export function createChatStore(storage: KeyValueStorage) {
               id: newId(),
               role: m.role,
               text: m.content,
+              at: Date.now(),
             })),
           });
         } catch {
@@ -127,7 +132,7 @@ export function createChatStore(storage: KeyValueStorage) {
         const id = newId();
         set((s) => ({
           sending: true,
-          messages: [...s.messages, { id, role: "user", text: trimmed }],
+          messages: [...s.messages, { id, role: "user", text: trimmed, at: Date.now() }],
         }));
         await runSend(id, trimmed);
         return true;

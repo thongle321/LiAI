@@ -141,6 +141,14 @@ describe("chat store", () => {
     assert.equal(storage.data["liai_session_id"], undefined);
   });
 
+  it("stamps messages with numeric times", async () => {
+    const useStore = createChatStore(memoryStorage());
+    await useStore.getState().send("hi");
+    const msgs = useStore.getState().messages;
+    assert.equal(msgs.length, 2);
+    assert.ok(msgs.every((m) => typeof m.at === "number"));
+  });
+
   it("checkHealth flips connection up and down", async () => {
     const useStore = createChatStore(memoryStorage());
     mockFetch(async () => jsonResponse({ status: "ok" }));

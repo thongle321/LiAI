@@ -1,101 +1,74 @@
+/** First-run welcome. Sets a versioned flag and replaces to /chat.
+ *
+ * Returning launches skip straight to chat. Tokens, Raleway scale,
+ * and Lucide icons only — no new assets.
+ */
+
 import { useEffect, useState } from "react";
-import {
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Plus } from "lucide-react-native";
+import { router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Eye, MessageCircle, Mic, type LucideIcon } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 import { APP_NAME } from "../constants/app.ts";
 
-import { Bubble } from "../components/Bubble.tsx";
-import { Connecting, Unavailable } from "../components/Unavailable.tsx";
-import { InteractionPanel } from "../components/InteractionPanel.tsx";
-import {
-  useChatStore,
-  type ChatMessage,
-  type Connection,
-} from "../store/chat.ts";
+export const ONBOARDED_KEY = "liai_onboarded_v1";
 
-const CONNECTION_DOT_CLASS: Record<Connection, string> = {
-  unknown: "status-dot status-dot--offline",
-  up: "status-dot status-dot--online",
-  down: "status-dot status-dot--error",
-};
+const ROWS: { Icon: LucideIcon; title: string; body: string }[] = [
+  { Icon: Eye, title: "See", body: "Point. Ask. Learn." },
+  { Icon: MessageCircle, title: "Chat", body: "Talk it through." },
+  { Icon: Mic, title: "Voice", body: "Tap to speak." },
+];
 
-// Design's opening line, fixed once (visual only until the first exchange).
-const GREETING: ChatMessage = {
-  id: "greeting",
-  role: "assistant",
-  text: "Hey there.\nWhat would you like to do today?",
-  at: Date.now(),
-};
-
-export default function ChatScreen() {
-  const messages = useChatStore((s) => s.messages);
-  const connection = useChatStore((s) => s.connection);
-  const sending = useChatStore((s) => s.sending);
-  const loadSession = useChatStore((s) => s.loadSession);
-  const checkHealth = useChatStore((s) => s.checkHealth);
-  const send = useChatStore((s) => s.send);
-  const retry = useChatStore((s) => s.retry);
-  const newConversation = useChatStore((s) => s.newConversation);
+export default function OnboardingScreen() {
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    void loadSession().then(() => checkHealth());
-  }, [loadSession, checkHealth]);
+    void AsyncStorage.getItem(ONBOARDED_KEY).then((flag) => {
+      if (flag === "1") router.replace("/chat");
+      else setChecked(true);
+    });
+  }, []);
 
-  const dot = CONNECTION_DOT_CLASS[connection];
-  // Design's opening line, visual only until the first real exchange.
-  const visibleMessages: ChatMessage[] =
-    messages.length === 0 ? [GREETING] : messages;
+  async function begin(): Promise<void> {
+    await AsyncStorage.setItem(ONBOARDED_KEY, "1");
+    router.replace("/chat");
+  }
+
+  if (!checked) return null;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#0B0C0C" }}>
-      <View className="flex-row items-center border-b border-border bg-base px-4 py-3">
-        <View className={dot} />
-        <Text className="flex-1 text-center font-sans-semibold text-h3 text-primary">
+      <View className="flex-1 justify-center px-8">
+        <Text className="text-center font-sans-semibold text-h1 text-primary">
           {APP_NAME}
         </Text>
-        <Pressable onPress={() => void newConversation()} className="flex-row items-center px-2 py-1">
-          <Plus size={18} color={colors.primary} />
-          <Text className="ml-1 font-sans text-body-md text-primary">New</Text>
+        <Text className="mt-2 text-center font-sans text-body-lg text-secondary-text">
+          Your AI companion.{"\n"}The world is more interesting when you can ask.
+        </Text>
+        <View className="mt-8">
+          {ROWS.map((r) => (
+            <View key={r.title} className="mb-3 flex-row items-center rounded-card border border-border bg-surface-1 p-4">
+              <r.Icon size={22} color={colors.primary} />
+              <View className="ml-3">
+                <Text className="font-sans-semibold text-body-md text-primary-text">
+                  {r.title}
+                </Text>
+                <Text className="font-sans text-body-sm text-secondary-text">
+                  {r.body}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+        <Pressable onPress={() => void begin()} className="btn btn--primary mt-8">
+          <Text className="text-center font-sans-semibold text-on-primary">
+            Get started
+          </Text>
         </Pressable>
       </View>
-
-      {connection === "unknown" ? (
-        <Connecting />
-      ) : connection === "down" ? (
-        <Unavailable onRetry={() => void checkHealth()} />
-      ) : (
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={{ flex: 1 }}
-        >
-          <FlatList
-            data={visibleMessages}
-            keyExtractor={(m) => m.id}
-            renderItem={({ item }) => (
-              <Bubble message={item} onRetry={() => void retry(item.id)} />
-            )}
-            contentContainerClassName="p-4"
-            className="flex-1"
-          />
-          {sending && (
-            <Text className="px-4 pb-1 font-sans text-body-sm text-secondary-text">LiAI…</Text>
-          )}
-          <InteractionPanel
-            sending={sending}
-            onSend={(text, image) => send(text, image)}
-            onNewConversation={() => void newConversation()}
-          />
-        </KeyboardAvoidingView>
-      )}
     </SafeAreaView>
   );
 }

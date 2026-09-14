@@ -8,6 +8,7 @@
  */
 
 import { useRef, useState } from "react";
+import type { RefObject } from "react";
 import { Image as RNImage, Pressable, Text, TextInput, View } from "react-native";
 import { AudioWaveform, Camera as CameraIcon, Mic, Plus, Send, Square, X } from "lucide-react-native";
 import {
@@ -18,6 +19,7 @@ import {
   Camera,
   useCameraDevice,
   useCameraPermission,
+  type Camera as VisionCameraView,
 } from "react-native-vision-camera";
 
 import { colors } from "../themes/tokens.ts";
@@ -72,16 +74,16 @@ export function InteractionPanel({
   useSpeechRecognitionEvent("error", (event) => {
     if (event.error === "aborted") return; // our own stop()
     if (event.error === "not-allowed") {
-      setVoiceIssue("denied");
+      setVoiceIssue("Microphone access is needed.");
     } else {
-      setVoiceIssue("Didn't catch that — try again.");
+      setVoiceIssue("Didn't catch that.");
     }
   });
 
   async function beginListening(): Promise<void> {
     const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!res.granted) {
-      setVoiceIssue("denied");
+      setVoiceIssue("Microphone access is needed.");
       return;
     }
     sentRef.current = false;
@@ -107,6 +109,7 @@ export function InteractionPanel({
 
   async function sendSpoken(text: string): Promise<void> {
     const said = text.trim();
+    ExpoSpeechRecognitionModule.stop();
     if (said === "") return;
     if (await onSend(said, attachment ?? undefined)) {
       setDraft("");
@@ -115,7 +118,7 @@ export function InteractionPanel({
     setMode("chat");
   }
 
-  function pick(next: ChatTab): void {
+  function selectTab(next: ChatTab): void {
     setPlusOpen(false);
     if (next !== "vision") setCamLive(false);
     if (next !== "voice" && listening) ExpoSpeechRecognitionModule.stop();
@@ -157,24 +160,15 @@ export function InteractionPanel({
           <Text className="mt-3 font-sans text-body-md text-secondary-text">
             {heard !== "" ? heard : "Listening…"}
           </Text>
-          {voiceIssue === "denied" ? (
-            <View className="mt-3 items-center">
+          {voiceIssue !== null && !listening && (
+            <View className="mt-2 items-center">
               <Text className="text-center font-sans text-body-sm text-secondary-text">
-                Microphone access is needed.
-              </Text>
-              <Pressable
-                onPress={() => void beginListening()}
-                className="btn btn--primary mt-3"
-              >
-                <Text className="font-sans-semibold text-on-primary">Grant access</Text>
-              </Pressable>
-            </View>
-          ) : (
-            voiceIssue !== null && (
-              <Text className="mt-2 text-center font-sans text-body-sm text-secondary-text">
                 {voiceIssue}
               </Text>
-            )
+              <Pressable onPress={() => void beginListening()} className="mt-1 px-4 py-1">
+                <Text className="font-sans text-body-md text-primary">Try again</Text>
+              </Pressable>
+            </View>
           )}
           <Pressable
             onPress={() => {
@@ -274,7 +268,7 @@ export function InteractionPanel({
 
       {attachment !== null && (
         <View className="mx-4 mb-1 flex-row items-center rounded-card border border-border bg-surface-1 p-2">
-          <RNImage source={{ uri: attachment }} style={{ width: 48, height: 48, borderRadius: 8 }} />
+          <RNImage source={{ uri: attachment }} className="h-12 w-12 rounded-lg" />
           <Text className="ml-2 flex-1 font-sans text-body-sm text-secondary-text">
             Photo attached
           </Text>
@@ -296,7 +290,7 @@ export function InteractionPanel({
             <View className="absolute bottom-11 left-0 w-40 rounded-card border border-border bg-surface-1 py-1">
               <PlusItem
                 label="Take photo"
-                onPress={() => pick("vision")}
+                onPress={() => selectTab("vision")}
               />
               <PlusItem label="Speak" onPress={toggleVoice} />
             </View>
@@ -306,7 +300,7 @@ export function InteractionPanel({
           value={draft}
           onChangeText={setDraft}
           placeholder={MODE_LABEL[mode]}
-          placeholderTextColor="#A1A1AA"
+          placeholderTextColor={colors.secondaryText}
           multiline
           editable={!sending}
           onSubmitEditing={() => void handleSend()}
@@ -323,13 +317,10 @@ export function InteractionPanel({
         </Pressable>
       </View>
 
-      <BottomNav active={mode} onSelect={(t) => (t === "voice" ? toggleVoice() : pick(t))} />
+      <BottomNav active={mode} onSelect={(t) => (t === "voice" ? toggleVoice() : selectTab(t))} />
     </View>
   );
 }
-
-import type { RefObject } from "react";
-import type { Camera as VisionCameraView } from "react-native-vision-camera";
 
 /** Live captions under the panel preview. Mounts only while vision is
  * expanded, so the socket connects on open and closes on collapse. */

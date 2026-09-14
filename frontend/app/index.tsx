@@ -13,6 +13,8 @@ import { router } from "expo-router";
 import { Menu, Plus, Send } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
+import { APP_NAME } from "../constants/app.ts";
+import { MENU } from "../data/menu.ts";
 
 import { Bubble } from "../components/Bubble.tsx";
 import { BottomNav, type ChatTab } from "../components/BottomNav.tsx";
@@ -30,14 +32,6 @@ const CONNECTION_DOT_CLASS: Record<Connection, string> = {
   up: "status-dot status-dot--online",
   down: "status-dot status-dot--error",
 };
-
-const MENU: { label: string; action: "see" | "chat" | "voice" | "more" | "new" }[] = [
-  { label: "SEE", action: "see" },
-  { label: "CHAT", action: "chat" },
-  { label: "VOICE", action: "voice" },
-  { label: "MORE", action: "more" },
-  { label: "New conversation", action: "new" },
-];
 
 // Design's opening line, fixed once (visual only until the first exchange).
 const GREETING: ChatMessage = {
@@ -86,7 +80,7 @@ export default function ChatScreen() {
       <View className="flex-row items-center border-b border-border bg-base px-4 py-3">
         <View className={dot} />
         <Text className="flex-1 text-center font-sans-semibold text-h3 text-primary">
-          LiAI
+          {APP_NAME}
         </Text>
         <Pressable onPress={() => setMenuOpen((o) => !o)} className="px-2 py-1">
           <Menu size={22} color={colors.primary} />

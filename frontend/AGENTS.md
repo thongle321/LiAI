@@ -43,6 +43,8 @@ The mobile application is responsible for:
 
 - AsyncStorage
 
+- VisionCamera
+
 ### Dependency Policy
 
 Do not introduce new major libraries unless there is a strong reason.
@@ -140,7 +142,16 @@ Use Uniwind classes. Do not use StyleSheet unless it is not possible
 to style with className.
 Use the Uniwind version installed in this project. Check
 package.json. Do not upgrade without approval.
-Reuse class patterns through utilities in global.css.
+Reuse class patterns through utilities in global.css and following BEM method.
+
+When buidling from an attacted design image:
+
+- match spacing closely
+- match typography hierachy
+- match border radius and shadows
+- match layout structure
+- use consistent reusable styles
+- make the UI responsive for different screen sizes
 
 ### Style Exception List
 

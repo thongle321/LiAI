@@ -1,15 +1,19 @@
 /** ONE persistent bottom interaction panel: composer + expanding voice/vision.
  *
- * Modes: chat (compact dock), voice (Listening + Stop), vision (live
- * preview + Capture), more (New conversation + Coming soon). The message
- * list always stays visible above; nothing navigates away. Voice is
- * visual-only — no audio deps. Capture snapshots the live preview and
- * hands a JPEG data-uri up; sending/wiring lives in the screen + store.
+ * Modes: chat (compact dock), voice (speech recognition, interim live,
+ * final auto-sends), vision (live preview + Capture), more (New
+ * conversation + Coming soon). The message list always stays visible
+ * above; nothing navigates away. Capture snapshots the live preview and
+ * attaches a JPEG data-uri; sending lives in the screen + store.
  */
 
 import { useRef, useState } from "react";
 import { Image as RNImage, Pressable, Text, TextInput, View } from "react-native";
 import { AudioWaveform, Camera as CameraIcon, Mic, Plus, Send, Square, X } from "lucide-react-native";
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from "expo-speech-recognition";
 import {
   Camera,
   useCameraDevice,
@@ -44,15 +48,77 @@ export function InteractionPanel({
   const [capturing, setCapturing] = useState(false);
   const [camProblem, setCamProblem] = useState<string | null>(null);
   const [camLive, setCamLive] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [heard, setHeard] = useState("");
+  const [voiceIssue, setVoiceIssue] = useState<string | null>(null);
+  const sentRef = useRef(false);
 
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice("back");
   const camera = useRef<Camera | null>(null);
   const ready = useRef(false);
 
+  useSpeechRecognitionEvent("start", () => setListening(true));
+  useSpeechRecognitionEvent("end", () => setListening(false));
+  useSpeechRecognitionEvent("result", (event) => {
+    const text = event.results[0]?.transcript ?? "";
+    if (text === "") return;
+    setHeard(text);
+    if (event.isFinal && !sentRef.current) {
+      sentRef.current = true;
+      void sendSpoken(text);
+    }
+  });
+  useSpeechRecognitionEvent("error", (event) => {
+    if (event.error === "aborted") return; // our own stop()
+    if (event.error === "not-allowed") {
+      setVoiceIssue("denied");
+    } else {
+      setVoiceIssue("Didn't catch that — try again.");
+    }
+  });
+
+  async function beginListening(): Promise<void> {
+    const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!res.granted) {
+      setVoiceIssue("denied");
+      return;
+    }
+    sentRef.current = false;
+    setHeard("");
+    setVoiceIssue(null);
+    ExpoSpeechRecognitionModule.start({
+      lang: "en-US",
+      interimResults: true,
+      continuous: false,
+    });
+  }
+
+  function toggleVoice(): void {
+    if (listening) {
+      ExpoSpeechRecognitionModule.stop();
+      setMode("chat");
+      return;
+    }
+    setPlusOpen(false);
+    setMode("voice");
+    void beginListening();
+  }
+
+  async function sendSpoken(text: string): Promise<void> {
+    const said = text.trim();
+    if (said === "") return;
+    if (await onSend(said, attachment ?? undefined)) {
+      setDraft("");
+      setAttachment(null);
+    }
+    setMode("chat");
+  }
+
   function pick(next: ChatTab): void {
     setPlusOpen(false);
     if (next !== "vision") setCamLive(false);
+    if (next !== "voice" && listening) ExpoSpeechRecognitionModule.stop();
     setMode((m) => (m === next && next !== "chat" ? "chat" : next));
   }
 
@@ -89,10 +155,32 @@ export function InteractionPanel({
         <View className="items-center px-4 pb-2 pt-5">
           <AudioWaveform size={48} color={colors.primary} />
           <Text className="mt-3 font-sans text-body-md text-secondary-text">
-            Listening…
+            {heard !== "" ? heard : "Listening…"}
           </Text>
+          {voiceIssue === "denied" ? (
+            <View className="mt-3 items-center">
+              <Text className="text-center font-sans text-body-sm text-secondary-text">
+                Microphone access is needed.
+              </Text>
+              <Pressable
+                onPress={() => void beginListening()}
+                className="btn btn--primary mt-3"
+              >
+                <Text className="font-sans-semibold text-on-primary">Grant access</Text>
+              </Pressable>
+            </View>
+          ) : (
+            voiceIssue !== null && (
+              <Text className="mt-2 text-center font-sans text-body-sm text-secondary-text">
+                {voiceIssue}
+              </Text>
+            )
+          )}
           <Pressable
-            onPress={() => setMode("chat")}
+            onPress={() => {
+              ExpoSpeechRecognitionModule.stop();
+              setMode("chat");
+            }}
             className="mt-4 items-center"
           >
             <View className="h-12 w-12 items-center justify-center rounded-full border border-error">
@@ -210,7 +298,7 @@ export function InteractionPanel({
                 label="Take photo"
                 onPress={() => pick("vision")}
               />
-              <PlusItem label="Speak" onPress={() => pick("voice")} />
+              <PlusItem label="Speak" onPress={toggleVoice} />
             </View>
           )}
         </View>
@@ -224,10 +312,10 @@ export function InteractionPanel({
           onSubmitEditing={() => void handleSend()}
           className="flex-1 px-3 font-sans text-body-md text-primary-text"
         />
-        <Pressable onPress={() => pick("voice")} className="px-1 py-1">
+        <Pressable onPress={toggleVoice} className="px-1 py-1">
           <Mic
             size={22}
-            color={mode === "voice" ? colors.primary : colors.secondaryText}
+            color={listening ? colors.primary : colors.secondaryText}
           />
         </Pressable>
         <Pressable disabled={!canSend} onPress={() => void handleSend()} className="px-2 py-1">
@@ -235,7 +323,7 @@ export function InteractionPanel({
         </Pressable>
       </View>
 
-      <BottomNav active={mode} onSelect={pick} />
+      <BottomNav active={mode} onSelect={(t) => (t === "voice" ? toggleVoice() : pick(t))} />
     </View>
   );
 }

@@ -47,6 +47,8 @@ The mobile application is responsible for:
 
 - lucide-react-native (+ react-native-svg peer, approved)
 
+- expo-speech-recognition (voice input, approved)
+
 ### Dependency Policy
 
 Do not introduce new major libraries unless there is a strong reason.

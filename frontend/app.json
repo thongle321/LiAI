@@ -41,6 +41,13 @@
       ],
       "expo-font",
       [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "LiAI needs the microphone to hear your questions.",
+          "speechRecognitionPermission": "LiAI needs speech recognition to transcribe your voice."
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {

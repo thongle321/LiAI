@@ -59,6 +59,7 @@ async def main() -> None:
         sys.exit("webcam 0 would not open")
     try:
         # ponytail: reconnect on backend restart instead of tracebacks (1012)
+        n = 0
         while True:
             try:
                 async with connect(URL, max_size=None) as ws:
@@ -82,8 +83,7 @@ async def main() -> None:
                                     }
                                 )
                             )
-                            n = getattr(main, "count", 0) + 1
-                            setattr(main, "count", n)
+                            n += 1
                             print(f"sent frame #{n}", flush=True)
                             await asyncio.sleep(SEND_EVERY_S)
                     finally:

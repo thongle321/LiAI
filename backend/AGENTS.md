@@ -37,6 +37,8 @@ This directory contains the backend responsible for:
 - FastAPI
 - Pydantic
 - Pydantic AI
+- llama-cpp-python (local GGUF VLM, CPU default)
+- WebSockets (realtime vision transport)
 - AsyncIO
 
 ### Storage
@@ -82,10 +84,23 @@ Use Pydantic AI for:
 - Validated AI responses
 - Application-level agent behavior
 
+### Realtime Vision
+
+Use the realtime pipeline (`app/realtime/`) for:
+
+- Live camera narration over WebSockets
+- Frame captioning with the local GGUF VLM via llama-cpp-python
+- Follow-up questions about what the camera sees
+
+There is no WebRTC or separate vision-agent framework: frames arrive
+over the existing FastAPI WebSocket, the VLM describes them, and
+Pydantic AI / the LLM reasons over those descriptions.
+CPU inference is the default; GPU offload is opt-in.
+
 ### Shared LiAI Services
 
-Application-level capabilities should remain independent from either
-framework where practical.
+Application-level capabilities should remain independent from any
+single framework or provider where practical.
 
 Shared services include:
 
@@ -98,7 +113,7 @@ Shared services include:
 - External services
 
 Do not create separate competing memory, personality, or tool systems
-inside Pydantic AI
+inside Pydantic AI or the realtime pipeline.
 
 ### Voice Input
 

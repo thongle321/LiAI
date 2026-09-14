@@ -1,3 +1,4 @@
+import base64
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -95,6 +96,15 @@ async def history(session_id: str | None = None) -> HistoryResponse | JSONRespon
         return _error(503, "store_error", str(exc))
 
 
+def _decode_image(data_uri: str) -> bytes:
+    """Accept a bare base64 payload or a data-uri; reject anything else."""
+    payload = data_uri.split(",", 1)[-1] if "," in data_uri else data_uri
+    try:
+        return base64.b64decode(payload, validate=True)
+    except ValueError:
+        raise ValueError("image must be base64-encoded JPEG") from None
+
+
 @app.websocket("/api/vision/ws")
 async def vision_ws(websocket: WebSocket) -> None:
     await handle_vision_socket(websocket)
@@ -112,13 +122,21 @@ async def chat(body: ChatRequest) -> ChatResponse | JSONResponse:
             history = store.get(session_id) or []
     except Exception as exc:
         return _error(503, "store_error", str(exc))
-    try:
-        result = await get_companion_agent().run(
-            body.message, message_history=to_message_history(history)
-        )
-    except Exception as exc:
-        return _error(502, "llm_error", str(exc))
-    reply = str(result.output)
+    if body.image is not None:
+        try:
+            reply = await vlm.describe_frame(_decode_image(body.image), body.message)
+        except ValueError as exc:
+            return _error(400, "invalid_request", str(exc))
+        except Exception as exc:  # noqa: BLE001 — same boundary as the text path below
+            return _error(502, "llm_error", str(exc))
+    else:
+        try:
+            result = await get_companion_agent().run(
+                body.message, message_history=to_message_history(history)
+            )
+        except Exception as exc:
+            return _error(502, "llm_error", str(exc))
+        reply = str(result.output)
     try:
         store.append(session_id, Turn(role="user", content=body.message))
         store.append(session_id, Turn(role="assistant", content=reply))

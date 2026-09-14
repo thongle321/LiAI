@@ -5,22 +5,19 @@ import {
   Platform,
   Pressable,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { Menu, Plus, Send } from "lucide-react-native";
+import { Menu } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 import { APP_NAME } from "../constants/app.ts";
 import { MENU } from "../data/menu.ts";
 
 import { Bubble } from "../components/Bubble.tsx";
-import { BottomNav, type ChatTab } from "../components/BottomNav.tsx";
 import { Connecting, Unavailable } from "../components/Unavailable.tsx";
-import { VisionPanel } from "../components/VisionPanel.tsx";
-import { VoicePanel } from "../components/VoicePanel.tsx";
+import { InteractionPanel } from "../components/InteractionPanel.tsx";
 import {
   useChatStore,
   type ChatMessage,
@@ -51,7 +48,7 @@ export default function ChatScreen() {
   const retry = useChatStore((s) => s.retry);
   const newConversation = useChatStore((s) => s.newConversation);
   const [draft, setDraft] = useState("");
-  const [tab, setTab] = useState<ChatTab>("chat");
+  const [attachment, setAttachment] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -60,15 +57,20 @@ export default function ChatScreen() {
 
   async function handleSend(): Promise<void> {
     const text = draft;
-    if (await send(text)) setDraft("");
+    const image = attachment;
+    if (await send(text, image ?? undefined)) {
+      setDraft("");
+      setAttachment(null);
+    }
   }
 
   function menuAction(action: (typeof MENU)[number]["action"]): void {
     setMenuOpen(false);
     if (action === "see") router.push("/vision");
     else if (action === "new") void newConversation();
-    else setTab(action);
   }
+  // Panel owns chat/voice/vision/more modes; header keeps route-level actions.
+  const actions = MENU.filter((m) => m.action === "see" || m.action === "new");
   const dot = CONNECTION_DOT_CLASS[connection];
   const canSend = !sending && draft.trim() !== "";
   // Design's opening line, visual only until the first real exchange.
@@ -88,7 +90,7 @@ export default function ChatScreen() {
       </View>
       {menuOpen && (
         <View className="absolute right-3 top-14 z-10 w-48 rounded-card border border-border bg-surface-1 py-1">
-          {MENU.map((m) => (
+          {actions.map((m) => (
             <Pressable
               key={m.label}
               onPress={() => menuAction(m.action)}
@@ -106,23 +108,6 @@ export default function ChatScreen() {
         <Connecting />
       ) : connection === "down" ? (
         <Unavailable onRetry={() => void checkHealth()} />
-      ) : tab === "voice" ? (
-        <View className="flex-1">
-          <VoicePanel />
-        </View>
-      ) : tab === "vision" ? (
-        <View className="flex-1">
-          <VisionPanel onOpen={() => router.push("/vision")} />
-        </View>
-      ) : tab === "more" ? (
-        <View className="m-4 rounded-card border border-border bg-surface-1 p-6">
-          <Text className="font-sans-semibold text-body-md text-primary-text">
-            More
-          </Text>
-          <Text className="mt-1 font-sans text-body-sm text-secondary-text">
-            Coming soon.
-          </Text>
-        </View>
       ) : (
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -135,37 +120,24 @@ export default function ChatScreen() {
               <Bubble message={item} onRetry={() => void retry(item.id)} />
             )}
             contentContainerClassName="p-4"
+            className="flex-1"
           />
           {sending && (
             <Text className="px-4 pb-1 font-sans text-body-sm text-secondary-text">LiAI…</Text>
           )}
-          <View className="mx-4 mb-2 flex-row items-center rounded-full border border-border bg-surface-1 px-2 py-1">
-            <Pressable
-              onPress={() => router.push("/vision")}
-              className="h-9 w-9 items-center justify-center rounded-full border border-border"
-            >
-              <Plus size={22} color={colors.primary} />
-            </Pressable>
-            <TextInput
-              value={draft}
-              onChangeText={setDraft}
-              placeholder="Type a message…"
-              placeholderTextColor="#A1A1AA"
-              multiline
-              editable={!sending}
-              onSubmitEditing={() => void handleSend()}
-              className="flex-1 px-3 font-sans text-body-md text-primary-text"
-            />
-            <Pressable disabled={!canSend} onPress={() => void handleSend()} className="px-2 py-1">
-              <Send
-                size={22}
-                color={canSend ? colors.primary : colors.secondaryText}
-              />
-            </Pressable>
-          </View>
+          <InteractionPanel
+            draft={draft}
+            setDraft={setDraft}
+            canSend={canSend}
+            sending={sending}
+            onSend={() => void handleSend()}
+            attachment={attachment}
+            onRemoveAttachment={() => setAttachment(null)}
+            onCapture={setAttachment}
+            onNewConversation={() => void newConversation()}
+          />
         </KeyboardAvoidingView>
       )}
-      <BottomNav active={tab} onSelect={setTab} />
     </SafeAreaView>
   );
 }

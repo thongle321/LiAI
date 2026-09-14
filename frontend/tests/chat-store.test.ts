@@ -141,6 +141,23 @@ describe("chat store", () => {
     assert.equal(storage.data["liai_session_id"], undefined);
   });
 
+  it("attaches the photo to the user message and posts it", async () => {
+    let posted: unknown = null;
+    mockFetch(async (_url, init) => {
+      posted = JSON.parse(String(init?.body));
+      return jsonResponse({ reply: "a red mug", session_id: "s1" });
+    });
+    const useStore = createChatStore(memoryStorage());
+    assert.equal(await useStore.getState().send("what?", "data:image/jpeg;base64,AAA"), true);
+    const msgs = useStore.getState().messages;
+    assert.equal(msgs[0].image, "data:image/jpeg;base64,AAA");
+    assert.deepEqual(posted, {
+      message: "what?",
+      image: "data:image/jpeg;base64,AAA",
+    });
+    assert.equal(msgs[1].text, "a red mug");
+  });
+
   it("stamps messages with numeric times", async () => {
     const useStore = createChatStore(memoryStorage());
     await useStore.getState().send("hi");

@@ -31,6 +31,39 @@ def test_chat_rejects_missing_and_blank() -> None:
     assert client.post("/api/chat", json={"message": "   "}).status_code == 422
 
 
+def test_chat_image_rejects_bad_base64() -> None:
+    resp = client.post(
+        "/api/chat", json={"message": "what is this?", "image": "!!!"}
+    )
+    assert resp.status_code == 400
+    assert resp.json()["error"]["code"] == "invalid_request"
+
+
+def test_chat_image_routes_to_vlm(monkeypatch: MonkeyPatch) -> None:
+    import base64
+
+    seen: dict[str, object] = {}
+
+    async def fake_describe(image: bytes, question: str) -> str:
+        seen["image"] = image
+        seen["question"] = question
+        return "a red mug"
+
+    monkeypatch.setattr("app.realtime.vlm.describe_frame", fake_describe)
+    payload = base64.b64encode(b"fake-jpeg-bytes").decode()
+    resp = client.post(
+        "/api/chat",
+        json={
+            "message": "what is this?",
+            "image": f"data:image/jpeg;base64,{payload}",
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["reply"] == "a red mug"
+    assert seen == {"image": b"fake-jpeg-bytes", "question": "what is this?"}
+
+
 def test_old_chat_route_dropped() -> None:
     assert client.post("/chat", json={"message": "hi"}).status_code == 404
 

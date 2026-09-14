@@ -7,6 +7,8 @@
 export interface ChatRequest {
   message: string;
   session_id?: string;
+  /** Optional JPEG data-uri; backend routes it to the VLM when present. */
+  image?: string;
 }
 
 export interface ChatResponse {

@@ -80,10 +80,11 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
 export function postChat(
   message: string,
   sessionId?: string,
+  image?: string,
 ): Promise<ChatResponse> {
-  const body: ChatRequest = sessionId
-    ? { message, session_id: sessionId }
-    : { message };
+  const body: ChatRequest = { message };
+  if (sessionId !== undefined) body.session_id = sessionId;
+  if (image !== undefined) body.image = image;
   return request<ChatResponse>("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

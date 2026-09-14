@@ -29,7 +29,7 @@ interface ChatState {
   sending: boolean;
   loadSession: () => Promise<void>;
   checkHealth: () => Promise<void>;
-  send: (text: string) => Promise<boolean>;
+  send: (text: string, image?: string) => Promise<boolean>;
   retry: (messageId: string) => Promise<boolean>;
   newConversation: () => Promise<void>;
 }
@@ -60,9 +60,9 @@ function newId(): string {
 
 export function createChatStore(storage: KeyValueStorage) {
   return create<ChatState>()((set, get) => {
-    async function runSend(id: string, text: string): Promise<void> {
+    async function runSend(id: string, text: string, image?: string): Promise<void> {
       try {
-        const res = await postChat(text, get().sessionId ?? undefined);
+        const res = await postChat(text, get().sessionId ?? undefined, image);
         if (get().sessionId !== res.session_id) {
           await storage.setItem(SESSION_KEY, res.session_id);
         }
@@ -126,15 +126,15 @@ export function createChatStore(storage: KeyValueStorage) {
         }
       },
 
-      send: async (text: string) => {
+      send: async (text: string, image?: string) => {
         const trimmed = text.trim();
         if (trimmed === "" || get().sending) return false;
         const id = newId();
         set((s) => ({
           sending: true,
-          messages: [...s.messages, { id, role: "user", text: trimmed, at: Date.now() }],
+          messages: [...s.messages, { id, role: "user", text: trimmed, at: Date.now(), ...(image !== undefined ? { image } : {}) }],
         }));
-        await runSend(id, trimmed);
+        await runSend(id, trimmed, image);
         return true;
       },
 
@@ -148,7 +148,7 @@ export function createChatStore(storage: KeyValueStorage) {
             m.id === messageId ? { ...m, error: undefined } : m,
           ),
         }));
-        await runSend(messageId, message.text);
+        await runSend(messageId, message.text, message.image);
         return true;
       },
 

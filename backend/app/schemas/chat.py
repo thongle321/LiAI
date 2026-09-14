@@ -10,6 +10,8 @@ class HealthResponse(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     session_id: str | None = None
+    # Optional JPEG data-uri; when present the turn is answered by the VLM.
+    image: str | None = None
 
     @field_validator("message")
     @classmethod

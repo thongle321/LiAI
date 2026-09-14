@@ -1,4 +1,4 @@
-import { Pressable, Text, View } from "react-native";
+import { Image as RNImage, Pressable, Text, View } from "react-native";
 import { Bot, CheckCheck, Image } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
@@ -37,6 +37,12 @@ export function Bubble({
   if (message.role === "user") {
     return (
       <View className="my-1 max-w-[80%] self-end items-end">
+        {message.image !== undefined && (
+          <RNImage
+            source={{ uri: message.image }}
+            style={{ width: 160, height: 120, borderRadius: 12, marginBottom: 4 }}
+          />
+        )}
         <View className="rounded-card rounded-br-sm bg-primary px-4 py-2">
           <Text className="font-sans text-body-md text-on-primary">
             {message.text}

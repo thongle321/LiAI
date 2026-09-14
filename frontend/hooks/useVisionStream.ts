@@ -127,7 +127,7 @@ export function useVisionStream(
             typeof e === "object" && e !== null && "message" in e
               ? String((e as { message: unknown }).message)
               : String(e);
-          console.error("[vision] snapshot failed", detail);
+          // Inline only: console.error would raise the dev overlay.
           setProblem(`Capture failed: ${detail}`);
         })
         .finally(() => {

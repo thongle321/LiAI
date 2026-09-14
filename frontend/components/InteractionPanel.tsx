@@ -19,6 +19,7 @@ import { deleteAsync, EncodingType, readAsStringAsync } from "expo-file-system/l
 
 import { colors } from "../themes/tokens.ts";
 import { BottomNav, type ChatTab } from "./BottomNav.tsx";
+import { useVisionStream } from "../hooks/useVisionStream.ts";
 
 export type PanelMode = ChatTab;
 
@@ -54,6 +55,7 @@ export function InteractionPanel({
   const [plusOpen, setPlusOpen] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [camProblem, setCamProblem] = useState<string | null>(null);
+  const [camLive, setCamLive] = useState(false);
 
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice("back");
@@ -62,12 +64,15 @@ export function InteractionPanel({
 
   function pick(mode: PanelMode): void {
     setPlusOpen(false);
+    if (mode !== "vision") setCamLive(false);
     setMode((m) => (m === mode && mode !== "chat" ? "chat" : mode));
   }
 
   async function capture(): Promise<void> {
     const cam = camera.current;
-    if (cam === null || capturing || !ready.current) return;
+    // Gate: snapshot on a zero-size/uninitialized preview throws
+    // "width and height must be > 0" — wait for onInitialized.
+    if (cam === null || capturing || !ready.current || !camLive) return;
     setCapturing(true);
     setCamProblem(null);
     try {
@@ -146,6 +151,7 @@ export function InteractionPanel({
                 video
                 onInitialized={() => {
                   ready.current = true;
+                  setCamLive(true);
                 }}
                 onError={(e: { message?: unknown }) =>
                   setCamProblem(`Camera error: ${String(e.message ?? e)}`)
@@ -163,7 +169,7 @@ export function InteractionPanel({
           )}
           <Pressable
             onPress={() => void capture()}
-            disabled={!hasPermission || device === undefined || capturing}
+            disabled={!hasPermission || device === undefined || capturing || !camLive}
             className="mt-2 items-center"
           >
             <View
@@ -177,9 +183,12 @@ export function InteractionPanel({
               />
             </View>
             <Text className="mt-1 font-sans text-body-sm text-secondary-text">
-              {capturing ? "Capturing…" : "Capture"}
+              {capturing ? "Capturing…" : camLive ? "Capture" : "Starting camera…"}
             </Text>
           </Pressable>
+          {device !== undefined && (
+            <VisionLive camera={camera} ready={ready} />
+          )}
         </View>
       )}
 
@@ -246,6 +255,34 @@ export function InteractionPanel({
       </View>
 
       <BottomNav active={mode} onSelect={pick} />
+    </View>
+  );
+}
+
+import type { RefObject } from "react";
+import type { Camera as VisionCameraView } from "react-native-vision-camera";
+
+/** Live captions under the panel preview. Mounts only while vision is
+ * expanded, so the socket connects on open and closes on collapse. */
+function VisionLive({
+  camera,
+  ready,
+}: {
+  camera: RefObject<VisionCameraView | null>;
+  ready: RefObject<boolean>;
+}) {
+  const { phase, problem, entries, captureStatus } = useVisionStream(camera, ready);
+  const tail = entries.slice(-3);
+  return (
+    <View className="mt-2 rounded-card border border-border bg-surface-1 px-3 py-2">
+      {tail.map((e, i) => (
+        <Text key={`${tail.length}-${i}`} className="font-sans text-body-sm text-primary-text">
+          {e}
+        </Text>
+      ))}
+      <Text className="mt-1 font-sans text-caption text-secondary-text">
+        {phase === "failed" ? problem : captureStatus}
+      </Text>
     </View>
   );
 }

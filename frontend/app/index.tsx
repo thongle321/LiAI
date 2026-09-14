@@ -8,7 +8,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
 import { Menu } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
@@ -66,11 +65,10 @@ export default function ChatScreen() {
 
   function menuAction(action: (typeof MENU)[number]["action"]): void {
     setMenuOpen(false);
-    if (action === "see") router.push("/vision");
-    else if (action === "new") void newConversation();
+    if (action === "new") void newConversation();
   }
-  // Panel owns chat/voice/vision/more modes; header keeps route-level actions.
-  const actions = MENU.filter((m) => m.action === "see" || m.action === "new");
+  // Panel owns chat/voice/vision/more modes; header keeps session actions.
+  const actions = MENU.filter((m) => m.action === "new");
   const dot = CONNECTION_DOT_CLASS[connection];
   const canSend = !sending && draft.trim() !== "";
   // Design's opening line, visual only until the first real exchange.

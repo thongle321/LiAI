@@ -25,6 +25,10 @@ export function voiceErrorAction(streak: number, code: string): VoiceErrorAction
   if (code === "not-allowed") {
     return { fatal: true, message: "Microphone access is needed." };
   }
+  // Throttled: every new start() extends the ban, so stop at once.
+  if (code === "too-many-requests") {
+    return { fatal: true, message: "Too many voice requests — wait a bit and try again." };
+  }
   if (streak + 1 >= MAX_VOICE_ERROR_STREAK) {
     return { fatal: true, message: `Having trouble hearing you (${code}).` };
   }

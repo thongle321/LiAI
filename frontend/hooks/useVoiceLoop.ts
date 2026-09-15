@@ -111,14 +111,11 @@ export function useVoiceLoop() {
     }
     setHeard(NUDGE);
     safeStopListen();
-    // A busy recognizer needs a beat before it accepts a new start.
-    if (code === "busy") {
-      setTimeout(() => {
-        if (aliveRef.current) void beginListening();
-      }, 1000);
-      return;
-    }
-    void beginListening();
+    // Breathing room: instant restarts hammer start() and Android
+    // answers ERROR_TOO_MANY_REQUESTS. One calm retry after 2s.
+    setTimeout(() => {
+      if (aliveRef.current && phaseRef.current === "listening") void beginListening();
+    }, 2000);
   }
 
   async function handleUtterance(text: string): Promise<void> {

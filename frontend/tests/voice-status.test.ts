@@ -43,6 +43,11 @@ describe("voiceErrorAction", () => {
     assert.equal(a.fatal, true);
     assert.match(a.message, /network/);
   });
+  it("throttling fails at once — retrying extends the ban", () => {
+    const a = voiceErrorAction(0, "too-many-requests");
+    assert.equal(a.fatal, true);
+    assert.match(a.message, /Too many voice requests/);
+  });
 });
 
 describe("bargeActionFor", () => {

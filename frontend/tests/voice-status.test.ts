@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import {
   bargeActionFor,
   showsReplyOverlay,
+  voiceErrorAction,
   VOICE_STATUS_LABEL,
 } from "../lib/voiceStatus.ts";
 
@@ -24,6 +25,23 @@ describe("showsReplyOverlay", () => {
     assert.equal(showsReplyOverlay("listening"), false);
     assert.equal(showsReplyOverlay("thinking"), false);
     assert.equal(showsReplyOverlay("idle"), false);
+  });
+});
+
+describe("voiceErrorAction", () => {
+  it("denied permission fails at once", () => {
+    const a = voiceErrorAction(0, "not-allowed");
+    assert.equal(a.fatal, true);
+    assert.match(a.message, /Microphone access/);
+  });
+  it("early failures nudge and keep listening", () => {
+    const a = voiceErrorAction(0, "no-speech");
+    assert.equal(a.fatal, false);
+  });
+  it("a long failure run gives up naming the error code", () => {
+    const a = voiceErrorAction(99, "network");
+    assert.equal(a.fatal, true);
+    assert.match(a.message, /network/);
   });
 });
 

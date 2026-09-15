@@ -13,14 +13,11 @@ import {
 } from "expo-speech-recognition";
 
 import type { VoicePhase } from "../lib/voiceStatus.ts";
-import { bargeActionFor } from "../lib/voiceStatus.ts";
+import { bargeActionFor, voiceErrorAction } from "../lib/voiceStatus.ts";
 import { VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
 import { useChatStore } from "../store/chat.ts";
 
 const NUDGE = "I'm listening…";
-// ponytail: restart cap — a broken recognizer errors instantly, and the
-// nudge-restart would hot-loop without this.
-const MAX_ERROR_STREAK = 3;
 
 export function useVoiceLoop() {
   const [phase, setPhase] = useState<VoicePhase>("idle");
@@ -32,7 +29,13 @@ export function useVoiceLoop() {
   const phaseRef = useRef<VoicePhase>("idle");
   const aliveRef = useRef(true);
   const sentRef = useRef(false);
+  // Consecutive failures without any transcript; reset by a result or
+  // an explicit user retry — never by a restart, or a deaf recognizer
+  // would nudge forever instead of saying what's wrong.
   const errorStreakRef = useRef(0);
+  // Guards overlapping beginListening calls (double-mount, fast
+  // restarts): a second start() while busy errors the session.
+  const startingRef = useRef(false);
   // Set when the user cuts the audio: the stop callback then stays quiet
   // because bargeIn already restarted listening itself.
   const bargedRef = useRef(false);
@@ -61,7 +64,8 @@ export function useVoiceLoop() {
   }
 
   async function beginListening(): Promise<void> {
-    if (!aliveRef.current) return;
+    if (!aliveRef.current || startingRef.current) return;
+    startingRef.current = true;
     try {
       const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!aliveRef.current) return;
@@ -71,7 +75,6 @@ export function useVoiceLoop() {
         return;
       }
       sentRef.current = false;
-      errorStreakRef.current = 0;
       setHeard("");
       setIssue(null);
       setBoth("listening");
@@ -82,7 +85,40 @@ export function useVoiceLoop() {
       if (!aliveRef.current) return;
       setIssue("Voice input isn't available in this build — rebuild the dev client.");
       setBoth("idle");
+    } finally {
+      startingRef.current = false;
     }
+  }
+
+  /** Explicit user retry: fresh streak, fresh listen. */
+  function retry(): void {
+    errorStreakRef.current = 0;
+    void beginListening();
+  }
+
+  /** One shared failure path for error + nomatch events. */
+  function handleRecognitionFailure(code: string): void {
+    // Permanent: shows in the Expo terminal AND names the code on
+    // screen at the streak cap, so a deaf recognizer can't fail
+    // silently anymore.
+    console.warn(`[voice] recognition failure: ${code}`);
+    const action = voiceErrorAction(errorStreakRef.current, code);
+    errorStreakRef.current += 1;
+    if (action.fatal) {
+      setIssue(action.message);
+      setBoth("idle");
+      return;
+    }
+    setHeard(NUDGE);
+    safeStopListen();
+    // A busy recognizer needs a beat before it accepts a new start.
+    if (code === "busy") {
+      setTimeout(() => {
+        if (aliveRef.current) void beginListening();
+      }, 1000);
+      return;
+    }
+    void beginListening();
   }
 
   async function handleUtterance(text: string): Promise<void> {
@@ -179,12 +215,6 @@ export function useVoiceLoop() {
     }
   }
 
-  useSpeechRecognitionEvent("start", () => {
-    // A fresh listen resets the silence streak: the cap below then only
-    // trips when the recognizer errors without ever starting (broken
-    // build), so genuine silence keeps the loop alive forever.
-    errorStreakRef.current = 0;
-  });
   useSpeechRecognitionEvent("result", (event) => {
     const text = event.results[0]?.transcript ?? "";
     if (text === "") return;
@@ -195,24 +225,15 @@ export function useVoiceLoop() {
       void handleUtterance(text);
     }
   });
+  useSpeechRecognitionEvent("nomatch", () => {
+    // Final result with nothing recognizable: same path as a failure.
+    if (!aliveRef.current || phaseRef.current !== "listening") return;
+    handleRecognitionFailure("nomatch");
+  });
   useSpeechRecognitionEvent("error", (event) => {
     if (event.error === "aborted") return; // our own stop()
     if (!aliveRef.current || phaseRef.current !== "listening") return;
-    if (event.error === "not-allowed") {
-      setIssue("Microphone access is needed.");
-      setBoth("idle");
-      return;
-    }
-    // Silence / no-speech: nudge and keep the loop alive.
-    errorStreakRef.current += 1;
-    if (errorStreakRef.current >= MAX_ERROR_STREAK) {
-      setIssue("Having trouble hearing you.");
-      setBoth("idle");
-      return;
-    }
-    setHeard(NUDGE);
-    safeStopListen();
-    void beginListening();
+    handleRecognitionFailure(event.error);
   });
 
   useEffect(() => {
@@ -226,5 +247,5 @@ export function useVoiceLoop() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { phase, heard, reply, issue, bargeIn, retry: beginListening };
+  return { phase, heard, reply, issue, bargeIn, retry };
 }

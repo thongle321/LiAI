@@ -52,10 +52,10 @@ describe("voiceErrorAction", () => {
 
 describe("bargeActionFor", () => {
   it("maps each phase to its mic-tap action", () => {
-    // Tapping mid-listen restarts the listen (loop never dies),
-    // speaking interrupts, thinking is in-flight, idle begins.
+    // Tap-to-talk: taps never start listening on their own — idle
+    // begins, live taps stop back to idle, thinking is in-flight.
     assert.equal(bargeActionFor("speaking"), "interrupt");
-    assert.equal(bargeActionFor("listening"), "restart");
+    assert.equal(bargeActionFor("listening"), "stop");
     assert.equal(bargeActionFor("thinking"), "ignore");
     assert.equal(bargeActionFor("idle"), "begin");
   });

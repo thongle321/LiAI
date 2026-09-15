@@ -1,4 +1,4 @@
-/** Standalone voice tab (ChatGPT-style hands-free loop).
+/** Standalone voice tab (tap-to-talk).
  *
  * Render-only screen: the turn loop lives in hooks/useVoiceLoop. Its
  * own tab, so no X button — the bottom tab bar switches away. Big
@@ -108,7 +108,7 @@ export default function VoiceScreen() {
       </ScrollView>
 
       <Text className="pb-2 text-center font-sans text-body-sm text-secondary-text">
-        Tap the mic to interrupt
+        Tap the mic to talk
       </Text>
       <BottomNav
         active="voice"

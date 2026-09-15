@@ -18,7 +18,7 @@ export function showsReplyOverlay(phase: VoicePhase): boolean {
 export const MAX_VOICE_ERROR_STREAK = 5;
 
 export type VoiceErrorAction = { fatal: boolean; message: string };
-export type BargeAction = "begin" | "restart" | "interrupt" | "ignore";
+export type BargeAction = "begin" | "stop" | "interrupt" | "ignore";
 
 /** Nudge-and-retry, or give up naming the recognizer's error code. */
 export function voiceErrorAction(streak: number, code: string): VoiceErrorAction {
@@ -35,13 +35,13 @@ export function voiceErrorAction(streak: number, code: string): VoiceErrorAction
   return { fatal: false, message: "" };
 }
 
-/** Mic-tap action per phase: taps never kill the hands-free loop. */
+/** Mic-tap action per phase: taps stop back to idle, never auto-listen. */
 export function bargeActionFor(phase: VoicePhase): BargeAction {
   switch (phase) {
     case "speaking":
       return "interrupt";
     case "listening":
-      return "restart";
+      return "stop";
     case "thinking":
       return "ignore";
     case "idle":

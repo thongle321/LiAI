@@ -1,8 +1,7 @@
-/** Hands-free voice loop: listen → send via store → speak the reply.
- *
- * The screen owns rendering (mic, overlay, captions); everything
- * stateful lives here. Each turn appends to the current chat through
- * the store's send(), so voice shares history with typed chat.
+/** Tap-to-talk voice: the mic only listens after a tap — on open,
+ * after a reply, after a failure. Every turn appends to the current
+ * chat through the store's send(), so voice shares history with
+ * typed chat. Screen owns rendering; everything stateful lives here.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -17,7 +16,7 @@ import { bargeActionFor, voiceErrorAction } from "../lib/voiceStatus.ts";
 import { VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
 import { useChatStore } from "../store/chat.ts";
 
-const NUDGE = "I'm listening…";
+const NOTHING_HEARD = "Didn't hear anything — tap the mic to try again.";
 
 export function useVoiceLoop() {
   const [phase, setPhase] = useState<VoicePhase>("idle");
@@ -36,9 +35,6 @@ export function useVoiceLoop() {
   // Guards overlapping beginListening calls (double-mount, fast
   // restarts): a second start() while busy errors the session.
   const startingRef = useRef(false);
-  // Set when the user cuts the audio: the stop callback then stays quiet
-  // because bargeIn already restarted listening itself.
-  const bargedRef = useRef(false);
 
   function setBoth(next: VoicePhase): void {
     phaseRef.current = next;
@@ -109,13 +105,11 @@ export function useVoiceLoop() {
       setBoth("idle");
       return;
     }
-    setHeard(NUDGE);
+    // Tap-to-talk: a miss ends the turn with a prompt, not a restart.
+    setHeard("");
+    setIssue(NOTHING_HEARD);
     safeStopListen();
-    // Breathing room: instant restarts hammer start() and Android
-    // answers ERROR_TOO_MANY_REQUESTS. One calm retry after 2s.
-    setTimeout(() => {
-      if (aliveRef.current && phaseRef.current === "listening") void beginListening();
-    }, 2000);
+    setBoth("idle");
   }
 
   async function handleUtterance(text: string): Promise<void> {
@@ -123,8 +117,9 @@ export function useVoiceLoop() {
     safeStopListen();
     if (!aliveRef.current) return;
     if (said === "") {
-      setHeard(NUDGE);
-      void beginListening();
+      setHeard("");
+      setIssue(NOTHING_HEARD);
+      setBoth("idle");
       return;
     }
     setBoth("thinking");
@@ -157,7 +152,6 @@ export function useVoiceLoop() {
 
   function speak(text: string): void {
     if (!aliveRef.current) return;
-    bargedRef.current = false;
     safeStopSpeak();
     setReply(text);
     setHeard("");
@@ -167,15 +161,10 @@ export function useVoiceLoop() {
       Speech.speak(text, {
         language: "en-US",
         onDone: () => {
-          if (bargedRef.current || !aliveRef.current || phaseRef.current !== "speaking") return;
-          void beginListening();
+          if (aliveRef.current && phaseRef.current === "speaking") setBoth("idle");
         },
         onStopped: () => {
-          if (bargedRef.current) {
-            bargedRef.current = false;
-            return;
-          }
-          if (aliveRef.current && phaseRef.current === "speaking") void beginListening();
+          if (aliveRef.current && phaseRef.current === "speaking") setBoth("idle");
         },
         onError: () => {
           if (!aliveRef.current) return;
@@ -190,24 +179,21 @@ export function useVoiceLoop() {
     }
   }
 
-  /** Tap the mic (or Stop): cut the audio, open the mic at once. */
+  /** Mic tap: begin from idle, stop back to idle — never auto-listen. */
   function bargeIn(): void {
     switch (bargeActionFor(phaseRef.current)) {
       case "begin":
         void beginListening();
         return;
-      case "restart":
-        // Fresh listen, not idle: taps never kill the hands-free loop.
+      case "stop":
         safeStopListen();
-        void beginListening();
+        setBoth("idle");
         return;
       case "ignore":
         return; // request in flight, nothing to cut yet
       case "interrupt":
-        bargedRef.current = true;
         safeStopSpeak();
-        setBoth("listening");
-        void beginListening();
+        setBoth("idle");
         return;
     }
   }
@@ -234,8 +220,8 @@ export function useVoiceLoop() {
   });
 
   useEffect(() => {
+    // Tap-to-talk: open idle, wait for the mic tap.
     aliveRef.current = true;
-    void beginListening();
     return () => {
       aliveRef.current = false;
       safeStopListen();

@@ -19,6 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .agents import get_companion_agent
 from .agents.companion import to_message_history
 from .memory import Turn, get_store
+from .providers.factory import get_provider
 from .realtime import vlm
 from .realtime.ws import handle_vision_socket
 from .schemas import (
@@ -32,6 +33,13 @@ from .schemas import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    provider = get_provider()
+    model = getattr(provider, "model_name", None)
+    logging.getLogger(__name__).info(
+        "llm provider=%s%s",
+        type(provider).__name__,
+        f" model={model}" if model else "",
+    )
     vlm.warmup()
     yield
 

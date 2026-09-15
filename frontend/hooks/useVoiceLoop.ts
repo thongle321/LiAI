@@ -14,6 +14,8 @@ import {
 } from "expo-speech-recognition";
 
 import type { VoicePhase } from "../lib/voiceStatus.ts";
+import { bargeActionFor } from "../lib/voiceStatus.ts";
+import { VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
 import { useChatStore } from "../store/chat.ts";
 
 const NUDGE = "I'm listening…";
@@ -32,6 +34,9 @@ export function useVoiceLoop() {
   const aliveRef = useRef(true);
   const sentRef = useRef(false);
   const errorStreakRef = useRef(0);
+  // Set when the user cuts the audio: the stop callback then stays quiet
+  // because bargeIn already restarted listening itself.
+  const bargedRef = useRef(false);
 
   function setBoth(next: VoicePhase): void {
     phaseRef.current = next;
@@ -72,9 +77,7 @@ export function useVoiceLoop() {
       setIssue(null);
       setBoth("listening");
       ExpoSpeechRecognitionModule.start({
-        lang: "en-US",
-        interimResults: true,
-        continuous: false,
+        ...VOICE_LISTEN_OPTS,
       });
     } catch {
       if (!aliveRef.current) return;
@@ -93,6 +96,13 @@ export function useVoiceLoop() {
       return;
     }
     setBoth("thinking");
+    // A typed send may still be in flight (store.send refuses while
+    // busy): wait for it instead of failing the turn and the loop.
+    let waited = 0;
+    while (useChatStore.getState().sending && waited < 10 && aliveRef.current) {
+      await new Promise((r) => setTimeout(r, 1000));
+      waited += 1;
+    }
     const before = useChatStore.getState().messages.length;
     const ok = await send(said);
     if (!aliveRef.current) return;
@@ -115,6 +125,7 @@ export function useVoiceLoop() {
 
   function speak(text: string): void {
     if (!aliveRef.current) return;
+    bargedRef.current = false;
     safeStopSpeak();
     setReply(text);
     setHeard("");
@@ -124,9 +135,14 @@ export function useVoiceLoop() {
       Speech.speak(text, {
         language: "en-US",
         onDone: () => {
-          if (aliveRef.current && phaseRef.current === "speaking") void beginListening();
+          if (bargedRef.current || !aliveRef.current || phaseRef.current !== "speaking") return;
+          void beginListening();
         },
         onStopped: () => {
+          if (bargedRef.current) {
+            bargedRef.current = false;
+            return;
+          }
           if (aliveRef.current && phaseRef.current === "speaking") void beginListening();
         },
         onError: () => {
@@ -144,30 +160,40 @@ export function useVoiceLoop() {
 
   /** Tap the mic (or Stop): cut the audio, open the mic at once. */
   function bargeIn(): void {
-    if (phaseRef.current === "thinking") return;
-    if (phaseRef.current === "speaking") {
-      safeStopSpeak();
-      // onStopped restarts listening; fall through if it never fires.
-      setTimeout(() => {
-        if (aliveRef.current && phaseRef.current === "speaking") void beginListening();
-      }, 500);
-      return;
+    switch (bargeActionFor(phaseRef.current)) {
+      case "begin":
+        void beginListening();
+        return;
+      case "restart":
+        // Fresh listen, not idle: taps never kill the hands-free loop.
+        safeStopListen();
+        void beginListening();
+        return;
+      case "ignore":
+        return; // request in flight, nothing to cut yet
+      case "interrupt":
+        bargedRef.current = true;
+        safeStopSpeak();
+        setBoth("listening");
+        void beginListening();
+        return;
     }
-    if (phaseRef.current === "listening") {
-      safeStopListen();
-      setBoth("idle");
-      return;
-    }
-    void beginListening();
   }
 
   function close(): void {
     aliveRef.current = false;
     safeStopListen();
     safeStopSpeak();
-    router.back();
+    if (router.canGoBack()) router.back();
+    else router.replace("/chat");
   }
 
+  useSpeechRecognitionEvent("start", () => {
+    // A fresh listen resets the silence streak: the cap below then only
+    // trips when the recognizer errors without ever starting (broken
+    // build), so genuine silence keeps the loop alive forever.
+    errorStreakRef.current = 0;
+  });
   useSpeechRecognitionEvent("result", (event) => {
     const text = event.results[0]?.transcript ?? "";
     if (text === "") return;

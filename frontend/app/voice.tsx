@@ -7,7 +7,7 @@
  * reply text below. The composer mic keeps the old dictation feature.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -20,12 +20,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Mic, X } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
-import { showsReplyOverlay, VOICE_STATUS_LABEL } from "../lib/voiceStatus.ts";
+import { VOICE_STATUS_LABEL } from "../lib/voiceStatus.ts";
 import { useVoiceLoop } from "../hooks/useVoiceLoop.ts";
 
 export default function VoiceScreen() {
   const { phase, heard, reply, issue, bargeIn, close, retry } = useVoiceLoop();
   const pulse = useRef(new Animated.Value(1)).current;
+  const fade = useRef(new Animated.Value(0)).current;
+  const [overlayOn, setOverlayOn] = useState(false);
+  // Typewriter: the backend answers whole, so reveal the reply
+  // progressively while it speaks (spec's streaming reply text).
+  const [shown, setShown] = useState("");
 
   // Pulse the mic while listening; still otherwise.
   useEffect(() => {
@@ -42,6 +47,32 @@ export default function VoiceScreen() {
     loop.start();
     return () => loop.stop();
   }, [phase, pulse]);
+
+  // Overlay fades in on reply start, fades out when audio ends.
+  useEffect(() => {
+    if (phase === "speaking") {
+      setOverlayOn(true);
+      Animated.timing(fade, { toValue: 1, duration: 150, useNativeDriver: true }).start();
+    } else {
+      Animated.timing(fade, { toValue: 0, duration: 200, useNativeDriver: true }).start(
+        ({ finished }) => {
+          if (finished) setOverlayOn(false);
+        },
+      );
+    }
+  }, [phase, fade]);
+
+  useEffect(() => {
+    setShown("");
+    if (reply === "") return;
+    let i = 0;
+    const timer = setInterval(() => {
+      i += 4;
+      setShown(reply.slice(0, i));
+      if (i >= reply.length) clearInterval(timer);
+    }, 40);
+    return () => clearInterval(timer);
+  }, [reply]);
 
   const micLive = phase === "listening" || phase === "speaking";
 
@@ -81,25 +112,27 @@ export default function VoiceScreen() {
           </Text>
         )}
 
-        {showsReplyOverlay(phase) && (
-          <View className="mt-6 w-full rounded-card border border-border bg-surface-1 p-4">
-            <View className="flex-row items-center">
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text className="ml-3 flex-1 font-sans text-body-md text-primary-text">
-                Playing audio…
-              </Text>
-              <Pressable onPress={bargeIn} className="rounded-full border border-error px-4 py-1">
-                <Text className="font-sans-semibold text-body-md text-secondary-text">
-                  Stop
+        {overlayOn && (
+          <Animated.View style={{ opacity: fade }} className="mt-6 w-full">
+            <View className="w-full rounded-card border border-border bg-surface-1 p-4">
+              <View className="flex-row items-center">
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text className="ml-3 flex-1 font-sans text-body-md text-primary-text">
+                  Playing audio…
                 </Text>
-              </Pressable>
+                <Pressable onPress={bargeIn} className="rounded-full border border-error px-4 py-1">
+                  <Text className="font-sans-semibold text-body-md text-secondary-text">
+                    Stop
+                  </Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
+          </Animated.View>
         )}
 
         {reply !== "" && (
           <Text className="mt-4 text-center font-sans text-body-md text-primary-text">
-            {reply}
+            {shown}
           </Text>
         )}
 

@@ -27,6 +27,7 @@ import {
 
 import { colors } from "../themes/tokens.ts";
 import { BottomNav, type ChatTab } from "./BottomNav.tsx";
+import { VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
 import { useVisionStream } from "../hooks/useVisionStream.ts";
 import { snapshotToBase64 } from "../lib/snapshot.ts";
 
@@ -104,9 +105,7 @@ export function InteractionPanel({
       setHeard("");
       setVoiceIssue(null);
       ExpoSpeechRecognitionModule.start({
-        lang: "en-US",
-        interimResults: true,
-        continuous: false,
+        ...VOICE_LISTEN_OPTS,
       });
     } catch {
       // Native side missing = dev build predates the dep, not a mic issue.

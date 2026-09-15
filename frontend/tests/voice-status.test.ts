@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  bargeActionFor,
   showsReplyOverlay,
   VOICE_STATUS_LABEL,
 } from "../lib/voiceStatus.ts";
@@ -23,5 +24,16 @@ describe("showsReplyOverlay", () => {
     assert.equal(showsReplyOverlay("listening"), false);
     assert.equal(showsReplyOverlay("thinking"), false);
     assert.equal(showsReplyOverlay("idle"), false);
+  });
+});
+
+describe("bargeActionFor", () => {
+  it("maps each phase to its mic-tap action", () => {
+    // Tapping mid-listen restarts the listen (loop never dies),
+    // speaking interrupts, thinking is in-flight, idle begins.
+    assert.equal(bargeActionFor("speaking"), "interrupt");
+    assert.equal(bargeActionFor("listening"), "restart");
+    assert.equal(bargeActionFor("thinking"), "ignore");
+    assert.equal(bargeActionFor("idle"), "begin");
   });
 });

@@ -13,3 +13,19 @@ export const VOICE_STATUS_LABEL: Record<VoicePhase, string> = {
 export function showsReplyOverlay(phase: VoicePhase): boolean {
   return phase === "speaking";
 }
+
+export type BargeAction = "begin" | "restart" | "interrupt" | "ignore";
+
+/** Mic-tap action per phase: taps never kill the hands-free loop. */
+export function bargeActionFor(phase: VoicePhase): BargeAction {
+  switch (phase) {
+    case "speaking":
+      return "interrupt";
+    case "listening":
+      return "restart";
+    case "thinking":
+      return "ignore";
+    case "idle":
+      return "begin";
+  }
+}

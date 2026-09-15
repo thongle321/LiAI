@@ -4,6 +4,10 @@ export const VOICE_LISTEN_OPTS = {
   lang: "en-US",
   interimResults: true,
   continuous: false,
+  // On-device: Google's server was answering ERROR_SERVER ("network"
+  // failure on screen), so skip it. Ignored where unsupported, in
+  // which case recognition falls back to the network as before.
+  requiresOnDeviceRecognition: true,
 } as const;
 
 /** Merge an STT transcript into the draft: interim updates replace the

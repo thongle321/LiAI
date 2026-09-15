@@ -3,7 +3,7 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
-import { createChatStore } from "../store/chat.ts";
+import { createChatStore, HISTORY_KEY } from "../store/chat.ts";
 import type { KeyValueStorage } from "../lib/storage.ts";
 
 function memoryStorage(seed: Record<string, string> = {}): KeyValueStorage & {
@@ -224,6 +224,78 @@ describe("chat store", () => {
     const useStore = createChatStore(storage);
     await useStore.getState().loadSession();
     assert.equal(useStore.getState().sessionId, "s1");
+    assert.deepEqual(useStore.getState().messages, []);
+  });
+
+  it("records a history entry titled by the first send", async () => {
+    const storage = memoryStorage();
+    const useStore = createChatStore(storage);
+    await useStore.getState().send("hello world");
+    const sessions = useStore.getState().sessions;
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0].id, "s1");
+    assert.equal(sessions[0].title, "hello world");
+    assert.ok(typeof sessions[0].at === "number");
+    assert.ok(storage.data[HISTORY_KEY]?.includes("hello world"));
+  });
+
+  it("keeps one entry per session across sends", async () => {
+    const storage = memoryStorage();
+    const useStore = createChatStore(storage);
+    await useStore.getState().send("first");
+    await useStore.getState().send("second");
+    const sessions = useStore.getState().sessions;
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0].title, "first");
+  });
+
+  it("switchSession loads another transcript", async () => {
+    mockFetch(async (url) => {
+      if (String(url).includes("session_id=s2"))
+        return jsonResponse({
+          session_id: "s2",
+          messages: [{ role: "user", content: "old question" }],
+        });
+      return jsonResponse({ session_id: "s1", messages: [] });
+    });
+    const storage = memoryStorage({
+      liai_session_id: "s1",
+      [HISTORY_KEY]: JSON.stringify([
+        { id: "s1", title: "current", at: 2 },
+        { id: "s2", title: "older", at: 1 },
+      ]),
+    });
+    const useStore = createChatStore(storage);
+    await useStore.getState().loadSession();
+    assert.equal(useStore.getState().sessions.length, 2);
+    await useStore.getState().switchSession("s2");
+    assert.equal(useStore.getState().sessionId, "s2");
+    assert.deepEqual(
+      useStore.getState().messages.map((m) => m.text),
+      ["old question"],
+    );
+    assert.equal(storage.data["liai_session_id"], "s2");
+  });
+
+  it("deleteSession drops the entry and clears the current view", async () => {
+    const storage = memoryStorage({
+      liai_session_id: "s1",
+      [HISTORY_KEY]: JSON.stringify([
+        { id: "s1", title: "current", at: 2 },
+        { id: "s2", title: "older", at: 1 },
+      ]),
+    });
+    const useStore = createChatStore(storage);
+    await useStore.getState().loadSession();
+    await useStore.getState().switchSession("s1");
+    await useStore.getState().deleteSession("s2");
+    assert.deepEqual(
+      useStore.getState().sessions.map((s) => s.id),
+      ["s1"],
+    );
+    await useStore.getState().deleteSession("s1");
+    assert.deepEqual(useStore.getState().sessions, []);
+    assert.equal(useStore.getState().sessionId, null);
     assert.deepEqual(useStore.getState().messages, []);
   });
 });

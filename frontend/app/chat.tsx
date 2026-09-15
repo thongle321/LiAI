@@ -8,12 +8,13 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Plus } from "lucide-react-native";
+import { Menu, Plus } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 import { APP_NAME } from "../constants/app.ts";
 
 import { Bubble } from "../components/Bubble.tsx";
+import { AppDrawer } from "../components/AppDrawer.tsx";
 import { Connecting, Unavailable } from "../components/Unavailable.tsx";
 import { InteractionPanel } from "../components/InteractionPanel.tsx";
 import {
@@ -37,6 +38,7 @@ const GREETING: ChatMessage = {
 };
 
 export default function ChatScreen() {
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const messages = useChatStore((s) => s.messages);
   const connection = useChatStore((s) => s.connection);
   const sending = useChatStore((s) => s.sending);
@@ -58,7 +60,10 @@ export default function ChatScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#0B0C0C" }}>
       <View className="flex-row items-center border-b border-border bg-base px-4 py-3">
-        <View className={dot} />
+        <Pressable onPress={() => setDrawerOpen(true)} className="px-1 py-1">
+          <Menu size={22} color={colors.primary} />
+        </Pressable>
+        <View className={`${dot} ml-2`} />
         <Text className="flex-1 text-center font-sans-semibold text-h3 text-primary">
           {APP_NAME}
         </Text>
@@ -94,6 +99,7 @@ export default function ChatScreen() {
             onSend={(text, image) => send(text, image)}
             onNewConversation={() => void newConversation()}
           />
+          <AppDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
         </KeyboardAvoidingView>
       )}
     </SafeAreaView>

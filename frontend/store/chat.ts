@@ -8,6 +8,14 @@ import type { ApiError } from "../types/api.ts";
 import type { KeyValueStorage } from "../lib/storage.ts";
 
 export const SESSION_KEY = "liai_session_id";
+export const HISTORY_KEY = "liai_history_v1";
+
+/** One row in the drawer's on-device history list. */
+export interface ChatSession {
+  id: string;
+  title: string;
+  at: number;
+}
 
 export interface ChatMessage {
   id: string;
@@ -27,11 +35,15 @@ interface ChatState {
   sessionId: string | null;
   connection: Connection;
   sending: boolean;
+  /** On-device history index (title = first user message). */
+  sessions: ChatSession[];
   loadSession: () => Promise<void>;
   checkHealth: () => Promise<void>;
   send: (text: string, image?: string) => Promise<boolean>;
   retry: (messageId: string) => Promise<boolean>;
   newConversation: () => Promise<void>;
+  switchSession: (sessionId: string) => Promise<boolean>;
+  deleteSession: (sessionId: string) => Promise<void>;
 }
 
 // ponytail: lazy import keeps the native module out of plain-Node tests;
@@ -60,12 +72,62 @@ function newId(): string {
 
 export function createChatStore(storage: KeyValueStorage) {
   return create<ChatState>()((set, get) => {
+    async function readIndex(): Promise<ChatSession[]> {
+      try {
+        const raw = await storage.getItem(HISTORY_KEY);
+        if (!raw) return [];
+        const parsed: unknown = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter(
+          (s): s is ChatSession =>
+            typeof s === "object" &&
+            s !== null &&
+            typeof (s as ChatSession).id === "string" &&
+            typeof (s as ChatSession).title === "string",
+        );
+      } catch {
+        return [];
+      }
+    }
+
+    async function writeIndex(sessions: ChatSession[]): Promise<void> {
+      // ponytail: best-effort — the index is a convenience, never a gate.
+      try {
+        await storage.setItem(HISTORY_KEY, JSON.stringify(sessions));
+      } catch {
+        // keep in-memory state even if persistence fails
+      }
+    }
+
+    /** Touch the index entry for a session (title sticks from first send). */
+    async function touchSession(id: string, title: string): Promise<void> {
+      const sessions = get().sessions;
+      const existing = sessions.find((s) => s.id === id);
+      const next =
+        existing === undefined
+          ? [...sessions, { id, title: title.slice(0, 40), at: Date.now() }]
+          : sessions.map((s) => (s.id === id ? { ...s, at: Date.now() } : s));
+      next.sort((a, b) => b.at - a.at);
+      set({ sessions: next });
+      await writeIndex(next);
+    }
+
+    function toMessages(res: { messages: { role: "user" | "assistant"; content: string }[] }): ChatMessage[] {
+      return res.messages.map((m) => ({
+        id: newId(),
+        role: m.role,
+        text: m.content,
+        at: Date.now(),
+      }));
+    }
+
     async function runSend(id: string, text: string, image?: string): Promise<void> {
       try {
         const res = await postChat(text, get().sessionId ?? undefined, image);
         if (get().sessionId !== res.session_id) {
           await storage.setItem(SESSION_KEY, res.session_id);
         }
+        await touchSession(res.session_id, text);
         set((s) => ({
           sessionId: res.session_id,
           sending: false,
@@ -91,8 +153,10 @@ export function createChatStore(storage: KeyValueStorage) {
       sessionId: null,
       connection: "unknown",
       sending: false,
+      sessions: [],
 
       loadSession: async () => {
+        set({ sessions: await readIndex() });
         const sessionId = await storage.getItem(SESSION_KEY);
         if (sessionId) set({ sessionId });
         // ponytail: best-effort hydration, never a second gate — chat works
@@ -105,12 +169,7 @@ export function createChatStore(storage: KeyValueStorage) {
           }
           set({
             sessionId: res.session_id,
-            messages: res.messages.map((m) => ({
-              id: newId(),
-              role: m.role,
-              text: m.content,
-              at: Date.now(),
-            })),
+            messages: toMessages(res),
           });
         } catch {
           // keep whatever is already in state
@@ -155,6 +214,29 @@ export function createChatStore(storage: KeyValueStorage) {
       newConversation: async () => {
         await storage.removeItem(SESSION_KEY);
         set({ sessionId: null, messages: [], sending: false });
+      },
+
+      switchSession: async (id: string) => {
+        if (get().sending || get().sessionId === id) return false;
+        if (!get().sessions.some((s) => s.id === id)) return false;
+        try {
+          const res = await getHistory(id);
+          await storage.setItem(SESSION_KEY, res.session_id);
+          set({ sessionId: res.session_id, messages: toMessages(res) });
+          return true;
+        } catch {
+          return false;
+        }
+      },
+
+      deleteSession: async (id: string) => {
+        const next = get().sessions.filter((s) => s.id !== id);
+        set({ sessions: next });
+        await writeIndex(next);
+        if (get().sessionId === id) {
+          await storage.removeItem(SESSION_KEY);
+          set({ sessionId: null, messages: [], sending: false });
+        }
       },
     };
   });

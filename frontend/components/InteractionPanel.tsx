@@ -1,14 +1,13 @@
 /** ONE persistent bottom interaction panel: composer + expanding voice/vision.
  *
  * Modes: chat (compact dock), voice (speech recognition, interim live,
- * final auto-sends), vision (live preview + Capture), more (New
+ * final auto-sends), vision (preview + Capture), more (New
  * conversation + Coming soon). The message list always stays visible
- * above; nothing navigates away. Capture snapshots the live preview and
+ * above; nothing navigates away. Capture snapshots the preview and
  * attaches a JPEG data-uri; sending lives in the screen + store.
  */
 
 import { useRef, useState } from "react";
-import type { RefObject } from "react";
 import { Image as RNImage, Pressable, Text, TextInput, View } from "react-native";
 import { AudioWaveform, Camera as CameraIcon, Mic, Plus, Send, Square, X } from "lucide-react-native";
 import {
@@ -19,12 +18,10 @@ import {
   Camera,
   useCameraDevice,
   useCameraPermission,
-  type Camera as VisionCameraView,
 } from "react-native-vision-camera";
 
 import { colors } from "../themes/tokens.ts";
 import { BottomNav, type ChatTab } from "./BottomNav.tsx";
-import { useVisionStream } from "../hooks/useVisionStream.ts";
 import { snapshotToBase64 } from "../lib/snapshot.ts";
 
 const MODE_LABEL: Record<ChatTab, string> = {
@@ -58,7 +55,6 @@ export function InteractionPanel({
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice("back");
   const camera = useRef<Camera | null>(null);
-  const ready = useRef(false);
 
   useSpeechRecognitionEvent("start", () => setListening(true));
   useSpeechRecognitionEvent("end", () => setListening(false));
@@ -218,7 +214,6 @@ export function InteractionPanel({
                 photo
                 video
                 onInitialized={() => {
-                  ready.current = true;
                   setCamLive(true);
                 }}
                 onError={(e: { message?: unknown }) =>
@@ -249,8 +244,10 @@ export function InteractionPanel({
               {capturing ? "Capturing…" : camLive ? "Capture" : "Starting camera…"}
             </Text>
           </Pressable>
-          {hasPermission && device !== undefined && (
-            <VisionLive camera={camera} ready={ready} extraProblem={camProblem} />
+          {camProblem !== null && (
+            <Text className="mt-2 text-center font-sans text-body-sm text-secondary-text">
+              {camProblem}
+            </Text>
           )}
         </View>
       )}
@@ -318,34 +315,6 @@ export function InteractionPanel({
       </View>
 
       <BottomNav active={mode} onSelect={(t) => (t === "voice" ? toggleVoice() : selectTab(t))} />
-    </View>
-  );
-}
-
-/** Live captions under the panel preview. Mounts only while vision is
- * expanded, so the socket connects on open and closes on collapse. */
-function VisionLive({
-  camera,
-  ready,
-  extraProblem,
-}: {
-  camera: RefObject<VisionCameraView | null>;
-  ready: RefObject<boolean>;
-  extraProblem: string | null;
-}) {
-  const { phase, problem, entries, captureStatus } = useVisionStream(camera, ready);
-  const tail = entries.slice(-3);
-  const status = extraProblem ?? (phase === "failed" ? problem : captureStatus);
-  return (
-    <View className="mt-2 rounded-card border border-border bg-surface-1 px-3 py-2">
-      {tail.map((e, i) => (
-        <Text key={`${tail.length}-${i}`} className="font-sans text-body-sm text-primary-text">
-          {e}
-        </Text>
-      ))}
-      <Text className="mt-1 font-sans text-caption text-secondary-text">
-        {status}
-      </Text>
     </View>
   );
 }

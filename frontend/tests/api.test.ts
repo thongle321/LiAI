@@ -3,7 +3,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { getHealth, getHistory, postChat } from "../lib/api.ts";
+import { getHealth, getHistory, postChat, resolveApiBaseUrl } from "../lib/api.ts";
 import type { ApiError } from "../types/api.ts";
 
 function mockFetch(
@@ -139,5 +139,33 @@ describe("getHistory", () => {
     const res = await getHistory();
     assert.ok(url.endsWith("/api/history"));
     assert.deepEqual(res.messages, []);
+  });
+});
+
+describe("resolveApiBaseUrl", () => {
+  it("prefers the explicit override", () => {
+    assert.equal(
+      resolveApiBaseUrl("http://10.0.0.9:8000", "192.168.1.5:8081"),
+      "http://10.0.0.9:8000",
+    );
+  });
+
+  it("derives the backend URL from the Metro host IP", () => {
+    assert.equal(
+      resolveApiBaseUrl(undefined, "192.168.100.195:8081"),
+      "http://192.168.100.195:8000",
+    );
+  });
+
+  it("falls back to localhost without override or host", () => {
+    assert.equal(resolveApiBaseUrl(undefined, null), "http://localhost:8000");
+    assert.equal(resolveApiBaseUrl("", null), "http://localhost:8000");
+  });
+
+  it("ignores non-IP hosts like tunnel URLs", () => {
+    assert.equal(
+      resolveApiBaseUrl(undefined, "abcd1234.exp.direct:8081"),
+      "http://localhost:8000",
+    );
   });
 });

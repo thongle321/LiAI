@@ -1,8 +1,9 @@
 /** Typed fetch wrapper for the LiAI backend (Expo ↔ FastAPI contract).
  *
- * - Base URL from EXPO_PUBLIC_API_URL, default http://localhost:8000.
- *   Physical devices cannot reach localhost: set
- *   EXPO_PUBLIC_API_URL=http://<your-lan-ip>:8000 in .env.
+ * - Base URL resolves itself: EXPO_PUBLIC_API_URL when set (manual
+ *   override, e.g. tunnel or emulator), else the Metro host's LAN IP
+ *   read at runtime (your phone already reaches the dev machine there,
+ *   so a changing IPv4 needs no .env.local edit), else localhost:8000.
  * - 30s timeout per request, no automatic retries: chat POSTs are not
  *   safely retryable yet, so timeout/network failures surface as ApiError
  *   codes and the user retries manually.
@@ -20,8 +21,39 @@ import type {
   HistoryResponse,
 } from "../types/api.ts";
 
-export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
+export const API_BASE_URL = resolveApiBaseUrl(
+  process.env.EXPO_PUBLIC_API_URL,
+  metroHostUri(),
+);
+
+/** Pure seam: explicit override wins, else the Metro host's LAN IP. */
+export function resolveApiBaseUrl(
+  envUrl: string | undefined,
+  hostUri: string | null,
+): string {
+  if (envUrl !== undefined && envUrl !== "") return envUrl;
+  const ip = hostUri?.match(/^(\d{1,3}(?:\.\d{1,3}){3})/)?.[1];
+  if (ip !== undefined) return `http://${ip}:8000`;
+  return "http://localhost:8000";
+}
+
+/** The phone already reaches Metro on this machine's LAN IP — reuse it.
+ * expo-constants is Metro-runtime only; node tests fall through to null. */
+function metroHostUri(): string | null {
+  try {
+    const req = (
+      globalThis as {
+        require?: (m: string) => {
+          default?: { expoConfig?: { hostUri?: unknown } };
+        };
+      }
+    ).require;
+    const hostUri = req?.("expo-constants")?.default?.expoConfig?.hostUri;
+    return typeof hostUri === "string" ? hostUri : null;
+  } catch {
+    return null;
+  }
+}
 
 export const REQUEST_TIMEOUT_MS = 30_000;
 

@@ -1,13 +1,16 @@
 /** ONE persistent bottom interaction panel: composer + expanding voice/vision.
  *
  * Modes: chat (compact dock), voice (speech recognition, interim live,
- * final auto-sends), vision (preview + Capture), more (New
+ * final auto-sends), vision (preview + silent live stream), more (New
  * conversation + Coming soon). The message list always stays visible
- * above; nothing navigates away. Capture snapshots the preview and
- * attaches a JPEG data-uri; sending lives in the screen + store.
+ * above; nothing navigates away. Vision streams frames while expanded
+ * (captions land in the backend log, nothing renders in the app).
+ * Capture snapshots the preview and attaches a JPEG data-uri; sending
+ * lives in the screen + store.
  */
 
 import { useRef, useState } from "react";
+import type { RefObject } from "react";
 import { Image as RNImage, Pressable, Text, TextInput, View } from "react-native";
 import { AudioWaveform, Camera as CameraIcon, Mic, Plus, Send, Square, X } from "lucide-react-native";
 import {
@@ -18,10 +21,12 @@ import {
   Camera,
   useCameraDevice,
   useCameraPermission,
+  type Camera as VisionCameraView,
 } from "react-native-vision-camera";
 
 import { colors } from "../themes/tokens.ts";
 import { BottomNav, type ChatTab } from "./BottomNav.tsx";
+import { useVisionStream } from "../hooks/useVisionStream.ts";
 import { snapshotToBase64 } from "../lib/snapshot.ts";
 
 const MODE_LABEL: Record<ChatTab, string> = {
@@ -55,6 +60,7 @@ export function InteractionPanel({
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice("back");
   const camera = useRef<Camera | null>(null);
+  const ready = useRef(false);
 
   useSpeechRecognitionEvent("start", () => setListening(true));
   useSpeechRecognitionEvent("end", () => setListening(false));
@@ -76,25 +82,40 @@ export function InteractionPanel({
     }
   });
 
-  async function beginListening(): Promise<void> {
-    const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-    if (!res.granted) {
-      setVoiceIssue("Microphone access is needed.");
-      return;
+  // ponytail: the native module is absent when the dev build predates
+  // the dep — stop() then throws, so never let it take down the caller.
+  function safeStop(): void {
+    try {
+      ExpoSpeechRecognitionModule.stop();
+    } catch {
+      // nothing live to stop
     }
-    sentRef.current = false;
-    setHeard("");
-    setVoiceIssue(null);
-    ExpoSpeechRecognitionModule.start({
-      lang: "en-US",
-      interimResults: true,
-      continuous: false,
-    });
+  }
+
+  async function beginListening(): Promise<void> {
+    try {
+      const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!res.granted) {
+        setVoiceIssue("Microphone access is needed.");
+        return;
+      }
+      sentRef.current = false;
+      setHeard("");
+      setVoiceIssue(null);
+      ExpoSpeechRecognitionModule.start({
+        lang: "en-US",
+        interimResults: true,
+        continuous: false,
+      });
+    } catch {
+      // Native side missing = dev build predates the dep, not a mic issue.
+      setVoiceIssue("Voice input isn't available in this build — rebuild the dev client.");
+    }
   }
 
   function toggleVoice(): void {
     if (listening) {
-      ExpoSpeechRecognitionModule.stop();
+      safeStop();
       setMode("chat");
       return;
     }
@@ -105,7 +126,7 @@ export function InteractionPanel({
 
   async function sendSpoken(text: string): Promise<void> {
     const said = text.trim();
-    ExpoSpeechRecognitionModule.stop();
+    safeStop();
     if (said === "") return;
     if (await onSend(said, attachment ?? undefined)) {
       setDraft("");
@@ -117,7 +138,7 @@ export function InteractionPanel({
   function selectTab(next: ChatTab): void {
     setPlusOpen(false);
     if (next !== "vision") setCamLive(false);
-    if (next !== "voice" && listening) ExpoSpeechRecognitionModule.stop();
+    if (next !== "voice" && listening) safeStop();
     setMode((m) => (m === next && next !== "chat" ? "chat" : next));
   }
 
@@ -168,7 +189,7 @@ export function InteractionPanel({
           )}
           <Pressable
             onPress={() => {
-              ExpoSpeechRecognitionModule.stop();
+              safeStop();
               setMode("chat");
             }}
             className="mt-4 items-center"
@@ -214,6 +235,7 @@ export function InteractionPanel({
                 photo
                 video
                 onInitialized={() => {
+                  ready.current = true;
                   setCamLive(true);
                 }}
                 onError={(e: { message?: unknown }) =>
@@ -248,6 +270,9 @@ export function InteractionPanel({
             <Text className="mt-2 text-center font-sans text-body-sm text-secondary-text">
               {camProblem}
             </Text>
+          )}
+          {hasPermission && device !== undefined && mode === "vision" && (
+            <VisionStream camera={camera} ready={ready} />
           )}
         </View>
       )}
@@ -317,6 +342,20 @@ export function InteractionPanel({
       <BottomNav active={mode} onSelect={(t) => (t === "voice" ? toggleVoice() : selectTab(t))} />
     </View>
   );
+}
+
+/** Silent live stream: same socket + 1s tick as before, but renders
+ * nothing — captions land in the backend log. Mounts only while vision
+ * is expanded, so the socket connects on open and closes on collapse. */
+function VisionStream({
+  camera,
+  ready,
+}: {
+  camera: RefObject<VisionCameraView | null>;
+  ready: RefObject<boolean>;
+}) {
+  useVisionStream(camera, ready);
+  return null;
 }
 
 function PlusItem({ label, onPress }: { label: string; onPress: () => void }) {

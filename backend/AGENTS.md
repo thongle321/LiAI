@@ -262,6 +262,21 @@ structure.
 ## Communication
 
 Be concise. Explain what changed and how to test it.
+
+---
+
+## Running
+
+From `backend/`:
+
+```powershell
+uv run --env-file .env uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+`--env-file` is required: this uv version does not auto-load `.env`,
+and without it the backend silently falls back to the fake echo provider.
+Confirm the live provider in the startup log:
+`llm provider=OpenRouterChatProvider model=...`.
 ---
 
 ## Final Reminder

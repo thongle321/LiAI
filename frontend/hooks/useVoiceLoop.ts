@@ -5,6 +5,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { useIsFocused } from "expo-router";
 import * as Speech from "expo-speech";
 import {
   ExpoSpeechRecognitionModule,
@@ -35,6 +36,11 @@ export function useVoiceLoop() {
   // Guards overlapping beginListening calls (double-mount, fast
   // restarts): a second start() while busy errors the session.
   const startingRef = useRef(false);
+  // The stack keeps chat mounted under /voice: ignore recognizer
+  // events while unfocused, or both screens process every event.
+  const focused = useIsFocused();
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
 
   function setBoth(next: VoicePhase): void {
     phaseRef.current = next;
@@ -60,7 +66,7 @@ export function useVoiceLoop() {
   }
 
   async function beginListening(): Promise<void> {
-    if (!aliveRef.current || startingRef.current) return;
+    if (!aliveRef.current || startingRef.current || !focusedRef.current) return;
     startingRef.current = true;
     try {
       const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
@@ -199,6 +205,7 @@ export function useVoiceLoop() {
   }
 
   useSpeechRecognitionEvent("result", (event) => {
+    if (!focusedRef.current) return;
     const text = event.results[0]?.transcript ?? "";
     if (text === "") return;
     errorStreakRef.current = 0;
@@ -210,11 +217,13 @@ export function useVoiceLoop() {
   });
   useSpeechRecognitionEvent("nomatch", () => {
     // Final result with nothing recognizable: same path as a failure.
+    if (!focusedRef.current) return;
     if (!aliveRef.current || phaseRef.current !== "listening") return;
     handleRecognitionFailure("nomatch");
   });
   useSpeechRecognitionEvent("error", (event) => {
     if (event.error === "aborted") return; // our own stop()
+    if (!focusedRef.current) return;
     if (!aliveRef.current || phaseRef.current !== "listening") return;
     handleRecognitionFailure(event.error);
   });

@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { Image as RNImage, Pressable, Text, TextInput, View } from "react-native";
-import { router } from "expo-router";
+import { router, useIsFocused } from "expo-router";
 import { Camera as CameraIcon, Mic, Plus, Send, X } from "lucide-react-native";
 import {
   ExpoSpeechRecognitionModule,
@@ -56,6 +56,13 @@ export function InteractionPanel({
   const [listening, setListening] = useState(false);
   const [voiceIssue, setVoiceIssue] = useState<string | null>(null);
   const draftBase = useRef("");
+  // The stack keeps chat mounted under /voice: ignore recognizer
+  // events while unfocused, or both screens process every event.
+  const focused = useIsFocused();
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
+  // Fast double-taps would start() twice; the second errors busy.
+  const startingRef = useRef(false);
 
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice("back");
@@ -77,6 +84,8 @@ export function InteractionPanel({
       safeStopDictation();
       return;
     }
+    if (startingRef.current) return;
+    startingRef.current = true;
     try {
       const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!res.granted) {
@@ -90,22 +99,31 @@ export function InteractionPanel({
       });
     } catch {
       setVoiceIssue("Voice input isn't available in this build — rebuild the dev client.");
+    } finally {
+      startingRef.current = false;
     }
   }
 
-  useSpeechRecognitionEvent("start", () => setListening(true));
-  useSpeechRecognitionEvent("end", () => setListening(false));
+  useSpeechRecognitionEvent("start", () => {
+    if (focusedRef.current) setListening(true);
+  });
+  useSpeechRecognitionEvent("end", () => {
+    if (focusedRef.current) setListening(false);
+  });
   useSpeechRecognitionEvent("result", (event) => {
+    if (!focusedRef.current) return;
     const text = event.results[0]?.transcript ?? "";
     if (text === "") return;
     setDraft(mergeDictation(draftBase.current, text));
   });
   useSpeechRecognitionEvent("nomatch", () => {
+    if (!focusedRef.current) return;
     console.warn("[voice] dictation failure: nomatch");
     setVoiceIssue("Didn't catch that (nomatch).");
   });
   useSpeechRecognitionEvent("error", (event) => {
     if (event.error === "aborted") return; // our own stop()
+    if (!focusedRef.current) return;
     // Name the code on screen + terminal: the generic line hid the cause.
     console.warn(`[voice] dictation failure: ${event.error} ${event.message ?? ""}`);
     setVoiceIssue(

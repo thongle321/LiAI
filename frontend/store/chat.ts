@@ -230,6 +230,8 @@ export function createChatStore(storage: KeyValueStorage) {
       },
 
       deleteSession: async (id: string) => {
+        // Never pull the rug on an in-flight turn: runSend would re-touch it.
+        if (get().sending && get().sessionId === id) return;
         const next = get().sessions.filter((s) => s.id !== id);
         set({ sessions: next });
         await writeIndex(next);

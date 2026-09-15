@@ -298,4 +298,26 @@ describe("chat store", () => {
     assert.equal(useStore.getState().sessionId, null);
     assert.deepEqual(useStore.getState().messages, []);
   });
+
+  it("deleteSession blocks deleting the active session mid-send", async () => {
+    const storage = memoryStorage({
+      liai_session_id: "s1",
+      [HISTORY_KEY]: JSON.stringify([{ id: "s1", title: "current", at: 1 }]),
+    });
+    const useStore = createChatStore(storage);
+    await useStore.getState().loadSession();
+    let resolveFetch!: (r: Response) => void;
+    mockFetch(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    const sending = useStore.getState().send("follow-up");
+    await useStore.getState().deleteSession("s1");
+    assert.equal(useStore.getState().sessions.length, 1);
+    resolveFetch(jsonResponse({ reply: "Echo", session_id: "s1" }));
+    await sending;
+    assert.equal(useStore.getState().sessions.length, 1);
+  });
 });

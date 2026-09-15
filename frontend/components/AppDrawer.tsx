@@ -1,12 +1,20 @@
 /** PocketPal-style overlay drawer, LiAI tokens only.
  *
  * Slide-in panel + scrim; chat stays mounted underneath. Dismisses via
- * scrim tap, item tap, or hardware back. History rows come from the
- * store's on-device index (tap loads, X deletes).
+ * scrim tap, swipe left, item tap, or hardware back. History rows come
+ * from the store's on-device index (tap loads, X deletes).
  */
 
-import { useEffect, useRef } from "react";
-import { BackHandler, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  BackHandler,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Constants from "expo-constants";
@@ -21,18 +29,12 @@ import {
 
 import { colors } from "../themes/tokens.ts";
 import { APP_NAME } from "../constants/app.ts";
-import { formatTime } from "./Bubble.tsx";
+import { formatTime } from "../lib/format.ts";
+import { CONNECTION_DOT_CLASS } from "../lib/connection.ts";
 import {
   useChatStore,
   type ChatSession,
-  type Connection,
 } from "../store/chat.ts";
-
-const CONNECTION_DOT_CLASS: Record<Connection, string> = {
-  unknown: "status-dot status-dot--offline",
-  up: "status-dot status-dot--online",
-  down: "status-dot status-dot--error",
-};
 
 const VERSION = Constants.expoConfig?.version ?? "0.1.0";
 
@@ -49,28 +51,50 @@ export function AppDrawer({
   const newConversation = useChatStore((s) => s.newConversation);
   const switchSession = useChatStore((s) => s.switchSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
-  // ponytail: touch deltas, not a gesture lib — swipe left closes.
+  const [switchError, setSwitchError] = useState<string | null>(null);
+  // ponytail: touch deltas + entrance slide, not a gesture lib.
   const touchX = useRef<number | null>(null);
+  const slide = useRef(new Animated.Value(-300)).current;
 
   useEffect(() => {
     if (!open) return;
+    setSwitchError(null);
+    slide.setValue(-300);
+    Animated.timing(slide, {
+      toValue: 0,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       onClose();
       return true;
     });
     return () => sub.remove();
-  }, [open, onClose]);
+  }, [open, onClose, slide]);
 
   function go(path: "/settings" | "/about"): void {
     onClose();
     router.push(path);
   }
 
+  function openSession(s: ChatSession): void {
+    // Tapping the already-open conversation just closes the drawer.
+    if (s.id === sessionId) {
+      onClose();
+      return;
+    }
+    setSwitchError(null);
+    void switchSession(s.id).then((ok) => {
+      if (ok) onClose();
+      else setSwitchError("Couldn't load that conversation.");
+    });
+  }
+
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
       <View className="flex-1 flex-row bg-black/60">
-        <SafeAreaView
-          style={{ width: 280, backgroundColor: "#141515" }}
+        <Animated.View
+          style={{ width: 280, transform: [{ translateX: slide }] }}
           onTouchStart={(e) => {
             touchX.current = e.nativeEvent.pageX;
           }}
@@ -81,61 +105,64 @@ export function AppDrawer({
             touchX.current = null;
           }}
         >
-          <View className="flex-1">
-            <View className="flex-row items-center border-b border-border px-4 py-3">
-              <View className={CONNECTION_DOT_CLASS[connection]} />
-              <Text className="ml-2 flex-1 font-sans-semibold text-h3 text-primary">
-                {APP_NAME}
-              </Text>
-              <Pressable onPress={onClose} className="px-1 py-1">
-                <X size={20} color={colors.secondaryText} />
-              </Pressable>
-            </View>
-
-            <ScrollView className="flex-1">
-              <DrawerItem
-                Icon={MessageSquarePlus}
-                label="New conversation"
-                onPress={() => {
-                  void newConversation();
-                  onClose();
-                }}
-              />
-              <View className="flex-row items-center px-4 pb-1 pt-3">
-                <History size={16} color={colors.secondaryText} />
-                <Text className="ml-2 font-sans text-body-sm text-secondary-text">
-                  History
+          <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface1 }}>
+            <View className="flex-1">
+              <View className="flex-row items-center border-b border-border px-4 py-3">
+                <View className={CONNECTION_DOT_CLASS[connection]} />
+                <Text className="ml-2 flex-1 font-sans-semibold text-h3 text-primary">
+                  {APP_NAME}
                 </Text>
+                <Pressable onPress={onClose} className="px-1 py-1">
+                  <X size={20} color={colors.secondaryText} />
+                </Pressable>
               </View>
-              {sessions.length === 0 ? (
-                <Text className="px-4 py-2 font-sans text-body-sm text-secondary-text">
-                  No conversations yet.
-                </Text>
-              ) : (
-                sessions.map((s) => (
-                  <HistoryRow
-                    key={s.id}
-                    session={s}
-                    current={s.id === sessionId}
-                    onOpen={() => {
-                      void switchSession(s.id).then((ok) => {
-                        if (ok) onClose();
-                      });
-                    }}
-                    onDelete={() => void deleteSession(s.id)}
-                  />
-                ))
-              )}
-              <View className="my-2 border-t border-border" />
-              <DrawerItem Icon={Settings} label="Settings" onPress={() => go("/settings")} />
-              <DrawerItem Icon={CircleHelp} label="About" onPress={() => go("/about")} />
-            </ScrollView>
 
-            <Text className="border-t border-border px-4 py-3 font-sans text-body-sm text-secondary-text">
-              v{VERSION}
-            </Text>
-          </View>
-        </SafeAreaView>
+              <ScrollView className="flex-1">
+                <DrawerItem
+                  Icon={MessageSquarePlus}
+                  label="New conversation"
+                  onPress={() => {
+                    void newConversation();
+                    onClose();
+                  }}
+                />
+                <View className="flex-row items-center px-4 pb-1 pt-3">
+                  <History size={16} color={colors.secondaryText} />
+                  <Text className="ml-2 font-sans text-body-sm text-secondary-text">
+                    History
+                  </Text>
+                </View>
+                {switchError !== null && (
+                  <Text className="px-4 py-1 font-sans text-body-sm text-secondary-text">
+                    {switchError}
+                  </Text>
+                )}
+                {sessions.length === 0 ? (
+                  <Text className="px-4 py-2 font-sans text-body-sm text-secondary-text">
+                    No conversations yet.
+                  </Text>
+                ) : (
+                  sessions.map((s) => (
+                    <HistoryRow
+                      key={s.id}
+                      session={s}
+                      selected={s.id === sessionId}
+                      onOpen={() => openSession(s)}
+                      onDelete={() => void deleteSession(s.id)}
+                    />
+                  ))
+                )}
+                <View className="my-2 border-t border-border" />
+                <DrawerItem Icon={Settings} label="Settings" onPress={() => go("/settings")} />
+                <DrawerItem Icon={CircleHelp} label="About" onPress={() => go("/about")} />
+              </ScrollView>
+
+              <Text className="border-t border-border px-4 py-3 font-sans text-body-sm text-secondary-text">
+                v{VERSION}
+              </Text>
+            </View>
+          </SafeAreaView>
+        </Animated.View>
         <Pressable onPress={onClose} className="flex-1" />
       </View>
     </Modal>
@@ -161,12 +188,12 @@ function DrawerItem({
 
 function HistoryRow({
   session,
-  current,
+  selected,
   onOpen,
   onDelete,
 }: {
   session: ChatSession;
-  current: boolean;
+  selected: boolean;
   onOpen: () => void;
   onDelete: () => void;
 }) {
@@ -174,12 +201,12 @@ function HistoryRow({
     <Pressable
       onPress={onOpen}
       onLongPress={onDelete}
-      className={`flex-row items-center px-4 py-2 ${current ? "bg-surface-2" : ""}`}
+      className={`flex-row items-center px-4 py-2 ${selected ? "bg-surface-2" : ""}`}
     >
       <View className="flex-1">
         <Text
           numberOfLines={1}
-          className={`font-sans text-body-md ${current ? "text-primary" : "text-primary-text"}`}
+          className={`font-sans text-body-md ${selected ? "text-primary" : "text-primary-text"}`}
         >
           {session.title}
         </Text>

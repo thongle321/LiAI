@@ -11,6 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Menu, Plus } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
+import { CONNECTION_DOT_CLASS } from "../lib/connection.ts";
 import { APP_NAME } from "../constants/app.ts";
 
 import { Bubble } from "../components/Bubble.tsx";
@@ -20,14 +21,7 @@ import { InteractionPanel } from "../components/InteractionPanel.tsx";
 import {
   useChatStore,
   type ChatMessage,
-  type Connection,
 } from "../store/chat.ts";
-
-const CONNECTION_DOT_CLASS: Record<Connection, string> = {
-  unknown: "status-dot status-dot--offline",
-  up: "status-dot status-dot--online",
-  down: "status-dot status-dot--error",
-};
 
 // Design's opening line, fixed once (visual only until the first exchange).
 const GREETING: ChatMessage = {
@@ -60,14 +54,16 @@ export default function ChatScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#0B0C0C" }}>
       <View className="flex-row items-center border-b border-border bg-base px-4 py-3">
-        <Pressable onPress={() => setDrawerOpen(true)} className="px-1 py-1">
-          <Menu size={22} color={colors.primary} />
-        </Pressable>
-        <View className={`${dot} ml-2`} />
+        <View className="w-16 flex-row items-center">
+          <Pressable onPress={() => setDrawerOpen(true)} className="px-1 py-1">
+            <Menu size={22} color={colors.primary} />
+          </Pressable>
+          <View className={`${dot} ml-2`} />
+        </View>
         <Text className="flex-1 text-center font-sans-semibold text-h3 text-primary">
           {APP_NAME}
         </Text>
-        <Pressable onPress={() => void newConversation()} className="flex-row items-center px-2 py-1">
+        <Pressable onPress={() => void newConversation()} className="w-16 flex-row items-center justify-end px-2 py-1">
           <Plus size={18} color={colors.primary} />
           <Text className="ml-1 font-sans text-body-md text-primary">New</Text>
         </Pressable>
@@ -99,9 +95,9 @@ export default function ChatScreen() {
             onSend={(text, image) => send(text, image)}
             onNewConversation={() => void newConversation()}
           />
-          <AppDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
         </KeyboardAvoidingView>
       )}
+      <AppDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </SafeAreaView>
   );
 }

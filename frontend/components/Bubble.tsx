@@ -2,15 +2,10 @@ import { Image as RNImage, Pressable, Text, View } from "react-native";
 import { Bot, CheckCheck, Image } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
+import { formatTime } from "../lib/format.ts";
 import type { ChatMessage } from "../store/chat.ts";
 
-/** HH:MM for the design's timestamp row under each bubble. */
-export function formatTime(at: number): string {
-  const d = new Date(at);
-  const h = String(d.getHours()).padStart(2, "0");
-  const m = String(d.getMinutes()).padStart(2, "0");
-  return `${h}:${m}`;
-}
+export { formatTime };
 
 export function Bubble({
   message,

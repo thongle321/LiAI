@@ -100,12 +100,18 @@ export function InteractionPanel({
     if (text === "") return;
     setDraft(mergeDictation(draftBase.current, text));
   });
+  useSpeechRecognitionEvent("nomatch", () => {
+    console.warn("[voice] dictation failure: nomatch");
+    setVoiceIssue("Didn't catch that (nomatch).");
+  });
   useSpeechRecognitionEvent("error", (event) => {
     if (event.error === "aborted") return; // our own stop()
+    // Name the code on screen + terminal: the generic line hid the cause.
+    console.warn(`[voice] dictation failure: ${event.error} ${event.message ?? ""}`);
     setVoiceIssue(
       event.error === "not-allowed"
         ? "Microphone access is needed."
-        : "Didn't catch that.",
+        : `Didn't catch that (${event.error}).`,
     );
   });
 

@@ -6,7 +6,6 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { router } from "expo-router";
 import * as Speech from "expo-speech";
 import {
   ExpoSpeechRecognitionModule,
@@ -180,14 +179,6 @@ export function useVoiceLoop() {
     }
   }
 
-  function close(): void {
-    aliveRef.current = false;
-    safeStopListen();
-    safeStopSpeak();
-    if (router.canGoBack()) router.back();
-    else router.replace("/chat");
-  }
-
   useSpeechRecognitionEvent("start", () => {
     // A fresh listen resets the silence streak: the cap below then only
     // trips when the recognizer errors without ever starting (broken
@@ -235,5 +226,5 @@ export function useVoiceLoop() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { phase, heard, reply, issue, bargeIn, close, retry: beginListening };
+  return { phase, heard, reply, issue, bargeIn, retry: beginListening };
 }

@@ -12,6 +12,7 @@
 import { useRef, useState } from "react";
 import type { RefObject } from "react";
 import { Image as RNImage, Pressable, Text, TextInput, View } from "react-native";
+import { router } from "expo-router";
 import { AudioWaveform, Camera as CameraIcon, Mic, Plus, Send, Square, X } from "lucide-react-native";
 import {
   ExpoSpeechRecognitionModule,
@@ -339,7 +340,7 @@ export function InteractionPanel({
         </Pressable>
       </View>
 
-      <BottomNav active={mode} onSelect={(t) => (t === "voice" ? toggleVoice() : selectTab(t))} />
+      <BottomNav active={mode} onSelect={(t) => (t === "voice" ? router.push("/voice") : selectTab(t))} />
     </View>
   );
 }

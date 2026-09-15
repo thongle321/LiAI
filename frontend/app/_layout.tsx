@@ -32,6 +32,7 @@ export default function RootLayout() {
     >
       <Stack.Screen name="index" />
       <Stack.Screen name="chat" />
+      <Stack.Screen name="voice" />
       <Stack.Screen name="settings" />
       <Stack.Screen name="about" />
     </Stack>

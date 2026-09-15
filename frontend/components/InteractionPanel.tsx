@@ -1,7 +1,6 @@
 /** ONE persistent bottom interaction panel: composer + expanding vision.
  *
- * Modes: chat (compact dock), vision (preview + silent live stream),
- * more (New conversation + Coming soon). Voice lives in the standalone
+ * Modes: chat (compact dock), vision (preview + silent live stream). Voice lives in the standalone
  * /voice screen: the composer mic, the Speak item, and the Voice tab
  * all open it — no inline dictation here, so only one recognizer
  * session can ever run. The message list always stays visible above;
@@ -32,17 +31,14 @@ const MODE_LABEL: Record<ChatTab, string> = {
   chat: "Type a message…",
   voice: "Listening…",
   vision: "Ask LiAI about this",
-  more: "More",
 };
 
 export function InteractionPanel({
   sending,
   onSend,
-  onNewConversation,
 }: {
   sending: boolean;
   onSend: (text: string, image?: string) => Promise<boolean>;
-  onNewConversation: () => void;
 }) {
   const [mode, setMode] = useState<ChatTab>("chat");
   const [draft, setDraft] = useState("");
@@ -162,17 +158,6 @@ export function InteractionPanel({
           {hasPermission && device !== undefined && mode === "vision" && (
             <VisionStream camera={camera} ready={ready} />
           )}
-        </View>
-      )}
-
-      {mode === "more" && (
-        <View className="px-4 pb-2 pt-4">
-          <Pressable onPress={() => { onNewConversation(); setMode("chat"); }} className="btn btn--primary">
-            <Text className="font-sans-semibold text-on-primary">New conversation</Text>
-          </Pressable>
-          <Text className="mt-2 text-center font-sans text-body-sm text-secondary-text">
-            More tools coming soon.
-          </Text>
         </View>
       )}
 

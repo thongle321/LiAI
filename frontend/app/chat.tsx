@@ -93,7 +93,6 @@ export default function ChatScreen() {
           <InteractionPanel
             sending={sending}
             onSend={(text, image) => send(text, image)}
-            onNewConversation={() => void newConversation()}
           />
         </KeyboardAvoidingView>
       )}

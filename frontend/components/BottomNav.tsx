@@ -1,6 +1,5 @@
 import { Pressable, Text, View } from "react-native";
 import {
-  Ellipsis,
   Eye,
   MessageCircle,
   Mic,
@@ -9,13 +8,12 @@ import {
 
 import { colors } from "../themes/tokens.ts";
 
-export type ChatTab = "chat" | "voice" | "vision" | "more";
+export type ChatTab = "chat" | "voice" | "vision";
 
 const TABS: { id: ChatTab; label: string; Icon: LucideIcon }[] = [
   { id: "chat", label: "Chat", Icon: MessageCircle },
   { id: "voice", label: "Voice", Icon: Mic },
   { id: "vision", label: "Vision", Icon: Eye },
-  { id: "more", label: "More", Icon: Ellipsis },
 ];
 
 /** Design's bottom tab bar (Tools removed per spec). */

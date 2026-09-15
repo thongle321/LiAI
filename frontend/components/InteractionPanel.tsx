@@ -1,20 +1,23 @@
 /** ONE persistent bottom interaction panel: composer + expanding vision.
  *
- * Modes: chat (compact dock), vision (preview + silent live stream). Voice lives in the standalone
- * /voice screen: the composer mic, the Speak item, and the Voice tab
- * all open it — no inline dictation here, so only one recognizer
- * session can ever run. The message list always stays visible above;
+ * Modes: chat (compact dock), vision (preview + silent live stream).
+ * The composer mic dictates into the draft (you press Send); the
+ * Voice tab opens the standalone /voice hands-free screen. The message list always stays visible above;
  * nothing else navigates away. Vision streams frames while expanded
  * (captions land in the backend log, nothing renders in the app).
  * Capture snapshots the preview and attaches a JPEG data-uri; sending
  * lives in the screen + store.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { Image as RNImage, Pressable, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { Camera as CameraIcon, Mic, Plus, Send, X } from "lucide-react-native";
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from "expo-speech-recognition";
 import {
   Camera,
   useCameraDevice,
@@ -24,6 +27,7 @@ import {
 
 import { colors } from "../themes/tokens.ts";
 import { BottomNav, type ChatTab } from "./BottomNav.tsx";
+import { mergeDictation, VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
 import { useVisionStream } from "../hooks/useVisionStream.ts";
 import { snapshotToBase64 } from "../lib/snapshot.ts";
 
@@ -47,11 +51,73 @@ export function InteractionPanel({
   const [capturing, setCapturing] = useState(false);
   const [camProblem, setCamProblem] = useState<string | null>(null);
   const [camLive, setCamLive] = useState(false);
+  // Dictation: mic fills the draft, the user presses Send. Interim
+  // updates replace the dictated tail (draftBase keeps typed text).
+  const [listening, setListening] = useState(false);
+  const [voiceIssue, setVoiceIssue] = useState<string | null>(null);
+  const draftBase = useRef("");
 
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice("back");
   const camera = useRef<Camera | null>(null);
   const ready = useRef(false);
+
+  // ponytail: the native module is absent when the dev build predates
+  // the dep — stop() then throws, so never let it take down the caller.
+  function safeStopDictation(): void {
+    try {
+      ExpoSpeechRecognitionModule.stop();
+    } catch {
+      // nothing live to stop
+    }
+  }
+
+  async function toggleDictation(): Promise<void> {
+    if (listening) {
+      safeStopDictation();
+      return;
+    }
+    try {
+      const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!res.granted) {
+        setVoiceIssue("Microphone access is needed.");
+        return;
+      }
+      draftBase.current = draft;
+      setVoiceIssue(null);
+      ExpoSpeechRecognitionModule.start({
+        ...VOICE_LISTEN_OPTS,
+      });
+    } catch {
+      setVoiceIssue("Voice input isn't available in this build — rebuild the dev client.");
+    }
+  }
+
+  useSpeechRecognitionEvent("start", () => setListening(true));
+  useSpeechRecognitionEvent("end", () => setListening(false));
+  useSpeechRecognitionEvent("result", (event) => {
+    const text = event.results[0]?.transcript ?? "";
+    if (text === "") return;
+    setDraft(mergeDictation(draftBase.current, text));
+  });
+  useSpeechRecognitionEvent("error", (event) => {
+    if (event.error === "aborted") return; // our own stop()
+    setVoiceIssue(
+      event.error === "not-allowed"
+        ? "Microphone access is needed."
+        : "Didn't catch that.",
+    );
+  });
+
+  useEffect(() => {
+    return () => {
+      try {
+        ExpoSpeechRecognitionModule.stop();
+      } catch {
+        // shutting down anyway
+      }
+    };
+  }, []);
 
   function selectTab(next: ChatTab): void {
     setPlusOpen(false);
@@ -62,6 +128,7 @@ export function InteractionPanel({
   const canSend = !sending && draft.trim() !== "";
 
   async function handleSend(): Promise<void> {
+    safeStopDictation();
     if (await onSend(draft, attachment ?? undefined)) {
       setDraft("");
       setAttachment(null);
@@ -173,6 +240,11 @@ export function InteractionPanel({
         </View>
       )}
 
+      {voiceIssue !== null && (
+        <Text className="px-5 pb-1 font-sans text-body-sm text-secondary-text">
+          {voiceIssue}
+        </Text>
+      )}
       <View className="mx-4 mb-2 flex-row items-center rounded-full border border-border bg-surface-1 px-2 py-1">
         <View>
           <Pressable
@@ -201,8 +273,8 @@ export function InteractionPanel({
           onSubmitEditing={() => void handleSend()}
           className="flex-1 px-3 font-sans text-body-md text-primary-text"
         />
-        <Pressable onPress={() => router.push("/voice")} className="px-1 py-1">
-          <Mic size={22} color={colors.secondaryText} />
+        <Pressable onPress={() => void toggleDictation()} className="px-1 py-1">
+          <Mic size={22} color={listening ? colors.primary : colors.secondaryText} />
         </Pressable>
         <Pressable disabled={!canSend} onPress={() => void handleSend()} className="px-2 py-1">
           <Send size={22} color={canSend ? colors.primary : colors.secondaryText} />

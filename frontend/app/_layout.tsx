@@ -31,8 +31,11 @@ export default function RootLayout() {
       }}
     >
       <Stack.Screen name="index" />
-      <Stack.Screen name="chat" />
-      <Stack.Screen name="voice" />
+      {/* Tab screens switch instantly: the stack push/slide would move
+          the whole screen including the bottom bar, which must stay
+          static when moving between tabs. */}
+      <Stack.Screen name="chat" options={{ animation: "none" }} />
+      <Stack.Screen name="voice" options={{ animation: "none" }} />
       <Stack.Screen name="settings" />
       <Stack.Screen name="about" />
     </Stack>

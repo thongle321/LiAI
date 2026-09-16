@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -57,6 +57,13 @@ export default function ChatScreen() {
   // Design's opening line, visual only until the first real exchange.
   const visibleMessages: ChatMessage[] =
     messages.length === 0 ? [GREETING] : messages;
+  // Follow the conversation: a new bubble lands below the fold, so
+  // pin the list to the end on every new message (never on re-render
+  // alone — length is the only trigger, reading history stays put).
+  const listRef = useRef<FlatList<ChatMessage>>(null);
+  useEffect(() => {
+    listRef.current?.scrollToEnd({ animated: motionDuration > 0 });
+  }, [visibleMessages.length, motionDuration]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#0B0C0C" }}>
@@ -83,6 +90,7 @@ export default function ChatScreen() {
           style={{ flex: 1 }}
         >
           <FlatList
+            ref={listRef}
             data={visibleMessages}
             keyExtractor={(m) => m.id}
             renderItem={({ item }) => (

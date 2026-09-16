@@ -16,6 +16,22 @@ from ..memory import Turn
 from ..providers import ChatProvider, get_provider
 
 
+def assistant_text(output: object) -> str:
+    """Reply text for the mobile bubble: tool calls never render.
+
+    The agent loop resolves tool calls internally, but a turn ending
+    on bare tool machinery (or a future non-text output) must not
+    leak it into chat — extract text parts only.
+    """
+    if isinstance(output, str):
+        return output
+    if isinstance(output, list):
+        return "".join(
+            part.content for part in output if isinstance(part, TextPart)
+        )
+    return str(output)
+
+
 def latest_user_text(messages: list[ModelMessage]) -> str:
     text = ""
     for message in messages:

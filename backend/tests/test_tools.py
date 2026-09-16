@@ -22,7 +22,11 @@ from pydantic_ai.models.function import AgentInfo
 
 import app.agents.companion as companion
 import app.main as main
-from app.agents.companion import get_companion_agent, latest_user_text
+from app.agents.companion import (
+    assistant_text,
+    get_companion_agent,
+    latest_user_text,
+)
 from app.main import app
 from app.memory import get_store
 
@@ -109,3 +113,16 @@ def test_non_time_message_never_calls_tool() -> None:
     resp = client.post("/api/chat", json={"message": "hi"})
     assert resp.status_code == 200
     assert resp.json()["reply"] == "Echo: hi"
+
+
+def test_assistant_text_passes_plain_str() -> None:
+    assert assistant_text("hi") == "hi"
+
+
+def test_assistant_text_drops_tool_parts() -> None:
+    """A turn ending on tool machinery must still bubble only text."""
+    parts = [
+        ToolCallPart(tool_name="get_current_time", args={}),
+        TextPart("The time is 2026-01-01T00:00:00+00:00"),
+    ]
+    assert assistant_text(parts) == "The time is 2026-01-01T00:00:00+00:00"

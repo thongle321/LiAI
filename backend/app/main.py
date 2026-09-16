@@ -17,9 +17,10 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .agents import get_companion_agent
-from .agents.companion import to_message_history
+from .agents.companion import assistant_text, to_message_history
 from .memory import Turn, get_store
 from .providers.factory import get_provider
+from .providers.fake import FakeProvider
 from .realtime import vlm
 from .realtime.ws import handle_vision_socket
 from .schemas import (
@@ -40,6 +41,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         type(provider).__name__,
         f" model={model}" if model else "",
     )
+    if isinstance(provider, FakeProvider):
+        # The .env wasn't loaded (needs --env-file) or no key is set:
+        # every chat reply echoes. Say so now, not per message.
+        logging.getLogger(__name__).warning(
+            "fake echo provider active — chat replies will echo; "
+            "set LLM_PROVIDER=openrouter + key and run with --env-file .env"
+        )
     vlm.warmup()
     yield
 
@@ -143,7 +151,7 @@ async def chat(body: ChatRequest) -> ChatResponse | JSONResponse:
             )
         except Exception as exc:
             return _error(502, "llm_error", str(exc))
-        reply = str(result.output)
+        reply = assistant_text(result.output)
     try:
         store.append(session_id, Turn(role="user", content=body.message))
         store.append(session_id, Turn(role="assistant", content=reply))

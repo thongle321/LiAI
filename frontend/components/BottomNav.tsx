@@ -43,7 +43,12 @@ export function BottomNav({
             >
               {t.label}
             </Text>
-            {selected && <View className="mt-1 h-0.5 w-8 rounded-full bg-primary" />}
+            {/* Indicator always mounted (transparent when idle): mounting
+                it on selection changes the row height and makes the
+                whole menu jump — the bar must stay static. */}
+            <View
+              className={`mt-1 h-0.5 w-8 rounded-full ${selected ? "bg-primary" : "bg-transparent"}`}
+            />
           </Pressable>
         );
       })}

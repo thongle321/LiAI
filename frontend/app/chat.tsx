@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Animated from "react-native-reanimated";
 import { Menu, Plus } from "lucide-react-native";
+import { useLocalSearchParams } from "expo-router";
 
 import { colors } from "../themes/tokens.ts";
 import { CONNECTION_DOT_CLASS } from "../lib/connection.ts";
@@ -50,6 +51,10 @@ export default function ChatScreen() {
 
   const dot = CONNECTION_DOT_CLASS[connection];
   const motionDuration = useMotionDuration();
+  // Deep-link entry: the voice tab's Vision button lands here with
+  // ?tab=vision so the camera expander opens instead of plain chat.
+  const { tab } = useLocalSearchParams<{ tab?: string }>();
+  const initialMode = tab === "vision" ? "vision" : "chat";
   // Design's opening line, visual only until the first real exchange.
   const visibleMessages: ChatMessage[] =
     messages.length === 0 ? [GREETING] : messages;
@@ -102,6 +107,7 @@ export default function ChatScreen() {
           <InteractionPanel
             sending={sending}
             onSend={(text, image) => send(text, image)}
+            initialMode={initialMode}
           />
         </KeyboardAvoidingView>
       )}

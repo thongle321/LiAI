@@ -50,11 +50,14 @@ const MODE_LABEL: Record<ChatTab, string> = {
 export function InteractionPanel({
   sending,
   onSend,
+  initialMode = "chat",
 }: {
   sending: boolean;
   onSend: (text: string, image?: string) => Promise<boolean>;
+  /** Deep-link entry (e.g. the voice tab's Vision button). */
+  initialMode?: ChatTab;
 }) {
-  const [mode, setMode] = useState<ChatTab>("chat");
+  const [mode, setMode] = useState<ChatTab>(initialMode);
   const [draft, setDraft] = useState("");
   const [attachment, setAttachment] = useState<string | null>(null);
   const [plusOpen, setPlusOpen] = useState(false);
@@ -380,7 +383,7 @@ export function InteractionPanel({
         </Pressable>
       </View>
 
-      <BottomNav active={mode} onSelect={(t) => (t === "voice" ? router.push("/voice") : selectTab(t))} />
+      <BottomNav active={mode} onSelect={(t) => (t === "voice" ? router.navigate("/voice") : selectTab(t))} />
     </View>
   );
 }

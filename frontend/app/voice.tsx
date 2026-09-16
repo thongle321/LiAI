@@ -26,6 +26,7 @@ import { Mic } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 import { VOICE_STATUS_LABEL } from "../lib/voiceStatus.ts";
+import { routeForTab } from "../lib/tabRoute.ts";
 import {
   fadeEntering,
   useMotionDuration,
@@ -132,7 +133,7 @@ export default function VoiceScreen() {
       <BottomNav
         active="voice"
         onSelect={(t) => {
-          if (t !== "voice") router.replace("/chat");
+          if (t !== "voice") router.replace(routeForTab(t));
         }}
       />
     </SafeAreaView>

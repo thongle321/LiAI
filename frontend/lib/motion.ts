@@ -27,9 +27,6 @@ export const motionEasing = Easing.out(Easing.quad);
  * duration 0 renders instantly instead of animating. */
 export function useMotionDuration(): number {
   const reduce = useReducedMotion();
-  useEffect(() => {
-    console.log(`[DEBUG-mtn1] reduced motion: ${reduce}`);
-  }, [reduce]);
   return reduce ? 0 : MOTION_DURATION_MS;
 }
 
@@ -55,7 +52,6 @@ export function useTabContentFade() {
   const opacity = useSharedValue(1);
   const focused = useIsFocused();
   useEffect(() => {
-    console.log(`[DEBUG-mtn1] tab fade focused=${focused} duration=${duration}`);
     if (!focused) return;
     opacity.value = 0;
     opacity.value = withTiming(1, { duration, easing: motionEasing });

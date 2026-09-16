@@ -14,6 +14,7 @@ from fastapi import FastAPI, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic_ai.exceptions import UserError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .agents import companion, get_companion_agent
@@ -44,10 +45,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         f" model={model}" if model else "",
     )
     # Fail fast: no keyless boot. The SDK validates the key eagerly at
-    # build, so this crashes startup instead of failing every turn.
-    # Tests patch the route call-site (app.main.get_companion_agent),
-    # never this source-namespace build.
-    companion.get_companion_agent(provider)
+    # build, so a truly missing key crashes startup with an actionable
+    # hint instead of failing every turn. Tests patch the route
+    # call-site (app.main.get_companion_agent), never this
+    # source-namespace build.
+    try:
+        companion.get_companion_agent(provider)
+    except UserError as exc:
+        logging.getLogger(__name__).error(
+            "llm backend misconfigured: %s "
+            "Set OPENROUTER_API_KEY in backend/.env "
+            "(see backend/.env.example) or export it, then restart.",
+            exc,
+        )
+        raise
     vlm.warmup()
     yield
 

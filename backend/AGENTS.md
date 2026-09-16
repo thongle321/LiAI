@@ -273,8 +273,10 @@ From `backend/`:
 uv run --env-file .env uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-`--env-file` is required: this uv version does not auto-load `.env`,
-and without it the backend fails fast at startup (no keyless fallback).
+The backend also autoloads `backend/.env` itself (stdlib, no dependency),
+so plain `uvicorn` / IDE runners work too. Explicit environment wins over
+the file in all cases. A truly missing key still fails fast at startup
+with an actionable log line (no keyless fallback).
 Confirm the live provider in the startup log:
 `llm provider=OpenRouterChatProvider model=...`.
 ---

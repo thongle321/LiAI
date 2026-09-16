@@ -116,8 +116,12 @@ def test_factory_legacy_alias_selects_openrouter(monkeypatch: MonkeyPatch) -> No
     assert isinstance(get_provider(), OpenRouterChatProvider)
 
 
-def test_openrouter_missing_key_raises() -> None:
+def test_openrouter_missing_key_raises(monkeypatch: MonkeyPatch) -> None:
     import asyncio
+
+    # Isolate from the import-time .env autoload: "" must mean no key.
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     async def reply_without_key() -> None:
         await OpenRouterChatProvider(api_key="", model="x").reply("hi")

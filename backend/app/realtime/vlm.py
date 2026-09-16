@@ -14,6 +14,7 @@ import base64
 import io
 import logging
 import os
+import threading
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -35,6 +36,14 @@ VLM_MAX_EDGE = int(os.getenv("VISION_MAX_EDGE", "512"))
 logger = logging.getLogger(__name__)
 
 _llm: Llama | None = None
+
+# llama-cpp Llama is not thread-safe: two concurrent
+# create_chat_completion calls corrupt the decode batch
+# ("sampling index is outside the most recent decode output batch").
+# A cancelled narration thread keeps decoding while the question's
+# inference starts, and ws.py locks are per-socket — so the boundary
+# owning the shared object serializes it.
+_infer_lock = threading.Lock()
 
 
 def warmup() -> None:
@@ -103,8 +112,9 @@ async def describe_frame(image: bytes, question: str) -> str:
 
 def _describe_sync(image: bytes, question: str) -> str:
     llm = _load()
-    out = llm.create_chat_completion(
-        messages=_chat_messages(image, question),
-        max_tokens=MAX_NEW_TOKENS,
-    )
+    with _infer_lock:
+        out = llm.create_chat_completion(
+            messages=_chat_messages(image, question),
+            max_tokens=MAX_NEW_TOKENS,
+        )
     return str(out["choices"][0]["message"]["content"]).strip()

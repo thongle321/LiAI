@@ -13,7 +13,8 @@ import {
 } from "expo-speech-recognition";
 
 import type { VoicePhase } from "../lib/voiceStatus.ts";
-import { bargeActionFor, voiceErrorAction } from "../lib/voiceStatus.ts";
+import { bargeActionFor, isThrottlingError, isVoiceThrottled, setVoiceThrottled, voiceErrorAction } from "../lib/voiceStatus.ts";
+import { ensureMicAccess } from "../lib/micAccess.ts";
 import { VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
 import { useChatStore } from "../store/chat.ts";
 
@@ -24,6 +25,9 @@ export function useVoiceLoop() {
   const [heard, setHeard] = useState("");
   const [reply, setReply] = useState("");
   const [issue, setIssue] = useState<string | null>(null);
+  // Permanent denial never pops the OS dialog again — the issue
+  // line becomes a link into Settings instead of dead text.
+  const [needsSettings, setNeedsSettings] = useState(false);
   const send = useChatStore((s) => s.send);
 
   const phaseRef = useRef<VoicePhase>("idle");
@@ -67,15 +71,30 @@ export function useVoiceLoop() {
 
   async function beginListening(): Promise<void> {
     if (!aliveRef.current || startingRef.current || !focusedRef.current) return;
+    // Shared lockout + never start while a turn is live: both extend bans.
+    if (isVoiceThrottled()) {
+      setNeedsSettings(false);
+      setIssue("Too many voice requests — wait a bit and try again.");
+      return;
+    }
+    if (phaseRef.current !== "idle") return;
     startingRef.current = true;
     try {
-      const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      const access = await ensureMicAccess();
       if (!aliveRef.current) return;
-      if (!res.granted) {
-        setIssue("Microphone access is needed.");
+      if (access === "unavailable") {
+        setNeedsSettings(false);
+        setIssue("Voice input isn't available in this build — rebuild the dev client.");
         setBoth("idle");
         return;
       }
+      if (access === "settings") {
+        setNeedsSettings(true);
+        setIssue("Microphone is blocked — tap here to open Settings and enable it.");
+        setBoth("idle");
+        return;
+      }
+      setNeedsSettings(false);
       sentRef.current = false;
       setHeard("");
       setIssue(null);
@@ -94,6 +113,7 @@ export function useVoiceLoop() {
 
   /** Explicit user retry: fresh streak, fresh listen. */
   function retry(): void {
+    if (isVoiceThrottled()) return;
     errorStreakRef.current = 0;
     void beginListening();
   }
@@ -104,6 +124,9 @@ export function useVoiceLoop() {
     // screen at the streak cap, so a deaf recognizer can't fail
     // silently anymore.
     console.warn(`[voice] recognition failure: ${code}`);
+    if (isThrottlingError(code)) {
+      setVoiceThrottled();
+    }
     const action = voiceErrorAction(errorStreakRef.current, code);
     errorStreakRef.current += 1;
     if (action.fatal) {
@@ -239,5 +262,5 @@ export function useVoiceLoop() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { phase, heard, reply, issue, bargeIn, retry };
+  return { phase, heard, reply, issue, needsSettings, bargeIn, retry };
 }

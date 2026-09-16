@@ -17,6 +17,33 @@ export function showsReplyOverlay(phase: VoicePhase): boolean {
 /** Consecutive recognition failures without any transcript. */
 export const MAX_VOICE_ERROR_STREAK = 5;
 
+/** Lockout after Google throttles us: every new start() extends the ban. */
+export const VOICE_THROTTLE_MS = 60_000;
+
+// Shared across dictation + voice tab (chat stays mounted under
+// /voice): per-component refs let the other screen restart mid-ban.
+let throttledUntilTs = 0;
+
+/** True while a throttle ban is active. */
+export function isVoiceThrottled(now: number = Date.now()): boolean {
+  return now < throttledUntilTs;
+}
+
+/** Start the lockout. */
+export function setVoiceThrottled(now: number = Date.now()): void {
+  throttledUntilTs = now + VOICE_THROTTLE_MS;
+}
+
+/** Clear the lockout (tests, explicit user retry after waiting). */
+export function clearVoiceThrottle(): void {
+  throttledUntilTs = 0;
+}
+
+/** Throttle codes: retrying immediately makes the ban longer. */
+export function isThrottlingError(code: string): boolean {
+  return code === "too-many-requests" || code === "busy";
+}
+
 export type VoiceErrorAction = { fatal: boolean; message: string };
 export type BargeAction = "begin" | "stop" | "interrupt" | "ignore";
 
@@ -26,7 +53,7 @@ export function voiceErrorAction(streak: number, code: string): VoiceErrorAction
     return { fatal: true, message: "Microphone access is needed." };
   }
   // Throttled: every new start() extends the ban, so stop at once.
-  if (code === "too-many-requests") {
+  if (isThrottlingError(code)) {
     return { fatal: true, message: "Too many voice requests — wait a bit and try again." };
   }
   if (streak + 1 >= MAX_VOICE_ERROR_STREAK) {

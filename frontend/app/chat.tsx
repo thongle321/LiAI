@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Animated from "react-native-reanimated";
-import { Menu, Plus } from "lucide-react-native";
+import { Menu } from "lucide-react-native";
 import { useLocalSearchParams } from "expo-router";
 
 import { colors } from "../themes/tokens.ts";
@@ -43,7 +43,6 @@ export default function ChatScreen() {
   const checkHealth = useChatStore((s) => s.checkHealth);
   const send = useChatStore((s) => s.send);
   const retry = useChatStore((s) => s.retry);
-  const newConversation = useChatStore((s) => s.newConversation);
 
   useEffect(() => {
     void loadSession().then(() => checkHealth());
@@ -71,10 +70,7 @@ export default function ChatScreen() {
         <Text className="flex-1 text-center font-sans-semibold text-h3 text-primary">
           {APP_NAME}
         </Text>
-        <Pressable onPress={() => void newConversation()} className="w-16 flex-row items-center justify-end px-2 py-1">
-          <Plus size={18} color={colors.primary} />
-          <Text className="ml-1 font-sans text-body-md text-primary">New</Text>
-        </Pressable>
+        <View className="w-16" />
       </View>
 
       {connection === "unknown" ? (

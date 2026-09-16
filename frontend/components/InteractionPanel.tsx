@@ -13,7 +13,14 @@ import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { Image as RNImage, Pressable, Text, TextInput, View } from "react-native";
 import { router, useIsFocused } from "expo-router";
+import { openSettings } from "expo-linking";
 import { Camera as CameraIcon, Mic, Plus, Send, X } from "lucide-react-native";
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -28,6 +35,9 @@ import {
 import { colors } from "../themes/tokens.ts";
 import { BottomNav, type ChatTab } from "./BottomNav.tsx";
 import { mergeDictation, VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
+import { ensureMicAccess } from "../lib/micAccess.ts";
+import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../lib/voiceStatus.ts";
+import { motionEasing, useMotionDuration } from "../lib/motion.ts";
 import { useVisionStream } from "../hooks/useVisionStream.ts";
 import { snapshotToBase64 } from "../lib/snapshot.ts";
 
@@ -51,10 +61,21 @@ export function InteractionPanel({
   const [capturing, setCapturing] = useState(false);
   const [camProblem, setCamProblem] = useState<string | null>(null);
   const [camLive, setCamLive] = useState(false);
+  // Vision expand: the outer box animates height (list yields above,
+  // composer + BottomNav never move). Content mounts first so onLayout
+  // can measure it, and unmounts after the collapse finishes — the
+  // camera and socket stay gated on mode, never on this mount flag.
+  const [visionMounted, setVisionMounted] = useState(false);
+  const [visionContentH, setVisionContentH] = useState(0);
+  const visionH = useSharedValue(0);
+  const motionDuration = useMotionDuration();
   // Dictation: mic fills the draft, the user presses Send. Interim
   // updates replace the dictated tail (draftBase keeps typed text).
   const [listening, setListening] = useState(false);
   const [voiceIssue, setVoiceIssue] = useState<string | null>(null);
+  // Permanent denial never pops the OS dialog again — the issue
+  // line becomes a link into Settings instead of dead text.
+  const [voiceSettings, setVoiceSettings] = useState(false);
   const draftBase = useRef("");
   // The stack keeps chat mounted under /voice: ignore recognizer
   // events while unfocused, or both screens process every event.
@@ -80,6 +101,12 @@ export function InteractionPanel({
   }
 
   async function toggleDictation(): Promise<void> {
+    // Shared lockout (voice tab sets it too): restarts extend the ban.
+    if (isVoiceThrottled()) {
+      setVoiceSettings(false);
+      setVoiceIssue("Too many voice requests — wait a bit and try again.");
+      return;
+    }
     if (listening) {
       safeStopDictation();
       return;
@@ -87,11 +114,20 @@ export function InteractionPanel({
     if (startingRef.current) return;
     startingRef.current = true;
     try {
-      const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (!res.granted) {
-        setVoiceIssue("Microphone access is needed.");
+      // Popup shows only when undetermined; a permanent denial must
+      // go through Settings, and a stale build has nothing to ask.
+      const access = await ensureMicAccess();
+      if (access === "unavailable") {
+        setVoiceSettings(false);
+        setVoiceIssue("Voice input isn't available in this build — rebuild the dev client.");
         return;
       }
+      if (access === "settings") {
+        setVoiceSettings(true);
+        setVoiceIssue("Microphone is blocked — tap here to open Settings and enable it.");
+        return;
+      }
+      setVoiceSettings(false);
       draftBase.current = draft;
       setVoiceIssue(null);
       ExpoSpeechRecognitionModule.start({
@@ -126,6 +162,11 @@ export function InteractionPanel({
     if (!focusedRef.current) return;
     // Name the code on screen + terminal: the generic line hid the cause.
     console.warn(`[voice] dictation failure: ${event.error} ${event.message ?? ""}`);
+    if (isThrottlingError(event.error)) {
+      setVoiceThrottled();
+      setVoiceIssue("Too many voice requests — wait a bit and try again.");
+      return;
+    }
     setVoiceIssue(
       event.error === "not-allowed"
         ? "Microphone access is needed."
@@ -143,6 +184,26 @@ export function InteractionPanel({
     };
   }, []);
 
+  useEffect(() => {
+    if (mode === "vision") {
+      setVisionMounted(true);
+      visionH.value = withTiming(visionContentH, {
+        duration: motionDuration,
+        easing: motionEasing,
+      });
+    } else {
+      visionH.value = withTiming(
+        0,
+        { duration: motionDuration, easing: motionEasing },
+        (finished) => {
+          if (finished === true) runOnJS(setVisionMounted)(false);
+        },
+      );
+    }
+  }, [mode, visionContentH, motionDuration, visionH]);
+
+  const visionStyle = useAnimatedStyle(() => ({ height: visionH.value }));
+
   function selectTab(next: ChatTab): void {
     setPlusOpen(false);
     if (next !== "vision") setCamLive(false);
@@ -152,7 +213,9 @@ export function InteractionPanel({
   const canSend = !sending && draft.trim() !== "";
 
   async function handleSend(): Promise<void> {
-    safeStopDictation();
+    // Spurious stop() with nothing live confuses the native session;
+    // only stop an active dictate before sending.
+    if (listening) safeStopDictation();
     if (await onSend(draft, attachment ?? undefined)) {
       setDraft("");
       setAttachment(null);
@@ -179,8 +242,12 @@ export function InteractionPanel({
 
   return (
     <View className="border-t border-border bg-base">
-      {mode === "vision" && (
-        <View className="px-4 pb-2 pt-4">
+      <Animated.View style={[visionStyle, { overflow: "hidden" }]}>
+        {visionMounted && (
+          <View
+            onLayout={(e) => setVisionContentH(e.nativeEvent.layout.height)}
+            className="px-4 pb-2 pt-4"
+          >
           <Text className="text-center font-sans-semibold text-body-md text-primary-text">
             LIVE CAMERA
           </Text>
@@ -249,8 +316,9 @@ export function InteractionPanel({
           {hasPermission && device !== undefined && mode === "vision" && (
             <VisionStream camera={camera} ready={ready} />
           )}
-        </View>
-      )}
+          </View>
+        )}
+      </Animated.View>
 
       {attachment !== null && (
         <View className="mx-4 mb-1 flex-row items-center rounded-card border border-border bg-surface-1 p-2">
@@ -264,11 +332,18 @@ export function InteractionPanel({
         </View>
       )}
 
-      {voiceIssue !== null && (
-        <Text className="px-5 pb-1 font-sans text-body-sm text-secondary-text">
-          {voiceIssue}
-        </Text>
-      )}
+      {voiceIssue !== null &&
+        (voiceSettings ? (
+          <Pressable onPress={() => void openSettings()}>
+            <Text className="px-5 pb-1 font-sans text-body-sm text-primary">
+              {voiceIssue}
+            </Text>
+          </Pressable>
+        ) : (
+          <Text className="px-5 pb-1 font-sans text-body-sm text-secondary-text">
+            {voiceIssue}
+          </Text>
+        ))}
       <View className="mx-4 mb-2 flex-row items-center rounded-full border border-border bg-surface-1 px-2 py-1">
         <View>
           <Pressable

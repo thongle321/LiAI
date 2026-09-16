@@ -12,30 +12,37 @@
 import { useEffect, useRef } from "react";
 import {
   ActivityIndicator,
-  Animated,
+  Animated as LegacyAnimated,
   Pressable,
   ScrollView,
   Text,
   View,
 } from "react-native";
+import Animated from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import { openSettings } from "expo-linking";
 import { Mic } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 import { VOICE_STATUS_LABEL } from "../lib/voiceStatus.ts";
+import {
+  fadeEntering,
+  useMotionDuration,
+} from "../lib/motion.ts";
 import { useVoiceLoop } from "../hooks/useVoiceLoop.ts";
 import { BottomNav } from "../components/BottomNav.tsx";
 
 export default function VoiceScreen() {
-  const { phase, heard, reply, issue, bargeIn, retry } = useVoiceLoop();
-  const fade = useRef(new Animated.Value(0)).current;
+  const { phase, heard, reply, issue, needsSettings, bargeIn, retry } = useVoiceLoop();
+  const fade = useRef(new LegacyAnimated.Value(0)).current;
+  const motionDuration = useMotionDuration();
   const replyVisible = phase === "speaking";
 
   // Overlay fades in on reply start, fades out when audio ends.
   // Always mounted — only opacity changes, so nothing ever shifts.
   useEffect(() => {
-    Animated.timing(fade, {
+    LegacyAnimated.timing(fade, {
       toValue: replyVisible ? 1 : 0,
       duration: replyVisible ? 150 : 200,
       useNativeDriver: true,
@@ -61,15 +68,19 @@ export default function VoiceScreen() {
           </View>
         </Pressable>
 
-        <Text className="mt-6 text-center font-sans-semibold text-h3 text-primary-text">
+        <Animated.Text
+          key={phase}
+          entering={fadeEntering(motionDuration)}
+          className="mt-6 text-center font-sans-semibold text-h3 text-primary-text"
+        >
           {VOICE_STATUS_LABEL[phase]}
-        </Text>
+        </Animated.Text>
         {/* Heard slot never unmounts: nbsp holds the line when silent. */}
         <Text className="mt-3 min-h-12 text-center font-sans text-body-md text-secondary-text">
           {heard !== "" && phase !== "speaking" ? heard : " "}
         </Text>
 
-        <Animated.View
+        <LegacyAnimated.View
           style={{ opacity: fade }}
           pointerEvents={replyVisible ? "auto" : "none"}
           className="mt-6 w-full"
@@ -87,7 +98,7 @@ export default function VoiceScreen() {
               </Pressable>
             </View>
           </View>
-        </Animated.View>
+        </LegacyAnimated.View>
 
         {reply !== "" && (
           <Text className="mt-4 text-center font-sans text-body-md text-primary-text">
@@ -97,9 +108,17 @@ export default function VoiceScreen() {
 
         {issue !== null && (
           <View className="mt-4 items-center">
-            <Text className="text-center font-sans text-body-sm text-secondary-text">
-              {issue}
-            </Text>
+            {needsSettings ? (
+              <Pressable onPress={() => void openSettings()}>
+                <Text className="text-center font-sans text-body-sm text-primary">
+                  {issue}
+                </Text>
+              </Pressable>
+            ) : (
+              <Text className="text-center font-sans text-body-sm text-secondary-text">
+                {issue}
+              </Text>
+            )}
             <Pressable onPress={() => void retry()} className="mt-1 px-4 py-1">
               <Text className="font-sans text-body-md text-primary">Try again</Text>
             </Pressable>

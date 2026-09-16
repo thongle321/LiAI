@@ -14,7 +14,7 @@ import { useLocalSearchParams } from "expo-router";
 
 import { colors } from "../themes/tokens.ts";
 import { CONNECTION_DOT_CLASS } from "../lib/connection.ts";
-import { fadeEntering, fadeExiting, useMotionDuration } from "../lib/motion.ts";
+import { fadeEntering, fadeExiting, useMotionDuration, useTabContentFade } from "../lib/motion.ts";
 import { APP_NAME } from "../constants/app.ts";
 
 import { Bubble } from "../components/Bubble.tsx";
@@ -50,6 +50,7 @@ export default function ChatScreen() {
 
   const dot = CONNECTION_DOT_CLASS[connection];
   const motionDuration = useMotionDuration();
+  const contentFade = useTabContentFade();
   // Deep-link entry: the voice tab's Vision button lands here with
   // ?tab=vision so the camera expander opens instead of plain chat.
   const { tab } = useLocalSearchParams<{ tab?: string }>();
@@ -89,16 +90,18 @@ export default function ChatScreen() {
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={{ flex: 1 }}
         >
-          <FlatList
-            ref={listRef}
-            data={visibleMessages}
-            keyExtractor={(m) => m.id}
-            renderItem={({ item }) => (
-              <Bubble message={item} onRetry={() => void retry(item.id)} />
-            )}
-            contentContainerClassName="p-4"
-            className="flex-1"
-          />
+          <Animated.View style={contentFade} className="flex-1">
+            <FlatList
+              ref={listRef}
+              data={visibleMessages}
+              keyExtractor={(m) => m.id}
+              renderItem={({ item }) => (
+                <Bubble message={item} onRetry={() => void retry(item.id)} />
+              )}
+              contentContainerClassName="p-4"
+              className="flex-1"
+            />
+          </Animated.View>
           {sending && (
             <Animated.Text
               entering={fadeEntering(motionDuration)}

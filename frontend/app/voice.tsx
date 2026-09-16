@@ -14,7 +14,6 @@ import {
   ActivityIndicator,
   Animated as LegacyAnimated,
   Pressable,
-  ScrollView,
   Text,
   View,
 } from "react-native";
@@ -30,6 +29,7 @@ import { routeForTab } from "../lib/tabRoute.ts";
 import {
   fadeEntering,
   useMotionDuration,
+  useTabContentFade,
 } from "../lib/motion.ts";
 import { useVoiceLoop } from "../hooks/useVoiceLoop.ts";
 import { BottomNav } from "../components/BottomNav.tsx";
@@ -38,6 +38,7 @@ export default function VoiceScreen() {
   const { phase, heard, reply, issue, needsSettings, bargeIn, retry } = useVoiceLoop();
   const fade = useRef(new LegacyAnimated.Value(0)).current;
   const motionDuration = useMotionDuration();
+  const contentFade = useTabContentFade();
   const replyVisible = phase === "speaking";
 
   // Overlay fades in on reply start, fades out when audio ends.
@@ -58,7 +59,7 @@ export default function VoiceScreen() {
         Voice
       </Text>
 
-      <ScrollView contentContainerClassName="flex-1 items-center justify-center px-8">
+      <Animated.ScrollView style={contentFade} contentContainerClassName="flex-1 items-center justify-center px-8">
         <Pressable onPress={bargeIn}>
           <View
             className={`h-40 w-40 items-center justify-center rounded-full border bg-surface-1 ${
@@ -125,7 +126,7 @@ export default function VoiceScreen() {
             </Pressable>
           </View>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
 
       <Text className="pb-2 text-center font-sans text-body-sm text-secondary-text">
         Tap the mic to talk

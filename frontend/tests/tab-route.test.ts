@@ -8,7 +8,7 @@ void describe("routeForTab", () => {
     assert.equal(routeForTab("chat"), "/chat");
   });
 
-  void it("carries the vision intent as a query param", () => {
-    assert.equal(routeForTab("vision"), "/chat?tab=vision");
+  void it("links vision to the standalone vision route", () => {
+    assert.equal(routeForTab("vision"), "/vision");
   });
 });

@@ -109,6 +109,8 @@ def test_startup_preloads_vlm_weights(
     import app.realtime.vlm as vlm_module
     from app.main import app as app_module
 
+    # Lifespan fails fast without a key; prove warmup with a dummy one.
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     loaded = False
 
     def fake_load() -> None:
@@ -128,6 +130,29 @@ async def _enter_lifespan(app: object) -> None:
     gen = lifespan(app)  # type: ignore[operator]
     await gen.__aenter__()
     await gen.__aexit__(None, None, None)
+
+
+def test_lifespan_boots_with_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.main import app as app_module
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    _run(_enter_lifespan(app_module))
+
+
+def test_lifespan_fails_fast_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pydantic_ai.exceptions import UserError
+
+    from app.main import app as app_module
+
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    try:
+        _run(_enter_lifespan(app_module))
+    except UserError as exc:
+        assert "OPENROUTER_API_KEY" in str(exc)
+    else:
+        raise AssertionError("expected UserError")
 
 
 class FakeSocket:

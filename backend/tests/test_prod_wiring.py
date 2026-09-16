@@ -5,12 +5,12 @@ Keyless construction (no network in CI); invocation proven live (Q6).
 """
 
 import pytest
+from conftest import EchoProvider
 from pydantic_ai.exceptions import UserError
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.openrouter import OpenRouterModel
 
 from app.agents.companion import get_companion_agent
-from app.providers.fake import FakeProvider
 from app.providers.openrouter import OpenRouterChatProvider
 
 
@@ -41,6 +41,20 @@ def test_missing_key_fails_fast_at_build(
         raise AssertionError("expected UserError")
 
 
-def test_fake_provider_still_uses_function_model() -> None:
-    agent = get_companion_agent(provider=FakeProvider(), clock=lambda: "t")
+def test_default_agent_build_without_key_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    try:
+        get_companion_agent()
+    except UserError as exc:
+        assert "OPENROUTER_API_KEY" in str(exc)
+    else:
+        raise AssertionError("expected UserError")
+
+
+def test_explicit_echo_provider_uses_function_model() -> None:
+    agent = get_companion_agent(provider=EchoProvider(), clock=lambda: "t")
     assert isinstance(agent.model, FunctionModel)

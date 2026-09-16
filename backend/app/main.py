@@ -16,16 +16,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .agents import get_companion_agent
-from .agents.companion import assistant_text, to_message_history
+from .agents import companion, get_companion_agent
+from .agents.companion import assistant_text, persist_turn, to_message_history
 from .memory import Turn, get_store
 from .providers.factory import get_provider
-from .providers.fake import FakeProvider
 from .realtime import vlm
+from .realtime.qa import validate_jpeg
 from .realtime.ws import handle_vision_socket
 from .schemas import (
     ChatRequest,
     ChatResponse,
+    ErrorDetail,
+    ErrorResponse,
     HealthResponse,
     HistoryMessage,
     HistoryResponse,
@@ -41,13 +43,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         type(provider).__name__,
         f" model={model}" if model else "",
     )
-    if isinstance(provider, FakeProvider):
-        # The .env wasn't loaded (needs --env-file) or no key is set:
-        # every chat reply echoes. Say so now, not per message.
-        logging.getLogger(__name__).warning(
-            "fake echo provider active — chat replies will echo; "
-            "set LLM_PROVIDER=openrouter + key and run with --env-file .env"
-        )
+    # Fail fast: no keyless boot. The SDK validates the key eagerly at
+    # build, so this crashes startup instead of failing every turn.
+    # Tests patch the route call-site (app.main.get_companion_agent),
+    # never this source-namespace build.
+    companion.get_companion_agent(provider)
     vlm.warmup()
     yield
 
@@ -69,10 +69,9 @@ def health() -> HealthResponse:
 
 
 def _error(status_code: int, code: str, message: str) -> JSONResponse:
-    return JSONResponse(
-        status_code=status_code,
-        content={"error": {"code": code, "message": message}},
-    )
+    # One envelope for every failure, built from the shared schema.
+    body = ErrorResponse(error=ErrorDetail(code=code, message=message))
+    return JSONResponse(status_code=status_code, content=body.model_dump())
 
 
 # ponytail: one envelope for every failure so the Expo client parses once
@@ -139,7 +138,9 @@ async def chat(body: ChatRequest) -> ChatResponse | JSONResponse:
         return _error(503, "store_error", str(exc))
     if body.image is not None:
         try:
-            reply = await vlm.describe_frame(_decode_image(body.image), body.message)
+            image_bytes = _decode_image(body.image)
+            validate_jpeg(image_bytes)
+            reply = await vlm.describe_frame(image_bytes, body.message)
         except ValueError as exc:
             return _error(400, "invalid_request", str(exc))
         except Exception as exc:  # noqa: BLE001 — same boundary as the text path below
@@ -153,8 +154,7 @@ async def chat(body: ChatRequest) -> ChatResponse | JSONResponse:
             return _error(502, "llm_error", str(exc))
         reply = assistant_text(result.output)
     try:
-        store.append(session_id, Turn(role="user", content=body.message))
-        store.append(session_id, Turn(role="assistant", content=reply))
+        session_id = persist_turn(store, session_id, body.message, reply)
     except Exception as exc:
         return _error(503, "store_error", str(exc))
     return ChatResponse(reply=reply, session_id=session_id)

@@ -12,7 +12,7 @@ from pydantic_ai.messages import (
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from ..config.personality import COMPANION_SYSTEM_PROMPT
-from ..memory import Turn
+from ..memory import ConversationStore, Turn
 from ..providers import ChatProvider, get_provider
 
 
@@ -30,6 +30,23 @@ def assistant_text(output: object) -> str:
             part.content for part in output if isinstance(part, TextPart)
         )
     return str(output)
+
+
+def persist_turn(
+    store: ConversationStore,
+    session_id: str | None,
+    user_text: str,
+    reply: str,
+) -> str:
+    """One stored turn: mint the session when needed, then user + final text.
+
+    The single place both chat routes persist, so tool internals can
+    never land in history — only the text the mobile bubble rendered.
+    """
+    session_id = session_id or store.create()
+    store.append(session_id, Turn(role="user", content=user_text))
+    store.append(session_id, Turn(role="assistant", content=reply))
+    return session_id
 
 
 def latest_user_text(messages: list[ModelMessage]) -> str:

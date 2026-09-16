@@ -8,6 +8,7 @@ Pydantic AI composes with personality/tools (existing companion agent)
 import io
 
 from ..agents import get_companion_agent
+from ..agents.companion import assistant_text, persist_turn
 from ..memory import Turn, get_store
 from . import vlm
 
@@ -45,11 +46,8 @@ async def answer_about_frame(
     seen = await vlm.describe_frame(jpeg, question)
     prompt = f"Question about the current camera view: {question}\nWhat the camera shows: {seen}"
     result = await get_companion_agent().run(prompt)
-    reply = str(result.output)
-    store = get_store()
-    session_id = session_id or store.create()
-    store.append(session_id, Turn(role="user", content=question))
-    store.append(session_id, Turn(role="assistant", content=reply))
+    reply = assistant_text(result.output)
+    session_id = persist_turn(get_store(), session_id, question, reply)
     return reply, session_id
 
 

@@ -2,9 +2,10 @@
 
 Contract frozen: tool runs inside the agent turn, mobile sees only text.
 The tool-calling model is faked test-locally (a FunctionModel stand-in
-patched over provider_function); production provider_function stays a
+in the native tool-model slot); production provider_function stays a
 pure ChatProvider-to-text adapter so real-model traffic never hits a
-substring trigger. Fake-provider tests gate the slice (Q3).
+substring trigger. Route tests inject the test-local echo provider
+(conftest); production has no fake.
 """
 
 from collections.abc import Awaitable, Callable
@@ -20,8 +21,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo
 
-import app.agents.companion as companion
-import app.main as main
+from app import main
 from app.agents.companion import (
     assistant_text,
     get_companion_agent,
@@ -58,15 +58,24 @@ def tool_calling_model(
 
 
 def route_agent(monkeypatch: pytest.MonkeyPatch, clock: Callable[[], str]) -> None:
-    """Route /api/chat through the real agent factory with injected clock + fake model."""
-    real_factory = get_companion_agent
+    """Route /api/chat through the real agent factory with injected clock + tool fake.
+
+    The fake steers the native tool-model slot, so the agent loop runs
+    its real tool machinery keyless (provider_function only serves
+    providers without a native model).
+    """
+    from conftest import EchoProvider
+    from pydantic_ai.models.function import FunctionModel
+
+    provider = EchoProvider()
     monkeypatch.setattr(
-        companion, "provider_function", lambda provider: tool_calling_model
+        provider, "create_tool_model", lambda: FunctionModel(tool_calling_model)
     )
+    real_factory = get_companion_agent
     monkeypatch.setattr(
         main,
         "get_companion_agent",
-        lambda provider=None, **kwargs: real_factory(
+        lambda _provider=None, **kwargs: real_factory(
             provider, **{**kwargs, "clock": clock}
         ),
     )

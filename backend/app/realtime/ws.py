@@ -9,6 +9,7 @@ import logging
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import TypeAdapter
 
+from ..schemas import ErrorDetail
 from ..schemas.vision import VisionClientMessage
 from .qa import answer_about_frame, caption_frame, store_caption, validate_jpeg
 
@@ -49,10 +50,13 @@ async def send_json(websocket: WebSocket, payload: dict) -> bool:
 
 
 async def send_error(websocket: WebSocket, message: str) -> bool:
-    return await send_json(
-        websocket,
-        {"type": "error", "error": {"code": "invalid_request", "message": message}},
-    )
+    return await send_json(websocket, _error_payload("invalid_request", message))
+
+
+def _error_payload(code: str, message: str) -> dict:
+    # Same envelope as the HTTP routes, plus the socket's type tag.
+    detail = ErrorDetail(code=code, message=message)
+    return {"type": "error", "error": detail.model_dump()}
 
 
 def is_duplicate(caption: str, previous: str) -> bool:
@@ -185,11 +189,7 @@ async def handle_vision_socket(websocket: WebSocket) -> None:
                         continue
                     except Exception as exc:
                         if not await send_json(
-                            websocket,
-                            {
-                                "type": "error",
-                                "error": {"code": "llm_error", "message": str(exc)},
-                            },
+                            websocket, _error_payload("llm_error", str(exc))
                         ):
                             return
                         continue

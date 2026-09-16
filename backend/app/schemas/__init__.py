@@ -1,6 +1,8 @@
 from .chat import (
     ChatRequest,
     ChatResponse,
+    ErrorDetail,
+    ErrorResponse,
     HealthResponse,
     HistoryMessage,
     HistoryResponse,
@@ -9,6 +11,8 @@ from .chat import (
 __all__ = [
     "ChatRequest",
     "ChatResponse",
+    "ErrorDetail",
+    "ErrorResponse",
     "HealthResponse",
     "HistoryMessage",
     "HistoryResponse",

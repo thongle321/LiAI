@@ -26,7 +26,11 @@ export const motionEasing = Easing.out(Easing.quad);
 /** 0 when the OS asks for reduced motion — entering/exiting with
  * duration 0 renders instantly instead of animating. */
 export function useMotionDuration(): number {
-  return useReducedMotion() ? 0 : MOTION_DURATION_MS;
+  const reduce = useReducedMotion();
+  useEffect(() => {
+    console.log(`[DEBUG-mtn1] reduced motion: ${reduce}`);
+  }, [reduce]);
+  return reduce ? 0 : MOTION_DURATION_MS;
 }
 
 /** New chat bubbles slide up once on mount (keyed by message id). */
@@ -51,6 +55,7 @@ export function useTabContentFade() {
   const opacity = useSharedValue(1);
   const focused = useIsFocused();
   useEffect(() => {
+    console.log(`[DEBUG-mtn1] tab fade focused=${focused} duration=${duration}`);
     if (!focused) return;
     opacity.value = 0;
     opacity.value = withTiming(1, { duration, easing: motionEasing });

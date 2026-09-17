@@ -6,8 +6,10 @@
  * small keyboard button opening a floating input. No BottomNav here —
  * vision is not a tab; stop-vision returns to the previous screen.
  *
- * Frame rule: one snapshot per send at send-time. While the AI thinks
- * and answers the preview stays live but nothing captures again.
+ * Frame rule: the preview streams frames while idle/listening. A voice or
+ * text question pauses uploads, sends the current frame + question, then
+ * resumes streaming after the answer finishes. The preview itself never
+ * freezes.
  */
 
 import { useState } from "react";
@@ -60,8 +62,17 @@ export default function VisionScreen() {
     return `data:image/jpeg;base64,${jpeg}`;
   }
 
-  const { phase, answer, issue, needsSettings, bargeIn, retry, sendText, stopAll } =
-    useVisionTurn(snap);
+  const {
+    phase,
+    answer,
+    issue,
+    needsSettings,
+    streamProblem,
+    bargeIn,
+    retry,
+    sendText,
+    stopAll,
+  } = useVisionTurn(snap, camera, () => camLive);
 
   function flip(): void {
     setCamLive(false);
@@ -180,6 +191,11 @@ export default function VisionScreen() {
             {camProblem !== null && (
               <Text className="mt-1 text-center font-sans text-body-sm text-white/70">
                 {camProblem}
+              </Text>
+            )}
+            {streamProblem !== null && (
+              <Text className="mt-1 text-center font-sans text-body-sm text-white/70">
+                {streamProblem}
               </Text>
             )}
           </View>

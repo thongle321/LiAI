@@ -6,9 +6,16 @@
  */
 
 import { API_BASE_URL } from "./api.ts";
+import type { VoicePhase } from "./voiceStatus.ts";
 
 export function visionSocketUrl(): string {
   return `${API_BASE_URL.replace(/^http/, "ws")}/api/vision/ws`;
+}
+
+/** Keep the preview live while voice is being heard; pause uploads while
+ * the backend is answering so a queued caption cannot race the question. */
+export function shouldStreamFrames(phase: VoicePhase): boolean {
+  return phase === "idle" || phase === "listening";
 }
 
 export function frameMessage(jpegBase64: string): string {
@@ -20,8 +27,8 @@ export function questionMessage(text: string): string {
 }
 
 export type VisionServerMessage =
-  | { type: "answer"; text: string }
-  | { type: "caption"; text: string }
+  | { type: "answer"; text: string; sessionId?: string }
+  | { type: "caption"; text: string; sessionId?: string }
   | { type: "error"; message: string }
   | { type: "other" };
 
@@ -41,7 +48,13 @@ export function parseServerMessage(data: unknown): VisionServerMessage {
   const record = msg as Record<string, unknown>;
   const kind = record.type;
   if (kind === "answer" || kind === "caption") {
-    return { type: kind, text: messageText(record.text) };
+    return {
+      type: kind,
+      text: messageText(record.text),
+      ...(typeof record.session_id === "string"
+        ? { sessionId: record.session_id }
+        : {}),
+    };
   }
   if (record.type === "error") {
     const error = record.error;

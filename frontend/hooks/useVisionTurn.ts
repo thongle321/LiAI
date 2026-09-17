@@ -1,17 +1,15 @@
-/** Vision turn: voice or text question about one camera frame.
+/** Vision turn: voice or text question about the live camera.
  *
- * Same discipline as the voice tab (throttle lockout, focus guards,
- * no auto-listen), plus the frame rule: exactly one snapshot per
- * send, taken at send-time. While the AI thinks and answers, the
- * preview stays live but nothing captures again — the turn reuses
- * that last frame. Next send snaps fresh; back to normal after.
- *
- * The screen owns the Camera ref and injects `snap`; everything
- * stateful lives here. Answers persist through the chat store, so
- * every exchange also lands in chat history.
+ * The stream sends frames while the screen is idle/listening. A question
+ * pauses frame uploads, sends the current frame plus question over the
+ * vision socket, and resumes after the spoken answer. If the socket is
+ * unavailable, the existing HTTP chat path remains the fallback so a
+ * network hiccup does not make vision unusable.
  */
 
 import { useEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
+import type { Camera as VisionCameraView } from "react-native-vision-camera";
 import { useIsFocused } from "expo-router";
 import {
   ExpoSpeechRecognitionModule,
@@ -19,11 +17,18 @@ import {
 } from "expo-speech-recognition";
 
 import type { VoicePhase } from "../lib/voiceStatus.ts";
-import { bargeActionFor, isThrottlingError, isVoiceThrottled, setVoiceThrottled, voiceErrorAction } from "../lib/voiceStatus.ts";
+import {
+  bargeActionFor,
+  isThrottlingError,
+  isVoiceThrottled,
+  setVoiceThrottled,
+  voiceErrorAction,
+} from "../lib/voiceStatus.ts";
 import { ensureMicAccess } from "../lib/micAccess.ts";
 import { speakReply, stopSpeaking } from "../lib/voiceSpeak.ts";
 import { VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
 import { useChatStore } from "../store/chat.ts";
+import { useVisionStream } from "./useVisionStream.ts";
 
 const NOTHING_HEARD = "Didn't hear anything — tap the mic to try again.";
 const NO_FRAME = "Couldn't capture a frame — try again.";
@@ -31,18 +36,29 @@ const NO_FRAME = "Couldn't capture a frame — try again.";
 /** Returns the frame as a data-uri, or null when the camera isn't ready. */
 export type SnapFrame = () => Promise<string | null>;
 
-export function useVisionTurn(snap: SnapFrame) {
+function bareJpeg(dataUri: string): string {
+  const prefix = "data:image/jpeg;base64,";
+  return dataUri.startsWith(prefix) ? dataUri.slice(prefix.length) : dataUri;
+}
+
+export function useVisionTurn(
+  snap: SnapFrame,
+  camera: RefObject<VisionCameraView | null>,
+  cameraReady: () => boolean,
+) {
   const [phase, setPhase] = useState<VoicePhase>("idle");
   const [answer, setAnswer] = useState("");
   const [issue, setIssue] = useState<string | null>(null);
   const [needsSettings, setNeedsSettings] = useState(false);
   const send = useChatStore((s) => s.send);
+  const recordVisionTurn = useChatStore((s) => s.recordVisionTurn);
 
   const phaseRef = useRef<VoicePhase>("idle");
   const aliveRef = useRef(true);
   const sentRef = useRef(false);
   const startingRef = useRef(false);
   const errorStreakRef = useRef(0);
+  const questionRef = useRef("");
   const focused = useIsFocused();
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
@@ -53,6 +69,22 @@ export function useVisionTurn(snap: SnapFrame) {
     phaseRef.current = next;
     setPhase(next);
   }
+
+  const stream = useVisionStream(camera, cameraReady, phase, {
+    onAnswer: (text, sessionId) => {
+      if (!aliveRef.current || phaseRef.current !== "thinking") return;
+      const said = questionRef.current;
+      if (said !== "") void recordVisionTurn(said, text, sessionId);
+      speak(text);
+    },
+    onError: (message) => {
+      if (!aliveRef.current) return;
+      if (phaseRef.current === "thinking" || phaseRef.current === "speaking") {
+        setIssue(message);
+        setBoth("idle");
+      }
+    },
+  });
 
   function safeStopListen(): void {
     try {
@@ -109,9 +141,7 @@ export function useVisionTurn(snap: SnapFrame) {
 
   function handleRecognitionFailure(code: string): void {
     console.warn(`[vision] recognition failure: ${code}`);
-    if (isThrottlingError(code)) {
-      setVoiceThrottled();
-    }
+    if (isThrottlingError(code)) setVoiceThrottled();
     const action = voiceErrorAction(errorStreakRef.current, code);
     errorStreakRef.current += 1;
     if (action.fatal) {
@@ -124,13 +154,14 @@ export function useVisionTurn(snap: SnapFrame) {
     setBoth("idle");
   }
 
-  /** One frame, one send: the turn's only capture. */
+  /** Pause the stream, send the current frame + question, then answer. */
   async function askAboutFrame(text: string): Promise<void> {
     const said = text.trim();
     if (said === "" || !aliveRef.current) {
       setBoth("idle");
       return;
     }
+    questionRef.current = said;
     setBoth("thinking");
     setIssue(null);
     let frame: string | null = null;
@@ -145,8 +176,12 @@ export function useVisionTurn(snap: SnapFrame) {
       setBoth("idle");
       return;
     }
-    // A typed send may still be in flight (store.send refuses while
-    // busy): wait for it instead of failing the turn.
+
+    // The fresh frame is sent before the question so the backend cancels
+    // any caption narration and answers exactly what the user saw.
+    if (stream.sendQuestion(said, bareJpeg(frame))) return;
+
+    // Socket fallback keeps vision usable when the dev backend is down.
     let waited = 0;
     while (useChatStore.getState().sending && waited < 10 && aliveRef.current) {
       await new Promise((r) => setTimeout(r, 1000));
@@ -212,7 +247,7 @@ export function useVisionTurn(snap: SnapFrame) {
     }
   }
 
-  /** Text send: same single-frame turn, no recognizer involved. */
+  /** Text send: same frame + question turn, no recognizer involved. */
   function sendText(text: string): void {
     if (phaseRef.current !== "idle" || isVoiceThrottled()) {
       if (isVoiceThrottled()) {
@@ -265,5 +300,15 @@ export function useVisionTurn(snap: SnapFrame) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { phase, answer, issue, needsSettings, bargeIn, retry, sendText, stopAll };
+  return {
+    phase,
+    answer,
+    issue,
+    needsSettings,
+    streamProblem: stream.problem,
+    bargeIn,
+    retry,
+    sendText,
+    stopAll,
+  };
 }

@@ -7,6 +7,7 @@ import {
   frameMessage,
   parseServerMessage,
   questionMessage,
+  shouldStreamFrames,
   visionSocketUrl,
 } from "../lib/vision.ts";
 
@@ -14,6 +15,15 @@ describe("visionSocketUrl", () => {
   it("swaps http for ws and appends the route", () => {
     assert.ok(visionSocketUrl().startsWith("ws://"));
     assert.ok(visionSocketUrl().endsWith("/api/vision/ws"));
+  });
+});
+
+describe("stream policy", () => {
+  it("streams while idle or listening, then pauses for an answer", () => {
+    assert.equal(shouldStreamFrames("idle"), true);
+    assert.equal(shouldStreamFrames("listening"), true);
+    assert.equal(shouldStreamFrames("thinking"), false);
+    assert.equal(shouldStreamFrames("speaking"), false);
   });
 });
 
@@ -35,14 +45,22 @@ describe("parseServerMessage", () => {
     const msg = parseServerMessage(
       JSON.stringify({ type: "answer", text: "a chair", session_id: "s" }),
     );
-    assert.deepEqual(msg, { type: "answer", text: "a chair" });
+    assert.deepEqual(msg, {
+      type: "answer",
+      text: "a chair",
+      sessionId: "s",
+    });
   });
 
   it("reads captions", () => {
     const msg = parseServerMessage(
       JSON.stringify({ type: "caption", text: "a room", session_id: "s" }),
     );
-    assert.deepEqual(msg, { type: "caption", text: "a room" });
+    assert.deepEqual(msg, {
+      type: "caption",
+      text: "a room",
+      sessionId: "s",
+    });
   });
 
   it("reads error envelopes", () => {

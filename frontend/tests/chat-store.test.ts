@@ -239,6 +239,23 @@ describe("chat store", () => {
     assert.ok(storage.data[HISTORY_KEY]?.includes("hello world"));
   });
 
+  it("records a vision socket turn locally without a second backend request", async () => {
+    const storage = memoryStorage();
+    const useStore = createChatStore(storage);
+    await useStore.getState().recordVisionTurn("what is this?", "a chair", "vision-1");
+    const state = useStore.getState();
+    assert.equal(state.sessionId, "vision-1");
+    assert.deepEqual(
+      state.messages.map((m) => [m.role, m.text]),
+      [
+        ["user", "what is this?"],
+        ["assistant", "a chair"],
+      ],
+    );
+    assert.equal(state.sessions.length, 1);
+    assert.equal(state.sessions[0].title, "what is this?");
+  });
+
   it("keeps one entry per session across sends", async () => {
     const storage = memoryStorage();
     const useStore = createChatStore(storage);

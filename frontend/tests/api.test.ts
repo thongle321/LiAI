@@ -154,6 +154,10 @@ describe("resolveApiBaseUrl", () => {
       resolveApiBaseUrl("http://10.0.0.9:8000", "192.168.1.5:8081"),
       "http://10.0.0.9:8000",
     );
+    assert.equal(
+      resolveApiBaseUrl("192.168.1.174:8000", "192.168.1.5:8081"),
+      "http://192.168.1.174:8000",
+    );
   });
 
   it("derives the backend URL from the Metro host IP", () => {

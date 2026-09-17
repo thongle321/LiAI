@@ -34,7 +34,8 @@ export function resolveApiBaseUrl(
   envUrl: string | undefined,
   hostUri: string | null,
 ): string {
-  if (envUrl !== undefined && envUrl !== "") return envUrl;
+  const explicit = normalizeBaseUrl(envUrl);
+  if (explicit !== null) return explicit;
   const ip = ipv4From(hostUri);
   if (ip !== null) return `http://${ip}:8000`;
   return "http://localhost:8000";
@@ -90,6 +91,12 @@ function prop(value: unknown, key: string): unknown {
   return typeof value === "object" && value !== null
     ? (value as Record<string, unknown>)[key]
     : undefined;
+}
+
+function normalizeBaseUrl(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  if (trimmed === undefined || trimmed === "") return null;
+  return /^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`;
 }
 
 function ipv4From(value: string | null): string | null {

@@ -26,33 +26,76 @@ export const API_BASE_URL = resolveApiBaseUrl(
   metroHostUri(),
 );
 
+type RuntimeRequire = (moduleName: string) => unknown;
+declare const require: RuntimeRequire | undefined;
+
 /** Pure seam: explicit override wins, else the Metro host's LAN IP. */
 export function resolveApiBaseUrl(
   envUrl: string | undefined,
   hostUri: string | null,
 ): string {
   if (envUrl !== undefined && envUrl !== "") return envUrl;
-  const ip = hostUri?.match(/^(\d{1,3}(?:\.\d{1,3}){3})/)?.[1];
-  if (ip !== undefined) return `http://${ip}:8000`;
+  const ip = ipv4From(hostUri);
+  if (ip !== null) return `http://${ip}:8000`;
   return "http://localhost:8000";
 }
 
-/** The phone already reaches Metro on this machine's LAN IP — reuse it.
- * expo-constants is Metro-runtime only; node tests fall through to null. */
+export function runtimeHostUriFromModules(req: RuntimeRequire | null): string | null {
+  if (req === null) return null;
+  const constants = readModule(req, "expo-constants");
+  const expo = prop(constants, "default") ?? constants;
+  const expoConfig = prop(expo, "expoConfig");
+  const manifest = prop(expo, "manifest");
+  const manifest2 = prop(expo, "manifest2");
+  const expoClient = prop(prop(manifest2, "extra"), "expoClient");
+
+  for (const v of [
+    prop(expoConfig, "hostUri"),
+    prop(manifest, "debuggerHost"),
+    prop(expoClient, "hostUri"),
+  ]) {
+    if (typeof v === "string") return v;
+  }
+
+  // Dev-client fallback: RN exposes the bundle URL as
+  // http://<metro-ip>:8081/index.bundle?... when Constants lacks hostUri.
+  const rn = readModule(req, "react-native");
+  const sourceCode = prop(prop(rn, "NativeModules"), "SourceCode");
+  const scriptURL = prop(sourceCode, "scriptURL");
+  return typeof scriptURL === "string" ? scriptURL : null;
+}
+
+/** The phone already reaches Metro on this machine's LAN IP — reuse it. */
 function metroHostUri(): string | null {
+  return runtimeHostUriFromModules(optionalRequire());
+}
+
+function optionalRequire(): RuntimeRequire | null {
   try {
-    const req = (
-      globalThis as {
-        require?: (m: string) => {
-          default?: { expoConfig?: { hostUri?: unknown } };
-        };
-      }
-    ).require;
-    const hostUri = req?.("expo-constants")?.default?.expoConfig?.hostUri;
-    return typeof hostUri === "string" ? hostUri : null;
+    return typeof require === "function" ? require : null;
   } catch {
     return null;
   }
+}
+
+function readModule(req: RuntimeRequire, name: string): unknown {
+  try {
+    return req(name);
+  } catch {
+    return null;
+  }
+}
+
+function prop(value: unknown, key: string): unknown {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)[key]
+    : undefined;
+}
+
+function ipv4From(value: string | null): string | null {
+  const ip = value?.match(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/)?.[1];
+  if (ip === undefined) return null;
+  return ip.split(".").every((part) => Number(part) <= 255) ? ip : null;
 }
 
 export const REQUEST_TIMEOUT_MS = 30_000;

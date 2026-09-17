@@ -9,9 +9,9 @@ import { useEffect, useRef, useState } from "react";
 import {
   Animated,
   BackHandler,
+  FlatList,
   Modal,
   Pressable,
-  ScrollView,
   Text,
   View,
 } from "react-native";
@@ -117,45 +117,55 @@ export function AppDrawer({
                 </Pressable>
               </View>
 
-              <ScrollView className="flex-1">
-                <DrawerItem
-                  Icon={MessageSquarePlus}
-                  label="New conversation"
-                  onPress={() => {
-                    void newConversation();
-                    onClose();
-                  }}
-                />
-                <View className="flex-row items-center px-4 pb-1 pt-3">
-                  <History size={16} color={colors.secondaryText} />
-                  <Text className="ml-2 font-sans text-body-sm text-secondary-text">
-                    History
-                  </Text>
-                </View>
-                {switchError !== null && (
-                  <Text className="px-4 py-1 font-sans text-body-sm text-secondary-text">
-                    {switchError}
-                  </Text>
-                )}
-                {sessions.length === 0 ? (
+              <FlatList
+                data={sessions}
+                keyExtractor={(s) => s.id}
+                extraData={sessionId}
+                className="flex-1"
+                ListHeaderComponent={
+                  <>
+                    <DrawerItem
+                      Icon={MessageSquarePlus}
+                      label="New conversation"
+                      onPress={() => {
+                        void newConversation();
+                        onClose();
+                      }}
+                    />
+                    <View className="flex-row items-center px-4 pb-1 pt-3">
+                      <History size={16} color={colors.secondaryText} />
+                      <Text className="ml-2 font-sans text-body-sm text-secondary-text">
+                        History
+                      </Text>
+                    </View>
+                    {switchError !== null && (
+                      <Text className="px-4 py-1 font-sans text-body-sm text-secondary-text">
+                        {switchError}
+                      </Text>
+                    )}
+                  </>
+                }
+                ListEmptyComponent={
                   <Text className="px-4 py-2 font-sans text-body-sm text-secondary-text">
                     No conversations yet.
                   </Text>
-                ) : (
-                  sessions.map((s) => (
-                    <HistoryRow
-                      key={s.id}
-                      session={s}
-                      selected={s.id === sessionId}
-                      onOpen={() => openSession(s)}
-                      onDelete={() => void deleteSession(s.id)}
-                    />
-                  ))
+                }
+                renderItem={({ item }) => (
+                  <HistoryRow
+                    session={item}
+                    selected={item.id === sessionId}
+                    onOpen={() => openSession(item)}
+                    onDelete={() => void deleteSession(item.id)}
+                  />
                 )}
-                <View className="my-2 border-t border-border" />
-                <DrawerItem Icon={Settings} label="Settings" onPress={() => go("/settings")} />
-                <DrawerItem Icon={CircleHelp} label="About" onPress={() => go("/about")} />
-              </ScrollView>
+                ListFooterComponent={
+                  <>
+                    <View className="my-2 border-t border-border" />
+                    <DrawerItem Icon={Settings} label="Settings" onPress={() => go("/settings")} />
+                    <DrawerItem Icon={CircleHelp} label="About" onPress={() => go("/about")} />
+                  </>
+                }
+              />
 
               <Text className="border-t border-border px-4 py-3 font-sans text-body-sm text-secondary-text">
                 v{VERSION}

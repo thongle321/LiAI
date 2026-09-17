@@ -2,8 +2,8 @@
  *
  * The stream sends frames while the screen is idle/listening. A question
  * pauses frame uploads, sends the current frame plus question over the
- * vision socket, and resumes after the spoken answer. If the socket is
- * unavailable, the existing HTTP chat path remains the fallback so a
+ * vision socket, and resumes as soon as the answer arrives. If the socket
+ * is unavailable, the existing HTTP chat path remains the fallback so a
  * network hiccup does not make vision unusable.
  */
 

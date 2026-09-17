@@ -28,8 +28,6 @@ export type VisionStreamCallbacks = {
   onError?: (message: string) => void;
 };
 
-export type VisionStreamState = "connecting" | "open" | "failed";
-
 export function useVisionStream(
   camera: RefObject<Camera | null>,
   cameraReady: () => boolean,
@@ -45,28 +43,31 @@ export function useVisionStream(
   const cameraReadyRef = useRef(cameraReady);
   cameraReadyRef.current = cameraReady;
   const focused = useIsFocused();
-  const [state, setState] = useState<VisionStreamState>("connecting");
   const [problem, setProblem] = useState<string | null>(null);
 
   useEffect(() => {
     if (!focused) return;
+    let active = true;
+    let failureReported = false;
+    const reportFailure = (message: string): void => {
+      if (!active || failureReported) return;
+      failureReported = true;
+      setProblem(message);
+      callbacksRef.current.onError?.(message);
+    };
 
     const ws = new WebSocket(visionSocketUrl());
     socket.current = ws;
-    ws.onerror = () => {
-      setProblem("Could not reach the vision stream");
-      setState("failed");
-    };
+    ws.onerror = () => reportFailure("Could not reach the vision stream");
     ws.onopen = () => {
-      setProblem(null);
-      setState("open");
+      failureReported = false;
+      if (active) setProblem(null);
     };
     ws.onclose = (event: { code?: unknown; reason?: unknown }) => {
       socket.current = null;
       const code = typeof event.code === "number" ? event.code : "?";
       const reason = typeof event.reason === "string" ? event.reason : "";
-      setProblem(`Vision stream closed (${code}${reason ? ` ${reason}` : ""})`);
-      setState("failed");
+      reportFailure(`Vision stream closed (${code}${reason ? ` ${reason}` : ""})`);
     };
     ws.onmessage = (event: { data?: unknown }) => {
       const msg = parseServerMessage(event.data);
@@ -107,6 +108,7 @@ export function useVisionStream(
     }, 1000);
 
     return () => {
+      active = false;
       clearInterval(timer);
       capturing.current = false;
       if (
@@ -131,5 +133,5 @@ export function useVisionStream(
     }
   }
 
-  return { state, problem, sendQuestion };
+  return { problem, sendQuestion };
 }

@@ -28,6 +28,7 @@ import { ensureMicAccess } from "../lib/micAccess.ts";
 import { speakReply, stopSpeaking } from "../lib/voiceSpeak.ts";
 import { VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
 import { snapshotToBase64 } from "../lib/snapshot.ts";
+import { shouldStreamFrames } from "../lib/vision.ts";
 import { useChatStore } from "../store/chat.ts";
 import { useVisionStream } from "./useVisionStream.ts";
 
@@ -73,7 +74,7 @@ export function useVisionTurn(
     frameRef.current = null;
   }
 
-  const stream = useVisionStream(camera, cameraReady, phase, {
+  const stream = useVisionStream(camera, cameraReady, shouldStreamFrames(phase), {
     onAnswer: (text, sessionId) => {
       clearAnswerTimeout();
       if (!aliveRef.current || phaseRef.current !== "thinking") return;
@@ -176,6 +177,16 @@ export function useVisionTurn(
     questionRef.current = said;
     setBoth("thinking");
     setIssue(null);
+
+    // Wait briefly if a periodic background stream snapshot is in flight to
+    // prevent concurrent camera hardware snapshot calls on native Android.
+    let waitedSnap = 0;
+    while (stream.isCapturing() && waitedSnap < 10 && aliveRef.current) {
+      await new Promise((r) => setTimeout(r, 100));
+      waitedSnap += 1;
+    }
+    if (!aliveRef.current) return;
+
     let rawJpeg: string | null = null;
     try {
       const cam = camera.current;

@@ -17,10 +17,8 @@ import {
   frameMessage,
   parseServerMessage,
   questionMessage,
-  shouldStreamFrames,
   visionSocketUrl,
 } from "../lib/vision.ts";
-import type { VoicePhase } from "../lib/voiceStatus.ts";
 
 export type VisionStreamCallbacks = {
   onAnswer?: (text: string, sessionId?: string) => void;
@@ -31,13 +29,13 @@ export type VisionStreamCallbacks = {
 export function useVisionStream(
   camera: RefObject<Camera | null>,
   cameraReady: () => boolean,
-  phase: VoicePhase,
+  enabled = true,
   callbacks: VisionStreamCallbacks = {},
 ) {
   const socket = useRef<WebSocket | null>(null);
   const capturing = useRef(false);
-  const phaseRef = useRef(phase);
-  phaseRef.current = phase;
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
   const callbacksRef = useRef(callbacks);
   callbacksRef.current = callbacks;
   const cameraReadyRef = useRef(cameraReady);
@@ -105,7 +103,7 @@ export function useVisionStream(
     connect();
 
     const timer = setInterval(() => {
-      if (!shouldStreamFrames(phaseRef.current)) return;
+      if (!enabledRef.current) return;
       const ws = socket.current;
       if (ws === null || ws.readyState !== WebSocket.OPEN || capturing.current) return;
       const ref = camera.current;
@@ -120,7 +118,7 @@ export function useVisionStream(
             currentWs === null ||
             currentWs.readyState !== WebSocket.OPEN ||
             !cameraReadyRef.current() ||
-            !shouldStreamFrames(phaseRef.current)
+            !enabledRef.current
           ) {
             return;
           }
@@ -171,5 +169,9 @@ export function useVisionStream(
     }
   }
 
-  return { problem, sendQuestion };
+  return {
+    problem,
+    sendQuestion,
+    isCapturing: () => capturing.current,
+  };
 }

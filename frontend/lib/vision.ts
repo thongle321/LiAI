@@ -12,10 +12,10 @@ export function visionSocketUrl(): string {
   return `${API_BASE_URL.replace(/^http/, "ws")}/api/vision/ws`;
 }
 
-/** Keep the preview live except while the backend is answering a question.
- * Streaming resumes as soon as the answer arrives, even while TTS plays it. */
+/** Keep the preview live while idle/listening; pause while the AI answers
+ * (including TTS), then resume for the next turn. */
 export function shouldStreamFrames(phase: VoicePhase): boolean {
-  return phase !== "thinking";
+  return phase === "idle" || phase === "listening";
 }
 
 export function frameMessage(jpegBase64: string): string {

@@ -1,10 +1,10 @@
 /** Vision stream: live frames over the backend WebSocket.
  *
  * The camera preview stays active while the screen is focused. Frames are
- * sent once per second only while the turn phase is idle/listening; they
- * pause during thinking/speaking so a queued caption cannot race a user
- * question. A question sends the current frame first, then the question,
- * which lets the backend cancel any in-flight caption before answering.
+ * sent once per second while idle/listening. Uploads pause while the AI
+ * answers (including TTS), then resume for the next turn. A question sends
+ * the current frame first, then the question, which lets the backend cancel
+ * any in-flight caption before answering.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -70,6 +70,7 @@ export function useVisionStream(
       reportFailure(`Vision stream closed (${code}${reason ? ` ${reason}` : ""})`);
     };
     ws.onmessage = (event: { data?: unknown }) => {
+      if (!active) return;
       const msg = parseServerMessage(event.data);
       if (msg.type === "answer") {
         callbacksRef.current.onAnswer?.(msg.text, msg.sessionId);
@@ -90,7 +91,9 @@ export function useVisionStream(
       void snapshotToBase64(() => ref.takeSnapshot({ quality: 50 }))
         .then((jpeg) => {
           if (
+            !active ||
             ws.readyState !== WebSocket.OPEN ||
+            !cameraReadyRef.current() ||
             !shouldStreamFrames(phaseRef.current)
           ) {
             return;
@@ -98,6 +101,7 @@ export function useVisionStream(
           ws.send(frameMessage(jpeg));
         })
         .catch((error: unknown) => {
+          if (!active) return;
           const detail =
             error instanceof Error ? error.message : String(error);
           setProblem(`Capture failed: ${detail}`);
@@ -126,6 +130,8 @@ export function useVisionStream(
     if (ws === null || ws.readyState !== WebSocket.OPEN) return false;
     try {
       ws.send(frameMessage(jpeg));
+      // If the socket closes between messages, do not send an orphan question.
+      if (ws.readyState !== WebSocket.OPEN) return false;
       ws.send(questionMessage(text));
       return true;
     } catch {

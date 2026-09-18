@@ -19,11 +19,11 @@ describe("visionSocketUrl", () => {
 });
 
 describe("stream policy", () => {
-  it("streams while idle, listening, or speaking, then pauses for an answer", () => {
+  it("streams while idle or listening, then pauses for an answer", () => {
     assert.equal(shouldStreamFrames("idle"), true);
     assert.equal(shouldStreamFrames("listening"), true);
     assert.equal(shouldStreamFrames("thinking"), false);
-    assert.equal(shouldStreamFrames("speaking"), true);
+    assert.equal(shouldStreamFrames("speaking"), false);
   });
 });
 

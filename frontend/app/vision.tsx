@@ -8,7 +8,7 @@
  *
  * Frame rule: the preview streams frames while idle/listening. A voice or
  * text question pauses uploads, sends the current frame + question, then
- * resumes streaming as soon as the answer arrives. The preview itself never
+ * resumes streaming after the answer and TTS finish. The preview itself never
  * freezes.
  */
 

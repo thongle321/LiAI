@@ -2,7 +2,7 @@
  *
  * The stream sends frames while the screen is idle/listening. A question
  * pauses frame uploads, sends the current frame plus question over the
- * vision socket, and resumes as soon as the answer arrives. If the socket
+ * vision socket, and resumes after the answer and TTS finish. If the socket
  * is unavailable, the existing HTTP chat path remains the fallback so a
  * network hiccup does not make vision unusable.
  */
@@ -32,6 +32,7 @@ import { useVisionStream } from "./useVisionStream.ts";
 
 const NOTHING_HEARD = "Didn't hear anything — tap the mic to try again.";
 const NO_FRAME = "Couldn't capture a frame — try again.";
+const VISION_ANSWER_TIMEOUT_MS = 30_000;
 
 /** Returns the frame as a data-uri, or null when the camera isn't ready. */
 export type SnapFrame = () => Promise<string | null>;
@@ -59,6 +60,7 @@ export function useVisionTurn(
   const startingRef = useRef(false);
   const errorStreakRef = useRef(0);
   const questionRef = useRef("");
+  const answerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focused = useIsFocused();
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
@@ -70,19 +72,33 @@ export function useVisionTurn(
     setPhase(next);
   }
 
+  function clearAnswerTimeout(): void {
+    if (answerTimeoutRef.current !== null) {
+      clearTimeout(answerTimeoutRef.current);
+      answerTimeoutRef.current = null;
+    }
+  }
+
   const stream = useVisionStream(camera, cameraReady, phase, {
     onAnswer: (text, sessionId) => {
+      clearAnswerTimeout();
       if (!aliveRef.current || phaseRef.current !== "thinking") return;
       const said = questionRef.current;
-      if (said !== "") void recordVisionTurn(said, text, sessionId);
+      questionRef.current = "";
+      if (said !== "") {
+        void recordVisionTurn(said, text, sessionId).catch(() => undefined);
+      }
       speak(text);
     },
     onError: (message) => {
       if (!aliveRef.current) return;
-      if (phaseRef.current === "thinking" || phaseRef.current === "speaking") {
+      clearAnswerTimeout();
+      if (phaseRef.current === "thinking") {
+        questionRef.current = "";
         setIssue(message);
         setBoth("idle");
       }
+      // Keep uploads paused during TTS even if the socket drops mid-reply.
     },
   });
 
@@ -179,7 +195,16 @@ export function useVisionTurn(
 
     // The fresh frame is sent before the question so the backend cancels
     // any caption narration and answers exactly what the user saw.
-    if (stream.sendQuestion(said, bareJpeg(frame))) return;
+    if (stream.sendQuestion(said, bareJpeg(frame))) {
+      answerTimeoutRef.current = setTimeout(() => {
+        answerTimeoutRef.current = null;
+        if (!aliveRef.current || phaseRef.current !== "thinking") return;
+        questionRef.current = "";
+        setIssue("Vision answer timed out — try again.");
+        setBoth("idle");
+      }, VISION_ANSWER_TIMEOUT_MS);
+      return;
+    }
 
     // Socket fallback keeps vision usable when the dev backend is down.
     let waited = 0;
@@ -209,6 +234,7 @@ export function useVisionTurn(
 
   function speak(text: string): void {
     if (!aliveRef.current) return;
+    clearAnswerTimeout();
     stopSpeaking();
     setAnswer(text);
     setIssue(null);
@@ -241,6 +267,7 @@ export function useVisionTurn(
       case "ignore":
         return;
       case "interrupt":
+        clearAnswerTimeout();
         stopSpeaking();
         setBoth("idle");
         return;
@@ -262,6 +289,8 @@ export function useVisionTurn(
 
   /** Stop everything (screen exit): recognizer, speech, back to idle. */
   function stopAll(): void {
+    clearAnswerTimeout();
+    questionRef.current = "";
     safeStopListen();
     stopSpeaking();
     setBoth("idle");
@@ -294,6 +323,8 @@ export function useVisionTurn(
     aliveRef.current = true;
     return () => {
       aliveRef.current = false;
+      clearAnswerTimeout();
+      questionRef.current = "";
       safeStopListen();
       stopSpeaking();
     };

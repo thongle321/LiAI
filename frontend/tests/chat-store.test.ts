@@ -242,7 +242,9 @@ describe("chat store", () => {
   it("records a vision socket turn locally without a second backend request", async () => {
     const storage = memoryStorage();
     const useStore = createChatStore(storage);
-    await useStore.getState().recordVisionTurn("what is this?", "a chair", "vision-1");
+    await useStore
+      .getState()
+      .recordVisionTurn("what is this?", "a chair", "vision-1", "data:image/jpeg;base64,AAA");
     const state = useStore.getState();
     assert.equal(state.sessionId, "vision-1");
     assert.deepEqual(
@@ -252,6 +254,7 @@ describe("chat store", () => {
         ["assistant", "a chair"],
       ],
     );
+    assert.equal(state.messages[0].image, "data:image/jpeg;base64,AAA");
     assert.equal(state.sessions.length, 1);
     assert.equal(state.sessions[0].title, "what is this?");
   });

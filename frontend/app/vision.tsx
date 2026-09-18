@@ -35,7 +35,6 @@ import {
 
 import { colors } from "../themes/tokens.ts";
 import { useTabContentFade } from "../lib/motion.ts";
-import { snapshotToBase64 } from "../lib/snapshot.ts";
 import { VOICE_STATUS_LABEL } from "../lib/voiceStatus.ts";
 import { useVisionTurn } from "../hooks/useVisionTurn.ts";
 
@@ -53,15 +52,6 @@ export default function VisionScreen() {
   const insets = useSafeAreaInsets();
   const contentFade = useTabContentFade();
 
-  // Snapshot source for the turn hook: null unless the preview is
-  // actually live — a send without a frame never happens silently.
-  async function snap(): Promise<string | null> {
-    const cam = camera.current;
-    if (cam === null || !camLive || device === undefined) return null;
-    const jpeg = await snapshotToBase64(() => cam.takeSnapshot({ quality: 50 }));
-    return `data:image/jpeg;base64,${jpeg}`;
-  }
-
   const {
     phase,
     answer,
@@ -72,7 +62,7 @@ export default function VisionScreen() {
     retry,
     sendText,
     stopAll,
-  } = useVisionTurn(snap, camera, () => camLive);
+  } = useVisionTurn(camera, () => camLive && device !== undefined);
 
   function flip(): void {
     setCamLive(false);
@@ -178,7 +168,7 @@ export default function VisionScreen() {
                 LiAI…
               </Text>
             ) : answer !== "" ? (
-              <ScrollView style={{ maxHeight: 120 }}>
+              <ScrollView className="max-h-[120px]">
                 <Text className="text-center font-sans text-body-md text-white">
                   {answer}
                 </Text>

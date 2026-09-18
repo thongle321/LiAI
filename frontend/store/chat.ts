@@ -48,6 +48,7 @@ interface ChatState {
     question: string,
     answer: string,
     sessionId?: string,
+    image?: string,
   ) => Promise<void>;
 }
 
@@ -246,7 +247,7 @@ export function createChatStore(storage: KeyValueStorage) {
         }
       },
 
-      recordVisionTurn: async (question, answer, sessionId) => {
+      recordVisionTurn: async (question, answer, sessionId, image) => {
         const nextSessionId = sessionId ?? get().sessionId;
         const now = Date.now();
         if (nextSessionId !== null && nextSessionId !== get().sessionId) {
@@ -257,7 +258,13 @@ export function createChatStore(storage: KeyValueStorage) {
           sending: false,
           messages: [
             ...s.messages,
-            { id: newId(), role: "user", text: question, at: now },
+            {
+              id: newId(),
+              role: "user",
+              text: question,
+              at: now,
+              ...(image !== undefined ? { image } : {}),
+            },
             { id: newId(), role: "assistant", text: answer, at: now },
           ],
         }));

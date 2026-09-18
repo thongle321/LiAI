@@ -27,6 +27,7 @@ import {
 import { ensureMicAccess } from "../lib/micAccess.ts";
 import { speakReply, stopSpeaking } from "../lib/voiceSpeak.ts";
 import { VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
+import { snapshotToBase64 } from "../lib/snapshot.ts";
 import { useChatStore } from "../store/chat.ts";
 import { useVisionStream } from "./useVisionStream.ts";
 
@@ -34,16 +35,7 @@ const NOTHING_HEARD = "Didn't hear anything — tap the mic to try again.";
 const NO_FRAME = "Couldn't capture a frame — try again.";
 const VISION_ANSWER_TIMEOUT_MS = 30_000;
 
-/** Returns the frame as a data-uri, or null when the camera isn't ready. */
-export type SnapFrame = () => Promise<string | null>;
-
-function bareJpeg(dataUri: string): string {
-  const prefix = "data:image/jpeg;base64,";
-  return dataUri.startsWith(prefix) ? dataUri.slice(prefix.length) : dataUri;
-}
-
 export function useVisionTurn(
-  snap: SnapFrame,
   camera: RefObject<VisionCameraView | null>,
   cameraReady: () => boolean,
 ) {
@@ -60,12 +52,13 @@ export function useVisionTurn(
   const startingRef = useRef(false);
   const errorStreakRef = useRef(0);
   const questionRef = useRef("");
+  const frameRef = useRef<string | null>(null);
   const answerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focused = useIsFocused();
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
-  const snapRef = useRef(snap);
-  snapRef.current = snap;
+  const cameraReadyRef = useRef(cameraReady);
+  cameraReadyRef.current = cameraReady;
 
   function setBoth(next: VoicePhase): void {
     phaseRef.current = next;
@@ -77,6 +70,7 @@ export function useVisionTurn(
       clearTimeout(answerTimeoutRef.current);
       answerTimeoutRef.current = null;
     }
+    frameRef.current = null;
   }
 
   const stream = useVisionStream(camera, cameraReady, phase, {
@@ -84,9 +78,11 @@ export function useVisionTurn(
       clearAnswerTimeout();
       if (!aliveRef.current || phaseRef.current !== "thinking") return;
       const said = questionRef.current;
+      const image = frameRef.current ?? undefined;
       questionRef.current = "";
+      frameRef.current = null;
       if (said !== "") {
-        void recordVisionTurn(said, text, sessionId).catch(() => undefined);
+        void recordVisionTurn(said, text, sessionId, image).catch(() => undefined);
       }
       speak(text);
     },
@@ -180,26 +176,33 @@ export function useVisionTurn(
     questionRef.current = said;
     setBoth("thinking");
     setIssue(null);
-    let frame: string | null = null;
+    let rawJpeg: string | null = null;
     try {
-      frame = await snapRef.current();
+      const cam = camera.current;
+      if (cam !== null && cameraReadyRef.current()) {
+        rawJpeg = await snapshotToBase64(() => cam.takeSnapshot({ quality: 50 }));
+      }
     } catch {
-      frame = null;
+      rawJpeg = null;
     }
     if (!aliveRef.current) return;
-    if (frame === null) {
+    if (rawJpeg === null) {
       setIssue(NO_FRAME);
       setBoth("idle");
       return;
     }
 
+    const dataUri = `data:image/jpeg;base64,${rawJpeg}`;
+    frameRef.current = dataUri;
+
     // The fresh frame is sent before the question so the backend cancels
     // any caption narration and answers exactly what the user saw.
-    if (stream.sendQuestion(said, bareJpeg(frame))) {
+    if (stream.sendQuestion(said, rawJpeg)) {
       answerTimeoutRef.current = setTimeout(() => {
         answerTimeoutRef.current = null;
         if (!aliveRef.current || phaseRef.current !== "thinking") return;
         questionRef.current = "";
+        frameRef.current = null;
         setIssue("Vision answer timed out — try again.");
         setBoth("idle");
       }, VISION_ANSWER_TIMEOUT_MS);
@@ -213,7 +216,7 @@ export function useVisionTurn(
       waited += 1;
     }
     const before = useChatStore.getState().messages.length;
-    const ok = await send(said, frame);
+    const ok = await send(said, dataUri);
     if (!aliveRef.current) return;
     if (!ok) {
       setIssue("Couldn't send that. Try again.");

@@ -49,6 +49,8 @@ export function useVisionStream(
     if (!focused) return;
     let active = true;
     let failureReported = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
     const reportFailure = (message: string): void => {
       if (!active || failureReported) return;
       failureReported = true;
@@ -56,49 +58,73 @@ export function useVisionStream(
       callbacksRef.current.onError?.(message);
     };
 
-    const ws = new WebSocket(visionSocketUrl());
-    socket.current = ws;
-    ws.onerror = () => reportFailure("Could not reach the vision stream");
-    ws.onopen = () => {
-      failureReported = false;
-      if (active) setProblem(null);
-    };
-    ws.onclose = (event: { code?: unknown; reason?: unknown }) => {
-      socket.current = null;
-      const code = typeof event.code === "number" ? event.code : "?";
-      const reason = typeof event.reason === "string" ? event.reason : "";
-      reportFailure(`Vision stream closed (${code}${reason ? ` ${reason}` : ""})`);
-    };
-    ws.onmessage = (event: { data?: unknown }) => {
+    function scheduleReconnect(): void {
+      if (!active || reconnectTimer !== null) return;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        if (!active) return;
+        connect();
+      }, 2000);
+    }
+
+    function connect(): void {
       if (!active) return;
-      const msg = parseServerMessage(event.data);
-      if (msg.type === "answer") {
-        callbacksRef.current.onAnswer?.(msg.text, msg.sessionId);
-      } else if (msg.type === "caption") {
-        callbacksRef.current.onCaption?.(msg.text);
-      } else if (msg.type === "error") {
-        callbacksRef.current.onError?.(msg.message);
-      }
-    };
+      const ws = new WebSocket(visionSocketUrl());
+      socket.current = ws;
+
+      ws.onerror = () => {
+        reportFailure("Could not reach the vision stream");
+      };
+
+      ws.onopen = () => {
+        failureReported = false;
+        if (active) setProblem(null);
+      };
+
+      ws.onclose = (event: { code?: unknown; reason?: unknown }) => {
+        if (socket.current === ws) socket.current = null;
+        const code = typeof event.code === "number" ? event.code : "?";
+        const reason = typeof event.reason === "string" ? event.reason : "";
+        reportFailure(`Vision stream closed (${code}${reason ? ` ${reason}` : ""})`);
+        scheduleReconnect();
+      };
+
+      ws.onmessage = (event: { data?: unknown }) => {
+        if (!active) return;
+        const msg = parseServerMessage(event.data);
+        if (msg.type === "answer") {
+          callbacksRef.current.onAnswer?.(msg.text, msg.sessionId);
+        } else if (msg.type === "caption") {
+          callbacksRef.current.onCaption?.(msg.text);
+        } else if (msg.type === "error") {
+          callbacksRef.current.onError?.(msg.message);
+        }
+      };
+    }
+
+    connect();
 
     const timer = setInterval(() => {
       if (!shouldStreamFrames(phaseRef.current)) return;
-      if (ws.readyState !== WebSocket.OPEN || capturing.current) return;
+      const ws = socket.current;
+      if (ws === null || ws.readyState !== WebSocket.OPEN || capturing.current) return;
       const ref = camera.current;
       if (ref === null || !cameraReadyRef.current()) return;
 
       capturing.current = true;
       void snapshotToBase64(() => ref.takeSnapshot({ quality: 50 }))
         .then((jpeg) => {
+          const currentWs = socket.current;
           if (
             !active ||
-            ws.readyState !== WebSocket.OPEN ||
+            currentWs === null ||
+            currentWs.readyState !== WebSocket.OPEN ||
             !cameraReadyRef.current() ||
             !shouldStreamFrames(phaseRef.current)
           ) {
             return;
           }
-          ws.send(frameMessage(jpeg));
+          currentWs.send(frameMessage(jpeg));
         })
         .catch((error: unknown) => {
           if (!active) return;
@@ -113,11 +139,17 @@ export function useVisionStream(
 
     return () => {
       active = false;
+      if (reconnectTimer !== null) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
       clearInterval(timer);
       capturing.current = false;
+      const ws = socket.current;
       if (
-        ws.readyState === WebSocket.OPEN ||
-        ws.readyState === WebSocket.CONNECTING
+        ws !== null &&
+        (ws.readyState === WebSocket.OPEN ||
+          ws.readyState === WebSocket.CONNECTING)
       ) {
         ws.close();
       }

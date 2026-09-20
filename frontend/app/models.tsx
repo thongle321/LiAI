@@ -1,6 +1,6 @@
 /** Models management screen: download GGUF models, manage remote APIs. */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,15 +16,25 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
+  Globe,
   Pause,
   Play,
   Plus,
+  Search,
+  SlidersHorizontal,
   Trash2,
   Upload,
   X,
 } from "lucide-react-native";
 
 import { colors, spacing } from "../themes/tokens.ts";
+import { ScreenHeader } from "../components/ScreenHeader.tsx";
+import {
+  FabAction,
+  FilterMenu,
+  SECTION_ORDER,
+  type ModelsSectionId,
+} from "../components/ModelsPanels.tsx";
 import { useModelStore } from "../store/modelStore";
 import type { PresetModel, PresetModelFile, HFModelFile, RemoteApiProvider, ModelDownloadStatus } from "../types/models";
 
@@ -257,7 +267,13 @@ function PresetModelCard({
   );
 }
 
-function HFSearchSection() {
+function HFSearchSection({
+  inputRef,
+  onLayoutY,
+}: {
+  inputRef?: React.RefObject<TextInput | null>;
+  onLayoutY?: (y: number) => void;
+}) {
   const { searchModels, searchResults, searchLoading, searchError, getModelFiles, startDownload, hfToken, setHfToken } = useModelStore();
   const [query, setQuery] = useState("");
   const [expandedModel, setExpandedModel] = useState<string | null>(null);
@@ -298,11 +314,15 @@ function HFSearchSection() {
   };
 
   return (
-    <View className="mb-6">
+    <View
+      className="mb-6"
+      onLayout={(e) => onLayoutY?.(e.nativeEvent.layout.y)}
+    >
       <Text className="font-sans-semibold text-h4 text-primary-text mb-3">Search Hugging Face</Text>
 
       <View className="flex-row items-center gap-2 mb-3">
         <TextInput
+          ref={inputRef}
           placeholder="Search models (e.g., llama, qwen, gemma)..."
           value={query}
           onChangeText={handleSearch}
@@ -402,9 +422,14 @@ function HFSearchSection() {
   );
 }
 
-function RemoteApiSection() {
+function RemoteApiSection({
+  showModal,
+  setShowModal,
+}: {
+  showModal: boolean;
+  setShowModal: (v: boolean) => void;
+}) {
   const { remoteApis, addRemoteApi, removeRemoteApi, validateRemoteApi, setActiveRemoteApi, activeModelId } = useModelStore();
-  const [showModal, setShowModal] = useState(false);
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -689,34 +714,121 @@ export default function ModelsScreen() {
     loadPersisted();
   }, []);
 
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [visible, setVisible] = useState<Record<ModelsSectionId, boolean>>({
+    presets: true,
+    hf: true,
+    remote: true,
+    downloaded: true,
+  });
+  const [fabOpen, setFabOpen] = useState(false);
+  const [remoteModalOpen, setRemoteModalOpen] = useState(false);
+
+  const scrollRef = useRef<ScrollView>(null);
+  const hfInputRef = useRef<TextInput>(null);
+  const hfY = useRef(0);
+
+  function toggleSection(id: ModelsSectionId): void {
+    setVisible((prev) => ({ ...prev, [id]: !prev[id] }));
+    // ponytail: never orphan the modal under a hidden section.
+    if (id === "remote") setRemoteModalOpen(false);
+  }
+
+  function goToHfSearch(): void {
+    setFabOpen(false);
+    setVisible((prev) => ({ ...prev, hf: true }));
+    // ponytail: layout settles first (hidden->shown refires onLayout),
+    // then scroll to the fresh Y, then focus.
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, hfY.current - 8), animated: true });
+    }, 100);
+    setTimeout(() => hfInputRef.current?.focus(), 450);
+  }
+
+  function openRemoteModal(): void {
+    setFabOpen(false);
+    setVisible((prev) => ({ ...prev, remote: true }));
+    setRemoteModalOpen(true);
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}>
-        <View className="mb-6">
-          <Text className="font-sans-semibold text-h2 text-primary-text mb-1">Models</Text>
-          <Text className="font-sans text-body-md text-secondary-text">
-            Download local models or configure remote API providers
-          </Text>
-        </View>
+      <ScreenHeader title="Models" />
+      <View className="flex-1">
+        <ScrollView
+          ref={scrollRef}
+          className="flex-1"
+          contentContainerStyle={{ padding: spacing.md, paddingBottom: 120 }}
+        >
+          <View className="flex-row items-center justify-between mb-4">
+            <Text className="flex-1 font-sans text-body-md text-secondary-text">
+              Download local models or configure remote API providers
+            </Text>
+            <Pressable
+              onPress={() => setMenuOpen(!menuOpen)}
+              className={`ml-2 p-2.5 rounded-lg border ${
+                menuOpen ? "border-primary bg-primary/20" : "border-border"
+              }`}
+            >
+              <SlidersHorizontal size={18} color={colors.primary} />
+            </Pressable>
+          </View>
 
-        <View className="mb-6">
-          <Text className="font-sans-semibold text-h4 text-primary-text mb-3">Preset Models</Text>
-          <Text className="font-sans text-body-sm text-secondary-text mb-4">
-            Pre-selected compact models optimized for mobile
-          </Text>
-          {presets.map((item) => (
-            <PresetModelCard
-              key={item.id}
-              preset={item}
-              onDownload={(modelId, file) => startDownload(modelId, file)}
+          {menuOpen && <FilterMenu visible={visible} onToggle={toggleSection} />}
+
+          {visible.presets && (
+            <View className="mb-6">
+              <Text className="font-sans-semibold text-h4 text-primary-text mb-3">Preset Models</Text>
+              <Text className="font-sans text-body-sm text-secondary-text mb-4">
+                Pre-selected compact models optimized for mobile
+              </Text>
+              {presets.map((item) => (
+                <PresetModelCard
+                  key={item.id}
+                  preset={item}
+                  onDownload={(modelId, file) => startDownload(modelId, file)}
+                />
+              ))}
+            </View>
+          )}
+
+          {visible.hf && (
+            <HFSearchSection
+              inputRef={hfInputRef}
+              onLayoutY={(y) => {
+                hfY.current = y;
+              }}
             />
-          ))}
-        </View>
+          )}
+          {visible.remote && (
+            <RemoteApiSection
+              showModal={remoteModalOpen}
+              setShowModal={setRemoteModalOpen}
+            />
+          )}
+          {visible.downloaded && <DownloadedModelsSection />}
+        </ScrollView>
 
-        <HFSearchSection />
-        <RemoteApiSection />
-        <DownloadedModelsSection />
-      </ScrollView>
+        <View className="absolute right-4 bottom-8 items-end">
+          {fabOpen && (
+            <>
+              <FabAction Icon={Search} label="Add from Hugging Face" onPress={goToHfSearch} />
+              <FabAction Icon={Globe} label="Add remote provider" onPress={openRemoteModal} />
+            </>
+          )}
+          <Pressable
+            onPress={() => setFabOpen(!fabOpen)}
+            className="w-14 h-14 rounded-full bg-primary items-center justify-center"
+            style={{ elevation: 4 }}
+          >
+            {fabOpen ? (
+              <X size={24} color={colors.base} />
+            ) : (
+              <Plus size={24} color={colors.base} />
+            )}
+          </Pressable>
+        </View>
+      </View>
     </SafeAreaView>
   );
 }

@@ -8,20 +8,20 @@ import { Check, type LucideIcon } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 
-export type ModelsSectionId = "presets" | "hf" | "remote" | "downloaded";
+export type ModelsSectionId = "ready" | "available" | "hf" | "remote";
 
 const SECTION_LABEL: Record<ModelsSectionId, string> = {
-  presets: "Preset Models",
+  ready: "Ready to use",
+  available: "Available to download",
   hf: "Hugging Face Search",
   remote: "Remote API Providers",
-  downloaded: "Downloaded Models",
 };
 
 export const SECTION_ORDER: ModelsSectionId[] = [
-  "presets",
+  "ready",
+  "available",
   "hf",
   "remote",
-  "downloaded",
 ];
 
 export function FilterMenu({

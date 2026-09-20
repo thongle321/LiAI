@@ -10,7 +10,8 @@ import { Settings, Trash2, Upload } from "lucide-react-native";
 import { colors } from "../themes/tokens.ts";
 import { useModelStore } from "../store/modelStore";
 import type { ModelSpec } from "../types/models";
-import { Chip, ModelGroup, StatusBadge, formatBytes } from "./ModelBits.tsx";
+import { Chip, ModelGroup, StatusBadge, StatusDot, formatBytes } from "./ModelBits.tsx";
+import { isProviderActive } from "../lib/model-providers.ts";
 
 function typeLabel(type: ModelSpec["type"]): string {
   if (type === "llm") return "LLM";
@@ -129,12 +130,15 @@ export function ReadyModels({
       ))}
 
       {remoteApis.map((item) => {
-        const isActive = activeModelId === `remote-${item.id}`;
+        const isActive = isProviderActive(activeModelId, item.id);
         return (
           <View key={item.id} className="mb-3 bg-surface-1 border border-border rounded-xl overflow-hidden">
             <View className="p-4 flex-row items-center justify-between">
               <View className="flex-1">
-                <Text className="font-sans-semibold text-body-md text-primary-text">{item.name}</Text>
+                <View className="flex-row items-center gap-2">
+                  <StatusDot color={isActive ? colors.success : colors.secondaryText} />
+                  <Text className="font-sans-semibold text-body-md text-primary-text">{item.name}</Text>
+                </View>
                 <Text className="font-sans text-body-sm text-secondary-text/70 mt-0.5">
                   {item.baseUrl} • {item.modelName}
                 </Text>

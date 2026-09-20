@@ -63,13 +63,19 @@ export function Chip({ label }: { label: string }) {
   );
 }
 
+export function StatusDot({ color }: { color: string }) {
+  return (
+    <View
+      className="w-2 h-2 rounded-full"
+      style={{ backgroundColor: color }}
+    />
+  );
+}
+
 export function StatusBadge({ status }: { status: ModelDownloadStatus }) {
   return (
     <View className="flex-row items-center gap-1.5">
-      <View
-        className="w-2 h-2 rounded-full"
-        style={{ backgroundColor: STATUS_DOT_COLOR[status] }}
-      />
+      <StatusDot color={STATUS_DOT_COLOR[status]} />
       <Text className="font-sans text-body-sm text-secondary-text">
         {STATUS_LABEL[status]}
       </Text>

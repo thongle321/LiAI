@@ -41,6 +41,7 @@ export default function RootLayout() {
       <Stack.Screen name="vision" options={{ animation: "none" }} />
       <Stack.Screen name="settings" />
       <Stack.Screen name="about" />
+      <Stack.Screen name="models" />
     </Stack>
   );
 }

@@ -26,7 +26,7 @@ import {
 
 import { colors, spacing } from "../themes/tokens.ts";
 import { useModelStore } from "../store/modelStore";
-import type { PresetModel, PresetModelFile, HFModelFile, RemoteApiProvider } from "../types/models";
+import type { PresetModel, PresetModelFile, HFModelFile, RemoteApiProvider, ModelDownloadStatus } from "../types/models";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -38,6 +38,66 @@ function formatBytes(bytes: number): string {
 
 function formatProgress(downloaded: number, total: number): string {
   return `${formatBytes(downloaded)} / ${formatBytes(total)}`;
+}
+
+const STATUS_DOT_COLOR: Record<ModelDownloadStatus, string> = {
+  completed: colors.success,
+  downloading: colors.primary,
+  paused: colors.warning,
+  failed: colors.error,
+  cancelled: colors.secondaryText,
+  idle: colors.secondaryText,
+};
+
+const STATUS_LABEL: Record<ModelDownloadStatus, string> = {
+  completed: "Downloaded",
+  downloading: "Downloading",
+  paused: "Paused",
+  failed: "Failed",
+  cancelled: "Cancelled",
+  idle: "Not downloaded",
+};
+
+function isProgressVisible(status: ModelDownloadStatus): boolean {
+  return status === "downloading" || status === "paused";
+}
+
+function StatusBadge({ status }: { status: ModelDownloadStatus }) {
+  return (
+    <View className="flex-row items-center gap-1.5">
+      <View
+        className="w-2 h-2 rounded-full"
+        style={{ backgroundColor: STATUS_DOT_COLOR[status] }}
+      />
+      <Text className="font-sans text-body-sm text-secondary-text">
+        {STATUS_LABEL[status]}
+      </Text>
+    </View>
+  );
+}
+
+function DownloadProgressBar({
+  progress,
+  downloaded,
+  total,
+}: {
+  progress: number;
+  downloaded: number;
+  total: number;
+}) {
+  return (
+    <View className="mt-2">
+      <View className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
+        <View
+          className="h-full bg-primary rounded-full"
+          style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+        />
+      </View>
+      <Text className="font-sans text-body-sm text-secondary-text/70 mt-1">
+        {formatProgress(downloaded, total)} ({Math.round(progress)}%)
+      </Text>
+    </View>
+  );
 }
 
 function DownloadButton({
@@ -112,24 +172,45 @@ function PresetModelCard({
     return existingModel.downloadProgress;
   };
 
+  const cardStatus = existingModel ? existingModel.downloadStatus : "idle";
+  const showCardProgress =
+    existingModel !== undefined && isProgressVisible(cardStatus);
+
   return (
     <View className="mb-4 bg-surface-1 border border-border rounded-xl overflow-hidden">
-      <Pressable onPress={() => setExpanded(!expanded)} className="p-4 flex-row items-center justify-between">
-        <View className="flex-1">
-          <View className="flex-row items-center gap-2 mb-1">
-            <Text className="font-sans-semibold text-h4 text-primary-text">{preset.name}</Text>
-            {preset.recommended && (
-              <View className="px-1.5 py-0.5 bg-primary/20 border border-primary/50 rounded">
-                <Text className="font-sans text-xs text-primary">Recommended</Text>
-              </View>
-            )}
+      <Pressable onPress={() => setExpanded(!expanded)} className="p-4">
+        <View className="flex-row items-center justify-between">
+          <View className="flex-1">
+            <View className="flex-row items-center gap-2 mb-1">
+              <Text className="font-sans-semibold text-h4 text-primary-text">{preset.name}</Text>
+              {preset.recommended && (
+                <View className="px-1.5 py-0.5 bg-primary/20 border border-primary/50 rounded">
+                  <Text className="font-sans text-xs text-primary">Recommended</Text>
+                </View>
+              )}
+            </View>
+            <Text className="font-sans text-body-sm text-secondary-text mb-1">{preset.description}</Text>
+            <Text className="font-sans text-body-sm text-secondary-text/70">by {preset.author}</Text>
           </View>
-          <Text className="font-sans text-body-sm text-secondary-text mb-1">{preset.description}</Text>
-          <Text className="font-sans text-body-sm text-secondary-text/70">by {preset.author}</Text>
-        </View>
-        <View className="flex-row items-center gap-2">
           {expanded ? <ChevronUp size={20} color={colors.secondaryText} /> : <ChevronDown size={20} color={colors.secondaryText} />}
         </View>
+
+        <View className="flex-row items-center justify-between mt-3">
+          <StatusBadge status={cardStatus} />
+          <View className="px-1.5 py-0.5 bg-surface-2 border border-border rounded">
+            <Text className="font-sans text-xs text-secondary-text">
+              {preset.files.length} file{preset.files.length === 1 ? "" : "s"}
+            </Text>
+          </View>
+        </View>
+
+        {showCardProgress && (
+          <DownloadProgressBar
+            progress={existingModel.downloadProgress}
+            downloaded={existingModel.downloadedBytes}
+            total={existingModel.totalBytes}
+          />
+        )}
       </Pressable>
 
       {expanded && (
@@ -137,26 +218,39 @@ function PresetModelCard({
           <View className="mb-3">
             <Text className="font-sans-semibold text-body-sm text-secondary-text mb-2">Available Quantizations</Text>
           </View>
-          {preset.files.map((item) => (
-            <View key={item.name} className="flex-row items-center justify-between py-2 border-b border-border/50">
-              <View className="flex-1">
-                <Text className="font-sans text-body-md text-primary-text">{item.name}</Text>
-                <View className="flex-row items-center gap-2 mt-1">
-                  <Text className="font-sans text-body-sm text-secondary-text">{item.quantization}</Text>
-                  <Text className="font-sans text-body-sm text-secondary-text/70">•</Text>
-                  <Text className="font-sans text-body-sm text-secondary-text/70">{formatBytes(item.size)}</Text>
+          {preset.files.map((item) => {
+            const st = getStatus(item);
+            return (
+            <View key={item.name} className="py-3 border-b border-border/50">
+              <View className="flex-row items-center justify-between">
+                <View className="flex-1">
+                  <Text className="font-sans text-body-md text-primary-text">{item.name}</Text>
+                  <View className="flex-row items-center gap-2 mt-1.5">
+                    <View className="px-1.5 py-0.5 bg-surface-2 border border-border rounded">
+                      <Text className="font-sans text-xs text-secondary-text">{item.quantization}</Text>
+                    </View>
+                    <Text className="font-sans text-body-sm text-secondary-text/70">{formatBytes(item.size)}</Text>
+                  </View>
                 </View>
+                <DownloadButton
+                  modelId={preset.id}
+                  file={item}
+                  status={st}
+                  progress={getProgress(item)}
+                  onPress={() => onDownload(preset.id, item)}
+                  disabled={st === "downloading"}
+                />
               </View>
-              <DownloadButton
-                modelId={preset.id}
-                file={item}
-                status={getStatus(item)}
-                progress={getProgress(item)}
-                onPress={() => onDownload(preset.id, item)}
-                disabled={getStatus(item) === "downloading"}
-              />
+              {isProgressVisible(st) && existingModel && (
+                <DownloadProgressBar
+                  progress={existingModel.downloadProgress}
+                  downloaded={existingModel.downloadedBytes}
+                  total={existingModel.totalBytes}
+                />
+              )}
             </View>
-          ))}
+            );
+          })}
         </View>
       )}
     </View>
@@ -243,12 +337,20 @@ function HFSearchSection() {
           onPress={() => handleModelPress(item.modelId)}
           className="mb-3 bg-surface-1 border border-border rounded-xl overflow-hidden"
         >
-          <View className="p-4 flex-row items-center justify-between">
-            <View className="flex-1">
-              <Text className="font-sans-semibold text-body-md text-primary-text">{item.name}</Text>
-              <Text className="font-sans text-body-sm text-secondary-text/70 mt-0.5">by {item.author}</Text>
+          <View className="p-4">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-1">
+                <Text className="font-sans-semibold text-body-md text-primary-text">{item.name}</Text>
+                <Text className="font-sans text-body-sm text-secondary-text/70 mt-0.5">by {item.author}</Text>
+              </View>
+              <ChevronDown size={20} color={colors.secondaryText} />
             </View>
-            <ChevronDown size={20} color={colors.secondaryText} />
+            <View className="flex-row items-center gap-2 mt-2.5">
+              <View className="px-1.5 py-0.5 bg-surface-2 border border-border rounded">
+                <Text className="font-sans text-xs text-secondary-text">GGUF</Text>
+              </View>
+              <StatusBadge status="idle" />
+            </View>
           </View>
 
           {expandedModel === item.modelId && (
@@ -264,20 +366,25 @@ function HFSearchSection() {
                     <Text className="font-sans-semibold text-body-sm text-secondary-text mb-2">GGUF Files</Text>
                   </View>
                   {(modelFiles[item.modelId] || []).map((file) => (
-                    <View key={file.name} className="flex-row items-center justify-between py-2 border-b border-border/50">
-                      <View className="flex-1">
-                        <Text className="font-sans text-body-md text-primary-text">{file.name}</Text>
-                        <View className="flex-row items-center gap-2 mt-1">
-                          <Text className="font-sans text-body-sm text-secondary-text/70">{formatBytes(file.size)}</Text>
+                    <View key={file.name} className="py-3 border-b border-border/50">
+                      <View className="flex-row items-center justify-between">
+                        <View className="flex-1">
+                          <Text className="font-sans text-body-md text-primary-text">{file.name}</Text>
+                          <View className="flex-row items-center gap-2 mt-1.5">
+                            <View className="px-1.5 py-0.5 bg-surface-2 border border-border rounded">
+                              <Text className="font-sans text-xs text-secondary-text">GGUF</Text>
+                            </View>
+                            <Text className="font-sans text-body-sm text-secondary-text/70">{formatBytes(file.size)}</Text>
+                          </View>
                         </View>
+                        <DownloadButton
+                          modelId={item.modelId}
+                          file={file}
+                          status="idle"
+                          progress={0}
+                          onPress={() => startDownload(item.modelId, file, hfToken || undefined)}
+                        />
                       </View>
-                      <DownloadButton
-                        modelId={item.modelId}
-                        file={file}
-                        status="idle"
-                        progress={0}
-                        onPress={() => startDownload(item.modelId, file, hfToken || undefined)}
-                      />
                     </View>
                   ))}
                 </View>
@@ -527,18 +634,23 @@ function DownloadedModelsSection() {
         const isActive = activeModelId === item.id;
         return (
           <View key={item.id} className="mb-3 bg-surface-1 border border-border rounded-xl overflow-hidden">
-            <View className="p-4 flex-row items-center justify-between">
-              <View className="flex-1">
-                <Text className="font-sans-semibold text-body-md text-primary-text">{item.name}</Text>
-                <View className="flex-row items-center gap-2 mt-1">
-                  <Text className="font-sans text-body-sm text-secondary-text/70">{formatBytes(item.files[0]?.size || 0)}</Text>
-                  {isActive && (
-                    <View className="px-1.5 py-0.5 bg-green-500/20 border border-green-500/50 rounded">
-                      <Text className="font-sans text-xs text-green-500">Active</Text>
+            <View className="p-4">
+              <View className="flex-row items-center justify-between">
+                <View className="flex-1">
+                  <Text className="font-sans-semibold text-body-md text-primary-text">{item.name}</Text>
+                  <View className="flex-row items-center gap-2 mt-1.5">
+                    <View className="px-1.5 py-0.5 bg-surface-2 border border-border rounded">
+                      <Text className="font-sans text-xs text-secondary-text">{formatBytes(item.files[0]?.size || 0)}</Text>
                     </View>
-                  )}
+                    {isActive ? (
+                      <View className="px-1.5 py-0.5 bg-green-500/20 border border-green-500/50 rounded">
+                        <Text className="font-sans text-xs text-green-500">Active</Text>
+                      </View>
+                    ) : (
+                      <StatusBadge status="completed" />
+                    )}
+                  </View>
                 </View>
-              </View>
               <View className="flex-row items-center gap-2">
                 {!isActive && (
                   <Pressable
@@ -560,6 +672,7 @@ function DownloadedModelsSection() {
                 >
                   <Trash2 size={16} color="#EF4444" />
                 </Pressable>
+              </View>
               </View>
             </View>
           </View>

@@ -690,7 +690,7 @@ export default function ModelsScreen() {
   }, []);
 
   return (
-    <SafeAreaView className="flex-1 bg-base">
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
       <ScrollView className="flex-1" contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}>
         <View className="mb-6">
           <Text className="font-sans-semibold text-h2 text-primary-text mb-1">Models</Text>

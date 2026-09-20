@@ -1,124 +1,80 @@
-/** Models screen: Ready to use / Available to download groups, HF search, remote APIs. */
+/** Models screen: Ready to use + Available to download, header filters, 3-action FAB. */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  Modal,
   Pressable,
   ScrollView,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  Globe,
+  Cloud,
+  FolderPlus,
   Plus,
   Search,
-  SlidersHorizontal,
   X,
 } from "lucide-react-native";
 
 import { colors, spacing } from "../themes/tokens.ts";
 import { ScreenHeader } from "../components/ScreenHeader.tsx";
-import {
-  FabAction,
-  FilterMenu,
-  type ModelsSectionId,
-} from "../components/ModelsPanels.tsx";
+import { ModelsHeaderMenu } from "../components/ModelsHeaderMenu.tsx";
+import { FabAction } from "../components/ModelsPanels.tsx";
 import { ReadyModels } from "../components/ReadyModels.tsx";
 import { AvailableModels } from "../components/AvailableModels.tsx";
 import { HFExplore } from "../components/HFExplore.tsx";
-import { RemoteApiSection } from "../components/RemoteApiSection.tsx";
+import { RemoteApiModal } from "../components/RemoteApiModal.tsx";
 import { ModelSettingsModal } from "../components/ModelSettingsModal.tsx";
+import { useLocalModelImport } from "../hooks/useLocalModelImport.ts";
 import { useModelStore } from "../store/modelStore";
 
 export default function ModelsScreen() {
   const { loadPersisted, startDownload } = useModelStore();
+  const importLocalModel = useLocalModelImport();
 
   useEffect(() => {
     loadPersisted();
   }, []);
 
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [visible, setVisible] = useState<Record<ModelsSectionId, boolean>>({
-    ready: true,
-    available: true,
-    hf: true,
-    remote: true,
-  });
+  const [visible, setVisible] = useState({ ready: true, available: true });
+  const [groupsOpen, setGroupsOpen] = useState({ ready: true, available: true });
   const [fabOpen, setFabOpen] = useState(false);
+  const [hfOpen, setHfOpen] = useState(false);
   const [remoteModalOpen, setRemoteModalOpen] = useState(false);
   const [settingsModelId, setSettingsModelId] = useState<string | null>(null);
 
-  const scrollRef = useRef<ScrollView>(null);
-  const hfInputRef = useRef<TextInput>(null);
-  const hfY = useRef(0);
-
-  function toggleSection(id: ModelsSectionId): void {
-    setVisible((prev) => ({ ...prev, [id]: !prev[id] }));
-    // ponytail: never orphan the modal under a hidden section.
-    if (id === "remote") setRemoteModalOpen(false);
-  }
-
-  function goToHfSearch(): void {
-    setFabOpen(false);
-    setVisible((prev) => ({ ...prev, hf: true }));
-    // ponytail: layout settles first (hidden->shown refires onLayout),
-    // then scroll to the fresh Y, then focus.
-    setTimeout(() => {
-      scrollRef.current?.scrollTo({ y: Math.max(0, hfY.current - 8), animated: true });
-    }, 100);
-    setTimeout(() => hfInputRef.current?.focus(), 450);
-  }
-
-  function openRemoteModal(): void {
-    setFabOpen(false);
-    setVisible((prev) => ({ ...prev, remote: true }));
-    setRemoteModalOpen(true);
-  }
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
-      <ScreenHeader title="Models" />
+      <ScreenHeader
+        title="Models"
+        right={
+          <ModelsHeaderMenu
+            readyVisible={visible.ready}
+            availableVisible={visible.available}
+            onToggleReady={() => setVisible((p) => ({ ...p, ready: !p.ready }))}
+            onToggleAvailable={() => setVisible((p) => ({ ...p, available: !p.available }))}
+            onExpandAll={() => setGroupsOpen({ ready: true, available: true })}
+            onCollapseAll={() => setGroupsOpen({ ready: false, available: false })}
+          />
+        }
+      />
       <View className="flex-1">
         <ScrollView
-          ref={scrollRef}
           className="flex-1"
           contentContainerStyle={{ padding: spacing.md, paddingBottom: 120 }}
         >
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="flex-1 font-sans text-body-md text-secondary-text">
-              Download local models or configure remote API providers
-            </Text>
-            <Pressable
-              onPress={() => setMenuOpen(!menuOpen)}
-              className={`ml-2 p-2.5 rounded-lg border ${
-                menuOpen ? "border-primary bg-primary/20" : "border-border"
-              }`}
-            >
-              <SlidersHorizontal size={18} color={colors.primary} />
-            </Pressable>
-          </View>
-
-          {menuOpen && <FilterMenu visible={visible} onToggle={toggleSection} />}
-
-          {visible.ready && <ReadyModels onOpenSettings={setSettingsModelId} />}
+          {visible.ready && (
+            <ReadyModels
+              open={groupsOpen.ready}
+              onToggle={() => setGroupsOpen((p) => ({ ...p, ready: !p.ready }))}
+              onOpenSettings={setSettingsModelId}
+            />
+          )}
           {visible.available && (
             <AvailableModels
+              open={groupsOpen.available}
+              onToggle={() => setGroupsOpen((p) => ({ ...p, available: !p.available }))}
               onDownload={(modelId, file) => startDownload(modelId, file)}
-            />
-          )}
-          {visible.hf && (
-            <HFExplore
-              inputRef={hfInputRef}
-              onLayoutY={(y) => {
-                hfY.current = y;
-              }}
-            />
-          )}
-          {visible.remote && (
-            <RemoteApiSection
-              showModal={remoteModalOpen}
-              setShowModal={setRemoteModalOpen}
             />
           )}
         </ScrollView>
@@ -126,8 +82,9 @@ export default function ModelsScreen() {
         <View className="absolute right-4 bottom-8 items-end">
           {fabOpen && (
             <>
-              <FabAction Icon={Search} label="Add from Hugging Face" onPress={goToHfSearch} />
-              <FabAction Icon={Globe} label="Add remote provider" onPress={openRemoteModal} />
+              <FabAction Icon={Search} label="Add from Hugging Face" onPress={() => { setFabOpen(false); setHfOpen(true); }} />
+              <FabAction Icon={FolderPlus} label="Add local model" onPress={() => { setFabOpen(false); void importLocalModel(); }} />
+              <FabAction Icon={Cloud} label="Add from API" onPress={() => { setFabOpen(false); setRemoteModalOpen(true); }} />
             </>
           )}
           <Pressable
@@ -143,6 +100,20 @@ export default function ModelsScreen() {
           </Pressable>
         </View>
       </View>
+
+      <Modal visible={hfOpen} animationType="slide" onRequestClose={() => setHfOpen(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
+          <ScrollView
+            className="flex-1"
+            contentContainerStyle={{ padding: spacing.md }}
+            keyboardShouldPersistTaps="handled"
+          >
+            <HFExplore onClose={() => setHfOpen(false)} />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      <RemoteApiModal showModal={remoteModalOpen} setShowModal={setRemoteModalOpen} />
 
       <ModelSettingsModal
         modelId={settingsModelId}

@@ -16,6 +16,7 @@ import type {
   ModelDownloadStatus,
 } from "../types/models";
 import { DEFAULT_MODEL_SETTINGS, parseModelSettings, parseModelSettingsMap } from "../lib/model-settings";
+import { buildLocalModelSpec } from "../lib/local-model";
 import { modelSourceStrategies, getStrategyById } from "../services/model-strategies";
 import { downloadService } from "../services/download";
 import { uploadService } from "../services/transfer";
@@ -72,6 +73,9 @@ export interface ModelState {
   removeModel: (modelId: string) => Promise<void>;
   updateModel: (modelId: string, updates: Partial<ModelSpec>) => void;
   getModel: (modelId: string) => ModelSpec | undefined;
+
+  // Local file import (device file -> models/local/ + register as ready)
+  addLocalModel: (sourceUri: string, fileName: string, size: number) => Promise<void>;
 
   // Presets
   loadPresets: () => Promise<void>;
@@ -208,13 +212,15 @@ export const useModelStore = create<ModelState>()((set, get) => ({
   removeModel: async (modelId) => {
     const model = get().getModel(modelId);
     if (model) {
-      // Delete local file if exists
+      // Delete local file if exists (downloads in models/, imports in models/local/)
       if (model.origin !== "remote_api" && model.files[0]) {
-        const filePath = `${LegacyFileSystem.documentDirectory}models/${model.files[0].name}`;
-        try {
-          await LegacyFileSystem.deleteAsync(filePath, { idempotent: true });
-        } catch {
-          // Ignore
+        for (const dir of ["models/", "models/local/"]) {
+          const filePath = `${LegacyFileSystem.documentDirectory}${dir}${model.files[0].name}`;
+          try {
+            await LegacyFileSystem.deleteAsync(filePath, { idempotent: true });
+          } catch {
+            // Ignore
+          }
         }
       }
     }
@@ -238,6 +244,32 @@ export const useModelStore = create<ModelState>()((set, get) => ({
 
   getModel: (modelId) => {
     return get().models.find((m) => m.id === modelId);
+  },
+
+  // Local file import
+  addLocalModel: async (sourceUri, fileName, size) => {
+    const base = LegacyFileSystem.documentDirectory ?? "";
+    const dir = `${base}models/local/`;
+    try {
+      const info = await LegacyFileSystem.getInfoAsync(dir);
+      if (!info.exists) {
+        await LegacyFileSystem.makeDirectoryAsync(dir, { intermediates: true });
+      }
+      await LegacyFileSystem.copyAsync({ from: sourceUri, to: `${dir}${fileName}` });
+    } catch (e) {
+      console.warn("Failed to copy local model file:", e);
+      throw e instanceof Error ? e : new Error("Copy failed");
+    }
+
+    // ponytail: replace reuses the file name — drop the stale row first.
+    set((state) => ({
+      models: state.models.filter(
+        (m) => !(m.origin === "local" && m.files[0]?.name === fileName),
+      ),
+    }));
+    get().addModel(
+      buildLocalModelSpec({ id: `local-${generateId()}`, fileName, size }),
+    );
   },
 
   // Presets
@@ -423,7 +455,17 @@ export const useModelStore = create<ModelState>()((set, get) => ({
       return false;
     }
 
-    const filePath = `${LegacyFileSystem.documentDirectory}models/${file.name}`;
+    // ponytail: downloads live in models/, imports in models/local/.
+    const base = LegacyFileSystem.documentDirectory ?? "";
+    let filePath = `${base}models/${file.name}`;
+    try {
+      const info = await LegacyFileSystem.getInfoAsync(filePath);
+      if (!info.exists) {
+        filePath = `${base}models/local/${file.name}`;
+      }
+    } catch {
+      // Fall through with default path
+    }
 
     try {
       const result = await uploadService.uploadModel(filePath, file.name);

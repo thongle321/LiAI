@@ -89,13 +89,22 @@ function DownloadedCard({
   );
 }
 
-export function ReadyModels({ onOpenSettings }: { onOpenSettings: (modelId: string) => void }) {
+export function ReadyModels({
+  open,
+  onToggle,
+  onOpenSettings,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  onOpenSettings: (modelId: string) => void;
+}) {
   const {
     models,
     remoteApis,
     activeModelId,
     setActiveModel,
     setActiveRemoteApi,
+    removeRemoteApi,
   } = useModelStore();
 
   const downloaded = models.filter(
@@ -106,7 +115,8 @@ export function ReadyModels({ onOpenSettings }: { onOpenSettings: (modelId: stri
     <ModelGroup
       title="Ready to use"
       count={downloaded.length + remoteApis.length}
-      subtitle="Downloaded models and connected APIs, ready to chat"
+      open={open}
+      onToggle={onToggle}
     >
       {downloaded.map((item) => (
         <DownloadedCard
@@ -145,18 +155,16 @@ export function ReadyModels({ onOpenSettings }: { onOpenSettings: (modelId: stri
                   <Text className="font-sans text-body-sm text-primary">Activate</Text>
                 </Pressable>
               )}
+              <Pressable
+                onPress={() => removeRemoteApi(item.id)}
+                className="px-3 py-1.5 bg-red-500/20 border border-red-500/50 rounded-lg"
+              >
+                <Trash2 size={16} color="#EF4444" />
+              </Pressable>
             </View>
           </View>
         );
       })}
-
-      {downloaded.length === 0 && remoteApis.length === 0 && (
-        <View className="bg-surface-1 border border-border rounded-xl p-8 items-center">
-          <Text className="font-sans text-body-md text-secondary-text text-center">
-            Nothing ready yet — download a model below or connect an API provider
-          </Text>
-        </View>
-      )}
     </ModelGroup>
   );
 }

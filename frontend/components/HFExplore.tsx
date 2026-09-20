@@ -1,7 +1,6 @@
 /** Upgraded Hugging Face search: debounced query, stats rows, rich file cards.
  *
- * Inline section (not a sheet): same features, existing patterns only.
- * First page of results; pagination deferred.
+ * Shown in the full-screen Add-from-HF modal. First page only; pagination deferred.
  */
 
 import { useEffect, useState } from "react";
@@ -12,7 +11,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { ChevronDown, Lock } from "lucide-react-native";
+import { ChevronDown, Lock, X } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 import { useModelStore } from "../store/modelStore";
@@ -26,11 +25,9 @@ import {
 } from "./ModelBits.tsx";
 
 export function HFExplore({
-  inputRef,
-  onLayoutY,
+  onClose,
 }: {
-  inputRef?: React.RefObject<TextInput | null>;
-  onLayoutY?: (y: number) => void;
+  onClose?: () => void;
 }) {
   const { searchModels, searchResults, searchLoading, searchError, getModelFiles, startDownload, hfToken, setHfToken } = useModelStore();
   const [query, setQuery] = useState("");
@@ -71,18 +68,22 @@ export function HFExplore({
   };
 
   return (
-    <View
-      className="mb-6"
-      onLayout={(e) => onLayoutY?.(e.nativeEvent.layout.y)}
-    >
-      <Text className="font-sans-semibold text-h4 text-primary-text mb-3">Search Hugging Face</Text>
+    <View className="mb-6">
+      <View className="flex-row items-center justify-between mb-3">
+        <Text className="font-sans-semibold text-h4 text-primary-text">Search Hugging Face</Text>
+        {onClose && (
+          <Pressable onPress={onClose} className="p-1">
+            <X size={22} color={colors.secondaryText} />
+          </Pressable>
+        )}
+      </View>
 
       <View className="flex-row items-center gap-2 mb-3">
         <TextInput
-          ref={inputRef}
           placeholder="Search models (e.g., llama, qwen, gemma)..."
           value={query}
           onChangeText={setQuery}
+          autoFocus={onClose !== undefined}
           className="flex-1 font-sans text-body-md text-primary-text bg-surface-1 border border-border rounded-lg px-4 py-3"
           placeholderTextColor={colors.secondaryText}
         />
@@ -92,10 +93,6 @@ export function HFExplore({
           </Pressable>
         )}
       </View>
-
-      {hfToken && (
-        <Text className="font-sans text-body-sm text-green-500 mb-3">HF Token configured ✓</Text>
-      )}
 
       {searchError && (
         <Text className="font-sans text-body-sm text-red-500 mb-3">Error: {searchError}</Text>

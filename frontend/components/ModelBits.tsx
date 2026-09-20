@@ -3,7 +3,7 @@
  * Moved out of app/models.tsx per ARCH (screens compose, components render).
  */
 
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { ChevronDown, ChevronUp, Download, Pause, Play } from "lucide-react-native";
 
@@ -153,20 +153,21 @@ export function DownloadButton({
 export function ModelGroup({
   title,
   count,
-  subtitle,
+  open,
+  onToggle,
   children,
 }: {
   title: string;
   count: number;
-  subtitle?: string;
+  open: boolean;
+  onToggle: () => void;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(true);
   return (
     <View className="mb-6">
       <Pressable
-        onPress={() => setOpen(!open)}
-        className="flex-row items-center justify-between mb-1"
+        onPress={onToggle}
+        className="flex-row items-center justify-between mb-3"
       >
         <View className="flex-row items-center gap-2">
           <Text className="font-sans-semibold text-h4 text-primary-text">{title}</Text>
@@ -180,10 +181,7 @@ export function ModelGroup({
           <ChevronDown size={20} color={colors.secondaryText} />
         )}
       </Pressable>
-      {subtitle && (
-        <Text className="font-sans text-body-sm text-secondary-text mb-3">{subtitle}</Text>
-      )}
-      {open && <View className={!subtitle ? "mt-3" : undefined}>{children}</View>}
+      {open && children}
     </View>
   );
 }

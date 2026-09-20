@@ -57,7 +57,6 @@ function PresetModelCard({
                 </View>
               )}
             </View>
-            <Text className="font-sans text-body-sm text-secondary-text mb-1">{preset.description}</Text>
             <Text className="font-sans text-body-sm text-secondary-text/70">by {preset.author}</Text>
           </View>
           {expanded ? <ChevronUp size={20} color={colors.secondaryText} /> : <ChevronDown size={20} color={colors.secondaryText} />}
@@ -83,6 +82,7 @@ function PresetModelCard({
 
       {expanded && (
         <View className="border-t border-border px-4 pb-4">
+          <Text className="font-sans text-body-sm text-secondary-text mt-3 mb-1">{preset.description}</Text>
           <View className="mb-3">
             <Text className="font-sans-semibold text-body-sm text-secondary-text mb-2">Available Quantizations</Text>
           </View>
@@ -126,8 +126,12 @@ function PresetModelCard({
 }
 
 export function AvailableModels({
+  open,
+  onToggle,
   onDownload,
 }: {
+  open: boolean;
+  onToggle: () => void;
   onDownload: (modelId: string, file: PresetModelFile) => void;
 }) {
   const { presets } = useModelStore();
@@ -135,7 +139,8 @@ export function AvailableModels({
     <ModelGroup
       title="Available to download"
       count={presets.length}
-      subtitle="Pre-selected compact models optimized for mobile"
+      open={open}
+      onToggle={onToggle}
     >
       {presets.map((item) => (
         <PresetModelCard key={item.id} preset={item} onDownload={onDownload} />

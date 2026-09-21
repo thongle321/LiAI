@@ -3,7 +3,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { isProviderActive } from "../lib/model-providers.ts";
+import { formatParams, isProviderActive } from "../lib/model-providers.ts";
 
 describe("isProviderActive", () => {
   it("matches only the remote id for that provider", () => {
@@ -11,5 +11,14 @@ describe("isProviderActive", () => {
     assert.equal(isProviderActive("remote-abc", "other"), false);
     assert.equal(isProviderActive("local-xyz", "xyz"), false);
     assert.equal(isProviderActive(null, "abc"), false);
+  });
+});
+
+describe("formatParams", () => {
+  it("compacts to M/B", () => {
+    assert.equal(formatParams(135_000_000), "135M");
+    assert.equal(formatParams(500_000_000), "500M");
+    assert.equal(formatParams(1_000_000_000), "1B");
+    assert.equal(formatParams(2_000_000_000), "2B");
   });
 });

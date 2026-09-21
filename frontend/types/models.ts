@@ -42,6 +42,10 @@ export interface ModelSpec {
   downloadedBytes: number;
   totalBytes: number;
   error?: string;
+  // Catalog metadata (PocketPal parity, minus pal features)
+  params?: number; // parameter count, e.g. 135_000_000
+  capabilities?: string[];
+  ggufMetadata?: Record<string, unknown>;
 }
 
 export interface PresetModel {
@@ -53,6 +57,8 @@ export interface PresetModel {
   files: PresetModelFile[];
   type: ModelType;
   recommended?: boolean;
+  params?: number;
+  capabilities?: string[];
 }
 
 export interface PresetModelFile {

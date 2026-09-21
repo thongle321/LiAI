@@ -11,7 +11,7 @@ import { colors } from "../themes/tokens.ts";
 import { useModelStore } from "../store/modelStore";
 import type { ModelSpec } from "../types/models";
 import { Chip, ModelGroup, StatusBadge, StatusDot, formatBytes } from "./ModelBits.tsx";
-import { isProviderActive } from "../lib/model-providers.ts";
+import { formatParams, isProviderActive } from "../lib/model-providers.ts";
 
 function typeLabel(type: ModelSpec["type"]): string {
   if (type === "llm") return "LLM";
@@ -33,6 +33,7 @@ function DownloadedCard({
   const { removeModel, uploadToBackend, getModelSettings } = useModelStore();
   const settings = getModelSettings(item.id);
   const title = settings.displayName || item.name;
+  const params = item.params ?? 0;
 
   return (
     <View className="mb-3 bg-surface-1 border border-border rounded-xl overflow-hidden">
@@ -45,6 +46,7 @@ function DownloadedCard({
             </Text>
             <View className="flex-row items-center gap-2 mt-1.5">
               <Chip label={typeLabel(item.type)} />
+              {params > 0 ? <Chip label={formatParams(params)} /> : null}
               <Chip label={formatBytes(item.files[0]?.size || 0)} />
               {item.files.length > 1 && <Chip label={`${item.files.length} files`} />}
               {isActive ? (

@@ -59,7 +59,8 @@
             "buildArchs": ["arm64-v8a"]
           }
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "extra": {
       "router": {},

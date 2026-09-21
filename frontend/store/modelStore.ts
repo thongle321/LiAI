@@ -17,6 +17,8 @@ import type {
 } from "../types/models";
 import { DEFAULT_MODEL_SETTINGS, parseModelSettings, parseModelSettingsMap } from "../lib/model-settings";
 import { buildLocalModelSpec } from "../lib/local-model";
+import { HF_TOKEN_SS_KEY, providerKeySS } from "../lib/secrets";
+import { upgradeModelList, upgradeRemoteApis } from "../lib/model-upgrade";
 import { modelSourceStrategies, getStrategyById } from "../services/model-strategies";
 import { downloadService } from "../services/download";
 import { uploadService } from "../services/transfer";
@@ -24,8 +26,40 @@ import { uploadService } from "../services/transfer";
 const STORAGE_KEY = "liai_models_v1";
 const ACTIVE_MODEL_KEY = "liai_active_model_v1";
 const REMOTE_APIS_KEY = "liai_remote_apis_v1";
-const HF_TOKEN_KEY = "liai_hf_token_v1";
+const HF_TOKEN_KEY = "liai_hf_token_v1"; // legacy AsyncStorage location (migrated to SecureStore)
 const MODEL_SETTINGS_KEY = "liai_model_settings_v1";
+
+async function secureStore(): Promise<typeof import("expo-secure-store")> {
+  return await import("expo-secure-store");
+}
+
+/** Read a secret; null when missing or SecureStore unavailable. */
+async function readSecret(key: string): Promise<string | null> {
+  try {
+    return await (await secureStore()).getItemAsync(key);
+  } catch (e) {
+    console.warn(`Failed to read secret ${key}:`, e);
+    return null;
+  }
+}
+
+/** Write a secret; warns when SecureStore unavailable. */
+async function writeSecret(key: string, value: string): Promise<void> {
+  try {
+    await (await secureStore()).setItemAsync(key, value);
+  } catch (e) {
+    console.warn(`Failed to write secret ${key}:`, e);
+  }
+}
+
+/** Delete a secret; warns when SecureStore unavailable. */
+async function deleteSecret(key: string): Promise<void> {
+  try {
+    await (await secureStore()).deleteItemAsync(key);
+  } catch (e) {
+    console.warn(`Failed to delete secret ${key}:`, e);
+  }
+}
 
 async function rnStorage(): Promise<AsyncStorageStatic> {
   const mod = await import("@react-native-async-storage/async-storage");
@@ -95,9 +129,9 @@ export interface ModelState {
   uploadToBackend: (modelId: string) => Promise<boolean>;
 
   // Remote API providers
-  addRemoteApi: (provider: RemoteApiProvider) => void;
-  removeRemoteApi: (providerId: string) => void;
-  updateRemoteApi: (providerId: string, updates: Partial<RemoteApiProvider>) => void;
+  addRemoteApi: (provider: RemoteApiProvider) => Promise<void>;
+  removeRemoteApi: (providerId: string) => Promise<void>;
+  updateRemoteApi: (providerId: string, updates: Partial<RemoteApiProvider>) => Promise<void>;
   setActiveRemoteApi: (providerId: string | null) => void;
   validateRemoteApi: (provider: RemoteApiProvider) => Promise<boolean>;
 
@@ -134,7 +168,7 @@ export const useModelStore = create<ModelState>()((set, get) => ({
   // Persistence
   loadPersisted: async () => {
     try {
-      const [modelsRaw, apisRaw, tokenRaw, activeRaw, settingsRaw] = await Promise.all([
+      const [modelsRaw, apisRaw, legacyTokenRaw, activeRaw, settingsRaw] = await Promise.all([
         asyncStorage.getItem(STORAGE_KEY),
         asyncStorage.getItem(REMOTE_APIS_KEY),
         asyncStorage.getItem(HF_TOKEN_KEY),
@@ -143,21 +177,63 @@ export const useModelStore = create<ModelState>()((set, get) => ({
       ]);
 
       if (modelsRaw) {
-        const parsed = JSON.parse(modelsRaw);
-        if (Array.isArray(parsed)) {
-          set({ models: parsed });
+        try {
+          const models = upgradeModelList(JSON.parse(modelsRaw));
+          // Hydrate remote model keys from SecureStore (never persisted in KV).
+          for (const m of models) {
+            if (m.origin === "remote_api" && m.id.startsWith("remote-")) {
+              const key = await readSecret(providerKeySS(m.id.slice("remote-".length)));
+              if (key) m.apiKey = key;
+            }
+          }
+          set({ models });
+        } catch {
+          // Corrupt payload: start empty rather than crash.
+          set({ models: [] });
         }
       }
 
       if (apisRaw) {
-        const parsed = JSON.parse(apisRaw);
-        if (Array.isArray(parsed)) {
-          set({ remoteApis: parsed });
+        try {
+          const rawList: unknown = JSON.parse(apisRaw);
+          // One-time migration: legacy plaintext apiKeys move to SecureStore.
+          if (Array.isArray(rawList)) {
+            for (const entry of rawList) {
+              if (
+                entry &&
+                typeof entry === "object" &&
+                typeof (entry as { id?: unknown }).id === "string" &&
+                typeof (entry as { apiKey?: unknown }).apiKey === "string" &&
+                (entry as { apiKey: string }).apiKey !== ""
+              ) {
+                await writeSecret(
+                  providerKeySS((entry as { id: string }).id),
+                  (entry as { apiKey: string }).apiKey,
+                );
+              }
+            }
+          }
+          const apis = upgradeRemoteApis(rawList);
+          for (const p of apis) {
+            const key = await readSecret(providerKeySS(p.id));
+            if (key) p.apiKey = key;
+          }
+          set({ remoteApis: apis });
+          // Persist scrubbed form immediately so plaintext never lingers.
+          get().saveRemoteApis();
+        } catch {
+          set({ remoteApis: [] });
         }
       }
 
-      if (tokenRaw) {
-        set({ hfToken: tokenRaw });
+      // HF token: SecureStore first, legacy AsyncStorage migrates once.
+      const ssToken = await readSecret(HF_TOKEN_SS_KEY);
+      if (ssToken) {
+        set({ hfToken: ssToken });
+      } else if (legacyTokenRaw) {
+        await writeSecret(HF_TOKEN_SS_KEY, legacyTokenRaw);
+        await asyncStorage.removeItem(HF_TOKEN_KEY);
+        set({ hfToken: legacyTokenRaw });
       }
 
       if (activeRaw) {
@@ -179,7 +255,11 @@ export const useModelStore = create<ModelState>()((set, get) => ({
 
   saveModels: async () => {
     try {
-      await asyncStorage.setItem(STORAGE_KEY, JSON.stringify(get().models));
+      // ponytail: remote apiKeys hydrate in memory only — never persist them.
+      const scrubbed = get().models.map((m) =>
+        m.origin === "remote_api" ? { ...m, apiKey: "" } : m,
+      );
+      await asyncStorage.setItem(STORAGE_KEY, JSON.stringify(scrubbed));
     } catch (e) {
       console.warn("Failed to save models:", e);
     }
@@ -187,7 +267,9 @@ export const useModelStore = create<ModelState>()((set, get) => ({
 
   saveRemoteApis: async () => {
     try {
-      await asyncStorage.setItem(REMOTE_APIS_KEY, JSON.stringify(get().remoteApis));
+      // ponytail: apiKeys live in SecureStore — persist metadata only.
+      const scrubbed = get().remoteApis.map((p) => ({ ...p, apiKey: "" }));
+      await asyncStorage.setItem(REMOTE_APIS_KEY, JSON.stringify(scrubbed));
     } catch (e) {
       console.warn("Failed to save remote APIs:", e);
     }
@@ -476,14 +558,17 @@ export const useModelStore = create<ModelState>()((set, get) => ({
   },
 
   // Remote API providers
-  addRemoteApi: (provider) => {
+  addRemoteApi: async (provider) => {
     set((state) => ({
       remoteApis: [...state.remoteApis.filter((p) => p.id !== provider.id), provider],
     }));
+    if (provider.apiKey !== "") {
+      await writeSecret(providerKeySS(provider.id), provider.apiKey);
+    }
     get().saveRemoteApis();
   },
 
-  removeRemoteApi: (providerId) => {
+  removeRemoteApi: async (providerId) => {
     set((state) => ({
       remoteApis: state.remoteApis.filter((p) => p.id !== providerId),
       activeModelId:
@@ -491,15 +576,22 @@ export const useModelStore = create<ModelState>()((set, get) => ({
       activeProviderType:
         state.activeModelId === providerId ? null : state.activeProviderType,
     }));
+    await deleteSecret(providerKeySS(providerId));
     get().saveRemoteApis();
   },
 
-  updateRemoteApi: (providerId, updates) => {
+  updateRemoteApi: async (providerId, updates) => {
     set((state) => ({
       remoteApis: state.remoteApis.map((p) =>
         p.id === providerId ? { ...p, ...updates } : p
       ),
     }));
+    if (updates.apiKey !== undefined && updates.apiKey !== "") {
+      await writeSecret(providerKeySS(providerId), updates.apiKey);
+    } else if (updates.apiKey === "") {
+      // ponytail: blanking the key must wipe SecureStore or it rehydrates.
+      await deleteSecret(providerKeySS(providerId));
+    }
     get().saveRemoteApis();
   },
 
@@ -548,9 +640,9 @@ export const useModelStore = create<ModelState>()((set, get) => ({
   setHfToken: async (token) => {
     set({ hfToken: token });
     if (token) {
-      await asyncStorage.setItem(HF_TOKEN_KEY, token);
+      await writeSecret(HF_TOKEN_SS_KEY, token);
     } else {
-      await asyncStorage.removeItem(HF_TOKEN_KEY);
+      await deleteSecret(HF_TOKEN_SS_KEY);
     }
   },
 

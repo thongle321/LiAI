@@ -5,6 +5,7 @@ import { Pressable, Text, View } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
+import { formatParams } from "../lib/model-providers.ts";
 import { useModelStore } from "../store/modelStore";
 import type { PresetModel, PresetModelFile } from "../types/models";
 import {
@@ -43,6 +44,7 @@ function PresetModelCard({
   const cardStatus = existingModel ? existingModel.downloadStatus : "idle";
   const showCardProgress =
     existingModel !== undefined && isProgressVisible(cardStatus);
+  const params = preset.params ?? 0;
 
   return (
     <View className="mb-4 bg-surface-1 border border-border rounded-xl overflow-hidden">
@@ -64,10 +66,19 @@ function PresetModelCard({
 
         <View className="flex-row items-center justify-between mt-3">
           <StatusBadge status={cardStatus} />
-          <View className="px-1.5 py-0.5 bg-surface-2 border border-border rounded">
-            <Text className="font-sans text-xs text-secondary-text">
-              {preset.files.length} file{preset.files.length === 1 ? "" : "s"}
-            </Text>
+          <View className="flex-row items-center gap-2">
+            {params > 0 ? (
+              <View className="px-1.5 py-0.5 bg-surface-2 border border-border rounded">
+                <Text className="font-sans text-xs text-secondary-text">
+                  {formatParams(params)}
+                </Text>
+              </View>
+            ) : null}
+            <View className="px-1.5 py-0.5 bg-surface-2 border border-border rounded">
+              <Text className="font-sans text-xs text-secondary-text">
+                {preset.files.length} file{preset.files.length === 1 ? "" : "s"}
+              </Text>
+            </View>
           </View>
         </View>
 

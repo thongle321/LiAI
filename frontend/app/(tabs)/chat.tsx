@@ -11,19 +11,19 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Animated from "react-native-reanimated";
 import { Menu } from "lucide-react-native";
 
-import { colors } from "../themes/tokens.ts";
-import { CONNECTION_DOT_CLASS } from "../lib/connection.ts";
-import { fadeEntering, fadeExiting, useMotionDuration, useTabContentFade } from "../lib/motion.ts";
-import { APP_NAME } from "../constants/app.ts";
+import { colors } from "../../themes/tokens.ts";
+import { CONNECTION_DOT_CLASS } from "../../lib/connection.ts";
+import { fadeEntering, fadeExiting, useMotionDuration, useTabContentFade } from "../../lib/motion.ts";
+import { APP_NAME } from "../../constants/app.ts";
 
-import { Bubble } from "../components/Bubble.tsx";
-import { AppDrawer } from "../components/AppDrawer.tsx";
-import { Connecting, Unavailable } from "../components/Unavailable.tsx";
-import { InteractionPanel } from "../components/InteractionPanel.tsx";
+import { Bubble } from "../../components/Bubble.tsx";
+import { AppDrawer } from "../../components/AppDrawer.tsx";
+import { Connecting, Unavailable } from "../../components/Unavailable.tsx";
+import { InteractionPanel } from "../../components/InteractionPanel.tsx";
 import {
   useChatStore,
   type ChatMessage,
-} from "../store/chat.ts";
+} from "../../store/chat.ts";
 
 // Design's opening line, fixed once (visual only until the first exchange).
 const GREETING: ChatMessage = {
@@ -62,7 +62,10 @@ export default function ChatScreen() {
   }, [visibleMessages.length, motionDuration]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
+    <SafeAreaView
+      edges={["top", "left", "right"]}
+      style={{ flex: 1, backgroundColor: colors.base }}
+    >
       <View className="flex-row items-center border-b border-border bg-base px-4 py-3">
         <View className="w-16 flex-row items-center">
           <Pressable onPress={() => setDrawerOpen(true)} className="px-1 py-1">

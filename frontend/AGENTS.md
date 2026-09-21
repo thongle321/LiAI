@@ -101,7 +101,9 @@ Use this folder structure:
 
 ```
  
-app/  (flat route screens + _layout.tsx; no route groups)
+app/  (routes + _layout.tsx; chat/voice live in the (tabs)/ group)
+
+ (tabs)/  (bottom tabs: chat + voice, bar in (tabs)/_layout.tsx)
 
 components/
 

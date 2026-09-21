@@ -1,4 +1,4 @@
-/** First-run welcome. Sets a versioned flag and replaces to /chat.
+/** First-run welcome. Sets a versioned flag and replaces to /(tabs)/chat.
  *
  * Returning launches skip straight to chat. Tokens, Raleway scale,
  * and Lucide icons only — no new assets.
@@ -27,14 +27,14 @@ export default function OnboardingScreen() {
 
   useEffect(() => {
     void AsyncStorage.getItem(ONBOARDED_KEY).then((flag) => {
-      if (flag === "1") router.replace("/chat");
+      if (flag === "1") router.replace("/(tabs)/chat");
       else setChecked(true);
     });
   }, []);
 
   async function begin(): Promise<void> {
     await AsyncStorage.setItem(ONBOARDED_KEY, "1");
-    router.replace("/chat");
+    router.replace("/(tabs)/chat");
   }
 
   if (!checked) return null;

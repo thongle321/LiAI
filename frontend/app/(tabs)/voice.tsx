@@ -19,20 +19,17 @@ import {
 } from "react-native";
 import Animated from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
 import { openSettings } from "expo-linking";
 import { Mic } from "lucide-react-native";
 
-import { colors } from "../themes/tokens.ts";
-import { VOICE_STATUS_LABEL } from "../lib/voiceStatus.ts";
-import { routeForTab } from "../lib/tabRoute.ts";
+import { colors } from "../../themes/tokens.ts";
+import { VOICE_STATUS_LABEL } from "../../lib/voiceStatus.ts";
 import {
   fadeEntering,
   useMotionDuration,
   useTabContentFade,
-} from "../lib/motion.ts";
-import { useVoiceLoop } from "../hooks/useVoiceLoop.ts";
-import { BottomNav } from "../components/BottomNav.tsx";
+} from "../../lib/motion.ts";
+import { useVoiceLoop } from "../../hooks/useVoiceLoop.ts";
 
 export default function VoiceScreen() {
   const { phase, heard, reply, issue, needsSettings, bargeIn, retry } = useVoiceLoop();
@@ -54,7 +51,10 @@ export default function VoiceScreen() {
   const micLive = phase === "listening" || phase === "speaking";
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
+    <SafeAreaView
+      edges={["top", "left", "right"]}
+      style={{ flex: 1, backgroundColor: colors.base }}
+    >
       <Text className="px-4 py-3 text-center font-sans-semibold text-h3 text-primary">
         Voice
       </Text>
@@ -131,12 +131,6 @@ export default function VoiceScreen() {
       <Text className="pb-2 text-center font-sans text-body-sm text-secondary-text">
         Tap the mic to talk
       </Text>
-      <BottomNav
-        active="voice"
-        onSelect={(t) => {
-          if (t !== "voice") router.replace(routeForTab(t));
-        }}
-      />
     </SafeAreaView>
   );
 }

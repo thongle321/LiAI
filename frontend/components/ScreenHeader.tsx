@@ -1,4 +1,4 @@
-/** Back header shared by stub screens. Deep links fall back to /chat. */
+/** Back header shared by stub screens. Deep links fall back to /(tabs)/chat. */
 
 import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -10,7 +10,7 @@ import { colors } from "../themes/tokens.ts";
 export function ScreenHeader({ title, right }: { title: string; right?: ReactNode }) {
   function back(): void {
     if (router.canGoBack()) router.back();
-    else router.replace("/chat");
+    else router.replace("/(tabs)/chat");
   }
 
   return (

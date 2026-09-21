@@ -1,10 +1,10 @@
 /** ONE persistent bottom interaction panel: composer + dictation.
  *
  * The composer mic dictates into the draft (you press Send); the
- * Voice tab opens the standalone /(tabs)/voice hands-free screen, and
+ * Voice tab opens the standalone /voice hands-free screen, and
  * the Vision entry opens the standalone /vision camera screen. The
  * message list always stays visible above; nothing else navigates away.
- * The bottom tab bar lives in app/(tabs)/_layout.tsx, not here.
+ * The bottom tab bar lives in app/(drawer)/(tabs)/_layout.tsx, not here.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -180,7 +180,7 @@ export function InteractionPanel({
                 label="Take photo"
                 onPress={() => router.navigate("/vision")}
               />
-              <PlusItem label="Speak" onPress={() => router.push("/(tabs)/voice")} />
+              <PlusItem label="Speak" onPress={() => router.push("/voice")} />
             </View>
           )}
         </View>

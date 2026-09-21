@@ -35,7 +35,7 @@ The mobile application is responsible for:
 
 - TypeScript
 
-- Expo Router
+- Expo Router (typedRoutes on — hrefs are compile-time checked)
 
 - Uniwind
 
@@ -59,6 +59,7 @@ The mobile application is responsible for:
 - expo-secure-store (user-provided secret keys, approved)
 
 - expo-linking + expo-constants (settings deep-link, app metadata)
+- react-native-drawer-layout + react-native-gesture-handler (navigator drawer, approved)
 - tailwindcss (+ @tailwindcss/postcss, Uniwind build peers)
 
 ### Dependency Policy
@@ -101,9 +102,12 @@ Use this folder structure:
 
 ```
  
-app/  (routes + _layout.tsx; chat/voice live in the (tabs)/ group)
+app/  (routes + _layout.tsx; (drawer)/ owns the navigator drawer,
+  chat/voice live in (drawer)/(tabs)/)
 
- (tabs)/  (bottom tabs: chat + voice, bar in (tabs)/_layout.tsx)
+ (drawer)/  (Drawer layout; drawerContent reuses AppDrawer UI)
+
+ (drawer)/(tabs)/  (bottom tabs: chat + voice, bar in (tabs)/_layout.tsx)
 
 components/
 

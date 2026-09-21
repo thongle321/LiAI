@@ -33,9 +33,9 @@ export default function RootLayout() {
       }}
     >
       <Stack.Screen name="index" />
-      {/* Bottom tabs own chat + voice (app/(tabs)/_layout.tsx): tab
-          switches never animate, so the shared bar stays static. */}
-      <Stack.Screen name="(tabs)" options={{ animation: "none" }} />
+      {/* Drawer group owns (tabs) + the navigator drawer (app/(drawer)/).
+          Tab switches never animate, so the shared bar stays static. */}
+      <Stack.Screen name="(drawer)" options={{ animation: "none" }} />
       {/* Standalone vision screen: same instant-switch discipline —
           the camera fades itself in, nothing else moves. */}
       <Stack.Screen name="vision" options={{ animation: "none" }} />

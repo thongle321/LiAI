@@ -1,4 +1,4 @@
-/** First-run welcome. Sets a versioned flag and replaces to /(tabs)/chat.
+/** First-run welcome. Sets a versioned flag and replaces to /chat.
  *
  * Returning launches skip straight to chat. Tokens, Raleway scale,
  * and Lucide icons only — no new assets.
@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Eye, MessageCircle, Mic, type LucideIcon } from "lucide-react-native";
 
@@ -23,21 +23,21 @@ const ROWS: { Icon: LucideIcon; title: string; body: string }[] = [
 ];
 
 export default function OnboardingScreen() {
-  const [checked, setChecked] = useState(false);
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
 
   useEffect(() => {
     void AsyncStorage.getItem(ONBOARDED_KEY).then((flag) => {
-      if (flag === "1") router.replace("/(tabs)/chat");
-      else setChecked(true);
+      setOnboarded(flag === "1");
     });
   }, []);
 
   async function begin(): Promise<void> {
     await AsyncStorage.setItem(ONBOARDED_KEY, "1");
-    router.replace("/(tabs)/chat");
+    router.replace("/chat");
   }
 
-  if (!checked) return null;
+  if (onboarded === null) return null;
+  if (onboarded) return <Redirect href="/chat" />;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>

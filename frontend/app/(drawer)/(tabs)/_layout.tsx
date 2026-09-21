@@ -14,7 +14,14 @@ import { colors } from "../../../themes/tokens.ts";
 
 export default function TabLayout() {
   return (
-    <Tabs screenOptions={{ headerShown: false }} tabBar={TabBar}>
+    <Tabs
+      screenOptions={{ headerShown: false }}
+      // Closure returning an element: the navigator invokes tabBar as a
+      // plain function, so passing the bare TabBar reference would run
+      // its hooks outside a component (Invalid hook call). TabBar itself
+      // stays a real component with hooks.
+      tabBar={(props) => <TabBar {...props} />}
+    >
       <Tabs.Screen name="chat" />
       <Tabs.Screen name="voice" />
     </Tabs>

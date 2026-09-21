@@ -1,20 +1,22 @@
-/** Settings placeholder. Real settings land here later. */
+/** Settings: voice output today; more sections land here later. */
 
-import { Text, View } from "react-native";
+import { ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { colors } from "../themes/tokens.ts";
+import { colors, spacing } from "../themes/tokens.ts";
 import { ScreenHeader } from "../components/ScreenHeader.tsx";
+import { VoiceSettings } from "../components/VoiceSettings.tsx";
 
 export default function SettingsScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
       <ScreenHeader title="Settings" />
-      <View className="flex-1 items-center justify-center px-8">
-        <Text className="text-center font-sans text-body-md text-secondary-text">
-          Settings are coming soon.
-        </Text>
-      </View>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ padding: spacing.md }}
+      >
+        <VoiceSettings />
+      </ScrollView>
     </SafeAreaView>
   );
 }

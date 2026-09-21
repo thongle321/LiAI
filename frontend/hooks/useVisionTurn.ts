@@ -26,6 +26,7 @@ import {
 } from "../lib/voiceStatus.ts";
 import { ensureMicAccess } from "../lib/micAccess.ts";
 import { speakReply, stopSpeaking } from "../lib/voiceSpeak.ts";
+import { useVoice } from "../store/voice.ts";
 import { VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
 import { snapshotToBase64 } from "../lib/snapshot.ts";
 import { shouldStreamFrames } from "../lib/vision.ts";
@@ -252,6 +253,10 @@ export function useVisionTurn(
     stopSpeaking();
     setAnswer(text);
     setIssue(null);
+    if (!useVoice.getState().autoSpeak) {
+      setBoth("idle");
+      return;
+    }
     setBoth("speaking");
     speakReply(text, {
       onDone: () => {

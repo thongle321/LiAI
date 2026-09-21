@@ -15,6 +15,7 @@ import type { VoicePhase } from "../lib/voiceStatus.ts";
 import { bargeActionFor, isThrottlingError, isVoiceThrottled, setVoiceThrottled, voiceErrorAction } from "../lib/voiceStatus.ts";
 import { ensureMicAccess } from "../lib/micAccess.ts";
 import { speakReply, stopSpeaking } from "../lib/voiceSpeak.ts";
+import { useVoice } from "../store/voice.ts";
 import { VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
 import { useChatStore } from "../store/chat.ts";
 
@@ -177,6 +178,10 @@ export function useVoiceLoop() {
     setReply(text);
     setHeard("");
     setIssue(null);
+    if (!useVoice.getState().autoSpeak) {
+      setBoth("idle");
+      return;
+    }
     setBoth("speaking");
     speakReply(text, {
       onDone: () => {

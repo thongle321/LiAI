@@ -6,6 +6,8 @@
  */
 import * as Speech from "expo-speech";
 
+import { useVoice } from "../store/voice.ts";
+
 export type SpeakCallbacks = {
   onDone?: () => void;
   onStopped?: () => void;
@@ -13,15 +15,28 @@ export type SpeakCallbacks = {
 };
 
 export function speakReply(text: string, cbs: SpeakCallbacks = {}): void {
+  const { voiceId, rate, pitch } = useVoice.getState();
   try {
     Speech.speak(text, {
       language: "en-US",
+      voice: voiceId ?? undefined,
+      rate,
+      pitch,
       onDone: () => cbs.onDone?.(),
       onStopped: () => cbs.onStopped?.(),
       onError: () => cbs.onError?.(),
     });
   } catch {
     cbs.onError?.();
+  }
+}
+
+/** System voices for the picker; [] when the module can't list them. */
+export async function listVoices(): Promise<Speech.Voice[]> {
+  try {
+    return await Speech.getAvailableVoicesAsync();
+  } catch {
+    return [];
   }
 }
 

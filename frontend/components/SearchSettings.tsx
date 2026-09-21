@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { Check, Minus, Plus } from "lucide-react-native";
+import { Check } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 import {
@@ -16,6 +16,7 @@ import {
   type SearchProviderId,
 } from "../lib/search-providers.ts";
 import { useSearch } from "../store/search.ts";
+import { StepperRow, ToggleRow } from "./SettingsRows.tsx";
 
 function ProviderKeys({ id }: { id: SearchProviderId }) {
   const getProviderKey = useSearch((s) => s.getProviderKey);
@@ -25,8 +26,11 @@ function ProviderKeys({ id }: { id: SearchProviderId }) {
   const [hasKey, setHasKey] = useState(false);
 
   useEffect(() => {
-    getProviderKey(id).then((k) => setHasKey(k !== null && k !== ""));
-  }, [id]);
+    getProviderKey(id).then(
+      (k) => setHasKey(k !== null && k !== ""),
+      () => setHasKey(false),
+    );
+  }, [id, getProviderKey]);
 
   async function save(): Promise<void> {
     if (draft.trim() === "") return;
@@ -83,41 +87,15 @@ export function SearchSettings() {
   return (
     <View className="mb-6">
       <Text className="font-sans-semibold text-h4 text-primary-text mb-1">Web search</Text>
-      <Pressable
-        onPress={() => setConsented(!hasConsented)}
-        className="flex-row items-center justify-between py-2.5"
-      >
-        <Text className="font-sans text-body-md text-primary-text">Allow web search</Text>
-        <View
-          className={`w-5 h-5 rounded-md border items-center justify-center ${
-            hasConsented ? "bg-primary border-primary" : "border-border"
-          }`}
-        >
-          {hasConsented && <Check size={14} color={colors.base} />}
-        </View>
-      </Pressable>
-      <View className="flex-row items-center justify-between py-2.5">
-        <Text className="font-sans text-body-md text-primary-text">Results</Text>
-        <View className="flex-row items-center gap-3">
-          <Pressable
-            onPress={() => setResultCount(resultCount - 1)}
-            disabled={resultCount <= MIN_RESULT_COUNT}
-            className="p-2 rounded-lg border border-border"
-          >
-            <Minus size={16} color={colors.primary} />
-          </Pressable>
-          <Text className="font-sans text-body-md text-primary-text w-12 text-center">
-            {resultCount}
-          </Text>
-          <Pressable
-            onPress={() => setResultCount(resultCount + 1)}
-            disabled={resultCount >= MAX_RESULT_COUNT}
-            className="p-2 rounded-lg border border-border"
-          >
-            <Plus size={16} color={colors.primary} />
-          </Pressable>
-        </View>
-      </View>
+      <ToggleRow label="Allow web search" on={hasConsented} onPress={() => setConsented(!hasConsented)} />
+      <StepperRow
+        label="Results"
+        display={`${resultCount}`}
+        onMinus={() => setResultCount(resultCount - 1)}
+        onPlus={() => setResultCount(resultCount + 1)}
+        minusDisabled={resultCount <= MIN_RESULT_COUNT}
+        plusDisabled={resultCount >= MAX_RESULT_COUNT}
+      />
       <Text className="font-sans-semibold text-body-sm text-secondary-text mt-2 mb-1">Provider</Text>
       {SEARCH_PROVIDERS.map((p) => (
         <View key={p.id} className="py-1">

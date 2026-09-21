@@ -540,7 +540,7 @@ export const useModelStore = create<ModelState>()((set, get) => ({
         // ponytail: learn the ceiling from what actually succeeded.
         if (downloadJob.totalBytes > get().largestSuccessfulBytes) {
           set({ largestSuccessfulBytes: downloadJob.totalBytes });
-          get().saveMemoryGuard();
+          void get().saveMemoryGuard();
         }
       } else {
         get().updateModel(modelId, {
@@ -697,13 +697,13 @@ export const useModelStore = create<ModelState>()((set, get) => ({
         [provider.id]: { reachable: ok, checkedAt: Date.now() },
       },
     }));
-    get().saveRemoteCaps();
+    void get().saveRemoteCaps();
     return ok;
   },
 
   acknowledgePrivacy: () => {
     set({ privacyAcknowledged: true });
-    get().saveRemoteCaps();
+    void get().saveRemoteCaps();
   },
 
   // Active model selection

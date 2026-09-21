@@ -26,14 +26,7 @@ def test_missing_message_is_invalid_request_envelope() -> None:
     assert_envelope(resp.json(), "invalid_request")
 
 
-def test_llm_failure_is_llm_error_envelope(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    import app.main as main
-
-    class BrokenAgent:
-        async def run(self, *args: object, **kwargs: object) -> object:
-            raise RuntimeError("provider down")
-
-    monkeypatch.setattr(main, "get_companion_agent", lambda: BrokenAgent())
+def test_llm_failure_is_llm_error_envelope(broken_agent) -> None:  # type: ignore[no-untyped-def]
     resp = client.post("/api/chat", json={"message": "hi"})
     assert resp.status_code == 502
     assert_envelope(resp.json(), "llm_error")

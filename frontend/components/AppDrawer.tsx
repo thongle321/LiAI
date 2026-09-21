@@ -24,6 +24,7 @@ import {
   MessageSquarePlus,
   Settings,
   X,
+  Download,
   type LucideIcon,
 } from "lucide-react-native";
 
@@ -72,7 +73,7 @@ export function AppDrawer({
     return () => sub.remove();
   }, [open, onClose, slide]);
 
-  function go(path: "/settings" | "/about"): void {
+  function go(path: "/settings" | "/about" | "/models"): void {
     onClose();
     router.push(path);
   }
@@ -161,6 +162,7 @@ export function AppDrawer({
                 ListFooterComponent={
                   <>
                     <View className="my-2 border-t border-border" />
+                    <DrawerItem Icon={Download} label="Models" onPress={() => go("/models")} />
                     <DrawerItem Icon={Settings} label="Settings" onPress={() => go("/settings")} />
                     <DrawerItem Icon={CircleHelp} label="About" onPress={() => go("/about")} />
                   </>

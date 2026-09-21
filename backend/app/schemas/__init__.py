@@ -6,6 +6,8 @@ from .chat import (
     HealthResponse,
     HistoryMessage,
     HistoryResponse,
+    ModelUploadResponse,
+    ModelListResponse,
 )
 
 __all__ = [
@@ -16,4 +18,6 @@ __all__ = [
     "HealthResponse",
     "HistoryMessage",
     "HistoryResponse",
+    "ModelUploadResponse",
+    "ModelListResponse",
 ]

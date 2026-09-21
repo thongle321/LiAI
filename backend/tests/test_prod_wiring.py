@@ -44,6 +44,10 @@ def test_missing_key_fails_fast_at_build(
 def test_default_agent_build_without_key_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Clear the provider cache to ensure fresh provider creation
+    from app.providers.factory import ProviderStrategyFactory
+    ProviderStrategyFactory.clear_cache()
+    
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)

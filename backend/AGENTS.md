@@ -35,9 +35,10 @@ This directory contains the backend responsible for:
 
 - Python
 - FastAPI
-- Vision Agents
 - Pydantic
 - Pydantic AI
+- llama-cpp-python (local GGUF VLM, CPU default)
+- WebSockets (realtime vision transport)
 - AsyncIO
 
 ### Storage
@@ -71,8 +72,6 @@ Do not tightly couple application logic to a single model provider.
 
 ## AI Architecture
 
-Pydantic AI and Vision Agents serve different responsibilities.
-
 ### Pydantic AI
 
 Use Pydantic AI for:
@@ -85,24 +84,23 @@ Use Pydantic AI for:
 - Validated AI responses
 - Application-level agent behavior
 
-###Vision Agents
+### Realtime Vision
 
-Use Vision Agents for:
+Use the realtime pipeline (`app/realtime/`) for:
 
-- Real-time voice interaction
-- Real-time camera interaction
-- Audio/video processing
-- Realtime multimodal pipelines
-- WebRTC and related realtime communication
-- Voice activity detection and realtime processing when required
+- Live camera narration over WebSockets
+- Frame captioning with the local GGUF VLM via llama-cpp-python
+- Follow-up questions about what the camera sees
 
-Vision Agents should be treated as a realtime interaction component,
-not as the entire backend architecture.
+There is no WebRTC or separate vision-agent framework: frames arrive
+over the existing FastAPI WebSocket, the VLM describes them, and
+Pydantic AI / the LLM reasons over those descriptions.
+CPU inference is the default; GPU offload is opt-in.
 
 ### Shared LiAI Services
 
-Application-level capabilities should remain independent from either
-framework where practical.
+Application-level capabilities should remain independent from any
+single framework or provider where practical.
 
 Shared services include:
 
@@ -115,24 +113,20 @@ Shared services include:
 - External services
 
 Do not create separate competing memory, personality, or tool systems
-inside Pydantic AI and Vision Agents.
+inside Pydantic AI or the realtime pipeline.
 
-Voice Input
+### Voice Input
 
 Use the mobile platform's native speech-to-text capabilities for
 ordinary voice input when practical.
 
 For normal voice conversations:
 
-Mobile microphone
-↓
-Native mobile STT
-↓
-Text
-↓
-FastAPI
-↓
-Pydantic AI / LLM
+- Mobile microphone
+- Native mobile STT
+- Text
+- FastAPI
+- Pydantic AI / LLM
 
 The backend should receive the resulting text rather than raw
 microphone audio when native mobile STT is sufficient.
@@ -268,6 +262,23 @@ structure.
 ## Communication
 
 Be concise. Explain what changed and how to test it.
+
+---
+
+## Running
+
+From `backend/`:
+
+```powershell
+uv run --env-file .env uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+The backend also autoloads `backend/.env` itself (stdlib, no dependency),
+so plain `uvicorn` / IDE runners work too. Explicit environment wins over
+the file in all cases. A truly missing key still fails fast at startup
+with an actionable log line (no keyless fallback).
+Confirm the live provider in the startup log:
+`llm provider=OpenRouterChatProvider model=...`.
 ---
 
 ## Final Reminder

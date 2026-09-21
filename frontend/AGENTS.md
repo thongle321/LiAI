@@ -37,11 +37,18 @@ The mobile application is responsible for:
 
 - Expo Router
 
-- NativeWind
+- Uniwind
 
 - Zustand
 
 - AsyncStorage
+
+- VisionCamera
+
+- lucide-react-native (+ react-native-svg peer, approved)
+
+- expo-speech-recognition (voice input, approved)
+- expo-speech (voice output, approved)
 
 ### Dependency Policy
 
@@ -92,9 +99,6 @@ app/
 components/
 
 constants/
-constants/
-
-data/
 
 hooks/
 
@@ -102,9 +106,13 @@ lib/
 
 store/
 
+themes/
+
 types/
 
 assets/
+
+tests/
 
 ```
 
@@ -114,10 +122,9 @@ or business logic.
 **components/** is for reusable UI. Create a component when it is
 reused in multiple places, when it makes a screen easier to read, or
 when it represents a clear UI concept. Examples for this app:
-[EXAMPLE_COMPONENT_NAMES]. Do not create components too early.
-**data/** holds hardcoded content. Keep it typed.
+Bubble, BottomNav, InteractionPanel. Do not create components too early.
 **store/** holds Zustand stores. Examples of state to keep here:
-[EXAMPLE_STATE_FIELDS]. Persist with AsyncStorage when needed.
+chat messages, session id, connection, sending flag. Persist with AsyncStorage when needed.
 **lib/** holds external service helpers (api.ts, cn.ts).
 Never expose secret keys here.
 ---
@@ -136,11 +143,24 @@ For any UI task:
 
 ## Styling Rules
 
-Use NativeWind classes. Do not use StyleSheet unless it is not possible
+Use Uniwind classes. Do not use StyleSheet unless it is not possible
 to style with className.
-Use the NativeWind version installed in this project. Check
+Use the Uniwind version installed in this project. Check
 package.json. Do not upgrade without approval.
-Reuse class patterns through utilities in global.css.
+Reuse class patterns through utilities in global.css, following BEM naming
+(`.block` + `.block--modifier`, e.g. `.btn` + `.btn--primary`).
+
+When building from an attached design image:
+
+- match spacing closely
+- match typography hierarchy
+- match border radius and shadows
+- match layout structure
+- use consistent reusable styles
+- make the UI responsive for different screen sizes
+
+Use Lucide icons (`lucide-react-native`) instead of emoji or text glyphs.
+Match the replaced glyph's size and color (colors from `themes/tokens.ts`).
 
 ### Style Exception List
 
@@ -161,7 +181,7 @@ Use StyleSheet or inline styles for:
 - Pressable or TouchableOpacity pressed states
 
 - Shadows (different per platform)
-  Everywhere else, use NativeWind.
+  Everywhere else, use Uniwind.
 
 ---
 

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": {
+    "migrate-nativewind-to-uniwind": {
+      "source": "uni-stack/uniwind",
+      "sourceType": "github",
+      "skillPath": "skills/migrate-nativewind-to-uniwind/SKILL.md",
+      "computedHash": "5559b353c2f22a12f12610d90a4e58c254f23bfbdb00e7dfcf79c8ea2305ec77"
+    },
+    "react-native-best-practices": {
+      "source": "callstackincubator/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-native-best-practices/SKILL.md",
+      "computedHash": "5b9722518860a462a9308759b7046725e4a1ab59642ad6a6e520afc45bc8373b"
+    },
+    "react-navigation": {
+      "source": "callstackincubator/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-navigation/SKILL.md",
+      "computedHash": "1b8127ce614fac048720e528fe3ff957da08f7777bc88ae9b1922108f72bdc61"
+    },
+    "uniwind": {
+      "source": "uni-stack/uniwind",
+      "sourceType": "github",
+      "skillPath": "skills/uniwind/SKILL.md",
+      "computedHash": "4f3d033154e0ecb4e9cb8ffd9d273884002fa9b499123dceb894623b0eadc859"
+    }
+  }
+}

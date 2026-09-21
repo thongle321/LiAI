@@ -1,0 +1,25 @@
+# Scratch planning docs — local only, never committed
+.scratch/
+
+# Secrets — server-only, never committed
+backend/.env
+
+# Python
+backend/.venv/
+# machine-local CUDA wheel (see backend/pyproject.toml [tool.uv.sources])
+backend/*.whl
+__pycache__/
+*.pyc
+
+# Expo / Node
+frontend/node_modules/
+frontend/.expo/
+frontend/dist/
+
+# Logs / OS / editors
+npm-debug.log*
+*.log
+.DS_Store
+.vscode/
+.idea/
+.gradle/

@@ -7,6 +7,8 @@
 export interface ChatRequest {
   message: string;
   session_id?: string;
+  /** Optional JPEG data-uri; backend routes it to the VLM when present. */
+  image?: string;
 }
 
 export interface ChatResponse {
@@ -16,6 +18,16 @@ export interface ChatResponse {
 
 export interface HealthResponse {
   status: string;
+}
+
+export interface HistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface HistoryResponse {
+  session_id: string;
+  messages: HistoryMessage[];
 }
 
 export type ApiErrorCode =

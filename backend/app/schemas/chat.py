@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -8,6 +10,8 @@ class HealthResponse(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     session_id: str | None = None
+    # Optional JPEG data-uri; when present the turn is answered by the VLM.
+    image: str | None = None
 
     @field_validator("message")
     @classmethod
@@ -20,6 +24,16 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     session_id: str
+
+
+class HistoryMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class HistoryResponse(BaseModel):
+    session_id: str
+    messages: list[HistoryMessage]
 
 
 class ErrorDetail(BaseModel):

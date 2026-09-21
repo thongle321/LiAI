@@ -104,6 +104,7 @@ export function ReadyModels({
   const {
     models,
     remoteApis,
+    remoteCaps,
     activeModelId,
     setActiveModel,
     setActiveRemoteApi,
@@ -150,6 +151,9 @@ export function ReadyModels({
                     <View className="px-1.5 py-0.5 bg-green-500/20 border border-green-500/50 rounded">
                       <Text className="font-sans text-xs text-green-500">Active</Text>
                     </View>
+                  )}
+                  {!isActive && remoteCaps[item.id]?.reachable === false && (
+                    <Chip label="Unreachable" />
                   )}
                 </View>
               </View>

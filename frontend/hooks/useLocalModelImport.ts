@@ -8,10 +8,12 @@ import * as DocumentPicker from "expo-document-picker";
 import * as LegacyFileSystem from "expo-file-system/legacy";
 
 import { numberedFileName } from "../lib/local-model.ts";
+import { useLoadGuard } from "./useLoadGuard.ts";
 import { useModelStore } from "../store/modelStore";
 
 export function useLocalModelImport(): () => Promise<void> {
   const addLocalModel = useModelStore((s) => s.addLocalModel);
+  const guard = useLoadGuard();
 
   return async function importLocalModel(): Promise<void> {
     const res = await DocumentPicker.getDocumentAsync({
@@ -42,8 +44,18 @@ export function useLocalModelImport(): () => Promise<void> {
       }
     }
 
+    const size = asset.size ?? 0;
+    const confirmed = await new Promise<boolean>((resolve) => {
+      guard(
+        size,
+        () => resolve(true),
+        () => resolve(false),
+      );
+    });
+    if (!confirmed) return;
+
     try {
-      await addLocalModel(asset.uri, fileName, asset.size ?? 0);
+      await addLocalModel(asset.uri, fileName, size);
     } catch {
       Alert.alert("Import failed", "Could not copy the file into models.");
     }

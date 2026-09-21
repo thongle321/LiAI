@@ -7,6 +7,7 @@ import {
   upgradeModelList,
   upgradeModelSpec,
   upgradeRemoteApis,
+  upgradeRemoteCaps,
 } from "../lib/model-upgrade.ts";
 import { HF_TOKEN_SS_KEY, providerKeySS } from "../lib/secrets.ts";
 
@@ -60,8 +61,18 @@ describe("upgradeRemoteApis", () => {
   });
 });
 
-describe("secrets keys", () => {
-  it("namespaces per provider", () => {
+describe("upgradeRemoteCaps", () => {
+  it("keeps valid snapshots, drops malformed", () => {
+    const out = upgradeRemoteCaps({
+      p1: { reachable: false, checkedAt: 123 },
+      p2: { reachable: "yes" },
+    });
+    assert.deepEqual(out, { p1: { reachable: false, checkedAt: 123 } });
+    assert.deepEqual(upgradeRemoteCaps(null), {});
+  });
+});
+
+describe("secrets keys", () => {  it("namespaces per provider", () => {
     assert.equal(providerKeySS("abc"), "liai_provider_key_abc");
     assert.equal(HF_TOKEN_SS_KEY, "liai_hf_token");
   });

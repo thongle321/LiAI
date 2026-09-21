@@ -14,6 +14,7 @@ import {
 import { ChevronDown, Lock, X } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
+import { useLoadGuard } from "../hooks/useLoadGuard.ts";
 import { useModelStore } from "../store/modelStore";
 import type { HFModelFile } from "../types/models";
 import {
@@ -30,6 +31,7 @@ export function HFExplore({
   onClose?: () => void;
 }) {
   const { searchModels, searchResults, searchLoading, searchError, getModelFiles, startDownload, hfToken, setHfToken } = useModelStore();
+  const guard = useLoadGuard();
   const [query, setQuery] = useState("");
   const [expandedModel, setExpandedModel] = useState<string | null>(null);
   const [modelFiles, setModelFiles] = useState<Record<string, HFModelFile[]>>({});
@@ -161,7 +163,11 @@ export function HFExplore({
                           file={file}
                           status="idle"
                           progress={0}
-                          onPress={() => startDownload(item.modelId, file, hfToken || undefined)}
+                          onPress={() =>
+                            guard(file.size, () =>
+                              startDownload(item.modelId, file, hfToken || undefined),
+                            )
+                          }
                         />
                       </View>
                     </View>

@@ -112,6 +112,12 @@ export interface RemoteApiProvider {
   isActive: boolean;
 }
 
+/** Probed capability snapshot per provider (PocketPal remoteCaps parity). */
+export interface RemoteCaps {
+  reachable: boolean;
+  checkedAt: number;
+}
+
 /** Per-model overrides edited on the Models screen. */
 export interface ModelSettings {
   displayName: string;

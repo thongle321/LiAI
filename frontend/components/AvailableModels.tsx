@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 import { formatParams } from "../lib/model-providers.ts";
+import { useLoadGuard } from "../hooks/useLoadGuard.ts";
 import { useModelStore } from "../store/modelStore";
 import type { PresetModel, PresetModelFile } from "../types/models";
 import {
@@ -146,6 +147,7 @@ export function AvailableModels({
   onDownload: (modelId: string, file: PresetModelFile) => void;
 }) {
   const { presets } = useModelStore();
+  const guard = useLoadGuard();
   return (
     <ModelGroup
       title="Available to download"
@@ -154,7 +156,11 @@ export function AvailableModels({
       onToggle={onToggle}
     >
       {presets.map((item) => (
-        <PresetModelCard key={item.id} preset={item} onDownload={onDownload} />
+        <PresetModelCard
+          key={item.id}
+          preset={item}
+          onDownload={(modelId, file) => guard(file.size, () => onDownload(modelId, file))}
+        />
       ))}
     </ModelGroup>
   );

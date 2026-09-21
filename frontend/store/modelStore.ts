@@ -13,12 +13,13 @@ import type {
   HFModelSearchResult,
   HFModelFile,
   RemoteApiProvider,
+  RemoteCaps,
   ModelDownloadStatus,
 } from "../types/models";
 import { DEFAULT_MODEL_SETTINGS, parseModelSettings, parseModelSettingsMap } from "../lib/model-settings";
 import { buildLocalModelSpec } from "../lib/local-model";
 import { HF_TOKEN_SS_KEY, providerKeySS } from "../lib/secrets";
-import { upgradeModelList, upgradeRemoteApis } from "../lib/model-upgrade";
+import { upgradeModelList, upgradeRemoteApis, upgradeRemoteCaps } from "../lib/model-upgrade";
 import { modelSourceStrategies, getStrategyById } from "../services/model-strategies";
 import { downloadService } from "../services/download";
 import { uploadService } from "../services/transfer";
@@ -28,6 +29,8 @@ const ACTIVE_MODEL_KEY = "liai_active_model_v1";
 const REMOTE_APIS_KEY = "liai_remote_apis_v1";
 const HF_TOKEN_KEY = "liai_hf_token_v1"; // legacy AsyncStorage location (migrated to SecureStore)
 const MODEL_SETTINGS_KEY = "liai_model_settings_v1";
+const MEMORY_GUARD_KEY = "liai_memory_guard_v1";
+const REMOTE_CAPS_KEY = "liai_remote_caps_v1";
 
 async function secureStore(): Promise<typeof import("expo-secure-store")> {
   return await import("expo-secure-store");
@@ -96,11 +99,20 @@ export interface ModelState {
   // Download state (mirrored from downloadService)
   activeDownloads: Map<string, ModelDownloadStatus>;
 
+  // Load-guard learned ceiling (PocketPal largestSuccessfulLoad parity)
+  largestSuccessfulBytes: number;
+
+  // Probed provider snapshots + privacy notice (remoteCaps parity)
+  remoteCaps: Record<string, RemoteCaps>;
+  privacyAcknowledged: boolean;
+
   // Actions
   loadPersisted: () => Promise<void>;
   saveModels: () => Promise<void>;
   saveRemoteApis: () => Promise<void>;
   saveModelSettings: () => Promise<void>;
+  saveMemoryGuard: () => Promise<void>;
+  saveRemoteCaps: () => Promise<void>;
 
   // Model management
   addModel: (model: ModelSpec) => void;
@@ -134,6 +146,8 @@ export interface ModelState {
   updateRemoteApi: (providerId: string, updates: Partial<RemoteApiProvider>) => Promise<void>;
   setActiveRemoteApi: (providerId: string | null) => void;
   validateRemoteApi: (provider: RemoteApiProvider) => Promise<boolean>;
+  validateAndRecord: (provider: RemoteApiProvider) => Promise<boolean>;
+  acknowledgePrivacy: () => void;
 
   // Active model selection
   setActiveModel: (modelId: string | null, providerType?: "local" | "remote") => void;
@@ -164,16 +178,21 @@ export const useModelStore = create<ModelState>()((set, get) => ({
   searchLoading: false,
   searchError: null,
   activeDownloads: new Map(),
+  largestSuccessfulBytes: 0,
+  remoteCaps: {},
+  privacyAcknowledged: false,
 
   // Persistence
   loadPersisted: async () => {
     try {
-      const [modelsRaw, apisRaw, legacyTokenRaw, activeRaw, settingsRaw] = await Promise.all([
+      const [modelsRaw, apisRaw, legacyTokenRaw, activeRaw, settingsRaw, guardRaw, capsRaw] = await Promise.all([
         asyncStorage.getItem(STORAGE_KEY),
         asyncStorage.getItem(REMOTE_APIS_KEY),
         asyncStorage.getItem(HF_TOKEN_KEY),
         asyncStorage.getItem(ACTIVE_MODEL_KEY),
         asyncStorage.getItem(MODEL_SETTINGS_KEY),
+        asyncStorage.getItem(MEMORY_GUARD_KEY),
+        asyncStorage.getItem(REMOTE_CAPS_KEY),
       ]);
 
       if (modelsRaw) {
@@ -246,6 +265,28 @@ export const useModelStore = create<ModelState>()((set, get) => ({
 
       set({ modelSettings: parseModelSettingsMap(settingsRaw) });
 
+      try {
+        const guard = guardRaw ? JSON.parse(guardRaw) : 0;
+        if (typeof guard === "number" && Number.isFinite(guard) && guard > 0) {
+          set({ largestSuccessfulBytes: guard });
+        }
+      } catch {
+        // Ignore corrupt guard value.
+      }
+
+      try {
+        const capsRawParsed: unknown = capsRaw ? JSON.parse(capsRaw) : null;
+        if (capsRawParsed && typeof capsRawParsed === "object") {
+          const payload = capsRawParsed as Record<string, unknown>;
+          set({
+            remoteCaps: upgradeRemoteCaps(payload.caps),
+            privacyAcknowledged: payload.privacyAcknowledged === true,
+          });
+        }
+      } catch {
+        // Ignore corrupt caps value.
+      }
+
       // Load presets
       await get().loadPresets();
     } catch (e) {
@@ -280,6 +321,28 @@ export const useModelStore = create<ModelState>()((set, get) => ({
       await asyncStorage.setItem(MODEL_SETTINGS_KEY, JSON.stringify(get().modelSettings));
     } catch (e) {
       console.warn("Failed to save model settings:", e);
+    }
+  },
+
+  saveMemoryGuard: async () => {
+    try {
+      await asyncStorage.setItem(MEMORY_GUARD_KEY, JSON.stringify(get().largestSuccessfulBytes));
+    } catch (e) {
+      console.warn("Failed to save memory guard:", e);
+    }
+  },
+
+  saveRemoteCaps: async () => {
+    try {
+      await asyncStorage.setItem(
+        REMOTE_CAPS_KEY,
+        JSON.stringify({
+          caps: get().remoteCaps,
+          privacyAcknowledged: get().privacyAcknowledged,
+        }),
+      );
+    } catch (e) {
+      console.warn("Failed to save remote caps:", e);
     }
   },
 
@@ -474,6 +537,11 @@ export const useModelStore = create<ModelState>()((set, get) => ({
           downloadedBytes: downloadJob.totalBytes,
           localPath: downloadJob.destinationPath,
         });
+        // ponytail: learn the ceiling from what actually succeeded.
+        if (downloadJob.totalBytes > get().largestSuccessfulBytes) {
+          set({ largestSuccessfulBytes: downloadJob.totalBytes });
+          get().saveMemoryGuard();
+        }
       } else {
         get().updateModel(modelId, {
           downloadStatus: "failed",
@@ -619,6 +687,23 @@ export const useModelStore = create<ModelState>()((set, get) => ({
       return strategy.validateRemoteApi(provider);
     }
     return false;
+  },
+
+  validateAndRecord: async (provider) => {
+    const ok = await get().validateRemoteApi(provider);
+    set((state) => ({
+      remoteCaps: {
+        ...state.remoteCaps,
+        [provider.id]: { reachable: ok, checkedAt: Date.now() },
+      },
+    }));
+    get().saveRemoteCaps();
+    return ok;
+  },
+
+  acknowledgePrivacy: () => {
+    set({ privacyAcknowledged: true });
+    get().saveRemoteCaps();
   },
 
   // Active model selection

@@ -8,6 +8,7 @@ import type {
   ModelDownloadStatus,
   ModelSpec,
   RemoteApiProvider,
+  RemoteCaps,
 } from "../types/models";
 
 const STATUSES: ModelDownloadStatus[] = [
@@ -101,6 +102,22 @@ export function upgradeModelList(raw: unknown): ModelSpec[] {
   for (const entry of raw) {
     const upgraded = upgradeModelSpec(entry);
     if (upgraded) out.push(upgraded);
+  }
+  return out;
+}
+
+/** Upgrade a persisted caps map; drops malformed entries. */
+export function upgradeRemoteCaps(raw: unknown): Record<string, RemoteCaps> {
+  const v = asRecord(raw);
+  if (!v) return {};
+  const out: Record<string, RemoteCaps> = {};
+  for (const [key, entry] of Object.entries(v)) {
+    const r = asRecord(entry);
+    if (!r || typeof r.reachable !== "boolean") continue;
+    out[key] = {
+      reachable: r.reachable,
+      checkedAt: asNumber(r.checkedAt, 0),
+    };
   }
   return out;
 }

@@ -27,7 +27,7 @@ export function RemoteApiModal({
   showModal: boolean;
   setShowModal: (v: boolean) => void;
 }) {
-  const { addRemoteApi, validateRemoteApi } = useModelStore();
+  const { addRemoteApi, validateAndRecord, privacyAcknowledged, acknowledgePrivacy } = useModelStore();
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -52,12 +52,13 @@ export function RemoteApiModal({
       isActive: false,
     };
 
-    const isValid = await validateRemoteApi(provider);
+    const isValid = await validateAndRecord(provider);
     if (!isValid) {
       Alert.alert("Warning", "Could not validate API endpoint. Adding anyway.");
     }
 
     addRemoteApi(provider);
+    acknowledgePrivacy();
     setShowModal(false);
     setName("");
     setBaseUrl("");
@@ -77,8 +78,13 @@ export function RemoteApiModal({
             </Pressable>
           </View>
 
-          <View className="flex-col gap-4">
-            <View>
+            <View className="flex-col gap-4">
+              {!privacyAcknowledged && (
+                <Text className="font-sans text-body-sm text-secondary-text">
+                  API keys stay on this device in encrypted storage.
+                </Text>
+              )}
+              <View>
               <Text className="font-sans text-body-sm text-secondary-text mb-1">Provider Type</Text>
               <View className="flex-row gap-2">
                 <Pressable

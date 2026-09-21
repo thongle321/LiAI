@@ -3,7 +3,7 @@
 import { ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { colors, spacing } from "../themes/tokens.ts";
+import { colors } from "../themes/tokens.ts";
 import { ScreenHeader } from "../components/ScreenHeader.tsx";
 import { VoiceSettings } from "../components/VoiceSettings.tsx";
 import { SearchSettings } from "../components/SearchSettings.tsx";
@@ -14,7 +14,7 @@ export default function SettingsScreen() {
       <ScreenHeader title="Settings" />
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ padding: spacing.md }}
+        contentContainerClassName="p-4"
       >
         <VoiceSettings />
         <SearchSettings />

@@ -40,7 +40,7 @@ export default function OnboardingScreen() {
   if (!checked) return null;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#0B0C0C" }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
       <View className="flex-1 justify-center px-8">
         <Text className="text-center font-sans-semibold text-h1 text-primary">
           {APP_NAME}

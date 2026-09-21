@@ -1,8 +1,8 @@
 /** Resumable download service using expo-file-system DownloadTask. */
 
 import { File, Directory, Paths, DownloadTask, DownloadProgress } from "expo-file-system";
-import { makeDirectoryAsync, deleteAsync } from "expo-file-system/legacy";
-import type { DownloadJob, ModelDownloadStatus } from "../../types/models";
+import { makeDirectoryAsync, deleteAsync, documentDirectory } from "expo-file-system/legacy";
+import type { DownloadJob } from "../types/models.ts";
 
 export interface DownloadProgressCallback {
   (job: DownloadJob): void;
@@ -14,8 +14,7 @@ export interface DownloadCompleteCallback {
 
 function getModelsDirectoryPath(): string {
   // Use legacy documentDirectory for string path operations
-  const { documentDirectory } = require("expo-file-system/legacy");
-  return documentDirectory + "models/";
+  return (documentDirectory ?? "") + "models/";
 }
 
 function getModelsDirectory(): Directory {

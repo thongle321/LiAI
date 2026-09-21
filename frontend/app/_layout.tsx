@@ -8,6 +8,8 @@ import {
 } from "@expo-google-fonts/raleway";
 import { Uniwind } from "uniwind";
 
+import { colors } from "../themes/tokens.ts";
+
 // Dark-only app (design_system.png): lock theme so device light mode
 // can't wash out the dystopian palette.
 Uniwind.setTheme("dark");
@@ -27,7 +29,7 @@ export default function RootLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: "#0B0C0C" },
+        contentStyle: { backgroundColor: colors.base },
       }}
     >
       <Stack.Screen name="index" />

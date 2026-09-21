@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react-native";
 
-import { colors, spacing } from "../themes/tokens.ts";
+import { colors } from "../themes/tokens.ts";
 import { ScreenHeader } from "../components/ScreenHeader.tsx";
 import { ModelsHeaderMenu } from "../components/ModelsHeaderMenu.tsx";
 import { FabAction } from "../components/ModelsPanels.tsx";
@@ -71,7 +71,7 @@ export default function ModelsScreen() {
       <View className="flex-1">
         <ScrollView
           className="flex-1"
-          contentContainerStyle={{ padding: spacing.md, paddingBottom: 120 }}
+          contentContainerClassName="p-4 pb-[120px]"
         >
           {readyVisible && (
             <ReadyModels
@@ -115,7 +115,7 @@ export default function ModelsScreen() {
         <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
           <ScrollView
             className="flex-1"
-            contentContainerStyle={{ padding: spacing.md }}
+            contentContainerClassName="p-4"
             keyboardShouldPersistTaps="handled"
           >
             <HFExplore onClose={() => setHfOpen(false)} />

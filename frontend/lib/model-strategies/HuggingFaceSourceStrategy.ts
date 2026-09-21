@@ -8,11 +8,28 @@ import type {
   HFModelFile,
   RemoteApiProvider,
   ModelType,
-} from "../../types/models";
+} from "../../types/models.ts";
 import { ModelSourceStrategy } from "./ModelSourceStrategy";
 
 const HF_API_BASE = "https://huggingface.co/api";
 const HF_HUB_BASE = "https://huggingface.co";
+
+/** Minimal shape of the HF models API we actually read. */
+interface HFSearchItem {
+  modelId: string;
+  cardData?: { description?: string };
+  tags?: string[];
+  downloads?: number;
+  likes?: number;
+  private?: boolean;
+}
+
+/** Minimal shape of the HF tree API we actually read. */
+interface HFTreeItem {
+  type?: string;
+  path: string;
+  size?: number;
+}
 
 export class HuggingFaceSourceStrategy implements ModelSourceStrategy {
   readonly id = "huggingface";
@@ -161,10 +178,10 @@ export class HuggingFaceSourceStrategy implements ModelSourceStrategy {
       throw new Error(`HF search failed: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as HFSearchItem[];
     return data
-      .filter((m: any) => m.private === false)
-      .map((m: any) => ({
+      .filter((m) => m.private === false)
+      .map((m) => ({
         modelId: m.modelId,
         author: m.modelId.split("/")[0],
         name: m.modelId.split("/")[1],
@@ -196,10 +213,10 @@ export class HuggingFaceSourceStrategy implements ModelSourceStrategy {
       throw new Error(`Failed to fetch model files: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as HFTreeItem[];
     return data
-      .filter((f: any) => f.type === "file" && f.path.toLowerCase().endsWith(".gguf"))
-      .map((f: any) => ({
+      .filter((f) => f.type === "file" && f.path.toLowerCase().endsWith(".gguf"))
+      .map((f) => ({
         name: f.path.split("/").pop() || f.path,
         size: f.size || 0,
         path: f.path,
@@ -207,7 +224,7 @@ export class HuggingFaceSourceStrategy implements ModelSourceStrategy {
       }));
   }
 
-  resolveDownloadUrl(modelId: string, fileName: string, token?: string): string {
+  resolveDownloadUrl(modelId: string, fileName: string): string {
     // The token is added as a header during download, not in URL
     return `${HF_HUB_BASE}/${modelId}/resolve/main/${fileName}`;
   }
@@ -220,7 +237,6 @@ export class HuggingFaceSourceStrategy implements ModelSourceStrategy {
   createModelSpecFromHF(
     hfResult: HFModelSearchResult,
     file: HFModelFile,
-    token?: string,
   ): ModelSpec {
     return {
       id: `hf-${hfResult.modelId}-${file.name}`,
@@ -233,7 +249,7 @@ export class HuggingFaceSourceStrategy implements ModelSourceStrategy {
         {
           name: file.name,
           size: file.size,
-          downloadUrl: this.resolveDownloadUrl(hfResult.modelId, file.path, token),
+          downloadUrl: this.resolveDownloadUrl(hfResult.modelId, file.path),
         },
       ],
       downloadStatus: "idle",

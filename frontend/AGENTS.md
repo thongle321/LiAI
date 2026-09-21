@@ -50,6 +50,17 @@ The mobile application is responsible for:
 - expo-speech-recognition (voice input, approved)
 - expo-speech (voice output, approved)
 
+- expo-font + @expo-google-fonts/raleway (Raleway type scale, approved)
+
+- react-native-reanimated (+ worklets peer, motion, approved)
+
+- expo-file-system (+ legacy API, model files/downloads/uploads, approved)
+- expo-document-picker (local model import, approved)
+- expo-secure-store (user-provided secret keys, approved)
+
+- expo-linking + expo-constants (settings deep-link, app metadata)
+- tailwindcss (+ @tailwindcss/postcss, Uniwind build peers)
+
 ### Dependency Policy
 
 Do not introduce new major libraries unless there is a strong reason.
@@ -89,12 +100,8 @@ Do not install new libraries without approval.
 Use this folder structure:
 
 ```
-
-app/
-
- (auth)/
-
- (tabs)/
+ 
+app/  (flat route screens + _layout.tsx; no route groups)
 
 components/
 
@@ -124,8 +131,14 @@ reused in multiple places, when it makes a screen easier to read, or
 when it represents a clear UI concept. Examples for this app:
 Bubble, BottomNav, InteractionPanel. Do not create components too early.
 **store/** holds Zustand stores. Examples of state to keep here:
-chat messages, session id, connection, sending flag. Persist with AsyncStorage when needed.
-**lib/** holds external service helpers (api.ts, cn.ts).
+chat messages, session id, connection, sending flag. Persist prefs and
+UI state with AsyncStorage; persist user-provided secret keys
+(HF token, provider keys) with SecureStore only, never AsyncStorage.
+**lib/** holds pure tested helpers (format.ts, load-guard.ts,
+model-settings.ts), external service clients (api.ts,
+download-service.ts, upload-service.ts, model-strategies/),
+and device I/O adapters (snapshot.ts, voiceSpeak.ts, motion.ts).
+A cohesive group may live in a `lib/<name>/` subfolder.
 Never expose secret keys here.
 ---
 
@@ -181,6 +194,15 @@ Use StyleSheet or inline styles for:
 - Pressable or TouchableOpacity pressed states
 
 - Shadows (different per platform)
+
+- Navigator props with no className equivalent (e.g. Stack
+  screenOptions contentStyle)
+
+- Third-party native components that do not accept className
+  (e.g. vision-camera Camera) — verify on device before swapping
+
+- ScrollView/FlatList content: use Uniwind `contentContainerClassName`
+  (supported by the installed Uniwind), not `contentContainerStyle`
   Everywhere else, use Uniwind.
 
 ---
@@ -217,7 +239,9 @@ Do not import image assets directly inside screens or components.
 
 - Local state for temporary UI state.
 
-- AsyncStorage for persistence.
+- AsyncStorage for prefs and UI state.
+
+- SecureStore for user-provided secret keys. Never AsyncStorage.
 
 ---
 
@@ -247,13 +271,15 @@ When building a feature:
 
 6. Make sure the feature works end to end.
 
-7. Fix lint and type errors before finishing.
+7. Run `npm run typecheck` and `npm test` before finishing.
 
 ---
 
 ## Secrets
 
 - Never expose secret keys in client code.
+
+- Store user-provided keys (HF token, provider keys) in SecureStore.
 
 - Use server routes for tokens, AI calls, and any external API access.
 

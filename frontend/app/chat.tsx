@@ -62,7 +62,7 @@ export default function ChatScreen() {
   }, [visibleMessages.length, motionDuration]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#0B0C0C" }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
       <View className="flex-row items-center border-b border-border bg-base px-4 py-3">
         <View className="w-16 flex-row items-center">
           <Pressable onPress={() => setDrawerOpen(true)} className="px-1 py-1">

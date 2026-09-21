@@ -1,10 +1,9 @@
 /** LiAI design tokens — TS mirror of `global.css`.
  *
  * Source of truth for styling is `global.css` (`@theme` + `@layer theme`);
- * this file mirrors the same values for JS-only use (chart configs,
+ * this file mirrors the same values for JS-only use (icon colors,
  * third-party props, `useCSSVariable` guards). Keep the two in sync.
- * Font is system-ui until expo-font + Raleway is approved (see AGENTS.md
- * dependency policy); then swap `font.sans` to 'Raleway' + load in _layout.
+ * Font is Raleway, loaded via expo-font in app/_layout.tsx.
  */
 
 export const colors = {

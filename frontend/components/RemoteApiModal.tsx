@@ -14,7 +14,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { X } from "lucide-react-native";
+import { CheckCircle2, Circle, X } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 import { useModelStore } from "../store/modelStore";
@@ -95,9 +95,16 @@ export function RemoteApiModal({
                       : "border-border"
                   }`}
                 >
-                  <Text className="font-sans text-body-sm text-center">
-                    {providerType === "openrouter" ? "●" : "○"} OpenRouter
-                  </Text>
+                  <View className="flex-row items-center justify-center gap-1.5">
+                    {providerType === "openrouter" ? (
+                      <CheckCircle2 size={14} color={colors.primary} />
+                    ) : (
+                      <Circle size={14} color={colors.secondaryText} />
+                    )}
+                    <Text className="font-sans text-body-sm text-primary-text">
+                      OpenRouter
+                    </Text>
+                  </View>
                 </Pressable>
                 <Pressable
                   onPress={() => setProviderType("custom_openai")}
@@ -107,9 +114,16 @@ export function RemoteApiModal({
                       : "border-border"
                   }`}
                 >
-                  <Text className="font-sans text-body-sm text-center">
-                    {providerType === "custom_openai" ? "●" : "○"} Custom OpenAI
-                  </Text>
+                  <View className="flex-row items-center justify-center gap-1.5">
+                    {providerType === "custom_openai" ? (
+                      <CheckCircle2 size={14} color={colors.primary} />
+                    ) : (
+                      <Circle size={14} color={colors.secondaryText} />
+                    )}
+                    <Text className="font-sans text-body-sm text-primary-text">
+                      Custom OpenAI
+                    </Text>
+                  </View>
                 </Pressable>
               </View>
             </View>

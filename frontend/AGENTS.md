@@ -54,6 +54,7 @@ The mobile application is responsible for:
 - expo-font + @expo-google-fonts/raleway (Raleway type scale, approved)
 
 - react-native-reanimated (+ worklets peer, motion, approved)
+- react-native-worklets-core (frame-processor JS bridge for vision-camera 4.x, approved)
 
 - expo-file-system (+ legacy API, model files/downloads/uploads, approved)
 - expo-document-picker (local model import, approved)

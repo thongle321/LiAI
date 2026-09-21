@@ -15,7 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { Camera } from "react-native-vision-camera";
 import { runAtTargetFps, useFrameProcessor } from "react-native-vision-camera";
-import { scheduleOnRN } from "react-native-worklets";
+import { useRunOnJS } from "react-native-worklets-core";
 import { useIsFocused } from "expo-router";
 
 import { snapshotToBase64 } from "../lib/snapshot.ts";
@@ -87,14 +87,19 @@ export function useVisionStream(
 
   /** Cadence lives on the frame pipeline: ticks arrive only while the
    * camera delivers frames, at most 2/s. Size parity holds by
-   * construction — capture is the same quality-50 snapshot as before. */
+   * construction — capture is the same quality-50 snapshot as before.
+   *
+   * The hop back to JS uses worklets-core's bridge (not worklets 0.10's
+   * scheduleOnRN): vision-camera 4.7.3 drives its frame-processor runtime
+   * with -core, whose bridge is the one installed there. */
+  const fireOnJS = useRunOnJS(fire, [fire]);
   const frameProcessor = useFrameProcessor(() => {
     "worklet";
     runAtTargetFps(2, () => {
       "worklet";
-      scheduleOnRN(fire);
+      void fireOnJS();
     });
-  }, [fire]);
+  }, [fireOnJS]);
 
   useEffect(() => {
     if (!focused) return;

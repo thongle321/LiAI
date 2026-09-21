@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 import app.realtime.vlm as vlm
+from app.agents.companion import get_companion_agent as real_agent
 from app.main import app
 from app.memory import get_store
 
@@ -140,10 +141,16 @@ def test_lifespan_boots_with_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_lifespan_fails_fast_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    from conftest import _route_all
     from pydantic_ai.exceptions import UserError
 
     from app.main import app as app_module
+    from app.providers.factory import ProviderStrategyFactory
 
+    # Route in-body with the genuine factory (bound at import, pre-patch):
+    # all fixtures run before us, so this wins over the autouse echo.
+    _route_all(monkeypatch, real_agent)
+    ProviderStrategyFactory.clear_cache()
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)

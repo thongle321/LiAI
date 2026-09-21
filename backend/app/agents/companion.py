@@ -7,6 +7,7 @@ from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
     TextPart,
+    ToolCallPart,
     UserPromptPart,
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
@@ -37,16 +38,36 @@ def persist_turn(
     session_id: str | None,
     user_text: str,
     reply: str,
+    tool_names: list[str] | None = None,
 ) -> str:
     """One stored turn: mint the session when needed, then user + final text.
 
     The single place both chat routes persist, so tool internals can
-    never land in history — only the text the mobile bubble rendered.
+    never land in history content — only the text the mobile bubble rendered.
+    Structural tool *names* may ride in assistant metadata (never args or
+    results); readers that replay history ignore metadata entirely.
     """
     session_id = session_id or store.create()
     store.append(session_id, Turn(role="user", content=user_text))
-    store.append(session_id, Turn(role="assistant", content=reply))
+    store.append(
+        session_id,
+        Turn(
+            role="assistant",
+            content=reply,
+            metadata={"tool_calls": tool_names} if tool_names else None,
+        ),
+    )
     return session_id
+
+
+def tool_names(messages: list[ModelMessage]) -> list[str]:
+    """Tool names invoked across agent messages, in order, deduplicated."""
+    names: list[str] = []
+    for message in messages:
+        for part in message.parts:
+            if isinstance(part, ToolCallPart) and part.tool_name not in names:
+                names.append(part.tool_name)
+    return names
 
 
 def latest_user_text(messages: list[ModelMessage]) -> str:

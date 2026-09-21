@@ -66,23 +66,23 @@ def route_agent(monkeypatch: pytest.MonkeyPatch, clock: Callable[[], str]) -> No
     """
     from conftest import EchoProvider
     from pydantic_ai.models.function import FunctionModel
+    import app.agents as agents_module
+    import app.agents.companion as companion_module
 
     provider = EchoProvider()
     monkeypatch.setattr(
         provider, "create_tool_model", lambda: FunctionModel(tool_calling_model)
     )
     real_factory = get_companion_agent
-    monkeypatch.setattr(
-        main,
-        "get_companion_agent",
-        lambda _provider=None, **kwargs: real_factory(
-            provider, **{**kwargs, "clock": clock}
-        ),
-    )
+
+    def tool_factory(_provider=None, **kwargs):
+        return real_factory(provider, **{**kwargs, "clock": clock})
+
+    for target in (main, agents_module, companion_module):
+        monkeypatch.setattr(target, "get_companion_agent", tool_factory)
 
 
-def post_time_question(monkeypatch: pytest.MonkeyPatch, clock: Callable[[], str]) -> dict:
-    route_agent(monkeypatch, clock)
+def post_time_question(clock: Callable[[], str]) -> dict:
     resp = client.post("/api/chat", json={"message": TIME_QUESTION})
     assert resp.status_code == 200
     body = resp.json()
@@ -91,13 +91,12 @@ def post_time_question(monkeypatch: pytest.MonkeyPatch, clock: Callable[[], str]
 
 
 def test_time_question_returns_tool_result(monkeypatch: pytest.MonkeyPatch) -> None:
-    body = post_time_question(monkeypatch, lambda: FIXED_TIME)
+    route_agent(monkeypatch, lambda: FIXED_TIME)
+    body = post_time_question(lambda: FIXED_TIME)
     assert FIXED_TIME in str(body["reply"])
 
 
-def test_tool_failure_is_llm_error_envelope(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_tool_failure_is_llm_error_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
     def broken_clock() -> str:
         raise RuntimeError("clock down")
 
@@ -107,10 +106,8 @@ def test_tool_failure_is_llm_error_envelope(
     assert resp.json()["error"]["code"] == "llm_error"
 
 
-def test_tool_turn_stores_only_final_text(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    body = post_time_question(monkeypatch, lambda: FIXED_TIME)
+def test_tool_turn_stores_only_final_text(tool_agent) -> None:
+    body = post_time_question(lambda: FIXED_TIME)
     turns = get_store().get(str(body["session_id"]))
     assert turns is not None and len(turns) == 2
     assert turns[0].role == "user" and turns[0].content == TIME_QUESTION

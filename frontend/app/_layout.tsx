@@ -36,8 +36,12 @@ export default function RootLayout() {
           static when moving between tabs. */}
       <Stack.Screen name="chat" options={{ animation: "none" }} />
       <Stack.Screen name="voice" options={{ animation: "none" }} />
+      {/* Standalone vision screen: same instant-switch discipline —
+          the camera fades itself in, nothing else moves. */}
+      <Stack.Screen name="vision" options={{ animation: "none" }} />
       <Stack.Screen name="settings" />
       <Stack.Screen name="about" />
+      <Stack.Screen name="models" />
     </Stack>
   );
 }

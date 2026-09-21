@@ -44,6 +44,12 @@ interface ChatState {
   newConversation: () => Promise<void>;
   switchSession: (sessionId: string) => Promise<boolean>;
   deleteSession: (sessionId: string) => Promise<void>;
+  recordVisionTurn: (
+    question: string,
+    answer: string,
+    sessionId?: string,
+    image?: string,
+  ) => Promise<void>;
 }
 
 // ponytail: lazy import keeps the native module out of plain-Node tests;
@@ -239,6 +245,30 @@ export function createChatStore(storage: KeyValueStorage) {
           await storage.removeItem(SESSION_KEY);
           set({ sessionId: null, messages: [], sending: false });
         }
+      },
+
+      recordVisionTurn: async (question, answer, sessionId, image) => {
+        const nextSessionId = sessionId ?? get().sessionId;
+        const now = Date.now();
+        if (nextSessionId !== null && nextSessionId !== get().sessionId) {
+          await storage.setItem(SESSION_KEY, nextSessionId);
+        }
+        set((s) => ({
+          sessionId: nextSessionId,
+          sending: false,
+          messages: [
+            ...s.messages,
+            {
+              id: newId(),
+              role: "user",
+              text: question,
+              at: now,
+              ...(image !== undefined ? { image } : {}),
+            },
+            { id: newId(), role: "assistant", text: answer, at: now },
+          ],
+        }));
+        if (nextSessionId !== null) await touchSession(nextSessionId, question);
       },
     };
   });

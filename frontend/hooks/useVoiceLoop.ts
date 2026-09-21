@@ -6,7 +6,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useIsFocused } from "expo-router";
-import * as Speech from "expo-speech";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -15,6 +14,8 @@ import {
 import type { VoicePhase } from "../lib/voiceStatus.ts";
 import { bargeActionFor, isThrottlingError, isVoiceThrottled, setVoiceThrottled, voiceErrorAction } from "../lib/voiceStatus.ts";
 import { ensureMicAccess } from "../lib/micAccess.ts";
+import { speakReply, stopSpeaking } from "../lib/voiceSpeak.ts";
+import { useVoice } from "../store/voice.ts";
 import { VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
 import { useChatStore } from "../store/chat.ts";
 
@@ -56,14 +57,6 @@ export function useVoiceLoop() {
   function safeStopListen(): void {
     try {
       ExpoSpeechRecognitionModule.stop();
-    } catch {
-      // nothing live to stop
-    }
-  }
-
-  function safeStopSpeak(): void {
-    try {
-      void Speech.stop();
     } catch {
       // nothing live to stop
     }
@@ -181,31 +174,28 @@ export function useVoiceLoop() {
 
   function speak(text: string): void {
     if (!aliveRef.current) return;
-    safeStopSpeak();
+    stopSpeaking();
     setReply(text);
     setHeard("");
     setIssue(null);
-    setBoth("speaking");
-    try {
-      Speech.speak(text, {
-        language: "en-US",
-        onDone: () => {
-          if (aliveRef.current && phaseRef.current === "speaking") setBoth("idle");
-        },
-        onStopped: () => {
-          if (aliveRef.current && phaseRef.current === "speaking") setBoth("idle");
-        },
-        onError: () => {
-          if (!aliveRef.current) return;
-          setIssue("Couldn't play the reply. Try again.");
-          setBoth("idle");
-        },
-      });
-    } catch {
-      if (!aliveRef.current) return;
-      setIssue("Voice output isn't available in this build — rebuild the dev client.");
+    if (!useVoice.getState().autoSpeak) {
       setBoth("idle");
+      return;
     }
+    setBoth("speaking");
+    speakReply(text, {
+      onDone: () => {
+        if (aliveRef.current && phaseRef.current === "speaking") setBoth("idle");
+      },
+      onStopped: () => {
+        if (aliveRef.current && phaseRef.current === "speaking") setBoth("idle");
+      },
+      onError: () => {
+        if (!aliveRef.current) return;
+        setIssue("Couldn't play the reply. Try again.");
+        setBoth("idle");
+      },
+    });
   }
 
   /** Mic tap: begin from idle, stop back to idle — never auto-listen. */
@@ -221,7 +211,7 @@ export function useVoiceLoop() {
       case "ignore":
         return; // request in flight, nothing to cut yet
       case "interrupt":
-        safeStopSpeak();
+        stopSpeaking();
         setBoth("idle");
         return;
     }
@@ -257,7 +247,7 @@ export function useVoiceLoop() {
     return () => {
       aliveRef.current = false;
       safeStopListen();
-      safeStopSpeak();
+      stopSpeaking();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

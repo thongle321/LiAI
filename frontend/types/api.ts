@@ -9,6 +9,12 @@ export interface ChatRequest {
   session_id?: string;
   /** Optional JPEG data-uri; backend routes it to the VLM when present. */
   image?: string;
+  // Provider selection for dynamic model switching
+  provider_type?: "openrouter" | "custom_openai" | "local_gguf";
+  model_name?: string;
+  base_url?: string;
+  api_key?: string;
+  model_path?: string;
 }
 
 export interface ChatResponse {
@@ -38,7 +44,11 @@ export type ApiErrorCode =
   | "http_error"
   | "internal_error"
   | "network"
-  | "timeout";
+  | "timeout"
+  | "conflict"
+  | "upload_failed"
+  | "list_failed"
+  | "delete_failed";
 
 /** Stable error envelope: { error: { code, message } }. */
 export interface ApiError {
@@ -48,4 +58,14 @@ export interface ApiError {
 
 export interface ApiErrorResponse {
   error: ApiError;
+}
+
+export interface ModelUploadResponse {
+  filename: string;
+  size_bytes: number;
+  path: string;
+}
+
+export interface ModelListResponse {
+  models: string[];
 }

@@ -3,7 +3,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { getHealth, getHistory, postChat, resolveApiBaseUrl } from "../lib/api.ts";
+import {
+  getHealth,
+  getHistory,
+  postChat,
+  resolveApiBaseUrl,
+  runtimeHostUriFromModules,
+} from "../lib/api.ts";
 import type { ApiError } from "../types/api.ts";
 
 function mockFetch(
@@ -148,12 +154,24 @@ describe("resolveApiBaseUrl", () => {
       resolveApiBaseUrl("http://10.0.0.9:8000", "192.168.1.5:8081"),
       "http://10.0.0.9:8000",
     );
+    assert.equal(
+      resolveApiBaseUrl("192.168.1.174:8000", "192.168.1.5:8081"),
+      "http://192.168.1.174:8000",
+    );
   });
 
   it("derives the backend URL from the Metro host IP", () => {
     assert.equal(
       resolveApiBaseUrl(undefined, "192.168.100.195:8081"),
       "http://192.168.100.195:8000",
+    );
+    assert.equal(
+      resolveApiBaseUrl(undefined, "exp://192.168.100.196:8081"),
+      "http://192.168.100.196:8000",
+    );
+    assert.equal(
+      resolveApiBaseUrl(undefined, "http://192.168.100.197:8081/index.bundle"),
+      "http://192.168.100.197:8000",
     );
   });
 
@@ -166,6 +184,34 @@ describe("resolveApiBaseUrl", () => {
     assert.equal(
       resolveApiBaseUrl(undefined, "abcd1234.exp.direct:8081"),
       "http://localhost:8000",
+    );
+  });
+
+  it("reads the Expo dev-client host from runtime modules", () => {
+    assert.equal(
+      runtimeHostUriFromModules((name) =>
+        name === "expo-constants"
+          ? { default: { expoConfig: { hostUri: "192.168.10.7:8081" } } }
+          : null,
+      ),
+      "192.168.10.7:8081",
+    );
+  });
+
+  it("falls back to the React Native bundle URL", () => {
+    assert.equal(
+      runtimeHostUriFromModules((name) =>
+        name === "react-native"
+          ? {
+              NativeModules: {
+                SourceCode: {
+                  scriptURL: "http://192.168.20.8:8081/index.bundle?platform=android",
+                },
+              },
+            }
+          : null,
+      ),
+      "http://192.168.20.8:8081/index.bundle?platform=android",
     );
   });
 });

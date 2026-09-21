@@ -47,7 +47,13 @@ def test_sliding_window_caps_at_100_messages() -> None:
 
 
 def test_turns_are_framework_agnostic() -> None:
-    assert {f.name for f in dataclasses.fields(Turn)} == {"role", "content"}
+    # Plain-data turns only: role/content/type/metadata, no framework types.
+    assert {f.name for f in dataclasses.fields(Turn)} == {
+        "role",
+        "content",
+        "type",
+        "metadata",
+    }
 
 
 def test_adapter_converts_turns_to_history() -> None:

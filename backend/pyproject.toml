@@ -11,6 +11,7 @@ dependencies = [
     "ruff>=0.16.6",
     "huggingface-hub>=0.23.0",
     "pillow>=12.3.0",
+    "python-multipart>=0.0.9",
     # ponytail: version resolved to the machine-local CUDA wheel via
     # [tool.uv.sources] below (win/amd64, cu131); portable installs
     # should point it at an index release instead
@@ -29,7 +30,7 @@ testpaths = ["tests"]
 packages = ["app"]
 
 [tool.uv.sources]
-llama-cpp-python = { path = "./llama_cpp_python-0.3.49+cu131-cp312-cp312-win_amd64.whl" }
+llama-cpp-python = { path = "./llama_cpp_python-0.4.0+cu131-cp312-cp312-win_amd64.whl" }
 
 [build-system]
 requires = ["hatchling"]

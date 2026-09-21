@@ -1,12 +1,12 @@
 import os
 
-from pydantic_ai.messages import ModelRequest, TextPart, UserPromptPart
-from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.models.openrouter import OpenRouterModel
 from pydantic_ai.providers.openrouter import OpenRouterProvider
 
+from .base import CachedChatModel, request_text
 
-class OpenRouterChatProvider:
+
+class OpenRouterChatProvider(CachedChatModel):
     """OpenRouter via the official pydantic-ai-slim integration.
 
     Same ChatProvider seam as before; the hand-rolled httpx code is gone.
@@ -24,14 +24,10 @@ class OpenRouterChatProvider:
         self.model_name = (
             model or os.getenv("OPENROUTER_MODEL", "") or os.getenv("OPENAI_MODEL", "openai/gpt-4o-mini")
         )
-        self._model: OpenAIChatModel | None = None
 
-    def _get_model(self) -> OpenAIChatModel:
+    def _prepare(self) -> None:
         if not self.api_key:
             raise RuntimeError("OPENROUTER_API_KEY must be set")
-        if self._model is None:
-            self._model = OpenAIChatModel(self.model_name, provider=self._provider())
-        return self._model
 
     def _provider(self) -> OpenRouterProvider:
         return OpenRouterProvider(api_key=self.api_key)
@@ -43,13 +39,14 @@ class OpenRouterChatProvider:
         network calls until the first request. A missing/invalid key
         fails the turn and surfaces as llm_error 502 via main.py.
         """
+        if not self.api_key:
+            from pydantic_ai.exceptions import UserError
+            raise UserError(
+                "OPENROUTER_API_KEY must be set to use OpenRouter provider"
+            )
         return OpenRouterModel(self.model_name, provider=self._provider())
 
     async def reply(self, message: str) -> str:
-        response = await self._get_model().request(
-            ModelRequest(parts=[UserPromptPart(content=message)])
+        return await request_text(
+            self._get_model(), message, empty_error="OpenRouter returned no text"
         )
-        for part in response.parts:
-            if isinstance(part, TextPart):
-                return part.content
-        raise RuntimeError("OpenRouter returned no text")

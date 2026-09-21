@@ -1,7 +1,7 @@
 /** Versioned store upgrades: prune-and-reconcile persisted models/providers.
  *
- * Pure + tested. Idempotent: safe to run on every load. Bumped via
- * MODEL_STORE_VERSION when shapes change again.
+ * Pure + tested. Idempotent: runs unconditionally on every load, so no
+ * version key is persisted anywhere.
  */
 
 import type {
@@ -9,8 +9,6 @@ import type {
   ModelSpec,
   RemoteApiProvider,
 } from "../types/models";
-
-export const MODEL_STORE_VERSION = 1;
 
 const STATUSES: ModelDownloadStatus[] = [
   "idle",

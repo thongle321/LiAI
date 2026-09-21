@@ -4,18 +4,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  MODEL_STORE_VERSION,
   upgradeModelList,
   upgradeModelSpec,
   upgradeRemoteApis,
 } from "../lib/model-upgrade.ts";
 import { HF_TOKEN_SS_KEY, providerKeySS } from "../lib/secrets.ts";
-
-describe("MODEL_STORE_VERSION", () => {
-  it("is a positive integer", () => {
-    assert.equal(Number.isInteger(MODEL_STORE_VERSION) && MODEL_STORE_VERSION > 0, true);
-  });
-});
 
 describe("upgradeModelSpec", () => {
   it("prunes unrecognizable records", () => {

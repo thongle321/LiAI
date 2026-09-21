@@ -27,17 +27,27 @@ import { RemoteApiModal } from "../components/RemoteApiModal.tsx";
 import { ModelSettingsModal } from "../components/ModelSettingsModal.tsx";
 import { useLocalModelImport } from "../hooks/useLocalModelImport.ts";
 import { useModelStore } from "../store/modelStore";
+import { useModelsUi } from "../store/modelsUi.ts";
 
 export default function ModelsScreen() {
   const { loadPersisted, startDownload } = useModelStore();
   const importLocalModel = useLocalModelImport();
+  const {
+    readyVisible,
+    availableVisible,
+    readyOpen,
+    availableOpen,
+    load: loadUi,
+    setVisible,
+    setOpen,
+    setAllOpen,
+  } = useModelsUi();
 
   useEffect(() => {
     loadPersisted();
+    void loadUi();
   }, []);
 
-  const [visible, setVisible] = useState({ ready: true, available: true });
-  const [groupsOpen, setGroupsOpen] = useState({ ready: true, available: true });
   const [fabOpen, setFabOpen] = useState(false);
   const [hfOpen, setHfOpen] = useState(false);
   const [remoteModalOpen, setRemoteModalOpen] = useState(false);
@@ -49,12 +59,12 @@ export default function ModelsScreen() {
         title="Models"
         right={
           <ModelsHeaderMenu
-            readyVisible={visible.ready}
-            availableVisible={visible.available}
-            onToggleReady={() => setVisible((p) => ({ ...p, ready: !p.ready }))}
-            onToggleAvailable={() => setVisible((p) => ({ ...p, available: !p.available }))}
-            onExpandAll={() => setGroupsOpen({ ready: true, available: true })}
-            onCollapseAll={() => setGroupsOpen({ ready: false, available: false })}
+            readyVisible={readyVisible}
+            availableVisible={availableVisible}
+            onToggleReady={() => setVisible("ready", !readyVisible)}
+            onToggleAvailable={() => setVisible("available", !availableVisible)}
+            onExpandAll={() => setAllOpen(true)}
+            onCollapseAll={() => setAllOpen(false)}
           />
         }
       />
@@ -63,17 +73,17 @@ export default function ModelsScreen() {
           className="flex-1"
           contentContainerStyle={{ padding: spacing.md, paddingBottom: 120 }}
         >
-          {visible.ready && (
+          {readyVisible && (
             <ReadyModels
-              open={groupsOpen.ready}
-              onToggle={() => setGroupsOpen((p) => ({ ...p, ready: !p.ready }))}
+              open={readyOpen}
+              onToggle={() => setOpen("ready", !readyOpen)}
               onOpenSettings={setSettingsModelId}
             />
           )}
-          {visible.available && (
+          {availableVisible && (
             <AvailableModels
-              open={groupsOpen.available}
-              onToggle={() => setGroupsOpen((p) => ({ ...p, available: !p.available }))}
+              open={availableOpen}
+              onToggle={() => setOpen("available", !availableOpen)}
               onDownload={(modelId, file) => startDownload(modelId, file)}
             />
           )}

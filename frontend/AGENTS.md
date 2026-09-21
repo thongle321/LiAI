@@ -59,7 +59,7 @@ The mobile application is responsible for:
 - expo-secure-store (user-provided secret keys, approved)
 
 - expo-linking + expo-constants (settings deep-link, app metadata)
-- react-native-drawer-layout + react-native-gesture-handler (navigator drawer, approved)
+- react-native-gesture-handler (navigator drawer gestures, approved; drawer-layout itself stays transitive inside expo-router per the Expo drawer guide)
 - tailwindcss (+ @tailwindcss/postcss, Uniwind build peers)
 
 ### Dependency Policy

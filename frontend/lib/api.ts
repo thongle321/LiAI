@@ -19,7 +19,6 @@ import type {
   ChatResponse,
   HealthResponse,
   HistoryResponse,
-  ModelUploadResponse,
   ModelListResponse,
 } from "../types/api.ts";
 
@@ -187,62 +186,6 @@ export function getHistory(sessionId?: string): Promise<HistoryResponse> {
 /** Cheap reachability probe for app start. Does not create a chat turn. */
 export function getHealth(): Promise<HealthResponse> {
   return request<HealthResponse>("/health", { method: "GET" });
-}
-
-/** Upload a GGUF model file to the backend. */
-export async function uploadModel(
-  filePath: string,
-  fileName: string,
-): Promise<ModelUploadResponse> {
-  const formData = new FormData();
-  formData.append("file", {
-    uri: filePath,
-    name: fileName,
-    type: "application/octet-stream",
-  } as any);
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 300_000); // 5 min timeout for large files
-
-  try {
-    const resp = await fetch(`${API_BASE_URL}/api/models/upload`, {
-      method: "POST",
-      body: formData,
-      signal: controller.signal,
-    });
-    if (!resp.ok) {
-      let body: unknown = null;
-      try {
-        body = await resp.json();
-      } catch {
-        body = null;
-      }
-      if (
-        typeof body === "object" &&
-        body !== null &&
-        "error" in body &&
-        typeof (body as { error?: unknown }).error === "object"
-      ) {
-        throw (body as { error: ApiError }).error;
-      }
-      throw apiError("upload_failed", `Upload failed with status ${resp.status}`);
-    }
-    return (await resp.json()) as ModelUploadResponse;
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") {
-      throw apiError("timeout", "Upload timed out after 5 minutes");
-    }
-    if (
-      err !== null &&
-      typeof err === "object" &&
-      "code" in err &&
-      typeof (err as { code?: unknown }).code === "string"
-    )
-      throw err;
-    throw apiError("network", err instanceof Error ? err.message : "Upload failed");
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 /** List available models on the backend. */

@@ -1,7 +1,7 @@
 /** Stream upload service for transferring models to backend. */
 
 import * as FileSystem from "expo-file-system";
-import { API_BASE_URL } from "../../lib/api";
+import { API_BASE_URL } from "./api.ts";
 
 export interface UploadProgressCallback {
   (progress: UploadProgress): void;
@@ -60,7 +60,7 @@ export class StreamUploadService {
         uri: filePath,
         name: fileName,
         type: "application/octet-stream",
-      } as any);
+      } as unknown as Blob);
 
       // Use fetch with progress tracking via a custom implementation
       // Since expo-file-system doesn't have built-in upload progress,

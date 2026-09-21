@@ -44,7 +44,7 @@ export function Bubble({
         {message.image !== undefined && (
           <RNImage
             source={{ uri: message.image }}
-            style={{ width: 160, height: 120, borderRadius: 12, marginBottom: 4 }}
+            className="w-40 h-[120px] rounded-xl mb-1"
           />
         )}
         <View className="rounded-card rounded-br-sm bg-primary px-4 py-2">

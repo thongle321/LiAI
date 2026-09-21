@@ -20,9 +20,9 @@ import { DEFAULT_MODEL_SETTINGS, parseModelSettings, parseModelSettingsMap } fro
 import { buildLocalModelSpec } from "../lib/local-model";
 import { HF_TOKEN_SS_KEY, providerKeySS } from "../lib/secrets";
 import { upgradeModelList, upgradeRemoteApis, upgradeRemoteCaps } from "../lib/model-upgrade";
-import { modelSourceStrategies, getStrategyById } from "../services/model-strategies";
-import { downloadService } from "../services/download";
-import { uploadService } from "../services/transfer";
+import { modelSourceStrategies, getStrategyById } from "../lib/model-strategies";
+import { downloadService } from "../lib/download-service";
+import { uploadService } from "../lib/upload-service";
 
 const STORAGE_KEY = "liai_models_v1";
 const ACTIVE_MODEL_KEY = "liai_active_model_v1";

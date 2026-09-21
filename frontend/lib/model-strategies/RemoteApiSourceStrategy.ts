@@ -7,7 +7,7 @@ import type {
   HFModelSearchResult,
   HFModelFile,
   RemoteApiProvider,
-} from "../../types/models";
+} from "../../types/models.ts";
 import { ModelSourceStrategy } from "./ModelSourceStrategy";
 
 export class RemoteApiSourceStrategy implements ModelSourceStrategy {

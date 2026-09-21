@@ -7,7 +7,7 @@ import type {
   HFModelSearchResult,
   HFModelFile,
   RemoteApiProvider,
-} from "../../types/models";
+} from "../../types/models.ts";
 
 export interface ModelSourceStrategy {
   /** Unique identifier for this strategy */
@@ -43,22 +43,4 @@ export interface ModelSourceStrategy {
 
   /** Create model spec from remote API provider */
   createModelSpecFromRemoteApi(provider: RemoteApiProvider): ModelSpec;
-}
-
-export abstract class BaseModelSourceStrategy implements ModelSourceStrategy {
-  abstract readonly id: string;
-  abstract readonly name: string;
-
-  abstract getPresets(): Promise<PresetModel[]>;
-  abstract searchModels(query: string, token?: string): Promise<HFModelSearchResult[]>;
-  abstract getModelFiles(modelId: string, token?: string): Promise<HFModelFile[]>;
-  abstract resolveDownloadUrl(modelId: string, fileName: string, token?: string): string;
-  abstract validateRemoteApi(provider: RemoteApiProvider): Promise<boolean>;
-  abstract createModelSpecFromHF(
-    hfResult: HFModelSearchResult,
-    file: HFModelFile,
-    token?: string,
-  ): ModelSpec;
-  abstract createModelSpecFromPreset(preset: PresetModel, file: PresetModelFile): ModelSpec;
-  abstract createModelSpecFromRemoteApi(provider: RemoteApiProvider): ModelSpec;
 }

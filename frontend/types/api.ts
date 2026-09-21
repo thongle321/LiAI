@@ -60,12 +60,6 @@ export interface ApiErrorResponse {
   error: ApiError;
 }
 
-export interface ModelUploadResponse {
-  filename: string;
-  size_bytes: number;
-  path: string;
-}
-
 export interface ModelListResponse {
   models: string[];
 }

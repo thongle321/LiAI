@@ -20,6 +20,8 @@ MAX_STORED_MESSAGES = 100
 class Turn:
     role: Role
     content: str
+    type: str = "text"
+    metadata: dict[str, object] | None = None
 
 
 class ConversationStore(Protocol):

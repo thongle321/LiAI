@@ -53,6 +53,7 @@ export function useVisionStream(
   /** One tick: snapshot + send when the gate is open. Stable (refs only)
    * so the frame processor never re-creates. */
   const fire = useCallback(() => {
+    console.log("[DEBUG-vision-tick] fire on JS");
     if (!activeRef.current || !enabledRef.current) return;
     const ws = socket.current;
     if (ws === null || ws.readyState !== WebSocket.OPEN || capturing.current) return;
@@ -97,6 +98,7 @@ export function useVisionStream(
     "worklet";
     runAtTargetFps(2, () => {
       "worklet";
+      globalThis.console?.log?.("[DEBUG-vision-tick] worklet tick");
       void fireOnJS();
     });
   }, [fireOnJS]);

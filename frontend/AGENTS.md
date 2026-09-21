@@ -43,7 +43,8 @@ The mobile application is responsible for:
 
 - AsyncStorage
 
-- VisionCamera
+- VisionCamera (preview + snapshots + Worklet Frame Processor at 2fps;
+  needs `enableFrameProcessors` and a dev-client binary — not Expo Go)
 
 - lucide-react-native (+ react-native-svg peer, approved)
 

@@ -9,5 +9,11 @@
     "babel.config.js",
     "metro.config.js",
     "tests"
+  ],
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
   ]
 }

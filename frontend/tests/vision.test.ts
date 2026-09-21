@@ -20,10 +20,16 @@ describe("visionSocketUrl", () => {
 
 describe("stream policy", () => {
   it("streams while idle or listening, then pauses for an answer", () => {
-    assert.equal(shouldStreamFrames("idle"), true);
-    assert.equal(shouldStreamFrames("listening"), true);
-    assert.equal(shouldStreamFrames("thinking"), false);
-    assert.equal(shouldStreamFrames("speaking"), false);
+    assert.equal(shouldStreamFrames("idle", false), true);
+    assert.equal(shouldStreamFrames("listening", false), true);
+    assert.equal(shouldStreamFrames("thinking", false), false);
+    assert.equal(shouldStreamFrames("speaking", false), false);
+  });
+
+  it("pauses while a chat send is in flight, resumes after", () => {
+    assert.equal(shouldStreamFrames("idle", true), false);
+    assert.equal(shouldStreamFrames("listening", true), false);
+    assert.equal(shouldStreamFrames("idle", false), true);
   });
 });
 

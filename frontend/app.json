@@ -37,7 +37,7 @@
         "react-native-vision-camera",
         {
           "cameraPermissionText": "LiAI needs the camera to see what you see.",
-          "enableFrameProcessors": false
+          "enableFrameProcessors": true
         }
       ],
       "expo-font",

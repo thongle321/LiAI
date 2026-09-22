@@ -36,6 +36,10 @@ from .schemas import (
 MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
+# App loggers default to WARNING with no handler under uvicorn, which
+# hides every logger.info (vlm load, narration content, socket probes).
+logging.basicConfig(level=logging.INFO)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:

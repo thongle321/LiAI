@@ -113,6 +113,7 @@ export function VisionBottomPanel({
   onRetry,
   phase,
   answer,
+  caption,
   statusLabel,
   camProblem,
   streamProblem,
@@ -130,6 +131,7 @@ export function VisionBottomPanel({
   onRetry: () => void;
   phase: VoicePhase;
   answer: string;
+  caption: string;
   statusLabel: string;
   camProblem: string | null;
   streamProblem: string | null;
@@ -171,6 +173,12 @@ export function VisionBottomPanel({
           <ScrollView className="max-h-[120px]">
             <Text className="text-center font-sans text-body-md text-white">
               {answer}
+            </Text>
+          </ScrollView>
+        ) : caption !== "" ? (
+          <ScrollView className="max-h-[120px]">
+            <Text className="text-center font-sans text-body-md text-white/90">
+              {caption}
             </Text>
           </ScrollView>
         ) : (

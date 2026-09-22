@@ -49,6 +49,7 @@ export default function VisionScreen() {
   const {
     phase,
     answer,
+    caption,
     issue,
     needsSettings,
     streamProblem,
@@ -106,6 +107,7 @@ export default function VisionScreen() {
           onRetry={() => void retry()}
           phase={phase}
           answer={answer}
+          caption={caption}
           statusLabel={VOICE_STATUS_LABEL[phase]}
           camProblem={camProblem}
           streamProblem={streamProblem}

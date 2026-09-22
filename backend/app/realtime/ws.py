@@ -164,9 +164,10 @@ async def handle_vision_socket(websocket: WebSocket) -> None:
                     raw = base64.b64decode(msg.jpeg, validate=True)
                     validate_jpeg(raw)
                 except ValueError:
-                    if not await send_error(websocket, "bad frame"):
-                        return
+                    if not await send_error(websocket, "bad frame"): return
                     continue
+                # TEMP DEBUG-vision (remove with the fix): proves frames arrive.
+                logger.info("[DEBUG-vision] frame received bytes=%s", len(raw))
                 state.latest = raw
             else:
                 if not msg.text.strip():

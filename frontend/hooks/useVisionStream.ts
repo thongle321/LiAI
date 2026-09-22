@@ -1,21 +1,24 @@
 /** Vision stream: live frames over the backend WebSocket.
  *
- * The camera preview stays active while the screen is focused. A Worklet
- * Frame Processor ticks at 2fps and hands each tick to JS, which snapshots
- * (quality-50 JPEG, same bytes as before) and sends while idle/listening.
+ * The camera preview stays active while the screen is focused. A 500ms
+ * interval snapshots (quality-50 JPEG) and sends while idle/listening.
  * Uploads pause while the AI answers (including TTS) or a chat send is in
  * flight, then resume for the next turn. A question sends the current frame
  * first, then the question, which lets the backend cancel any in-flight
  * caption before answering.
  *
- * Requires a dev binary built with enableFrameProcessors (app.json).
+ * A bridge-free Worklet Frame Processor is attached to the Camera so the
+ * frame pipeline stays live for future on-worklet pixel work. It makes no
+ * JS calls: the cross-generation worklet→JS bridge proved unreliable
+ * (first a scheduleOnRN crash, then silent ticks), so cadence stays on
+ * the proven interval until the toolchain aligns on one worklets
+ * generation. Requires a dev binary built with enableFrameProcessors.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { Camera } from "react-native-vision-camera";
 import { runAtTargetFps, useFrameProcessor } from "react-native-vision-camera";
-import { useRunOnJS } from "react-native-worklets-core";
 import { useIsFocused } from "expo-router";
 
 import { snapshotToBase64 } from "../lib/snapshot.ts";
@@ -40,7 +43,6 @@ export function useVisionStream(
 ) {
   const socket = useRef<WebSocket | null>(null);
   const capturing = useRef(false);
-  const activeRef = useRef(false);
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
   const callbacksRef = useRef(callbacks);
@@ -50,62 +52,17 @@ export function useVisionStream(
   const focused = useIsFocused();
   const [problem, setProblem] = useState<string | null>(null);
 
-  /** One tick: snapshot + send when the gate is open. Stable (refs only)
-   * so the frame processor never re-creates. */
-  const fire = useCallback(() => {
-    console.log("[DEBUG-vision-tick] fire on JS");
-    if (!activeRef.current || !enabledRef.current) return;
-    const ws = socket.current;
-    if (ws === null || ws.readyState !== WebSocket.OPEN || capturing.current) return;
-    const ref = camera.current;
-    if (ref === null || !cameraReadyRef.current()) return;
-
-    capturing.current = true;
-    void snapshotToBase64(() => ref.takeSnapshot({ quality: 50 }))
-      .then((jpeg) => {
-        const currentWs = socket.current;
-        if (
-          !activeRef.current ||
-          currentWs === null ||
-          currentWs.readyState !== WebSocket.OPEN ||
-          !cameraReadyRef.current() ||
-          !enabledRef.current
-        ) {
-          return;
-        }
-        currentWs.send(frameMessage(jpeg));
-      })
-      .catch((error: unknown) => {
-        if (!activeRef.current) return;
-        const detail =
-          error instanceof Error ? error.message : String(error);
-        setProblem(`Capture failed: ${detail}`);
-      })
-      .finally(() => {
-        capturing.current = false;
-      });
-  }, [camera]);
-
-  /** Cadence lives on the frame pipeline: ticks arrive only while the
-   * camera delivers frames, at most 2/s. Size parity holds by
-   * construction — capture is the same quality-50 snapshot as before.
-   *
-   * The hop back to JS uses worklets-core's bridge (not worklets 0.10's
-   * scheduleOnRN): vision-camera 4.7.3 drives its frame-processor runtime
-   * with -core, whose bridge is the one installed there. */
-  const fireOnJS = useRunOnJS(fire, [fire]);
+  /** Pipeline heartbeat: keeps the frame processor live without crossing
+   * the worklet→JS bridge. Cadence comes from the interval below. */
   const frameProcessor = useFrameProcessor(() => {
     "worklet";
     runAtTargetFps(2, () => {
       "worklet";
-      globalThis.console?.log?.("[DEBUG-vision-tick] worklet tick");
-      void fireOnJS();
     });
-  }, [fireOnJS]);
+  }, []);
 
   useEffect(() => {
     if (!focused) return;
-    activeRef.current = true;
     let active = true;
     let failureReported = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -163,13 +120,46 @@ export function useVisionStream(
 
     connect();
 
+    const timer = setInterval(() => {
+      if (!enabledRef.current) return;
+      const ws = socket.current;
+      if (ws === null || ws.readyState !== WebSocket.OPEN || capturing.current) return;
+      const ref = camera.current;
+      if (ref === null || !cameraReadyRef.current()) return;
+
+      capturing.current = true;
+      void snapshotToBase64(() => ref.takeSnapshot({ quality: 50 }))
+        .then((jpeg) => {
+          const currentWs = socket.current;
+          if (
+            !active ||
+            currentWs === null ||
+            currentWs.readyState !== WebSocket.OPEN ||
+            !cameraReadyRef.current() ||
+            !enabledRef.current
+          ) {
+            return;
+          }
+          currentWs.send(frameMessage(jpeg));
+        })
+        .catch((error: unknown) => {
+          if (!active) return;
+          const detail =
+            error instanceof Error ? error.message : String(error);
+          setProblem(`Capture failed: ${detail}`);
+        })
+        .finally(() => {
+          capturing.current = false;
+        });
+    }, 500);
+
     return () => {
       active = false;
-      activeRef.current = false;
       if (reconnectTimer !== null) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
+      clearInterval(timer);
       capturing.current = false;
       const ws = socket.current;
       if (

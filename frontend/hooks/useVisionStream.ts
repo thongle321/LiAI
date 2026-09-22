@@ -95,7 +95,6 @@ export function useVisionStream(
       ws.onopen = () => {
         failureReported = false;
         if (active) setProblem(null);
-        console.log("[DEBUG-vision] socket open");
       };
 
       ws.onclose = (event: { code?: unknown; reason?: unknown }) => {
@@ -122,14 +121,10 @@ export function useVisionStream(
     connect();
 
     const timer = setInterval(() => {
-      const ws = socket.current;
-      const ref = camera.current;
-      // TEMP DEBUG-vision (remove with the fix): which gate kills the tick.
-      console.log(
-        `[DEBUG-vision] tick e=${enabledRef.current} ws=${ws === null ? "null" : String(ws.readyState)} cap=${capturing.current} cam=${ref !== null} rdy=${cameraReadyRef.current()}`,
-      );
       if (!enabledRef.current) return;
+      const ws = socket.current;
       if (ws === null || ws.readyState !== WebSocket.OPEN || capturing.current) return;
+      const ref = camera.current;
       if (ref === null || !cameraReadyRef.current()) return;
 
       capturing.current = true;
@@ -143,11 +138,9 @@ export function useVisionStream(
             !cameraReadyRef.current() ||
             !enabledRef.current
           ) {
-            console.log("[DEBUG-vision] post-capture guard dropped send");
             return;
           }
           currentWs.send(frameMessage(jpeg));
-          console.log(`[DEBUG-vision] sent bytes=${jpeg.length}`);
         })
         .catch((error: unknown) => {
           if (!active) return;

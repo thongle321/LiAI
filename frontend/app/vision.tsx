@@ -6,11 +6,12 @@
  * small keyboard button opening a floating input. No BottomNav here —
  * vision is not a tab; stop-vision returns to the previous screen.
  *
- * Frame rule: the preview streams frames while idle/listening, driven by
- * a Worklet Frame Processor at 2fps (needs a dev binary built with
- * enableFrameProcessors). A voice or text question pauses uploads, sends
- * the current frame + question, then resumes streaming after the answer
- * and TTS finish. The preview itself never freezes.
+ * Frame rule: a 500ms JS interval snapshots and uploads frames while
+ * idle/listening; the worklet frame processor is a bridge-free heartbeat
+ * only (no JS calls — the worklet→JS bridge proved unreliable). A voice
+ * or text question pauses uploads, sends the current frame + question,
+ * then resumes after the answer and TTS finish. The preview itself
+ * never freezes.
  */
 
 import { useState } from "react";
@@ -49,7 +50,6 @@ export default function VisionScreen() {
   const {
     phase,
     answer,
-    caption,
     issue,
     needsSettings,
     streamProblem,
@@ -107,7 +107,6 @@ export default function VisionScreen() {
           onRetry={() => void retry()}
           phase={phase}
           answer={answer}
-          caption={caption}
           statusLabel={VOICE_STATUS_LABEL[phase]}
           camProblem={camProblem}
           streamProblem={streamProblem}

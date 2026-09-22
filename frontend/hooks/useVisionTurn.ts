@@ -43,7 +43,6 @@ export function useVisionTurn(
 ) {
   const [phase, setPhase] = useState<VoicePhase>("idle");
   const [answer, setAnswer] = useState("");
-  const [caption, setCaption] = useState("");
   const [issue, setIssue] = useState<string | null>(null);
   const [needsSettings, setNeedsSettings] = useState(false);
   const send = useChatStore((s) => s.send);
@@ -78,9 +77,6 @@ export function useVisionTurn(
   }
 
   const stream = useVisionStream(camera, cameraReady, shouldStreamFrames(phase, sending), {
-    onCaption: (text) => {
-      if (aliveRef.current) setCaption(text);
-    },
     onAnswer: (text, sessionId) => {
       clearAnswerTimeout();
       if (!aliveRef.current || phaseRef.current !== "thinking") return;
@@ -140,7 +136,6 @@ export function useVisionTurn(
       setNeedsSettings(false);
       sentRef.current = false;
       setAnswer("");
-      setCaption("");
       setIssue(null);
       setBoth("listening");
       ExpoSpeechRecognitionModule.start({ ...VOICE_LISTEN_OPTS });
@@ -183,7 +178,6 @@ export function useVisionTurn(
     }
     questionRef.current = said;
     setBoth("thinking");
-    setCaption("");
     setIssue(null);
 
     // Wait briefly if a periodic background stream snapshot is in flight to
@@ -360,7 +354,6 @@ export function useVisionTurn(
   return {
     phase,
     answer,
-    caption,
     issue,
     needsSettings,
     streamProblem: stream.problem,

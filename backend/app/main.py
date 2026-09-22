@@ -36,9 +36,12 @@ from .schemas import (
 MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-# App loggers default to WARNING with no handler under uvicorn, which
-# hides every logger.info (vlm load, narration content, socket probes).
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logging.getLogger("app").setLevel(logging.INFO)
 
 
 @asynccontextmanager

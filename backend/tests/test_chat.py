@@ -106,14 +106,21 @@ def test_factory_defaults_to_openrouter(monkeypatch: MonkeyPatch) -> None:
     assert isinstance(get_provider(), OpenRouterChatProvider)
 
 
-def test_factory_selects_openrouter(monkeypatch: MonkeyPatch) -> None:
-    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
-    assert isinstance(get_provider(), OpenRouterChatProvider)
+def test_provider_surface_is_openrouter_only() -> None:
+    """One real adapter: dead branches and their types must not exist."""
+    from app import providers
+
+    assert not hasattr(providers, "CustomOpenAIChatProvider")
+    assert not hasattr(providers, "LocalLlamaCppProvider")
+    assert not hasattr(providers, "ProviderConfig")
+    assert not hasattr(providers, "ProviderStrategyFactory")
 
 
-def test_factory_legacy_alias_selects_openrouter(monkeypatch: MonkeyPatch) -> None:
-    monkeypatch.setenv("LLM_PROVIDER", "openai-compatible")
-    assert isinstance(get_provider(), OpenRouterChatProvider)
+def test_chat_request_has_no_provider_selection_fields() -> None:
+    from app.schemas.chat import ChatRequest
+
+    for field in ("provider_type", "model_name", "base_url", "api_key", "model_path"):
+        assert field not in ChatRequest.model_fields
 
 
 def test_openrouter_missing_key_raises(monkeypatch: MonkeyPatch) -> None:

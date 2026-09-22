@@ -1,5 +1,4 @@
-from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Protocol
 
 from pydantic_ai.messages import ModelRequest, TextPart, UserPromptPart
 from pydantic_ai.models import Model
@@ -8,35 +7,17 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 
 class ChatProvider(Protocol):
-    """Unified interface for all chat providers.
+    """Unified interface for chat providers.
 
-    Both local (GGUF) and remote (OpenRouter, custom OpenAI-compatible) providers
-    implement this interface to allow dynamic selection at request time.
+    One live adapter today (OpenRouter). Second adapter ships -> revisit.
     """
-    provider_type: Literal["openrouter", "custom_openai", "local_gguf"]
     model_name: str
-    
+
     async def reply(self, message: str) -> str: ...
 
     def create_tool_model(self) -> Model | None:
         """Native tool-capable model for Pydantic AI agent, or None."""
         return None
-
-
-@dataclass
-class ProviderConfig:
-    """Configuration for a provider, used for dynamic provider selection."""
-    provider_type: Literal["openrouter", "custom_openai", "local_gguf"]
-    model_name: str
-    # For custom_openai
-    base_url: str | None = None
-    api_key: str | None = None
-    # For local_gguf
-    model_path: str | None = None
-    n_ctx: int = 4096
-    n_gpu_layers: int = 0
-    n_threads: int | None = None
-    verbose: bool = False
 
 
 class CachedChatModel:

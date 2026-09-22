@@ -6,7 +6,6 @@ Fake-gated: VLM stubbed, synthetic JPEG, no camera/network/keys.
 
 import base64
 import io
-
 from collections.abc import Awaitable
 from typing import TypeVar
 
@@ -14,10 +13,10 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-import app.realtime.vlm as vlm
 from app.agents.companion import get_companion_agent as real_agent
 from app.main import app
 from app.memory import get_store
+from app.realtime import vlm
 
 client = TestClient(app)
 
@@ -118,9 +117,9 @@ def test_startup_preloads_vlm_weights(
         nonlocal loaded
         loaded = True
 
-    monkeypatch.setattr(vlm_module, "_load", fake_load)
+    monkeypatch.setattr(vlm_module, "_loader", fake_load)
     # conftest no-ops warmup; restore the real one to prove lifespan calls it
-    monkeypatch.setattr(vlm_module, "warmup", lambda: vlm_module._load())
+    monkeypatch.setattr(vlm_module, "warmup", lambda: vlm_module._loader())
     _run(_enter_lifespan(app_module))
     assert loaded
 
@@ -145,13 +144,12 @@ def test_lifespan_fails_fast_without_key(monkeypatch: pytest.MonkeyPatch) -> Non
     from pydantic_ai.exceptions import UserError
 
     from app.main import app as app_module
-    from app.providers.factory import ProviderStrategyFactory
+    from app.providers.factory import clear_provider_cache
 
     # Route in-body with the genuine factory (bound at import, pre-patch):
     # all fixtures run before us, so this wins over the autouse echo.
     _route_all(monkeypatch, real_agent)
-    ProviderStrategyFactory.clear_cache()
-    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    clear_provider_cache()
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     try:
@@ -179,9 +177,9 @@ def test_narration_tick_sends_caption_and_persists(
         return "a red square"
 
     monkeypatch.setattr(vlm, "describe_frame", fake_describe)
-    from app.realtime.ws import SocketState, narration_tick
-
     import asyncio
+
+    from app.realtime.ws import SocketState, narration_tick
 
     ws = FakeSocket()
     state = SocketState(latest=FAKE_JPEG)
@@ -212,41 +210,40 @@ def test_send_on_closing_socket_is_clean_exit() -> None:
     assert _run(go()) == (False, False)
 
 
-def test_describe_frame_keeps_loop_responsive() -> None:
+def test_describe_frame_keeps_loop_responsive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """1006 regression: sync torch inference must not block the event
     loop, or the phone's socket times out with no ping/pong answered."""
     import time
 
     import app.realtime.vlm as vlm_module
 
-    real_sync = vlm_module._describe_sync
+    class SlowLlama:
+        def create_chat_completion(self, **kwargs: object) -> dict:
+            time.sleep(0.5)
+            return {"choices": [{"message": {"content": "slow view"}}]}
 
-    def slow_sync(image: bytes, question: str) -> str:
-        time.sleep(0.5)
-        return "slow view"
+    monkeypatch.setattr(vlm_module, "_loader", lambda: SlowLlama())
 
     async def go() -> tuple[int, float]:
         import asyncio
         import time
 
-        vlm_module._describe_sync = slow_sync
-        try:
-            beats = 0
+        beats = 0
 
-            async def heartbeat() -> None:
-                nonlocal beats
-                for _ in range(5):
-                    await asyncio.sleep(0.1)
-                    beats += 1
+        async def heartbeat() -> None:
+            nonlocal beats
+            for _ in range(5):
+                await asyncio.sleep(0.1)
+                beats += 1
 
-            started = time.monotonic()
-            caption = await asyncio.gather(
-                vlm_module.describe_frame(FAKE_JPEG, "What?"), heartbeat()
-            )
-            assert caption[0] == "slow view"
-            return beats, time.monotonic() - started
-        finally:
-            vlm_module._describe_sync = real_sync
+        started = time.monotonic()
+        caption = await asyncio.gather(
+            vlm_module.describe_frame(FAKE_JPEG, "What?"), heartbeat()
+        )
+        assert caption[0] == "slow view"
+        return beats, time.monotonic() - started
 
     # Blocking loop: 0.5s frozen + 0.5s heartbeat = >=1.0s.
     # Worker thread: both run together ~= 0.5s.

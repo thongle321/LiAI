@@ -48,7 +48,7 @@ def test_concurrent_describe_frame_calls_are_serialized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake = OverlappingLlama()
-    monkeypatch.setattr(vlm, "_load", lambda: fake)
+    monkeypatch.setattr(vlm, "_loader", lambda: fake)
     jpeg = _jpeg()
 
     async def go() -> None:

@@ -30,4 +30,4 @@ def test_thumbnail_caps_long_edge() -> None:
     msgs = vlm._chat_messages(_jpeg(1600, 1200), "Describe what you see.")
     uri = msgs[0]["content"][0]["image_url"]["url"]
     thumb = Image.open(io.BytesIO(base64.b64decode(uri.split(",", 1)[1])))
-    assert max(thumb.size) <= vlm.VLM_MAX_EDGE
+    assert max(thumb.size) <= vlm._max_edge()

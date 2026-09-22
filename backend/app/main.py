@@ -1,10 +1,7 @@
 import base64
 import logging
-import os
-import shutil
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, File, Request, UploadFile, WebSocket
 from fastapi.exceptions import RequestValidationError
@@ -13,10 +10,10 @@ from fastapi.responses import JSONResponse
 from pydantic_ai.exceptions import UserError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .agents import companion, get_companion_agent
-from .agents.companion import assistant_text, persist_turn, to_message_history, tool_names
-from .memory import Turn, get_store
-from .providers.factory import ProviderStrategyFactory
+from . import model_files
+from .agents import companion
+from .memory import get_store
+from .providers.factory import clear_provider_cache, get_provider
 from .realtime import vlm
 from .realtime.qa import validate_jpeg
 from .realtime.ws import handle_vision_socket
@@ -31,10 +28,7 @@ from .schemas import (
     ModelListResponse,
     ModelUploadResponse,
 )
-
-# Model storage directory
-MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
-MODELS_DIR.mkdir(parents=True, exist_ok=True)
+from .turns import StoreError, run_turn
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,7 +40,7 @@ logging.getLogger("app").setLevel(logging.INFO)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    provider = ProviderStrategyFactory.get_default_provider()
+    provider = get_provider()
     model = getattr(provider, "model_name", None)
     logging.getLogger(__name__).info(
         "llm provider=%s%s",
@@ -55,8 +49,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     # Fail fast: no keyless boot. The SDK validates the key eagerly at
     # build, so a truly missing key crashes startup with an actionable
-    # hint instead of failing every turn. Tests patch the route
-    # call-site (app.main.get_companion_agent), never this
+    # hint instead of failing every turn. Tests patch the single seam
+    # (app.agents.companion.get_companion_agent), never this
     # source-namespace build.
     try:
         companion.get_companion_agent(provider)
@@ -71,7 +65,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     vlm.warmup()
     yield
     # Cleanup on shutdown
-    ProviderStrategyFactory.clear_cache()
+    clear_provider_cache()
 
 
 app = FastAPI(title="LiAI backend", lifespan=lifespan)
@@ -148,52 +142,22 @@ async def vision_ws(websocket: WebSocket) -> None:
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(body: ChatRequest) -> ChatResponse | JSONResponse:
-    store = get_store()
-    session_id = body.session_id
-    try:
-        if session_id is None or store.get(session_id) is None:
-            session_id = store.create()
-            history: list[Turn] = []
-        else:
-            history = store.get(session_id) or []
-    except Exception as exc:
-        return _error(503, "store_error", str(exc))
-
-    # Get provider for this request (dynamic selection)
-    provider = ProviderStrategyFactory.get_provider_for_request(
-        provider_type=body.provider_type,
-        model_name=body.model_name,
-        base_url=body.base_url,
-        api_key=body.api_key,
-        model_path=body.model_path,
-    )
-
+    image_bytes: bytes | None = None
     if body.image is not None:
         try:
             image_bytes = _decode_image(body.image)
             validate_jpeg(image_bytes)
-            reply = await vlm.describe_frame(image_bytes, body.message)
         except ValueError as exc:
             return _error(400, "invalid_request", str(exc))
-        except Exception as exc:  # noqa: BLE001 — same boundary as the text path below
-            return _error(502, "llm_error", str(exc))
-        names: list[str] | None = None
-    else:
-        try:
-            # Create agent with the selected provider
-            agent = companion.get_companion_agent(provider)
-            result = await agent.run(
-                body.message, message_history=to_message_history(history)
-            )
-        except Exception as exc:
-            return _error(502, "llm_error", str(exc))
-        reply = assistant_text(result.output)
-        names = tool_names(result.all_messages())
     try:
-        session_id = persist_turn(store, session_id, body.message, reply, names)
-    except Exception as exc:
+        outcome = await run_turn(
+            get_store(), body.session_id, body.message, image=image_bytes
+        )
+    except StoreError as exc:
         return _error(503, "store_error", str(exc))
-    return ChatResponse(reply=reply, session_id=session_id)
+    except Exception as exc:  # noqa: BLE001 — llm/agent boundary
+        return _error(502, "llm_error", str(exc))
+    return ChatResponse(reply=outcome.reply, session_id=outcome.session_id)
 
 
 @app.post("/api/models/upload", response_model=ModelUploadResponse)
@@ -206,15 +170,12 @@ async def upload_model(file: UploadFile = File(...)) -> ModelUploadResponse | JS
     if not file.filename:
         return _error(400, "invalid_request", "No filename provided")
 
-    # Validate file extension
-    if not file.filename.lower().endswith(".gguf"):
+    if not model_files.is_gguf(file.filename):
         return _error(400, "invalid_request", "Only .gguf files are supported")
 
-    # Sanitize filename
-    safe_filename = Path(file.filename).name
-    dest_path = MODELS_DIR / safe_filename
+    dest_path = model_files.path_for(file.filename)
+    safe_filename = dest_path.name
 
-    # Check if file already exists
     if dest_path.exists():
         return _error(409, "conflict", f"Model {safe_filename} already exists")
 
@@ -252,11 +213,7 @@ async def upload_model(file: UploadFile = File(...)) -> ModelUploadResponse | JS
 async def list_models() -> ModelListResponse:
     """List available GGUF models in the backend models directory."""
     try:
-        models = [
-            f.name for f in MODELS_DIR.iterdir()
-            if f.is_file() and f.name.lower().endswith(".gguf")
-        ]
-        return ModelListResponse(models=sorted(models))
+        return ModelListResponse(models=model_files.list_models())
     except Exception as exc:
         return _error(500, "list_failed", str(exc))
 
@@ -264,12 +221,11 @@ async def list_models() -> ModelListResponse:
 @app.delete("/api/models/{filename}")
 async def delete_model(filename: str) -> JSONResponse:
     """Delete a GGUF model from the backend models directory."""
-    # Sanitize filename to prevent path traversal
-    safe_filename = Path(filename).name
-    if not safe_filename.lower().endswith(".gguf"):
+    safe_filename = model_files.safe_name(filename)
+    if not model_files.is_gguf(safe_filename):
         return _error(400, "invalid_request", "Only .gguf files can be deleted")
 
-    model_path = MODELS_DIR / safe_filename
+    model_path = model_files.path_for(filename)
 
     if not model_path.exists():
         return _error(404, "not_found", f"Model {safe_filename} not found")

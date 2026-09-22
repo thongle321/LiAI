@@ -17,9 +17,6 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-import app.main as main_module
-import app.agents as agents_module
-import app.realtime.qa as qa_module
 import app.realtime.vlm as vlm
 from app.agents.companion import get_companion_agent as build_agent, latest_user_text
 from app.providers.base import ChatProvider
@@ -33,10 +30,7 @@ class EchoProvider(ChatProvider):
 
 
 def _route_all(monkeypatch: pytest.MonkeyPatch, factory: Callable[..., object]) -> None:
-    """Patch every get_companion_agent import site to the same factory."""
-    monkeypatch.setattr(main_module, "get_companion_agent", factory)
-    monkeypatch.setattr(agents_module, "get_companion_agent", factory)
-    monkeypatch.setattr(qa_module, "get_companion_agent", factory)
+    """Patch the single agent-factory seam every caller resolves through."""
     monkeypatch.setattr("app.agents.companion.get_companion_agent", factory)
 
 

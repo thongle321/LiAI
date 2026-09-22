@@ -43,19 +43,21 @@ def row_to_turn(row: dict[str, Any]) -> Turn:
 
 
 class SupabaseConversationStore:
-    def __init__(self) -> None:
-        # Eager credential check preserves the old fail-fast behavior.
-        get_client()
+    def __init__(self, client: Any | None = None) -> None:
+        # reason: SDK client (or test fake) is a dynamic PostgREST chain,
+        # same nature as the row dicts below
+        # Eager credential check preserves the old fail-fast behavior;
+        # tests inject a fake client adapter and skip get_client entirely.
+        self._client = client if client is not None else get_client()
 
     def create(self) -> str:
         session_id = uuid4().hex
-        get_client().from_("sessions").insert({"id": session_id}).execute()
+        self._client.from_("sessions").insert({"id": session_id}).execute()
         return session_id
 
     def get(self, session_id: str) -> list[Turn] | None:
-        client = get_client()
         session = (
-            client.from_("sessions")
+            self._client.from_("sessions")
             .select("id")
             .eq("id", session_id)
             .limit(1)
@@ -64,7 +66,7 @@ class SupabaseConversationStore:
         if not session.data:
             return None
         rows = (
-            client.from_("messages")
+            self._client.from_("messages")
             .select("role,content,type,metadata")
             .eq("session_id", session_id)
             .order("created_at", desc=True)
@@ -75,6 +77,5 @@ class SupabaseConversationStore:
         return [row_to_turn(r) for r in reversed(rows.data)]
 
     def append(self, session_id: str, turn: Turn) -> None:
-        client = get_client()
-        client.from_("sessions").upsert({"id": session_id}).execute()
-        client.from_("messages").insert(turn_to_row(session_id, turn)).execute()
+        self._client.from_("sessions").upsert({"id": session_id}).execute()
+        self._client.from_("messages").insert(turn_to_row(session_id, turn)).execute()

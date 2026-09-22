@@ -12,12 +12,6 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
     # Optional JPEG data-uri; when present the turn is answered by the VLM.
     image: str | None = None
-    # Optional provider selection for dynamic model switching
-    provider_type: Literal["openrouter", "custom_openai", "local_gguf"] | None = None
-    model_name: str | None = None
-    base_url: str | None = None  # For custom_openai
-    api_key: str | None = None   # For custom_openai
-    model_path: str | None = None  # For local_gguf (server-side path)
 
     @field_validator("message")
     @classmethod

@@ -1,15 +1,14 @@
 """Frame Q&A: JPEG + question in, stored companion reply out.
 
 Pipeline: validate frame (fail-safe) → local VLM describes →
-Pydantic AI composes with personality/tools (existing companion agent)
-→ existing store persists exactly user + final text.
+run_turn composes with personality/tools (existing companion agent,
+no history) → same turn seam persists exactly user + final text.
 """
 
 import io
 
-from ..agents import get_companion_agent
-from ..agents.companion import assistant_text, persist_turn
 from ..memory import Turn, get_store
+from ..turns import run_turn
 from . import vlm
 
 MAX_FRAME_BYTES = 2 * 1024 * 1024
@@ -45,10 +44,10 @@ async def answer_about_frame(
     validate_jpeg(jpeg)
     seen = await vlm.describe_frame(jpeg, question)
     prompt = f"Question about the current camera view: {question}\nWhat the camera shows: {seen}"
-    result = await get_companion_agent().run(prompt)
-    reply = assistant_text(result.output)
-    session_id = persist_turn(get_store(), session_id, question, reply)
-    return reply, session_id
+    outcome = await run_turn(
+        get_store(), session_id, question, prompt=prompt, use_history=False
+    )
+    return outcome.reply, outcome.session_id
 
 
 async def caption_frame(jpeg: bytes) -> str:

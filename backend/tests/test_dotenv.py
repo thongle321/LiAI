@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from app.providers.factory import _load_dotenv
+from app.config.boot import _load_dotenv
 
 
 def test_load_dotenv_sets_missing_keys(

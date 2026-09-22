@@ -21,7 +21,6 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo
 
-from app import main
 from app.agents.companion import (
     assistant_text,
     get_companion_agent,
@@ -66,8 +65,6 @@ def route_agent(monkeypatch: pytest.MonkeyPatch, clock: Callable[[], str]) -> No
     """
     from conftest import EchoProvider
     from pydantic_ai.models.function import FunctionModel
-    import app.agents as agents_module
-    import app.agents.companion as companion_module
 
     provider = EchoProvider()
     monkeypatch.setattr(
@@ -78,8 +75,7 @@ def route_agent(monkeypatch: pytest.MonkeyPatch, clock: Callable[[], str]) -> No
     def tool_factory(_provider=None, **kwargs):
         return real_factory(provider, **{**kwargs, "clock": clock})
 
-    for target in (main, agents_module, companion_module):
-        monkeypatch.setattr(target, "get_companion_agent", tool_factory)
+    monkeypatch.setattr("app.agents.companion.get_companion_agent", tool_factory)
 
 
 def post_time_question(clock: Callable[[], str]) -> dict:

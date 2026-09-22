@@ -15,23 +15,22 @@ import io
 import logging
 import os
 import threading
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from llama_cpp import Llama
 
-MODEL_REPO = os.getenv("VISION_GGUF_REPO", "LiquidAI/LFM2.5-VL-450M-GGUF")
-MODEL_FILE = os.getenv("VISION_GGUF_FILE", "LFM2.5-VL-450M-Q4_K_M.gguf")
-MMPROJ_FILE = os.getenv("VISION_MMPROJ_FILE", "mmproj-LFM2.5-VL-450m-Q8_0.gguf")
-# ponytail: CPU-only (0); set VISION_GPU_LAYERS=-1 with a CUDA runtime
-# on PATH for full GPU offload
-N_GPU_LAYERS = int(os.getenv("VISION_GPU_LAYERS", "0"))
-# ponytail: 8192 covers 512px image tokens + question + short caption
-N_CTX = int(os.getenv("VISION_CTX", "8192"))
-# ponytail: 32 tokens halves generation time vs 64; captions stay one sentence
-MAX_NEW_TOKENS = int(os.getenv("VISION_MAX_TOKENS", "32"))
-# ponytail: cap pixels before the handler — visual tokens dominate prefill
-VLM_MAX_EDGE = int(os.getenv("VISION_MAX_EDGE", "512"))
+# ponytail: env read at use time, never at import — .env autoload must
+# win regardless of which module is imported first (config timing).
+_GGUF_REPO_DEFAULT = "LiquidAI/LFM2.5-VL-450M-GGUF"
+_GGUF_FILE_DEFAULT = "LFM2.5-VL-450M-Q4_K_M.gguf"
+_MMPROJ_FILE_DEFAULT = "mmproj-LFM2.5-VL-450m-Q8_0.gguf"
+
+
+def _max_edge() -> int:
+    # ponytail: cap pixels before the handler — visual tokens dominate prefill
+    return int(os.getenv("VISION_MAX_EDGE", "512"))
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ _infer_lock = threading.Lock()
 
 def warmup() -> None:
     """Preload weights (server lifespan); lazy _load stays for tests."""
-    _load()
+    _loader()
 
 
 def _load() -> Llama:
@@ -60,26 +59,41 @@ def _load() -> Llama:
     from llama_cpp import Llama
     from llama_cpp.llama_chat_format import LFM25VLChatHandler
 
-    logger.info("vlm cache miss — loading %s/%s", MODEL_REPO, MODEL_FILE)
-    mmproj_path = hf_hub_download(repo_id=MODEL_REPO, filename=MMPROJ_FILE)
+    repo = os.getenv("VISION_GGUF_REPO", _GGUF_REPO_DEFAULT)
+    filename = os.getenv("VISION_GGUF_FILE", _GGUF_FILE_DEFAULT)
+    mmproj_file = os.getenv("VISION_MMPROJ_FILE", _MMPROJ_FILE_DEFAULT)
+    # ponytail: CPU-only (0); set VISION_GPU_LAYERS=-1 with a CUDA runtime
+    # on PATH for full GPU offload
+    n_gpu_layers = int(os.getenv("VISION_GPU_LAYERS", "0"))
+    # ponytail: 8192 covers 512px image tokens + question + short caption
+    n_ctx = int(os.getenv("VISION_CTX", "8192"))
+
+    logger.info("vlm cache miss — loading %s/%s", repo, filename)
+    mmproj_path = hf_hub_download(repo_id=repo, filename=mmproj_file)
     handler = LFM25VLChatHandler(mmproj_path=mmproj_path, verbose=False)
     _llm = Llama.from_pretrained(
-        repo_id=MODEL_REPO,
-        filename=MODEL_FILE,
+        repo_id=repo,
+        filename=filename,
         chat_handler=handler,
-        n_gpu_layers=N_GPU_LAYERS,
-        n_ctx=N_CTX,
+        n_gpu_layers=n_gpu_layers,
+        n_ctx=n_ctx,
         verbose=False,
     )
-    logger.info("vlm loaded (gpu_layers=%d, ctx=%d)", N_GPU_LAYERS, N_CTX)
+    logger.info("vlm loaded (gpu_layers=%d, ctx=%d)", n_gpu_layers, n_ctx)
     return _llm
+
+
+# Single loader seam: tests inject a fake model here instead of
+# reaching into _load/_describe_sync internals.
+_loader: Callable[[], Llama] = _load
 
 
 def _thumbnail_jpeg(image: bytes) -> bytes:
     from PIL import Image
 
     picture = Image.open(io.BytesIO(image)).convert("RGB")
-    picture.thumbnail((VLM_MAX_EDGE, VLM_MAX_EDGE))
+    edge = _max_edge()
+    picture.thumbnail((edge, edge))
     buf = io.BytesIO()
     picture.save(buf, format="JPEG")
     return buf.getvalue()
@@ -111,10 +125,12 @@ async def describe_frame(image: bytes, question: str) -> str:
 
 
 def _describe_sync(image: bytes, question: str) -> str:
-    llm = _load()
+    llm = _loader()
+    # ponytail: 32 tokens halves generation time vs 64; captions stay one sentence
+    max_tokens = int(os.getenv("VISION_MAX_TOKENS", "32"))
     with _infer_lock:
         out = llm.create_chat_completion(
             messages=_chat_messages(image, question),
-            max_tokens=MAX_NEW_TOKENS,
+            max_tokens=max_tokens,
         )
     return str(out["choices"][0]["message"]["content"]).strip()

@@ -20,14 +20,12 @@ import {
 
 import { colors } from "../themes/tokens.ts";
 import { APP_NAME } from "../constants/app.ts";
-import { CONNECTION_DOT_CLASS } from "../lib/connection.ts";
 import { useChatStore } from "../store/chat.ts";
 import { SessionList } from "./chat/SessionList.tsx";
 
 const VERSION = Constants.expoConfig?.version ?? "0.1.0";
 
 export function AppDrawerContent({ onClose }: { onClose: () => void }) {
-  const connection = useChatStore((s) => s.connection);
   const sessionId = useChatStore((s) => s.sessionId);
   const sessions = useChatStore((s) => s.sessions);
   const newConversation = useChatStore((s) => s.newConversation);
@@ -56,8 +54,7 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface1 }}>
       <View className="flex-1">
         <View className="flex-row items-center border-b border-border px-4 py-3">
-          <View className={CONNECTION_DOT_CLASS[connection]} />
-          <Text className="ml-2 flex-1 font-sans-semibold text-h3 text-primary">
+          <Text className="flex-1 font-sans-semibold text-h3 text-primary">
             {APP_NAME}
           </Text>
           <Pressable onPress={onClose} className="px-1 py-1">

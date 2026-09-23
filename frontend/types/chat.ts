@@ -6,9 +6,16 @@
 
 import type { ApiError } from "./api.ts";
 
-/** One tool invocation surfaced in a bubble (Wave 1: completed only). */
+/** One tool invocation surfaced in a bubble (Wave 2: running, then done). */
 export interface AgentStep {
+  /** Wire identity: running→done upserts match on this, so parallel
+   * same-name calls keep their own results. Absent on history steps
+   * (reloaded rows render done-only, never upsert). */
+  id?: string;
   tool: string;
+  status: "running" | "done";
+  input?: Record<string, unknown>;
+  result?: string;
 }
 
 export interface MessageUsage {

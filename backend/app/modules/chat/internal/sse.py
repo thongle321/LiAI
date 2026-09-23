@@ -32,7 +32,16 @@ def event_to_sse(event: StreamEvent) -> str:
     if isinstance(event, StreamToken):
         return format_event("token", {"text": event.text})
     if isinstance(event, StreamToolCall):
-        return format_event("tool", {"name": event.name})
+        payload: dict[str, Any] = {
+            "name": event.name,
+            "status": event.status,
+            "id": event.id,
+        }
+        if event.input is not None:
+            payload["input"] = event.input
+        if event.result is not None:
+            payload["result"] = event.result
+        return format_event("tool", payload)
     if isinstance(event, StreamUsage):
         return format_event(
             "usage",

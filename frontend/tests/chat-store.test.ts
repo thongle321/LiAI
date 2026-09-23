@@ -207,13 +207,61 @@ describe("chat store sessions", () => {
         ["assistant", "It is noon"],
       ],
     );
-    assert.deepEqual(state.messages[1].steps, [{ tool: "get_current_time" }]);
+    assert.deepEqual(state.messages[1].steps, [
+      { tool: "get_current_time", status: "done" },
+    ]);
     assert.deepEqual(state.messages[1].usage, {
       promptTokens: 1,
       completionTokens: 2,
       totalTokens: 3,
     });
     assert.equal(storage.data[SESSION_KEY], "s2");
+  });
+
+  it("switchSession prefers persisted tool_runs over bare names", async () => {
+    mockFetch(async (url) => {
+      if (String(url).includes("/api/sessions")) {
+        return jsonResponse({
+          sessions: [{ id: "s2", title: "T", pinned: false, updated_at: "t" }],
+        });
+      }
+      if (String(url).includes("session_id=s2")) {
+        return jsonResponse({
+          session_id: "s2",
+          messages: [
+            { role: "user", content: "search?" },
+            {
+              role: "assistant",
+              content: "Found it",
+              metadata: {
+                tool_calls: ["web_search"],
+                tool_runs: [
+                  {
+                    name: "web_search",
+                    input: { query: "q" },
+                    result: "R",
+                  },
+                ],
+              },
+            },
+          ],
+        });
+      }
+      return jsonResponse({ session_id: "s1", messages: [] });
+    });
+    const useStore = createChatStore(memoryStorage(), {
+      openXhr: fakeXhr([]).factory,
+    });
+    await useStore.getState().loadSession();
+    assert.equal(await useStore.getState().switchSession("s2"), true);
+    assert.deepEqual(useStore.getState().messages[1].steps, [
+      {
+        tool: "web_search",
+        status: "done",
+        input: { query: "q" },
+        result: "R",
+      },
+    ]);
   });
 
   it("renameSession patches the backend and updates the row", async () => {
@@ -377,18 +425,66 @@ describe("chat store streaming", () => {
     assert.deepEqual(JSON.parse(sent.body ?? ""), { message: "hi", stream: true });
   });
 
-  it("collects tool events into bubble steps", async () => {
+  it("upserts running/done pairs into a single step", async () => {
     const { factory } = fakeXhr([
       'event: start\ndata: {"session_id":"s1"}\n\n',
-      'event: tool\ndata: {"name":"get_current_time"}\n\n',
-      'event: token\ndata: {"text":"noon"}\n\n',
-      "event: done\ndata: {}\n\n",
+      'event: tool\ndata: {"name":"web_search","status":"running","id":"w1","input":{"query":"q"}}\n\n',
+      'event: tool\ndata: {"name":"web_search","status":"done","id":"w1","input":{"query":"q"},"result":"R"}\n\n',
+      'event: token\ndata: {"text":"done"}\n\n',
+      'event: done\ndata: {"session_id":"s1"}\n\n',
     ]);
     const useStore = createChatStore(memoryStorage(), { openXhr: factory });
-    await useStore.getState().send("time?");
+    await useStore.getState().send("search?");
     assert.deepEqual(useStore.getState().messages[1].steps, [
-      { tool: "get_current_time" },
+      {
+        id: "w1",
+        tool: "web_search",
+        status: "done",
+        input: { query: "q" },
+        result: "R",
+      },
     ]);
+  });
+
+  it("keeps parallel same-name calls on their own steps", async () => {
+    const { factory } = fakeXhr([
+      'event: start\ndata: {"session_id":"s1"}\n\n',
+      'event: tool\ndata: {"name":"web_search","status":"running","id":"w1","input":{"query":"a"}}\n\n',
+      'event: tool\ndata: {"name":"web_search","status":"running","id":"w2","input":{"query":"b"}}\n\n',
+      'event: tool\ndata: {"name":"web_search","status":"done","id":"w2","input":{"query":"b"},"result":"B"}\n\n',
+      'event: tool\ndata: {"name":"web_search","status":"done","id":"w1","input":{"query":"a"},"result":"A"}\n\n',
+      'event: done\ndata: {"session_id":"s1"}\n\n',
+    ]);
+    const useStore = createChatStore(memoryStorage(), { openXhr: factory });
+    await useStore.getState().send("compare?");
+    assert.deepEqual(
+      useStore.getState().messages[1].steps?.map((s) => [s.id, s.result]),
+      [
+        ["w1", "A"],
+        ["w2", "B"],
+      ],
+    );
+  });
+
+  it("attaches search auth when the seam provides it", async () => {
+    const { factory, sent } = fakeXhr(STREAM_OK);
+    const useStore = createChatStore(memoryStorage(), {
+      openXhr: factory,
+      getSearchAuth: async () => ({ provider: "tavily", key: "k", count: 3 }),
+    });
+    await useStore.getState().send("hi");
+    assert.deepEqual(JSON.parse(sent.body ?? ""), {
+      message: "hi",
+      stream: true,
+      search: { provider: "tavily", key: "k", count: 3 },
+    });
+  });
+
+  it("omits search when the seam provides none", async () => {
+    const { factory, sent } = fakeXhr(STREAM_OK);
+    const useStore = createChatStore(memoryStorage(), { openXhr: factory });
+    await useStore.getState().send("hi");
+    assert.ok(!("search" in JSON.parse(sent.body ?? "")));
   });
 
   it("marks the user bubble when the stream never opens", async () => {

@@ -18,10 +18,13 @@ from ...shared.ports import ConversationStore, Turn
 from . import agent as agent_module
 from .agent import (
     SESSION_TITLE_LEN,
+    SearchContext,
+    ToolRun,
     assistant_metadata,
     assistant_text,
     persist_turn,
     to_message_history,
+    tool_events,
     tool_names,
 )
 from .store import get_store
@@ -48,6 +51,10 @@ class StreamToken:
 @dataclass(frozen=True)
 class StreamToolCall:
     name: str
+    status: str
+    input: dict[str, object] | None
+    result: str | None
+    id: str
 
 
 @dataclass(frozen=True)
@@ -69,6 +76,26 @@ StreamEvent = StreamStart | StreamToken | StreamToolCall | StreamUsage | StreamD
 """Events the chat stream may yield, in order: start, tokens, tools, usage, done."""
 
 
+RESULT_MAX_CHARS = 2000
+"""Tool-result cap on the wire and in stored provenance: the answer carries
+what matters; steps keep enough to re-render, never whole pages."""
+
+
+def _done_dicts(runs: list[ToolRun]) -> list[dict[str, object]]:
+    """Closed runs as storable provenance (inputs + truncated results)."""
+    return [
+        {"name": run.name, "input": run.input, "result": _truncate(run.result)}
+        for run in runs
+        if run.status == "done"
+    ]
+
+
+def _truncate(result: str | None) -> str | None:
+    if result is None or len(result) <= RESULT_MAX_CHARS:
+        return result
+    return result[:RESULT_MAX_CHARS] + "\n…[truncated]"
+
+
 @dataclass(frozen=True)
 class TurnOutcome:
     reply: str
@@ -84,6 +111,7 @@ async def run_turn(
     prompt: str | None = None,
     use_history: bool = True,
     agent: Agent[None, str] | None = None,
+    search: SearchContext | None = None,
 ) -> TurnOutcome:
     """Run one companion turn and store user + final text.
 
@@ -110,6 +138,7 @@ async def run_turn(
         raise StoreError(str(exc)) from exc
 
     names: list[str] | None = None
+    dones: list[dict[str, object]] | None = None
     if image is not None:
         reply = await vlm.describe_frame(image, message)
     else:
@@ -117,12 +146,15 @@ async def run_turn(
         result = await agent.run(
             prompt or message,
             message_history=to_message_history(history),
+            deps=search,  # type: ignore[arg-type]
         )
         reply = assistant_text(result.output)
+        paired = tool_events(result.all_messages())
         names = tool_names(result.all_messages())
+        dones = _done_dicts(paired) or None
 
     try:
-        session_id = persist_turn(store, session_id, message, reply, names)
+        session_id = persist_turn(store, session_id, message, reply, names, None, dones)
     except Exception as exc:
         raise StoreError(str(exc)) from exc
     return TurnOutcome(reply=reply, session_id=session_id)
@@ -204,6 +236,7 @@ async def stream_turn_events(
     *,
     image: bytes | None = None,
     agent: Agent[None, str] | None = None,
+    search: SearchContext | None = None,
 ) -> AsyncIterator[StreamEvent]:
     """Yield the reply as stream events, then persist the assistant turn.
 
@@ -216,27 +249,35 @@ async def stream_turn_events(
         reply = await vlm.describe_frame(image, text)
         yield StreamToken(reply)
         usage = StreamUsage(0, 0, 0)
-        names = []
+        names: list[str] = []
+        paired: list[ToolRun] = []
+        dones: list[dict[str, object]] = []
     else:
         agent = agent or agent_module.get_companion_agent()
         parts: list[str] = []
         async with agent.run_stream(
-            text, message_history=to_message_history(history)
+            text,
+            message_history=to_message_history(history),
+            deps=search,  # type: ignore[arg-type]
         ) as result:
             async for chunk in result.stream_text(delta=True):
                 parts.append(chunk)
                 yield StreamToken(chunk)
+            paired = tool_events(result.all_messages())
             names = tool_names(result.all_messages())
+            dones = _done_dicts(paired)
             usage = _usage_of(result)
         reply = "".join(parts)
-    for name in names:
-        yield StreamToolCall(name)
+    for run in paired:
+        yield StreamToolCall(
+            run.name, run.status, run.input, _truncate(run.result), run.id
+        )
     yield usage
     append_assistant_text(
         reply,
         session_id,
         store=store,
-        metadata=assistant_metadata(names or None, _usage_dict(usage)),
+        metadata=assistant_metadata(names or None, _usage_dict(usage), dones or None),
     )
     yield StreamDone(session_id)
 

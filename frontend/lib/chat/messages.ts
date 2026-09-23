@@ -45,10 +45,31 @@ function toUsage(value: unknown): MessageUsage | undefined {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function toSteps(value: unknown): AgentStep[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const steps = value.filter((t): t is string => typeof t === "string");
-  return steps.length > 0 ? steps.map((tool) => ({ tool })) : undefined;
+  return steps.length > 0
+    ? steps.map((tool) => ({ tool, status: "done" as const }))
+    : undefined;
+}
+
+function toRunSteps(value: unknown): AgentStep[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const steps: AgentStep[] = [];
+  for (const row of value) {
+    if (!isRecord(row) || typeof row.name !== "string") continue;
+    steps.push({
+      tool: row.name,
+      status: "done",
+      ...(isRecord(row.input) ? { input: row.input } : {}),
+      ...(typeof row.result === "string" ? { result: row.result } : {}),
+    });
+  }
+  return steps.length > 0 ? steps : undefined;
 }
 
 /** History turns -> bubbles. Images are send-time only (never stored). */
@@ -56,7 +77,11 @@ export function toMessages(messages: HistoryMessage[]): ChatMessage[] {
   return messages.map((m) => {
     const metadata =
       typeof m.metadata === "object" && m.metadata !== null ? m.metadata : null;
-    const steps = metadata !== null ? toSteps(metadata.tool_calls) : undefined;
+    // tool_runs (Wave 2 provenance) wins; bare tool_calls stay as fallback.
+    const steps =
+      metadata !== null
+        ? toRunSteps(metadata.tool_runs) ?? toSteps(metadata.tool_calls)
+        : undefined;
     const usage = metadata !== null ? toUsage(metadata.usage) : undefined;
     return {
       id: newId(),

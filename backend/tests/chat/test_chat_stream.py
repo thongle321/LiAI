@@ -63,7 +63,20 @@ def test_stream_tool_and_usage_events(tool_agent) -> None:  # type: ignore[no-un
     kinds = [name for name, _ in events]
     assert kinds[0] == "start"
     assert kinds[-1] == "done"
-    assert ("tool", {"name": "get_current_time"}) in events
+    assert (
+        "tool",
+        {"name": "get_current_time"},
+    ) not in events  # Wave 1 bare shape is gone
+    tools = [payload for name, payload in events if name == "tool"]
+    assert tools[0] == {
+        "name": "get_current_time",
+        "status": "running",
+        "id": "t1",
+        "input": {},
+    }
+    assert tools[1]["name"] == "get_current_time" and tools[1]["status"] == "done"
+    assert tools[1]["id"] == "t1" and tools[1]["input"] == {}
+    assert isinstance(tools[1].get("result"), str)
     usage = [payload for name, payload in events if name == "usage"]
     assert len(usage) == 1
     assert set(usage[0]) == {"prompt_tokens", "completion_tokens", "total_tokens"}

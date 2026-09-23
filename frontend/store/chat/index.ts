@@ -9,7 +9,9 @@ import { create } from "zustand";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 
 import { getHealth } from "../../lib/api.ts";
+import type { SearchAuth } from "../../types/api.ts";
 import type { KeyValueStorage } from "../../lib/storage.ts";
+import { useSearch } from "../search.ts";
 import { createSendSlice } from "./send.ts";
 import { createSessionsSlice } from "./sessions.ts";
 import type { ChatCtx, ChatDeps, ChatState } from "./types.ts";
@@ -34,10 +36,21 @@ const asyncStorage: KeyValueStorage = {
   },
 };
 
+/** Default BYOK resolver: consent-gated key from SecureStore, never KV.
+ * Short-circuits before touching SecureStore when consent is absent. */
+async function defaultSearchAuth(): Promise<SearchAuth | null> {
+  const search = useSearch.getState();
+  if (!search.hasConsented) return null;
+  const key = await search.getProviderKey(search.activeProviderId);
+  if (!key) return null;
+  return { provider: search.activeProviderId, key, count: search.resultCount };
+}
+
 export function createChatStore(storage: KeyValueStorage, deps?: ChatDeps) {
   const ctx: ChatCtx = {
     storage,
     openXhr: deps?.openXhr,
+    getSearchAuth: deps?.getSearchAuth ?? defaultSearchAuth,
     active: { handle: null },
     streamGen: 0,
   };

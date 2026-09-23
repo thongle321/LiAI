@@ -116,4 +116,7 @@ def test_history_carries_tool_metadata_when_present(tool_agent) -> None:  # type
     assert resp.status_code == 200
     assistant = [m for m in resp.json()["messages"] if m["role"] == "assistant"]
     assert len(assistant) == 1
-    assert assistant[0]["metadata"] == {"tool_calls": ["get_current_time"]}
+    assert assistant[0]["metadata"]["tool_calls"] == ["get_current_time"]
+    (runs,) = assistant[0]["metadata"]["tool_runs"]
+    assert runs["name"] == "get_current_time" and runs["input"] == {}
+    assert isinstance(runs["result"], str) and runs["result"]

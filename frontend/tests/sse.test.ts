@@ -31,10 +31,32 @@ describe("parseSseBlock", () => {
       ),
       { type: "usage", promptTokens: 1, completionTokens: 2, totalTokens: 3 },
     );
-    assert.deepEqual(parseSseBlock('event: tool\ndata: {"name":"get_current_time"}'), {
-      type: "tool",
-      name: "get_current_time",
-    });
+assert.deepEqual(
+      parseSseBlock('event: tool\ndata: {"name":"web_search","status":"running","id":"w1","input":{"query":"q"}}'),
+      { type: "tool", name: "web_search", status: "running", id: "w1", input: { query: "q" } },
+);
+assert.deepEqual(
+      parseSseBlock(
+            'event: tool\ndata: {"name":"web_search","status":"done","id":"w1","input":{"query":"q"},"result":"R"}',
+      ),
+      {
+            type: "tool",
+            name: "web_search",
+            status: "done",
+            id: "w1",
+            input: { query: "q" },
+            result: "R",
+      },
+);
+// Blocks missing name, status, or id carry nothing usable.
+assert.equal(parseSseBlock('event: tool\ndata: {"name":"get_current_time"}'), null);
+assert.equal(parseSseBlock('event: tool\ndata: {"status":"done"}'), null);
+assert.equal(
+      parseSseBlock('event: tool\ndata: {"name":"x","status":"done"}'),
+      null,
+);
+assert.equal(parseSseBlock('event: tool\ndata: {"name":"x","status":"bogus","id":"a"}'), null);
+assert.equal(parseSseBlock('event: tool\ndata: {"name":"x","status":"done","id":"a","input":42}'), null);
     assert.deepEqual(
       parseSseBlock('event: error\ndata: {"code":"llm_error","message":"down"}'),
       { type: "error", code: "llm_error", message: "down" },

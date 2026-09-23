@@ -2,6 +2,7 @@
 
 import type { StoreApi } from "zustand";
 
+import type { SearchAuth } from "../../types/api.ts";
 import type { KeyValueStorage } from "../../lib/storage.ts";
 import type { MinimalXhr } from "../../lib/chat/api.ts";
 import type { ChatMessage, ChatSession } from "../../types/chat.ts";
@@ -18,12 +19,14 @@ export type ChatGet = StoreApi<ChatState>["getState"];
 
 export interface ChatDeps {
   openXhr?: () => MinimalXhr;
+  getSearchAuth?: () => Promise<SearchAuth | null>;
 }
 
 /** Per-factory mutable stream tracking (never in render state). */
 export interface ChatCtx {
   storage: KeyValueStorage;
   openXhr?: () => MinimalXhr;
+  getSearchAuth: () => Promise<SearchAuth | null>;
   active: { handle: { cancel(): void } | null };
   streamGen: number;
 }

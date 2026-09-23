@@ -107,12 +107,17 @@ backend/app/
 ### Contract changes
 
 - `POST /api/chat` — body adds `image?`
-  (exists), `retry?` (drops the last assistant turn), `stream?`.
+  (exists), `retry?` (drops the last assistant turn), `stream?`, and
+  `search?` (Wave 2: `{provider, key, count}` BYOK creds for the talent
+  loop — transient per request, consent-gated client-side, never stored
+  or logged; ADR-004).
   (`model_id?`/`byok?` arrive with the Wave-3 provider resolution.)
   `stream:false` → existing JSON contract (voice/vision paths unchanged).
   `stream:true` → `text/event-stream` events:
-  `token {text}` · `tool {name}` (Wave 1; status/input/result arrive with
-  the Wave-2 agent loop) · `usage {…}` · `done {session_id}` (Turns carry
+  `token {text}` · `tool {name,status,id,input?,result?}` (Wave 1 sent name
+  only; the Wave-2 agent loop adds status/input/result, and `id` — the
+  backend tool-call id — so the client upserts running→done by identity
+  and parallel same-name calls keep their own results) · `usage {…}` · `done {session_id}` (Turns carry
   no message ids, so there is no message_id) · `error {code,message}`.
   `retry:true` requires `stream:true` (JSON+retry → 422): the non-stream
   turn persists user+assistant together, so a JSON retry could not avoid

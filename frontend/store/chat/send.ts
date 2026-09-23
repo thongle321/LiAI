@@ -11,7 +11,7 @@ import {
 } from "../../lib/chat/api.ts";
 import type { ApiError, ApiErrorCode } from "../../types/api.ts";
 import type { ChatStreamEvent } from "../../lib/chat/sse.ts";
-import type { ChatMessage } from "../../types/chat.ts";
+import type { AgentStep, ChatMessage } from "../../types/chat.ts";
 import { newId } from "../../lib/chat/messages.ts";
 import { SESSION_KEY } from "./types.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
@@ -77,8 +77,11 @@ export function createSendSlice(
     const gen = (ctx.streamGen += 1);
     let started = false;
     let firstToken = true;
+    // BYOK search creds ride every streamed turn (consent-gated); a
+    // settings failure degrades to no-search rather than blocking the turn.
+    const search = await ctx.getSearchAuth().catch(() => null);
     const handle = postChatStream(
-      opts.body,
+      { ...opts.body, ...(search !== null ? { search } : {}) },
       (event: ChatStreamEvent) => {
         // Superseded (cancelled or replaced) streams never touch state.
         if (gen !== ctx.streamGen) return;
@@ -101,9 +104,25 @@ export function createSendSlice(
             break;
           }
           case "tool": {
-            updateBubble(opts.assistantId, (m) => ({
-              steps: [...(m.steps ?? []), { tool: event.name }],
-            }));
+            updateBubble(opts.assistantId, (m) => {
+              const steps = [...(m.steps ?? [])];
+              const next: AgentStep = {
+                id: event.id,
+                tool: event.name,
+                status: event.status,
+                ...(event.input !== undefined ? { input: event.input } : {}),
+                ...(event.result !== undefined ? { result: event.result } : {}),
+              };
+              // Pairs close by wire id: a done event completes its running
+              // entry; an unmatched done (or a repeat call) appends, so
+              // parallel same-name calls keep their own results.
+              const at = steps.findIndex(
+                (s) => s.id !== undefined && s.id === event.id,
+              );
+              if (at >= 0) steps[at] = { ...steps[at], ...next };
+              else steps.push(next);
+              return { steps };
+            });
             break;
           }
           case "usage": {

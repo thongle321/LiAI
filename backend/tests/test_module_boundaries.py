@@ -13,10 +13,13 @@ from pathlib import Path
 
 APP_ROOT = Path(__file__).resolve().parent.parent / "app"
 
-# Lateral edges allowed beyond shared/*: downstream conformists → companion.
+# Lateral edges allowed beyond shared/*: downstream conformists → companion,
+# and companion → search (ADR-007: the web_search talent delegates to the
+# search module's public search_web seam; keys stay per-request BYOK).
 ALLOWED_LATERAL = {
     ("chat", "companion"),
     ("vision", "companion"),
+    ("companion", "search"),
 }
 
 
@@ -126,8 +129,7 @@ def test_checker_catches_internal_cross_import(tmp_path: Path) -> None:
     (pkg / "vision" / "ws.py").write_text(
         "from app.modules.chat.internal import secret\n", encoding="utf-8"
     )
-    (pkg / "chat" / "router.py").write_text("x = 1\n", encoding="utf-8"
-    )
+    (pkg / "chat" / "router.py").write_text("x = 1\n", encoding="utf-8")
     found = find_violations(tmp_path / "app")
     assert any("internal cross-import" in v for v in found), found
 
@@ -152,7 +154,5 @@ def test_checker_flags_table_access_outside_companion(tmp_path: Path) -> None:
         "client.from_('sessions').insert({}).execute()\n", encoding="utf-8"
     )
     found = find_violations(tmp_path / "app")
-    assert any(
-        "direct table access" in v and "chat" in v for v in found
-    ), found
+    assert any("direct table access" in v and "chat" in v for v in found), found
     assert not any(v.startswith("app.modules.companion:") for v in found), found

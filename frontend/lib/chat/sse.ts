@@ -9,7 +9,15 @@
 export type ChatStreamEvent =
   | { type: "start"; sessionId: string }
   | { type: "token"; text: string }
-  | { type: "tool"; name: string }
+  | {
+      type: "tool";
+      name: string;
+      status: "running" | "done";
+      /** Wire identity for running→done upserts (backend tool_call_id). */
+      id: string;
+      input?: Record<string, unknown>;
+      result?: string;
+    }
   | {
       type: "usage";
       promptTokens: number;
@@ -64,7 +72,34 @@ export function parseSseBlock(block: string): ChatStreamEvent | null {
     }
     case "tool": {
       const toolName = asString(payload["name"]);
-      return toolName !== null ? { type: "tool", name: toolName } : null;
+      if (toolName === null) return null;
+      // The backend always sends status + id (construction-guaranteed);
+      // a block missing either is malformed, not tolerated.
+      const rawStatus = payload["status"];
+      if (rawStatus !== "running" && rawStatus !== "done") return null;
+      const id = asString(payload["id"]);
+      if (id === null) return null;
+      const rawInput = payload["input"];
+      let input: Record<string, unknown> | undefined;
+      if (rawInput !== undefined) {
+        if (!isRecord(rawInput)) return null;
+        input = rawInput;
+      }
+      const rawResult = payload["result"];
+      let result: string | undefined;
+      if (rawResult !== undefined) {
+        const text = asString(rawResult);
+        if (text === null) return null;
+        result = text;
+      }
+      return {
+        type: "tool",
+        name: toolName,
+        status: rawStatus,
+        id,
+        ...(input !== undefined ? { input } : {}),
+        ...(result !== undefined ? { result } : {}),
+      };
     }
     case "usage": {
       const promptTokens = asNumber(payload["prompt_tokens"]);

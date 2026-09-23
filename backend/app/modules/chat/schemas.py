@@ -5,6 +5,26 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 
+class SearchAuth(BaseModel):
+    """Per-request web-search credentials (BYOK, ADR-004).
+
+    Transient: the route maps this to the talent context and never stores
+    or logs it. Field names avoid the provider-selection guardrail
+    (provider_type/model_name/base_url/api_key/model_path): this selects
+    a *search* backend, never inference.
+    """
+
+    provider: Literal["tavily", "brave"]
+    key: str = Field(min_length=1)
+    count: int = Field(default=5, ge=1, le=10)
+
+    @model_validator(mode="after")
+    def _key_not_blank(self) -> "SearchAuth":
+        if not self.key.strip():
+            raise ValueError("search key must not be blank")
+        return self
+
+
 class ChatRequest(BaseModel):
     # None only on retry (regenerate reuses the stored question); the
     # validator below keeps every existing blank/missing 422 exactly.
@@ -14,6 +34,9 @@ class ChatRequest(BaseModel):
     retry: bool = False
     # Optional JPEG data-uri; when present the turn is answered by the VLM.
     image: str | None = None
+    # Optional web-search credentials for the talent loop (Wave 2); the
+    # client sends these only with consent + a stored key, per request.
+    search: SearchAuth | None = None
 
     @model_validator(mode="after")
     def _message_rules(self) -> "ChatRequest":

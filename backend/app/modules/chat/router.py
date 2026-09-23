@@ -12,6 +12,7 @@ from ...shared.ports import ConversationStore, SessionInfo, Turn
 from ...shared.validators import validate_jpeg
 from ..companion import (
     NothingToRegenerate,
+    SearchContext,
     StoreError,
     StreamStart,
     agent_dependency,
@@ -164,6 +165,7 @@ async def chat(
                 body.message or "",
                 image=image_bytes,
                 agent=agent,
+                search=_search_context(body),
             )
         except StoreError as exc:
             return error_response(503, "store_error", str(exc))
@@ -179,9 +181,22 @@ async def chat(
     except StoreError as exc:
         return error_response(503, "store_error", str(exc))
     return StreamingResponse(
-        _stream_events(store, sid, text, history, image_bytes, agent),
+        _stream_events(
+            store, sid, text, history, image_bytes, agent, _search_context(body)
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+def _search_context(body: ChatRequest) -> SearchContext | None:
+    """Wire creds -> talent context (transient; never stored or logged)."""
+    if body.search is None:
+        return None
+    return SearchContext(
+        provider=body.search.provider,
+        key=body.search.key.strip(),
+        count=body.search.count,
     )
 
 
@@ -192,6 +207,7 @@ async def _stream_events(
     history: list[Turn],
     image: bytes | None,
     agent: Agent[None, str],
+    search: SearchContext | None,
 ):
     """SSE body: start first, then companion events; failures become error events.
 
@@ -201,7 +217,7 @@ async def _stream_events(
     yield event_to_sse(StreamStart(session_id))
     try:
         async for event in stream_turn_events(
-            store, session_id, text, history, image=image, agent=agent
+            store, session_id, text, history, image=image, agent=agent, search=search
         ):
             yield event_to_sse(event)
     except asyncio.CancelledError:

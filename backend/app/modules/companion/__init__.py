@@ -8,6 +8,8 @@ from ...shared.ports import (
 )
 from .agent import (
     SESSION_TITLE_LEN,
+    SearchContext,
+    ToolRun,
     agent_dependency,
     assistant_metadata,
     assistant_text,
@@ -16,6 +18,7 @@ from .agent import (
     persist_turn,
     provider_function,
     to_message_history,
+    tool_events,
     tool_names,
 )
 from .service import (
@@ -42,6 +45,7 @@ __all__ = [
     "ConversationStore",
     "InMemoryConversationStore",
     "NothingToRegenerate",
+    "SearchContext",
     "SessionInfo",
     "StoreError",
     "StreamDone",
@@ -51,6 +55,7 @@ __all__ = [
     "StreamToolCall",
     "StreamUsage",
     "SupabaseConversationStore",
+    "ToolRun",
     "Turn",
     "TurnOutcome",
     "agent_dependency",
@@ -67,6 +72,7 @@ __all__ = [
     "run_turn",
     "stream_turn_events",
     "to_message_history",
+    "tool_events",
     "tool_names",
     "turn_to_row",
 ]

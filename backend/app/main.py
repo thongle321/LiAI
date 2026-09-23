@@ -15,9 +15,10 @@ from pydantic_ai.exceptions import UserError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .agents import companion
+from .modules.models import router as models_router
 from .providers.factory import clear_provider_cache, get_provider
 from .realtime import vlm
-from .routers import chat, models, vision
+from .routers import chat, vision
 from .schemas import HealthResponse
 from .shared.kernel import error_response
 
@@ -99,4 +100,4 @@ async def unhandled_handler(request: Request, exc: Exception):
 
 app.include_router(chat.router)
 app.include_router(vision.router)
-app.include_router(models.router)
+app.include_router(models_router)

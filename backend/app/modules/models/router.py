@@ -1,13 +1,13 @@
-"""GGUF model file routes: thin wiring over model_files service."""
+"""GGUF model file routes: thin wiring over the internal service."""
 
 import logging
 
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse
 
-from .. import model_files
-from ..schemas import ModelListResponse, ModelUploadResponse
-from ..shared.kernel import error_response
+from ...schemas import ModelListResponse, ModelUploadResponse
+from ...shared.kernel import error_response
+from . import internal as model_files
 
 router = APIRouter()
 
@@ -64,7 +64,7 @@ async def upload_model(
 
 
 @router.get("/api/models", response_model=ModelListResponse)
-async def list_models() -> ModelListResponse | JSONResponse:
+async def list_models_route() -> ModelListResponse | JSONResponse:
     """List available GGUF models in the backend models directory."""
     try:
         return ModelListResponse(models=model_files.list_models())
@@ -75,19 +75,19 @@ async def list_models() -> ModelListResponse | JSONResponse:
 @router.delete("/api/models/{filename}")
 async def delete_model(filename: str) -> JSONResponse:
     """Delete a GGUF model from the backend models directory."""
-    safe_filename = model_files.safe_name(filename)
-    if not model_files.is_gguf(safe_filename):
+    safe = model_files.safe_name(filename)
+    if not model_files.is_gguf(safe):
         return error_response(400, "invalid_request", "Only .gguf files can be deleted")
 
     model_path = model_files.path_for(filename)
 
     if not model_path.exists():
-        return error_response(404, "not_found", f"Model {safe_filename} not found")
+        return error_response(404, "not_found", f"Model {safe} not found")
 
     try:
         model_path.unlink()
-        logger.info("Model deleted: %s", safe_filename)
-        return JSONResponse(content={"message": f"Model {safe_filename} deleted"})
+        logger.info("Model deleted: %s", safe)
+        return JSONResponse(content={"message": f"Model {safe} deleted"})
     except Exception as exc:  # noqa: BLE001 — delete boundary maps to 500 envelope
         logger.error("Model deletion failed: %s", exc)
         return error_response(500, "delete_failed", str(exc))

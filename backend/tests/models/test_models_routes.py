@@ -8,9 +8,10 @@ import io
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx2 import Response
 
-from app import model_files
 from app.main import app
+from app.modules.models import internal as model_files
 
 client = TestClient(app)
 
@@ -23,7 +24,7 @@ def models_dir(tmp_path, monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-un
     return path
 
 
-def _upload(name: str, payload: bytes = b"gguf-bytes") -> object:
+def _upload(name: str, payload: bytes = b"gguf-bytes") -> Response:
     return client.post(
         "/api/models/upload",
         files={"file": (name, io.BytesIO(payload), "application/octet-stream")},

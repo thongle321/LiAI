@@ -1,8 +1,7 @@
 """History tests: GET /api/history returns stored turns, forgiving session lifecycle."""
 
-from fastapi.testclient import TestClient
-
 import pytest
+from fastapi.testclient import TestClient
 
 from app.main import app
 from tests.test_contract import assert_envelope
@@ -50,7 +49,7 @@ def test_history_unknown_session_id_is_fresh_empty() -> None:
 def test_history_store_failure_is_store_error_envelope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import app.main as main
+    import app.routers.chat as chat_router
 
     class BrokenStore:
         def get(self, session_id: str) -> object:
@@ -62,7 +61,7 @@ def test_history_store_failure_is_store_error_envelope(
         def append(self, session_id: str, turn: object) -> None:
             raise RuntimeError("db down")
 
-    monkeypatch.setattr(main, "get_store", lambda: BrokenStore())
+    monkeypatch.setattr(chat_router, "get_store", lambda: BrokenStore())
     resp = client.get("/api/history", params={"session_id": "x"})
     assert resp.status_code == 503
     assert_envelope(resp.json(), "store_error")

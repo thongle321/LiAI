@@ -1,34 +1,25 @@
-import base64
+"""LiAI backend composition root (ADR-0002): lifespan, middleware, router mounts.
+
+Route logic lives in app/routers/*; this file only ties everything together.
+"""
+
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, Request, UploadFile, WebSocket
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic_ai.exceptions import UserError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import model_files
 from .agents import companion
-from .memory import get_store
 from .providers.factory import clear_provider_cache, get_provider
 from .realtime import vlm
-from .realtime.qa import validate_jpeg
-from .realtime.ws import handle_vision_socket
-from .schemas import (
-    ChatRequest,
-    ChatResponse,
-    ErrorDetail,
-    ErrorResponse,
-    HealthResponse,
-    HistoryMessage,
-    HistoryResponse,
-    ModelListResponse,
-    ModelUploadResponse,
-)
-from .turns import StoreError, run_turn
+from .routers import chat, models, vision
+from .schemas import HealthResponse
+from .shared.kernel import error_response
 
 logging.basicConfig(
     level=logging.INFO,
@@ -70,10 +61,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="LiAI backend", lifespan=lifespan)
 
-# ponytail: open CORS for dev only, restrict origins when auth/prod lands
+# ponytail: open CORS for dev only. Prod sets CORS_ORIGINS to explicit origins
+# (credentialed mobile/web clients); the "*" default never leaves dev.
+_cors_origins = [
+    o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",") if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -84,156 +79,24 @@ def health() -> HealthResponse:
     return HealthResponse()
 
 
-def _error(status_code: int, code: str, message: str) -> JSONResponse:
-    # One envelope for every failure, built from the shared schema.
-    body = ErrorResponse(error=ErrorDetail(code=code, message=message))
-    return JSONResponse(status_code=status_code, content=body.model_dump())
-
-
 # ponytail: one envelope for every failure so the Expo client parses once
 @app.exception_handler(RequestValidationError)
-async def validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+async def validation_handler(request: Request, exc: RequestValidationError):
     message = "; ".join(e["msg"] for e in exc.errors())
-    return _error(422, "invalid_request", message)
+    return error_response(422, "invalid_request", message)
 
 
 @app.exception_handler(StarletteHTTPException)
-async def http_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+async def http_handler(request: Request, exc: StarletteHTTPException):
     code = "not_found" if exc.status_code == 404 else "http_error"
-    return _error(exc.status_code, code, str(exc.detail))
+    return error_response(exc.status_code, code, str(exc.detail))
 
 
 @app.exception_handler(Exception)
-async def unhandled_handler(request: Request, exc: Exception) -> JSONResponse:
-    return _error(500, "internal_error", str(exc))
+async def unhandled_handler(request: Request, exc: Exception):
+    return error_response(500, "internal_error", str(exc))
 
 
-@app.get("/api/history", response_model=HistoryResponse)
-async def history(session_id: str | None = None) -> HistoryResponse | JSONResponse:
-    store = get_store()
-    try:
-        if session_id is None:
-            return HistoryResponse(session_id=store.create(), messages=[])
-        turns = store.get(session_id)
-        if turns is None:
-            return HistoryResponse(session_id=store.create(), messages=[])
-        return HistoryResponse(
-            session_id=session_id,
-            messages=[
-                HistoryMessage(role=t.role, content=t.content) for t in turns
-            ],
-        )
-    except Exception as exc:
-        return _error(503, "store_error", str(exc))
-
-
-def _decode_image(data_uri: str) -> bytes:
-    """Bare base64 payload or data-uri; anything else raises ValueError."""
-    try:
-        return base64.b64decode(data_uri.split(",", 1)[-1], validate=True)
-    except ValueError:
-        raise ValueError("image must be base64-encoded JPEG") from None
-
-
-@app.websocket("/api/vision/ws")
-async def vision_ws(websocket: WebSocket) -> None:
-    await handle_vision_socket(websocket)
-
-
-@app.post("/api/chat", response_model=ChatResponse)
-async def chat(body: ChatRequest) -> ChatResponse | JSONResponse:
-    image_bytes: bytes | None = None
-    if body.image is not None:
-        try:
-            image_bytes = _decode_image(body.image)
-            validate_jpeg(image_bytes)
-        except ValueError as exc:
-            return _error(400, "invalid_request", str(exc))
-    try:
-        outcome = await run_turn(
-            get_store(), body.session_id, body.message, image=image_bytes
-        )
-    except StoreError as exc:
-        return _error(503, "store_error", str(exc))
-    except Exception as exc:  # noqa: BLE001 — llm/agent boundary
-        return _error(502, "llm_error", str(exc))
-    return ChatResponse(reply=outcome.reply, session_id=outcome.session_id)
-
-
-@app.post("/api/models/upload", response_model=ModelUploadResponse)
-async def upload_model(file: UploadFile = File(...)) -> ModelUploadResponse | JSONResponse:
-    """Upload a GGUF model file from the mobile client to the backend.
-    
-    The file is streamed to disk to handle large files (500MB - 4GB+) without
-    loading into memory.
-    """
-    if not file.filename:
-        return _error(400, "invalid_request", "No filename provided")
-
-    if not model_files.is_gguf(file.filename):
-        return _error(400, "invalid_request", "Only .gguf files are supported")
-
-    dest_path = model_files.path_for(file.filename)
-    safe_filename = dest_path.name
-
-    if dest_path.exists():
-        return _error(409, "conflict", f"Model {safe_filename} already exists")
-
-    try:
-        # Stream the file to disk in chunks
-        chunk_size = 1024 * 1024  # 1MB chunks
-        total_size = 0
-
-        with open(dest_path, "wb") as f:
-            while True:
-                chunk = await file.read(chunk_size)
-                if not chunk:
-                    break
-                f.write(chunk)
-                total_size += len(chunk)
-
-        logging.getLogger(__name__).info(
-            "Model uploaded: %s (%d bytes)", safe_filename, total_size
-        )
-
-        return ModelUploadResponse(
-            filename=safe_filename,
-            size_bytes=total_size,
-            path=str(dest_path),
-        )
-    except Exception as exc:
-        # Clean up partial file on error
-        if dest_path.exists():
-            dest_path.unlink()
-        logging.getLogger(__name__).error("Model upload failed: %s", exc)
-        return _error(500, "upload_failed", str(exc))
-
-
-@app.get("/api/models", response_model=ModelListResponse)
-async def list_models() -> ModelListResponse:
-    """List available GGUF models in the backend models directory."""
-    try:
-        return ModelListResponse(models=model_files.list_models())
-    except Exception as exc:
-        return _error(500, "list_failed", str(exc))
-
-
-@app.delete("/api/models/{filename}")
-async def delete_model(filename: str) -> JSONResponse:
-    """Delete a GGUF model from the backend models directory."""
-    safe_filename = model_files.safe_name(filename)
-    if not model_files.is_gguf(safe_filename):
-        return _error(400, "invalid_request", "Only .gguf files can be deleted")
-
-    model_path = model_files.path_for(filename)
-
-    if not model_path.exists():
-        return _error(404, "not_found", f"Model {safe_filename} not found")
-
-    try:
-        model_path.unlink()
-        logging.getLogger(__name__).info("Model deleted: %s", safe_filename)
-        return JSONResponse(content={"message": f"Model {safe_filename} deleted"})
-    except Exception as exc:
-        logging.getLogger(__name__).error("Model deletion failed: %s", exc)
-        return _error(500, "delete_failed", str(exc))
+app.include_router(chat.router)
+app.include_router(vision.router)
+app.include_router(models.router)

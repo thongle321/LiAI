@@ -1,0 +1,93 @@
+"""GGUF model file routes: thin wiring over model_files service."""
+
+import logging
+
+from fastapi import APIRouter, File, UploadFile
+from fastapi.responses import JSONResponse
+
+from .. import model_files
+from ..schemas import ModelListResponse, ModelUploadResponse
+from ..shared.kernel import error_response
+
+router = APIRouter()
+
+logger = logging.getLogger(__name__)
+
+
+@router.post("/api/models/upload", response_model=ModelUploadResponse)
+async def upload_model(
+    file: UploadFile = File(...),
+) -> ModelUploadResponse | JSONResponse:
+    """Upload a GGUF model file from the mobile client to the backend.
+
+    The file is streamed to disk to handle large files (500MB - 4GB+) without
+    loading into memory.
+    """
+    if not file.filename:
+        return error_response(400, "invalid_request", "No filename provided")
+
+    if not model_files.is_gguf(file.filename):
+        return error_response(400, "invalid_request", "Only .gguf files are supported")
+
+    dest_path = model_files.path_for(file.filename)
+    safe_filename = dest_path.name
+
+    if dest_path.exists():
+        return error_response(409, "conflict", f"Model {safe_filename} already exists")
+
+    try:
+        # Stream the file to disk in chunks
+        chunk_size = 1024 * 1024  # 1MB chunks
+        total_size = 0
+
+        with open(dest_path, "wb") as f:
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+                total_size += len(chunk)
+
+        logger.info("Model uploaded: %s (%d bytes)", safe_filename, total_size)
+
+        return ModelUploadResponse(
+            filename=safe_filename,
+            size_bytes=total_size,
+            path=str(dest_path),
+        )
+    except Exception as exc:
+        # Clean up partial file on error
+        if dest_path.exists():
+            dest_path.unlink()
+        logger.error("Model upload failed: %s", exc)
+        return error_response(500, "upload_failed", str(exc))
+
+
+@router.get("/api/models", response_model=ModelListResponse)
+async def list_models() -> ModelListResponse | JSONResponse:
+    """List available GGUF models in the backend models directory."""
+    try:
+        return ModelListResponse(models=model_files.list_models())
+    except Exception as exc:
+        return error_response(500, "list_failed", str(exc))
+
+
+@router.delete("/api/models/{filename}")
+async def delete_model(filename: str) -> JSONResponse:
+    """Delete a GGUF model from the backend models directory."""
+    safe_filename = model_files.safe_name(filename)
+    if not model_files.is_gguf(safe_filename):
+        return error_response(400, "invalid_request", "Only .gguf files can be deleted")
+
+    model_path = model_files.path_for(filename)
+
+    if not model_path.exists():
+        return error_response(404, "not_found", f"Model {safe_filename} not found")
+
+    try:
+        model_path.unlink()
+        logger.info("Model deleted: %s", safe_filename)
+        return JSONResponse(content={"message": f"Model {safe_filename} deleted"})
+    except Exception as exc:
+        logger.error("Model deletion failed: %s", exc)
+        return error_response(500, "delete_failed", str(exc))

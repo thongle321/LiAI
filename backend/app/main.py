@@ -1,6 +1,6 @@
 """LiAI backend composition root (ADR-0002): lifespan, middleware, router mounts.
 
-Route logic lives in app/routers/*; this file only ties everything together.
+Route logic lives in app/modules/*/router.py; this file only ties everything together.
 """
 
 import logging

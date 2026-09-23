@@ -2,6 +2,16 @@
 
 Date: 2026-09-23
 Status: Accepted
+
+Implementation: steps 0–7 landed 2026-09-23 on `dev`
+(one commit per step). Q8 deviation: caption persistence stays inline —
+the caption message carries `session_id` synchronously and the tick path
+is VLM-bound (seconds), so store IO is noise; deferral would break the
+client contract for no measurable gain.
+`app/providers/`, `app/db/` (client factory), `app/config/` stay top-level:
+moving them into `shared/` is pure churn — they are already shared leaves
+with no lateral importers, and the dependency rules (which hold, gated)
+matter more than the directory picture.
 Deciders: backend
 
 ## Context

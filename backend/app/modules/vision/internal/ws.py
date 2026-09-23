@@ -11,6 +11,7 @@ from pydantic import TypeAdapter
 from pydantic_ai import Agent
 
 from ....schemas import ErrorDetail
+from ....shared.ports import ConversationStore
 from ..schemas import VisionClientMessage
 from .qa import answer_about_frame, caption_frame, store_caption, validate_jpeg
 
@@ -138,7 +139,9 @@ async def narration_loop(
 
 
 async def handle_vision_socket(
-    websocket: WebSocket, agent: Agent[None, str] | None = None
+    websocket: WebSocket,
+    agent: Agent[None, str] | None = None,
+    store: ConversationStore | None = None,
 ) -> None:
     await websocket.accept()
     # ponytail: session minted lazily on first stored turn (answer or caption)
@@ -183,7 +186,8 @@ async def handle_vision_socket(
                 async with lock:
                     try:
                         reply, state.session_id = await answer_about_frame(
-                            msg.text, state.latest, state.session_id, agent=agent
+                            msg.text, state.latest, state.session_id,
+                            agent=agent, store=store,
                         )
                     except ValueError as exc:
                         if not await send_error(websocket, str(exc)):

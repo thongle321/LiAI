@@ -8,6 +8,7 @@ no history) → same turn seam persists exactly user + final text.
 from pydantic_ai import Agent
 
 from ...companion import append_assistant_text, get_store, run_turn
+from ....shared.ports import ConversationStore
 from ....shared.validators import validate_jpeg
 from ....shared import vlm
 
@@ -20,6 +21,7 @@ async def answer_about_frame(
     jpeg: bytes,
     session_id: str | None = None,
     agent: Agent[None, str] | None = None,
+    store: ConversationStore | None = None,
 ) -> tuple[str, str]:
     if not question.strip():
         raise ValueError("question must not be empty")
@@ -27,7 +29,7 @@ async def answer_about_frame(
     seen = await vlm.describe_frame(jpeg, question)
     prompt = f"Question about the current camera view: {question}\nWhat the camera shows: {seen}"
     outcome = await run_turn(
-        get_store(),
+        store or get_store(),
         session_id,
         question,
         prompt=prompt,

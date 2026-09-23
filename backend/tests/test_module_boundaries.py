@@ -22,14 +22,16 @@ ALLOWED_LATERAL = {
 
 def _absolute_imports(tree: ast.Module, module_name: str) -> list[str]:
     """All absolute `app.*` imports of one file (relative resolved)."""
+    parts = module_name.split(".")
     found: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             found.extend(a.name for a in node.names)
         elif isinstance(node, ast.ImportFrom):
             if node.level:
-                parts = module_name.split(".")
-                base = parts[: len(parts) - node.level + 1]
+                # parts includes the file: app.modules.chat.router is 4 parts.
+                # Level N strips N trailing parts (file + N-1 packages).
+                base = parts[: len(parts) - node.level]
                 mod = ".".join(base + (node.module.split(".") if node.module else []))
             else:
                 mod = node.module or ""
@@ -48,6 +50,18 @@ def _mod_name(mod: str) -> str | None:
     if len(parts) >= 3 and parts[0] == "app" and parts[1] == "modules":
         return parts[2]
     return None
+
+
+def _direct_table_writes(tree: ast.Module) -> bool:
+    """True when the file touches Supabase tables (from_/execute chain)."""
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"from_", "execute"}
+        ):
+            return True
+    return False
 
 
 def find_violations(root: Path = APP_ROOT) -> list[str]:
@@ -71,20 +85,38 @@ def find_violations(root: Path = APP_ROOT) -> list[str]:
                 continue
             if "internal" in imp.split(target_mod, 1)[1].split("."):
                 violations.append(f"{importer} → {imp}: internal cross-import")
+            elif importer == "app.main":
+                # Composition root mounts module routers; nothing else.
+                continue
             elif (importer_mod, target_mod) not in ALLOWED_LATERAL:
                 violations.append(f"{importer} → {imp}: lateral import")
+        # Rule 3b: only companion touches tables; others persist via run_turn.
+        if _mod_name(importer) != "companion" and _direct_table_writes(tree):
+            violations.append(f"{importer}: direct table access outside companion")
     return violations
 
 
 def test_module_boundaries() -> None:
     violations = find_violations()
-    if os.getenv("MODULE_BOUNDARIES", "warn") == "deny":
+    if os.getenv("MODULE_BOUNDARIES", "deny") == "deny":
         assert not violations, "boundary violations:\n" + "\n".join(violations)
     elif violations:
         warnings.warn(
             "module boundary drift (warn-only):\n" + "\n".join(violations),
             stacklevel=2,
         )
+
+
+def test_checker_resolves_relative_imports(tmp_path: Path) -> None:
+    pkg = tmp_path / "app" / "modules"
+    (pkg / "chat").mkdir(parents=True)
+    (pkg / "chat" / "router.py").write_text(
+        "from ...shared.kernel import error_response\n"
+        "from ..companion import run_turn\n",
+        encoding="utf-8",
+    )
+    found = find_violations(tmp_path / "app")
+    assert found == [], found
 
 
 def test_checker_catches_internal_cross_import(tmp_path: Path) -> None:
@@ -107,3 +139,20 @@ def test_checker_allows_conformist_edge(tmp_path: Path) -> None:
         "from app.modules.companion import run_turn\n", encoding="utf-8"
     )
     assert find_violations(tmp_path / "app") == []
+
+
+def test_checker_flags_table_access_outside_companion(tmp_path: Path) -> None:
+    pkg = tmp_path / "app" / "modules"
+    (pkg / "chat").mkdir(parents=True)
+    (pkg / "chat" / "router.py").write_text(
+        "client.from_('sessions').insert({}).execute()\n", encoding="utf-8"
+    )
+    (pkg / "companion").mkdir(parents=True)
+    (pkg / "companion" / "store.py").write_text(
+        "client.from_('sessions').insert({}).execute()\n", encoding="utf-8"
+    )
+    found = find_violations(tmp_path / "app")
+    assert any(
+        "direct table access" in v and "chat" in v for v in found
+    ), found
+    assert not any(v.startswith("app.modules.companion:") for v in found), found

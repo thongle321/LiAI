@@ -39,9 +39,13 @@ def _supabase_env_present() -> bool:
     return bool(os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_SECRET_KEY"))
 
 
+def _live_supabase_opted_in() -> bool:
+    return os.getenv("LIVE_SUPABASE") == "1" and _supabase_env_present()
+
+
 @pytest.mark.skipif(
-    not _supabase_env_present(),
-    reason="set SUPABASE_URL and SUPABASE_SECRET_KEY for live Supabase tests",
+    not _live_supabase_opted_in(),
+    reason="set LIVE_SUPABASE=1 (plus SUPABASE_URL and SUPABASE_SECRET_KEY) for live Supabase tests",
 )
 def test_supabase_passes_conformance() -> None:
     from app.memory.supabase_store import SupabaseConversationStore

@@ -1,9 +1,10 @@
 /** ONE persistent bottom interaction panel: composer + dictation.
  *
  * The composer mic dictates into the draft (you press Send); the
- * Voice tab opens the standalone /voice hands-free screen, and the
- * Vision tab opens the standalone /vision camera screen. The message
- * list always stays visible above; nothing else navigates away.
+ * Voice tab opens the standalone /voice hands-free screen, and
+ * the Vision entry opens the standalone /vision camera screen. The
+ * message list always stays visible above; nothing else navigates away.
+ * The bottom tab bar lives in app/(drawer)/(tabs)/_layout.tsx, not here.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -17,7 +18,6 @@ import {
 } from "expo-speech-recognition";
 
 import { colors } from "../themes/tokens.ts";
-import { BottomNav } from "./BottomNav.tsx";
 import { mergeDictation, VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
 import { ensureMicAccess } from "../lib/micAccess.ts";
 import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../lib/voiceStatus.ts";
@@ -201,14 +201,6 @@ export function InteractionPanel({
           <Send size={22} color={canSend ? colors.primary : colors.secondaryText} />
         </Pressable>
       </View>
-
-      <BottomNav
-        active="chat"
-        onSelect={(t) => {
-          setPlusOpen(false);
-          router.navigate(t === "chat" ? "/chat" : `/${t}`);
-        }}
-      />
     </View>
   );
 }

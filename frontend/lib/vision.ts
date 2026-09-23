@@ -13,8 +13,10 @@ export function visionSocketUrl(): string {
 }
 
 /** Keep the preview live while idle/listening; pause while the AI answers
- * (including TTS), then resume for the next turn. */
-export function shouldStreamFrames(phase: VoicePhase): boolean {
+ * (including TTS) or a chat send is in flight, then resume for the next
+ * turn. A failed send clears `sending`, so the stream always resumes. */
+export function shouldStreamFrames(phase: VoicePhase, chatSending: boolean): boolean {
+  if (chatSending) return false;
   return phase === "idle" || phase === "listening";
 }
 

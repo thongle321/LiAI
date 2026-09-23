@@ -46,6 +46,7 @@ export function useVisionTurn(
   const [issue, setIssue] = useState<string | null>(null);
   const [needsSettings, setNeedsSettings] = useState(false);
   const send = useChatStore((s) => s.send);
+  const sending = useChatStore((s) => s.sending);
   const recordVisionTurn = useChatStore((s) => s.recordVisionTurn);
 
   const phaseRef = useRef<VoicePhase>("idle");
@@ -75,7 +76,7 @@ export function useVisionTurn(
     frameRef.current = null;
   }
 
-  const stream = useVisionStream(camera, cameraReady, shouldStreamFrames(phase), {
+  const stream = useVisionStream(camera, cameraReady, shouldStreamFrames(phase, sending), {
     onAnswer: (text, sessionId) => {
       clearAnswerTimeout();
       if (!aliveRef.current || phaseRef.current !== "thinking") return;
@@ -356,6 +357,7 @@ export function useVisionTurn(
     issue,
     needsSettings,
     streamProblem: stream.problem,
+    frameProcessor: stream.frameProcessor,
     bargeIn,
     retry,
     sendText,

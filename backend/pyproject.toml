@@ -8,7 +8,6 @@ dependencies = [
     "uvicorn>=0.30",
     "supabase>=2.31.0",
     "pydantic-ai-slim[openrouter]>=2.42.0",
-    "ruff>=0.16.6",
     "huggingface-hub>=0.23.0",
     "pillow>=12.3.0",
     "python-multipart>=0.0.9",
@@ -20,7 +19,9 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "import-linter>=2.15",
     "pytest>=8",
+    "ruff>=0.16.6",
 ]
 
 [tool.pytest.ini_options]

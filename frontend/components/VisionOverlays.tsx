@@ -4,7 +4,7 @@
  * (hook + callbacks) while this file owns the large JSX blocks.
  */
 
-import type { RefObject } from "react";
+import type { ComponentProps, RefObject } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { Keyboard, Mic, Send, SwitchCamera, X } from "lucide-react-native";
@@ -24,6 +24,7 @@ export function VisionPreview({
   focused,
   fade,
   cameraRef,
+  frameProcessor,
   onReady,
   onProblem,
   onGrant,
@@ -33,6 +34,7 @@ export function VisionPreview({
   focused: boolean;
   fade: ReturnType<typeof useTabContentFade>;
   cameraRef: RefObject<VisionCameraView | null>;
+  frameProcessor: ComponentProps<typeof Camera>["frameProcessor"];
   onReady: () => void;
   onProblem: (message: string) => void;
   onGrant: () => void;
@@ -46,6 +48,7 @@ export function VisionPreview({
           device={device}
           isActive={focused}
           photo
+          frameProcessor={frameProcessor}
           onInitialized={onReady}
           onError={(e: { message?: unknown }) =>
             onProblem(`Camera error: ${String(e.message ?? e)}`)

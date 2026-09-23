@@ -1,15 +1,24 @@
 /** Vision stream: live frames over the backend WebSocket.
  *
- * The camera preview stays active while the screen is focused. Frames are
- * sent once per second while idle/listening. Uploads pause while the AI
- * answers (including TTS), then resume for the next turn. A question sends
- * the current frame first, then the question, which lets the backend cancel
- * any in-flight caption before answering.
+ * The camera preview stays active while the screen is focused. A 500ms
+ * interval snapshots (quality-50 JPEG) and sends while idle/listening.
+ * Uploads pause while the AI answers (including TTS) or a chat send is in
+ * flight, then resume for the next turn. A question sends the current frame
+ * first, then the question, which lets the backend cancel any in-flight
+ * caption before answering.
+ *
+ * A bridge-free Worklet Frame Processor is attached to the Camera so the
+ * frame pipeline stays live for future on-worklet pixel work. It makes no
+ * JS calls: the cross-generation worklet→JS bridge proved unreliable
+ * (first a scheduleOnRN crash, then silent ticks), so cadence stays on
+ * the proven interval until the toolchain aligns on one worklets
+ * generation. Requires a dev binary built with enableFrameProcessors.
  */
 
 import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { Camera } from "react-native-vision-camera";
+import { runAtTargetFps, useFrameProcessor } from "react-native-vision-camera";
 import { useIsFocused } from "expo-router";
 
 import { snapshotToBase64 } from "../lib/snapshot.ts";
@@ -42,6 +51,15 @@ export function useVisionStream(
   cameraReadyRef.current = cameraReady;
   const focused = useIsFocused();
   const [problem, setProblem] = useState<string | null>(null);
+
+  /** Pipeline heartbeat: keeps the frame processor live without crossing
+   * the worklet→JS bridge. Cadence comes from the interval below. */
+  const frameProcessor = useFrameProcessor(() => {
+    "worklet";
+    runAtTargetFps(2, () => {
+      "worklet";
+    });
+  }, []);
 
   useEffect(() => {
     if (!focused) return;
@@ -133,7 +151,7 @@ export function useVisionStream(
         .finally(() => {
           capturing.current = false;
         });
-    }, 1000);
+    }, 500);
 
     return () => {
       active = false;
@@ -173,5 +191,6 @@ export function useVisionStream(
     problem,
     sendQuestion,
     isCapturing: () => capturing.current,
+    frameProcessor,
   };
 }

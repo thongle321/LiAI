@@ -9,12 +9,6 @@ export interface ChatRequest {
   session_id?: string;
   /** Optional JPEG data-uri; backend routes it to the VLM when present. */
   image?: string;
-  // Provider selection for dynamic model switching
-  provider_type?: "openrouter" | "custom_openai" | "local_gguf";
-  model_name?: string;
-  base_url?: string;
-  api_key?: string;
-  model_path?: string;
 }
 
 export interface ChatResponse {

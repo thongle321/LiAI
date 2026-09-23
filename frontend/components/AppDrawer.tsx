@@ -1,22 +1,21 @@
-/** PocketPal-style overlay drawer, LiAI tokens only.
+/** PocketPal-style drawer content, LiAI tokens only.
  *
- * Slide-in panel + scrim; chat stays mounted underneath. Dismisses via
- * scrim tap, swipe left, item tap, or hardware back. History rows come
- * from the store's on-device index (tap loads, X deletes).
+ * Rendered by the navigator-owned <Drawer> (app/(drawer)/_layout.tsx),
+ * which provides the panel slide, scrim, gestures, and back handling —
+ * this file is only the panel UI. History rows come from the store's
+ * on-device index (tap loads, X deletes).
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  Animated,
-  BackHandler,
   FlatList,
-  Modal,
   Pressable,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import { useDrawerStatus } from "expo-router/drawer";
 import Constants from "expo-constants";
 import {
   CircleHelp,
@@ -39,13 +38,7 @@ import {
 
 const VERSION = Constants.expoConfig?.version ?? "0.1.0";
 
-export function AppDrawer({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
+export function AppDrawerContent({ onClose }: { onClose: () => void }) {
   const connection = useChatStore((s) => s.connection);
   const sessionId = useChatStore((s) => s.sessionId);
   const sessions = useChatStore((s) => s.sessions);
@@ -53,25 +46,12 @@ export function AppDrawer({
   const switchSession = useChatStore((s) => s.switchSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
   const [switchError, setSwitchError] = useState<string | null>(null);
-  // ponytail: touch deltas + entrance slide, not a gesture lib.
-  const touchX = useRef<number | null>(null);
-  const slide = useRef(new Animated.Value(-300)).current;
+  const drawerStatus = useDrawerStatus();
 
+  // Fresh panel on every open: a failed switch error must not linger.
   useEffect(() => {
-    if (!open) return;
-    setSwitchError(null);
-    slide.setValue(-300);
-    Animated.timing(slide, {
-      toValue: 0,
-      duration: 220,
-      useNativeDriver: true,
-    }).start();
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      onClose();
-      return true;
-    });
-    return () => sub.remove();
-  }, [open, onClose, slide]);
+    if (drawerStatus === "open") setSwitchError(null);
+  }, [drawerStatus]);
 
   function go(path: "/settings" | "/about" | "/models"): void {
     onClose();
@@ -92,22 +72,8 @@ export function AppDrawer({
   }
 
   return (
-    <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
-      <View className="flex-1 flex-row bg-black/60">
-        <Animated.View
-          style={{ width: 280, transform: [{ translateX: slide }] }}
-          onTouchStart={(e) => {
-            touchX.current = e.nativeEvent.pageX;
-          }}
-          onTouchEnd={(e) => {
-            if (touchX.current !== null && touchX.current - e.nativeEvent.pageX > 60) {
-              onClose();
-            }
-            touchX.current = null;
-          }}
-        >
-          <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface1 }}>
-            <View className="flex-1">
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface1 }}>
+      <View className="flex-1">
               <View className="flex-row items-center border-b border-border px-4 py-3">
                 <View className={CONNECTION_DOT_CLASS[connection]} />
                 <Text className="ml-2 flex-1 font-sans-semibold text-h3 text-primary">
@@ -172,12 +138,8 @@ export function AppDrawer({
               <Text className="border-t border-border px-4 py-3 font-sans text-body-sm text-secondary-text">
                 v{VERSION}
               </Text>
-            </View>
-          </SafeAreaView>
-        </Animated.View>
-        <Pressable onPress={onClose} className="flex-1" />
       </View>
-    </Modal>
+    </SafeAreaView>
   );
 }
 

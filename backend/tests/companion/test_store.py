@@ -3,7 +3,7 @@ from collections.abc import Callable
 
 import pytest
 
-from app.memory import (
+from app.modules.companion import (
     MAX_STORED_MESSAGES,
     ConversationStore,
     InMemoryConversationStore,
@@ -48,7 +48,7 @@ def _live_supabase_opted_in() -> bool:
     reason="set LIVE_SUPABASE=1 (plus SUPABASE_URL and SUPABASE_SECRET_KEY) for live Supabase tests",
 )
 def test_supabase_passes_conformance() -> None:
-    from app.memory.supabase_store import SupabaseConversationStore
+    from app.modules.companion import SupabaseConversationStore
 
     run_conformance_battery(SupabaseConversationStore)
 
@@ -59,7 +59,7 @@ def test_store_selection_defaults_to_memory(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_store_selection_supabase(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.memory.supabase_store import SupabaseConversationStore
+    from app.modules.companion import SupabaseConversationStore
 
     monkeypatch.setenv("CONVERSATION_STORE", "supabase")
     monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")

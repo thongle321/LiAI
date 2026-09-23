@@ -9,10 +9,14 @@ offline — one adapter hypothetical seam, two = real.
 from typing import Any
 
 import pytest
+from test_store import run_conformance_battery
 
-from app.memory import MAX_STORED_MESSAGES, InMemoryConversationStore, Turn
-from app.memory.supabase_store import SupabaseConversationStore
-from tests.test_store import run_conformance_battery
+from app.modules.companion import (
+    MAX_STORED_MESSAGES,
+    InMemoryConversationStore,
+    SupabaseConversationStore,
+    Turn,
+)
 
 
 class _Result:
@@ -113,7 +117,7 @@ def test_injected_client_skips_singleton(monkeypatch) -> None:  # type: ignore[n
     def boom() -> Any:
         raise AssertionError("get_client must not be called when client is injected")
 
-    monkeypatch.setattr("app.db.repositories.conversations.get_client", boom)
+    monkeypatch.setattr("app.modules.companion.supabase_store.get_client", boom)
     store = SupabaseConversationStore(client=FakeSupabaseClient())
     sid = store.create()
     store.append(sid, Turn(role="user", content="hi"))
@@ -129,7 +133,7 @@ def test_default_init_still_requires_env(monkeypatch: pytest.MonkeyPatch) -> Non
     def no_creds() -> Any:
         raise RuntimeError("SUPABASE_URL and SUPABASE_SECRET_KEY must be set")
 
-    monkeypatch.setattr("app.db.repositories.conversations.get_client", no_creds)
+    monkeypatch.setattr("app.modules.companion.supabase_store.get_client", no_creds)
     with pytest.raises(RuntimeError, match="SUPABASE"):
         SupabaseConversationStore()
 

@@ -33,7 +33,7 @@ def test_llm_failure_is_llm_error_envelope(broken_agent) -> None:  # type: ignor
 
 
 def test_store_failure_is_store_error_envelope() -> None:  # type: ignore[no-untyped-def]
-    from app.memory import get_store
+    from app.modules.companion import get_store
 
     class BrokenStore:
         def get(self, session_id: str) -> object:

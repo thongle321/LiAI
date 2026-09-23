@@ -13,9 +13,8 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from app.agents.companion import get_companion_agent as real_agent
 from app.main import app
-from app.memory import get_store
+from app.modules.companion import get_store
 from app.realtime import vlm
 
 client = TestClient(app)
@@ -108,8 +107,10 @@ def test_startup_preloads_vlm_weights(
 ) -> None:
     import app.realtime.vlm as vlm_module
     from app.main import app as app_module
+    from app.providers.factory import clear_provider_cache
 
     # Lifespan fails fast without a key; prove warmup with a dummy one.
+    clear_provider_cache()
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     loaded = False
 
@@ -134,21 +135,25 @@ async def _enter_lifespan(app: object) -> None:
 
 def test_lifespan_boots_with_key(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.main import app as app_module
+    from app.providers.factory import clear_provider_cache
 
+    clear_provider_cache()
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     _run(_enter_lifespan(app_module))
 
 
 def test_lifespan_fails_fast_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    from conftest import _route_all
     from pydantic_ai.exceptions import UserError
 
     from app.main import app as app_module
+    from app.modules.companion import agent_dependency
     from app.providers.factory import clear_provider_cache
 
-    # Route in-body with the genuine factory (bound at import, pre-patch):
-    # all fixtures run before us, so this wins over the autouse echo.
-    _route_all(monkeypatch, real_agent)
+    # Drop the autouse echo override: lifespan builds via the genuine factory.
+    monkeypatch.setitem(
+        app_module.dependency_overrides, agent_dependency, lambda: None
+    )
+    monkeypatch.delitem(app_module.dependency_overrides, agent_dependency)
     clear_provider_cache()
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)

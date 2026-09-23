@@ -8,6 +8,7 @@ import logging
 
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import TypeAdapter
+from pydantic_ai import Agent
 
 from ..schemas import ErrorDetail
 from ..schemas.vision import VisionClientMessage
@@ -136,7 +137,9 @@ async def narration_loop(
         await narration_tick(websocket, lock, state)
 
 
-async def handle_vision_socket(websocket: WebSocket) -> None:
+async def handle_vision_socket(
+    websocket: WebSocket, agent: Agent[None, str] | None = None
+) -> None:
     await websocket.accept()
     # ponytail: session minted lazily on first stored turn (answer or caption)
     state = SocketState()
@@ -180,7 +183,7 @@ async def handle_vision_socket(websocket: WebSocket) -> None:
                 async with lock:
                     try:
                         reply, state.session_id = await answer_about_frame(
-                            msg.text, state.latest, state.session_id
+                            msg.text, state.latest, state.session_id, agent=agent
                         )
                     except ValueError as exc:
                         if not await send_error(websocket, str(exc)):

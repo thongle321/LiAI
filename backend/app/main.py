@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic_ai.exceptions import UserError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .agents import companion
+from .modules import companion
 from .modules.models import router as models_router
 from .providers.factory import clear_provider_cache, get_provider
 from .realtime import vlm

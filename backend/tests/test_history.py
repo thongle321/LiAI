@@ -2,9 +2,9 @@
 
 import pytest
 from fastapi.testclient import TestClient
+from test_contract import assert_envelope
 
 from app.main import app
-from tests.test_contract import assert_envelope
 
 client = TestClient(app)
 
@@ -49,7 +49,7 @@ def test_history_unknown_session_id_is_fresh_empty() -> None:
 def test_history_store_failure_is_store_error_envelope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.memory import get_store
+    from app.modules.companion import get_store
 
     class BrokenStore:
         def get(self, session_id: str) -> object:

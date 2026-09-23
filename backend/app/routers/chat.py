@@ -4,8 +4,14 @@ import base64
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from pydantic_ai import Agent
 
-from ..memory import get_store
+from ..modules.companion import (
+    StoreError,
+    agent_dependency,
+    get_store,
+    run_turn,
+)
 from ..realtime.qa import validate_jpeg
 from ..schemas import (
     ChatRequest,
@@ -15,7 +21,6 @@ from ..schemas import (
 )
 from ..shared.kernel import error_response
 from ..shared.ports import ConversationStore
-from ..turns import StoreError, run_turn
 
 router = APIRouter()
 
@@ -51,7 +56,9 @@ def _decode_image(data_uri: str) -> bytes:
 
 @router.post("/api/chat", response_model=ChatResponse)
 async def chat(
-    body: ChatRequest, store: ConversationStore = Depends(get_store)  # noqa: B008 — resolved by FastAPI
+    body: ChatRequest,
+    store: ConversationStore = Depends(get_store),  # noqa: B008 — resolved by FastAPI
+    agent: Agent[None, str] = Depends(agent_dependency),  # noqa: B008 — resolved by FastAPI
 ) -> ChatResponse | JSONResponse:
     image_bytes: bytes | None = None
     if body.image is not None:
@@ -62,7 +69,7 @@ async def chat(
             return error_response(400, "invalid_request", str(exc))
     try:
         outcome = await run_turn(
-            store, body.session_id, body.message, image=image_bytes
+            store, body.session_id, body.message, image=image_bytes, agent=agent
         )
     except StoreError as exc:
         return error_response(503, "store_error", str(exc))

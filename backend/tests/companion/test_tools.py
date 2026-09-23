@@ -21,13 +21,8 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo
 
-from app.agents.companion import (
-    assistant_text,
-    get_companion_agent,
-    latest_user_text,
-)
 from app.main import app
-from app.memory import get_store
+from app.modules.companion import assistant_text, get_store, latest_user_text
 
 client = TestClient(app)
 
@@ -66,16 +61,17 @@ def route_agent(monkeypatch: pytest.MonkeyPatch, clock: Callable[[], str]) -> No
     from conftest import EchoProvider
     from pydantic_ai.models.function import FunctionModel
 
+    from app.main import app as fastapi_app
+    from app.modules.companion import agent_dependency
+    from app.modules.companion import get_companion_agent as build_agent
+
     provider = EchoProvider()
-    monkeypatch.setattr(
-        provider, "create_tool_model", lambda: FunctionModel(tool_calling_model)
-    )
-    real_factory = get_companion_agent
+    provider.create_tool_model = lambda: FunctionModel(tool_calling_model)  # type: ignore[method-assign]
 
-    def tool_factory(_provider=None, **kwargs):
-        return real_factory(provider, **{**kwargs, "clock": clock})
+    def _tool_override() -> object:
+        return build_agent(provider, clock=clock)
 
-    monkeypatch.setattr("app.agents.companion.get_companion_agent", tool_factory)
+    monkeypatch.setitem(fastapi_app.dependency_overrides, agent_dependency, _tool_override)
 
 
 def post_time_question(clock: Callable[[], str]) -> dict:

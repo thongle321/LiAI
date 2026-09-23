@@ -4,9 +4,14 @@ import json
 
 from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 
-from app.agents.companion import persist_turn, tool_names
-from app.db.repositories.conversations import row_to_turn, turn_to_row
-from app.memory import InMemoryConversationStore, Turn
+from app.modules.companion import (
+    InMemoryConversationStore,
+    Turn,
+    persist_turn,
+    row_to_turn,
+    tool_names,
+    turn_to_row,
+)
 
 
 def test_tool_names_ordered_deduped() -> None:

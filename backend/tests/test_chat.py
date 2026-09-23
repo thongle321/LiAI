@@ -4,9 +4,9 @@ from _pytest.monkeypatch import MonkeyPatch
 from conftest import EchoProvider
 from fastapi.testclient import TestClient
 
-from app.agents import get_companion_agent
 from app.config.personality import COMPANION_SYSTEM_PROMPT
 from app.main import app
+from app.modules.companion import get_companion_agent
 from app.providers.factory import get_provider
 from app.providers.openrouter import OpenRouterChatProvider
 

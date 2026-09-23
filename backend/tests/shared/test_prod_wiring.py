@@ -10,7 +10,7 @@ from pydantic_ai.exceptions import UserError
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.openrouter import OpenRouterModel
 
-from app.agents.companion import get_companion_agent
+from app.modules.companion import get_companion_agent
 from app.providers.openrouter import OpenRouterChatProvider
 
 

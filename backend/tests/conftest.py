@@ -1,13 +1,15 @@
 """Never load real VLM weights in tests — lifespan warmup is a no-op here.
 
 Never hit the network from route tests either: the companion agent is
-injected with a test-local echo provider. Production has no fake —
-this seam lives in tests only.
+injected via FastAPI dependency_overrides (no monkeypatching of the
+factory — the single seam is app.modules.companion.get_companion_agent
+as a Depends target). Production has no fake — this seam lives in tests only.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 
 import pytest
+from pydantic_ai import Agent
 from pydantic_ai.messages import (
     ModelMessage,
     ModelResponse,
@@ -18,20 +20,19 @@ from pydantic_ai.messages import (
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 import app.realtime.vlm as vlm
-from app.agents.companion import get_companion_agent as build_agent, latest_user_text
+from app.main import app
+from app.modules.companion import agent_dependency
+from app.modules.companion import get_companion_agent as build_agent
 from app.providers.base import ChatProvider
 
 
 class EchoProvider(ChatProvider):
     """Test-local stand-in: deterministic reply, no native tool model."""
 
+    model_name = "echo"
+
     async def reply(self, message: str) -> str:
         return f"Echo: {message}"
-
-
-def _route_all(monkeypatch: pytest.MonkeyPatch, factory: Callable[..., object]) -> None:
-    """Patch the single agent-factory seam every caller resolves through."""
-    monkeypatch.setattr("app.agents.companion.get_companion_agent", factory)
 
 
 @pytest.fixture(autouse=True)
@@ -39,39 +40,44 @@ def _no_vlm_warmup(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(vlm, "warmup", lambda: None)
 
 
+def _override_agent(factory: Callable[..., object]) -> Iterator[None]:
+    app.dependency_overrides[agent_dependency] = factory
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(agent_dependency, None)
+
+
 @pytest.fixture(autouse=True)
-def _echo_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+def _echo_agent() -> Iterator[None]:
     """Route /api/chat + frame Q&A through the real factory, echo in."""
 
-    def echo_agent(
-        provider: ChatProvider | None = None,
-        *,
-        clock: Callable[[], str] | None = None,
-    ):
-        return build_agent(EchoProvider(), clock=clock)
+    def echo_agent() -> object:
+        return build_agent(EchoProvider())
 
-    _route_all(monkeypatch, echo_agent)
+    yield from _override_agent(echo_agent)
 
 
 @pytest.fixture
-def broken_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+def broken_agent() -> Iterator[None]:
     """Fixture to inject a broken agent for error testing."""
     class BrokenAgent:
-        async def run(self, *args: object, **kwargs: object) -> object:
+        model_name = "broken"
+
+        async def reply(self, message: str) -> str:
             raise RuntimeError("provider down")
 
-    def broken_agent_factory(
-        provider: ChatProvider | None = None,
-        *,
-        clock: Callable[[], str] | None = None,
-    ):
-        return build_agent(BrokenAgent(), clock=clock)
+        def create_tool_model(self) -> None:
+            return None
 
-    _route_all(monkeypatch, broken_agent_factory)
+    def broken_agent_factory() -> object:
+        return build_agent(BrokenAgent())
+
+    yield from _override_agent(broken_agent_factory)
 
 
 @pytest.fixture
-def tool_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+def tool_agent() -> Iterator[None]:
     """Fixture to inject a tool-capable agent for tool testing."""
 
     async def tool_calling_model(
@@ -84,6 +90,8 @@ def tool_agent(monkeypatch: pytest.MonkeyPatch) -> None:
                     return ModelResponse(
                         parts=[TextPart(f"The time is {part.content}")]
                     )
+        from app.modules.companion import latest_user_text
+
         if "time" in latest_user_text(messages).lower():
             return ModelResponse(
                 parts=[ToolCallPart(tool_name="get_current_time", args={})]
@@ -91,11 +99,29 @@ def tool_agent(monkeypatch: pytest.MonkeyPatch) -> None:
         raise AssertionError("fake model only handles time questions")
 
     provider = EchoProvider()
-    monkeypatch.setattr(
-        provider, "create_tool_model", lambda: FunctionModel(tool_calling_model)
-    )
+    provider.create_tool_model = lambda: FunctionModel(tool_calling_model)  # type: ignore[method-assign]
 
-    def tool_factory(_provider: ChatProvider | None = None, **kwargs: object) -> object:
-        return build_agent(provider, **kwargs)
+    def tool_factory() -> object:
+        return build_agent(provider)
 
-    _route_all(monkeypatch, tool_factory)
+    yield from _override_agent(tool_factory)
+
+
+def make_echo_agent() -> Agent[None, str]:
+    """Explicit echo agent for direct service calls (bypasses HTTP overrides)."""
+    return build_agent(EchoProvider())
+
+
+def make_broken_agent() -> Agent[None, str]:
+    """Explicit broken agent for direct service calls."""
+
+    class BrokenAgent:
+        model_name = "broken"
+
+        async def reply(self, message: str) -> str:
+            raise RuntimeError("provider down")
+
+        def create_tool_model(self) -> None:
+            return None
+
+    return build_agent(BrokenAgent())

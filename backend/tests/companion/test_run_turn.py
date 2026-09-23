@@ -7,14 +7,14 @@ is one visible argument at the call site.
 import asyncio
 
 import pytest
+from conftest import make_broken_agent, make_echo_agent
 
-from app.memory import InMemoryConversationStore, Turn
-from app.turns import StoreError, run_turn
+from app.modules.companion import InMemoryConversationStore, StoreError, Turn, run_turn
 
 
 def test_text_turn_mints_session_and_persists() -> None:
     store = InMemoryConversationStore()
-    out = asyncio.run(run_turn(store, None, "hi"))
+    out = asyncio.run(run_turn(store, None, "hi", agent=make_echo_agent()))
     assert out.reply == "Echo: hi"
     assert out.session_id
     turns = store.get(out.session_id)
@@ -28,7 +28,7 @@ def test_existing_session_reuses_and_extends_history() -> None:
     sid = store.create()
     store.append(sid, Turn(role="user", content="old"))
     store.append(sid, Turn(role="assistant", content="old-a"))
-    out = asyncio.run(run_turn(store, sid, "hi"))
+    out = asyncio.run(run_turn(store, sid, "hi", agent=make_echo_agent()))
     assert out.session_id == sid
     turns = store.get(sid)
     assert turns is not None and len(turns) == 4
@@ -54,7 +54,10 @@ def test_use_history_false_never_reads_store() -> None:
 
     spy = SpyStore()
     out = asyncio.run(
-        run_turn(spy, "s1", "what?", prompt="composed prompt", use_history=False)
+        run_turn(
+            spy, "s1", "what?", prompt="composed prompt", use_history=False,
+            agent=make_echo_agent(),
+        )
     )
     assert spy.gets == 0
     assert out.session_id == "s1"
@@ -76,10 +79,10 @@ def test_store_failure_raises_store_error() -> None:
         asyncio.run(run_turn(Broken(), None, "hi"))
 
 
-def test_llm_failure_bubbles_not_store_error(broken_agent) -> None:  # type: ignore[no-untyped-def]
+def test_llm_failure_bubbles_not_store_error() -> None:
     store = InMemoryConversationStore()
     with pytest.raises(Exception) as excinfo:
-        asyncio.run(run_turn(store, None, "hi"))
+        asyncio.run(run_turn(store, None, "hi", agent=make_broken_agent()))
     assert not isinstance(excinfo.value, StoreError)
     assert "db down" not in str(excinfo.value)
 
@@ -114,5 +117,7 @@ def test_frame_mint_keeps_provided_unknown_session() -> None:
         def append(self, session_id: str, turn: Turn) -> None:
             kept.append(session_id)
 
-    asyncio.run(run_turn(AppendOnly(), "client-sid", "q", use_history=False))
+    asyncio.run(
+        run_turn(AppendOnly(), "client-sid", "q", use_history=False, agent=make_echo_agent())
+    )
     assert kept == ["client-sid", "client-sid"]  # user + assistant turns

@@ -2,9 +2,13 @@ import dataclasses
 
 from fastapi.testclient import TestClient
 
-from app.agents.companion import to_message_history
 from app.main import app
-from app.memory import InMemoryConversationStore, Turn, get_store
+from app.modules.companion import (
+    InMemoryConversationStore,
+    Turn,
+    get_store,
+    to_message_history,
+)
 
 client = TestClient(app)
 

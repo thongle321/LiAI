@@ -1,14 +1,20 @@
 """Durable ConversationStore on Supabase sessions/messages tables.
 
 Row mappers are pure (tested); only execute() touches the network.
+Owned by companion (ADR-0002 data ownership); shared/db holds only the client.
 """
 
 import json
-from typing import Any  # reason: supabase rows and json.loads are dynamic by nature
+from typing import (
+    Any,
+    cast,
+)
+
+# reason: supabase rows and json.loads are dynamic by nature
 from uuid import uuid4
 
-from ...memory.store import MAX_STORED_MESSAGES, Turn
-from ..client import get_client
+from ...db.client import get_client
+from ...shared.ports import MAX_STORED_MESSAGES, Turn
 
 
 def turn_to_row(session_id: str, turn: Turn) -> dict[str, Any]:
@@ -74,7 +80,8 @@ class SupabaseConversationStore:
             .limit(MAX_STORED_MESSAGES)
             .execute()
         )
-        return [row_to_turn(r) for r in reversed(rows.data)]
+        # cast: PostgREST select rows are dicts; stubs type data as list[JSON]
+        return [row_to_turn(cast(dict[str, Any], r)) for r in reversed(rows.data)]
 
     def append(self, session_id: str, turn: Turn) -> None:
         self._client.from_("sessions").upsert({"id": session_id}).execute()

@@ -1,5 +1,10 @@
+"""Companion agent: portable turns at the boundary, framework messages inside.
+
+The single factory seam every caller resolves through (tests override the
+model via pydantic-ai's Agent.override, not by patching this factory).
+"""
+
 from collections.abc import Awaitable, Callable
-from datetime import datetime
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import (
@@ -12,9 +17,10 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from ..config.personality import COMPANION_SYSTEM_PROMPT
-from ..memory import ConversationStore, Turn
-from ..providers import ChatProvider, get_provider
+from ...config.personality import COMPANION_SYSTEM_PROMPT
+from ...providers import ChatProvider, get_provider
+from ...shared.ports import ConversationStore, Turn
+from .tools import local_time as _local_time
 
 
 def assistant_text(output: object) -> str:
@@ -103,13 +109,13 @@ def get_companion_agent(
     provider: ChatProvider | None = None,
     *,
     clock: Callable[[], str] | None = None,
-) -> Agent:
+) -> Agent[None, str]:
     provider = provider if provider is not None else get_provider()
     # ponytail: injectable clock so tool tests never touch the wall clock
     current_time = clock if clock is not None else _local_time
     # ponytail: native model drives the tool loop for providers that
     # offer one; others keep the deterministic FunctionModel echo
-    agent = Agent(
+    agent: Agent[None, str] = Agent(
         provider.create_tool_model()
         or FunctionModel(provider_function(provider), model_name="liai-provider"),
         system_prompt=COMPANION_SYSTEM_PROMPT,
@@ -123,5 +129,6 @@ def get_companion_agent(
     return agent
 
 
-def _local_time() -> str:
-    return datetime.now().astimezone().isoformat()
+def agent_dependency() -> Agent[None, str]:
+    """Zero-arg Depends target (factory params are not request params)."""
+    return get_companion_agent()

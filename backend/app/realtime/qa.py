@@ -7,8 +7,9 @@ no history) → same turn seam persists exactly user + final text.
 
 import io
 
-from ..memory import Turn, get_store
-from ..turns import run_turn
+from pydantic_ai import Agent
+
+from ..modules.companion import append_assistant_text, get_store, run_turn
 from . import vlm
 
 MAX_FRAME_BYTES = 2 * 1024 * 1024
@@ -37,7 +38,10 @@ def validate_jpeg(jpeg: bytes) -> None:
 
 
 async def answer_about_frame(
-    question: str, jpeg: bytes, session_id: str | None = None
+    question: str,
+    jpeg: bytes,
+    session_id: str | None = None,
+    agent: Agent[None, str] | None = None,
 ) -> tuple[str, str]:
     if not question.strip():
         raise ValueError("question must not be empty")
@@ -45,7 +49,12 @@ async def answer_about_frame(
     seen = await vlm.describe_frame(jpeg, question)
     prompt = f"Question about the current camera view: {question}\nWhat the camera shows: {seen}"
     outcome = await run_turn(
-        get_store(), session_id, question, prompt=prompt, use_history=False
+        get_store(),
+        session_id,
+        question,
+        prompt=prompt,
+        use_history=False,
+        agent=agent,
     )
     return outcome.reply, outcome.session_id
 
@@ -58,7 +67,4 @@ async def caption_frame(jpeg: bytes) -> str:
 
 def store_caption(caption: str, session_id: str | None = None) -> str:
     """Persist a caption as an assistant-only Turn; returns the session."""
-    store = get_store()
-    session_id = session_id or store.create()
-    store.append(session_id, Turn(role="assistant", content=caption))
-    return session_id
+    return append_assistant_text(caption, session_id)

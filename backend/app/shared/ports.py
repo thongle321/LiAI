@@ -33,9 +33,9 @@ class ConversationStore(Protocol):
 
 
 __all__ = [
+    "MAX_STORED_MESSAGES",
     "ChatProvider",
     "ConversationStore",
-    "MAX_STORED_MESSAGES",
     "Role",
     "Turn",
 ]

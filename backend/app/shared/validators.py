@@ -22,5 +22,5 @@ def validate_jpeg(jpeg: bytes) -> None:
     try:
         with Image.open(io.BytesIO(jpeg)) as picture:
             picture.load()
-    except Exception:
+    except Exception:  # noqa: BLE001 — decode guard maps to ValueError
         raise ValueError("undecodable JPEG frame") from None

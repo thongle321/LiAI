@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import contextlib
 import dataclasses
 import difflib
 import logging
@@ -74,10 +75,8 @@ async def cancel_narration(state: SocketState) -> None:
     state.narration = None
     if task is not None and not task.done():
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
 
 async def narration_tick(
@@ -155,13 +154,13 @@ async def handle_vision_socket(
             except WebSocketDisconnect as exc:
                 logger.info("vision socket disconnected code=%s", exc.code)
                 return
-            except Exception:
+            except Exception:  # noqa: BLE001 — socket stays clean for answers
                 if not await send_error(websocket, "malformed message"):
                     return
                 continue
             try:
                 msg = _adapter.validate_python(raw_msg)
-            except Exception:
+            except Exception:  # noqa: BLE001 — socket stays clean for answers
                 if not await send_error(websocket, "unknown type"):
                     return
                 continue
@@ -170,7 +169,8 @@ async def handle_vision_socket(
                     raw = base64.b64decode(msg.jpeg, validate=True)
                     validate_jpeg(raw)
                 except ValueError:
-                    if not await send_error(websocket, "bad frame"): return
+                    if not await send_error(websocket, "bad frame"):
+                        return
                     continue
                 state.latest = raw
             else:
@@ -193,7 +193,7 @@ async def handle_vision_socket(
                         if not await send_error(websocket, str(exc)):
                             return
                         continue
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001 — llm boundary maps to llm_error envelope
                         if not await send_json(
                             websocket, _error_payload("llm_error", str(exc))
                         ):
@@ -208,7 +208,5 @@ async def handle_vision_socket(
         state.closed = True
         await cancel_narration(state)
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass

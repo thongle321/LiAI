@@ -7,10 +7,10 @@ no history) → same turn seam persists exactly user + final text.
 
 from pydantic_ai import Agent
 
-from ...companion import append_assistant_text, get_store, run_turn
+from ....shared import vlm
 from ....shared.ports import ConversationStore
 from ....shared.validators import validate_jpeg
-from ....shared import vlm
+from ...companion import append_assistant_text, get_store, run_turn
 
 # ponytail: fixed narration prompt (Q1) — tunable later with continuous understanding
 NARRATION_PROMPT = "Describe what you see."

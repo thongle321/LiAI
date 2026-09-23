@@ -40,7 +40,7 @@ async def upload_model(
         chunk_size = 1024 * 1024  # 1MB chunks
         total_size = 0
 
-        with open(dest_path, "wb") as f:
+        with open(dest_path, "wb") as f:  # noqa: ASYNC230 — local sequential disk write, chunked streaming
             while True:
                 chunk = await file.read(chunk_size)
                 if not chunk:

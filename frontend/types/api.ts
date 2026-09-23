@@ -23,6 +23,15 @@ export interface HealthResponse {
 export interface HistoryMessage {
   role: "user" | "assistant";
   content: string;
+  /** Structural turn metadata (tool names, token usage); absent stays absent. */
+  metadata?: {
+    tool_calls?: string[];
+    usage?: {
+      prompt_tokens: number;
+      completion_tokens: number;
+      total_tokens: number;
+    };
+  } | null;
 }
 
 export interface HistoryResponse {
@@ -40,6 +49,7 @@ export type ApiErrorCode =
   | "network"
   | "timeout"
   | "conflict"
+  | "cancelled"
   | "upload_failed"
   | "list_failed"
   | "delete_failed";

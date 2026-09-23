@@ -1,0 +1,50 @@
+/** Chat domain types: messages, steps, sessions.
+ *
+ * Mirrors the backend chat contract (backend/app/modules/chat/schemas.py)
+ * plus client-only render state (streaming bubbles, errors).
+ */
+
+import type { ApiError } from "./api.ts";
+
+/** One tool invocation surfaced in a bubble (Wave 1: completed only). */
+export interface AgentStep {
+  tool: string;
+}
+
+export interface MessageUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  /** Local creation time (ms) for the design's timestamp row. */
+  at: number;
+  /** Optional image ref — bubble shows the design's picture box when set. */
+  image?: string;
+  error?: ApiError;
+  /** Tool calls behind this reply, in order. */
+  steps?: AgentStep[];
+  usage?: MessageUsage;
+  /** True while tokens are still arriving. */
+  streaming?: boolean;
+}
+
+/** One row of the backend-owned session list. */
+export interface SessionInfo {
+  id: string;
+  title: string;
+  pinned: boolean;
+  updated_at: string;
+}
+
+/** One row in the drawer's history list (derived from SessionInfo). */
+export interface ChatSession {
+  id: string;
+  title: string;
+  pinned: boolean;
+  at: number;
+}

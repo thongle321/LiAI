@@ -33,10 +33,25 @@ def assistant_text(output: object) -> str:
     if isinstance(output, str):
         return output
     if isinstance(output, list):
-        return "".join(
-            part.content for part in output if isinstance(part, TextPart)
-        )
+        return "".join(part.content for part in output if isinstance(part, TextPart))
     return str(output)
+
+
+SESSION_TITLE_LEN = 48
+"""First user message becomes the session title, truncated here."""
+
+
+def assistant_metadata(
+    tool_names: list[str] | None = None,
+    usage: dict[str, int] | None = None,
+) -> dict[str, object] | None:
+    """Assistant-turn metadata: tool names + token usage, never args/results."""
+    metadata: dict[str, object] | None = None
+    if tool_names:
+        metadata = {"tool_calls": tool_names}
+    if usage is not None:
+        metadata = {**(metadata or {}), "usage": usage}
+    return metadata
 
 
 def persist_turn(
@@ -45,6 +60,7 @@ def persist_turn(
     user_text: str,
     reply: str,
     tool_names: list[str] | None = None,
+    usage: dict[str, int] | None = None,
 ) -> str:
     """One stored turn: mint the session when needed, then user + final text.
 
@@ -52,15 +68,18 @@ def persist_turn(
     never land in history content — only the text the mobile bubble rendered.
     Structural tool *names* may ride in assistant metadata (never args or
     results); readers that replay history ignore metadata entirely.
+    The first user message also titles untitled sessions (presentation
+    policy — the store only offers set_title_if_empty).
     """
     session_id = session_id or store.create()
+    store.set_title_if_empty(session_id, user_text[:SESSION_TITLE_LEN])
     store.append(session_id, Turn(role="user", content=user_text))
     store.append(
         session_id,
         Turn(
             role="assistant",
             content=reply,
-            metadata={"tool_calls": tool_names} if tool_names else None,
+            metadata=assistant_metadata(tool_names, usage),
         ),
     )
     return session_id
@@ -121,7 +140,7 @@ def get_companion_agent(
         system_prompt=COMPANION_SYSTEM_PROMPT,
     )
 
-    @agent.tool
+    @agent.tool  # type: ignore[arg-type]
     def get_current_time(_ctx: RunContext[None]) -> str:
         """Return the current local time as an ISO-8601 string."""
         return current_time()

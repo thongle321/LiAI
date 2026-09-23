@@ -1,24 +1,34 @@
+/** Chat bubble: user card, assistant card (markdown + tool chips + actions),
+ * and the tap-to-retry error card.
+ *
+ * Moved from components/Bubble.tsx (Wave 1 chat): assistant text renders
+ * through MarkdownView; streaming replies re-parse per token chunk.
+ */
+
 import { Image as RNImage, Pressable, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
-import { Bot, CheckCheck, Image } from "lucide-react-native";
+import { Bot, CheckCheck, Image, Wrench } from "lucide-react-native";
 
 // Reanimated v4 ships View/Text/Image/ScrollView only — Pressable
 // goes through the builtin factory instead of a hand-rolled wrapper.
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-import { colors } from "../themes/tokens.ts";
-import { formatTime } from "../lib/format.ts";
-import { bubbleEntering, useMotionDuration } from "../lib/motion.ts";
-import type { ChatMessage } from "../store/chat.ts";
-
-export { formatTime };
+import { colors } from "../../themes/tokens.ts";
+import { formatTime } from "../../lib/format.ts";
+import { bubbleEntering, useMotionDuration } from "../../lib/motion.ts";
+import type { ChatMessage } from "../../types/chat.ts";
+import { MarkdownView } from "./MarkdownView.tsx";
+import { MessageActions } from "./MessageActions.tsx";
 
 export function Bubble({
   message,
   onRetry,
+  onRegenerate,
 }: {
   message: ChatMessage;
   onRetry: () => void;
+  /** Null for user bubbles (nothing to regenerate). */
+  onRegenerate: (() => void) | null;
 }) {
   const duration = useMotionDuration();
   const entering = bubbleEntering(duration);
@@ -69,18 +79,34 @@ export function Bubble({
       </View>
       <View className="flex-1">
         <View className="rounded-card rounded-tl-sm border border-border bg-surface-1 px-4 py-2">
-          <Text className="font-sans text-body-md text-primary-text">
-            {message.text}
-          </Text>
+          <MarkdownView text={message.text} />
           {message.image !== undefined && (
             <View className="mt-2 aspect-video items-center justify-center rounded-card border border-border bg-surface-2">
               <Image size={40} color={colors.secondaryText} />
+            </View>
+          )}
+          {message.steps !== undefined && message.steps.length > 0 && (
+            <View className="mt-2 flex-row flex-wrap items-center gap-1.5">
+              {message.steps.map((step) => (
+                <View
+                  key={step.tool}
+                  className="flex-row items-center gap-1 rounded-full border border-border bg-surface-2 px-2 py-0.5"
+                >
+                  <Wrench size={11} color={colors.secondaryText} />
+                  <Text className="font-sans text-caption text-secondary-text">
+                    {step.tool}
+                  </Text>
+                </View>
+              ))}
             </View>
           )}
         </View>
         <Text className="mt-1 font-sans text-caption text-secondary-text">
           {formatTime(message.at)}
         </Text>
+        {onRegenerate !== null && message.streaming !== true && (
+          <MessageActions text={message.text} onRegenerate={onRegenerate} />
+        )}
       </View>
     </Animated.View>
   );

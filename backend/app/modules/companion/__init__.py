@@ -1,8 +1,15 @@
 """Companion module: agent reasoning, tools, turn seam, persistence. Public surface."""
 
-from ...shared.ports import MAX_STORED_MESSAGES, ConversationStore, Turn
+from ...shared.ports import (
+    MAX_STORED_MESSAGES,
+    ConversationStore,
+    SessionInfo,
+    Turn,
+)
 from .agent import (
+    SESSION_TITLE_LEN,
     agent_dependency,
+    assistant_metadata,
     assistant_text,
     get_companion_agent,
     latest_user_text,
@@ -11,28 +18,54 @@ from .agent import (
     to_message_history,
     tool_names,
 )
-from .service import StoreError, TurnOutcome, append_assistant_text, run_turn
+from .service import (
+    NothingToRegenerate,
+    StoreError,
+    StreamDone,
+    StreamEvent,
+    StreamStart,
+    StreamToken,
+    StreamToolCall,
+    StreamUsage,
+    TurnOutcome,
+    append_assistant_text,
+    prepare_stream_turn,
+    run_turn,
+    stream_turn_events,
+)
 from .store import InMemoryConversationStore, get_store
 from .supabase_store import SupabaseConversationStore, row_to_turn, turn_to_row
 
 __all__ = [
     "MAX_STORED_MESSAGES",
+    "SESSION_TITLE_LEN",
     "ConversationStore",
     "InMemoryConversationStore",
+    "NothingToRegenerate",
+    "SessionInfo",
     "StoreError",
+    "StreamDone",
+    "StreamEvent",
+    "StreamStart",
+    "StreamToken",
+    "StreamToolCall",
+    "StreamUsage",
     "SupabaseConversationStore",
     "Turn",
     "TurnOutcome",
     "agent_dependency",
     "append_assistant_text",
+    "assistant_metadata",
     "assistant_text",
     "get_companion_agent",
     "get_store",
     "latest_user_text",
     "persist_turn",
+    "prepare_stream_turn",
     "provider_function",
     "row_to_turn",
     "run_turn",
+    "stream_turn_events",
     "to_message_history",
     "tool_names",
     "turn_to_row",

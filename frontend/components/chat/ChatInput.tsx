@@ -8,9 +8,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Image as RNImage, Pressable, Text, TextInput, View } from "react-native";
-import { router, useIsFocused } from "expo-router";
+import { useIsFocused } from "expo-router";
 import { openSettings } from "expo-linking";
-import { Mic, Plus, Send, X } from "lucide-react-native";
+import { Camera, Image as ImageIcon, Mic, Plus, Send, X, type LucideIcon } from "lucide-react-native";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -210,16 +210,17 @@ export function ChatInput({
             <Plus size={22} color={colors.primary} />
           </Pressable>
           {plusOpen && (
-            <View className="absolute bottom-11 left-0 w-44 rounded-card border border-border bg-surface-1 py-1">
+            <View className="absolute bottom-11 left-0 w-48 rounded-card border border-border bg-surface-1 py-1">
               <PlusItem
+                Icon={Camera}
                 label="Take photo"
                 onPress={() => void handleAttach("camera")}
               />
               <PlusItem
+                Icon={ImageIcon}
                 label="Choose from gallery"
                 onPress={() => void handleAttach("gallery")}
               />
-              <PlusItem label="Speak" onPress={() => router.push("/voice")} />
             </View>
           )}
         </View>
@@ -244,9 +245,18 @@ export function ChatInput({
   );
 }
 
-function PlusItem({ label, onPress }: { label: string; onPress: () => void }) {
+function PlusItem({
+  Icon,
+  label,
+  onPress,
+}: {
+  Icon: LucideIcon;
+  label: string;
+  onPress: () => void;
+}) {
   return (
-    <Pressable onPress={onPress} className="px-4 py-2">
+    <Pressable onPress={onPress} className="flex-row items-center gap-2.5 px-4 py-2.5">
+      <Icon size={18} color={colors.primary} />
       <Text className="font-sans text-body-md text-primary-text">{label}</Text>
     </Pressable>
   );

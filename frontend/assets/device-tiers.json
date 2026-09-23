@@ -1,0 +1,23 @@
+[
+  {
+    "id": "light",
+    "label": "Light",
+    "minRamMb": 0,
+    "blurb": "Small and fast — runs on any phone.",
+    "presetIds": ["smollm-135m"]
+  },
+  {
+    "id": "balanced",
+    "label": "Balanced",
+    "minRamMb": 4096,
+    "blurb": "Best balance of quality and speed.",
+    "presetIds": ["smollm-360m", "qwen2.5-0.5b"]
+  },
+  {
+    "id": "capable",
+    "label": "Capable",
+    "minRamMb": 8192,
+    "blurb": "Largest models — needs a recent phone.",
+    "presetIds": ["llama-3.2-1b", "gemma-2-2b"]
+  }
+]

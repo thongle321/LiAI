@@ -13,6 +13,7 @@ import type { ApiError, ApiErrorCode } from "../../types/api.ts";
 import type { ChatStreamEvent } from "../../lib/chat/sse.ts";
 import type { AgentStep, ChatMessage } from "../../types/chat.ts";
 import { newId } from "../../lib/chat/messages.ts";
+import { draftKey } from "../../lib/chat/drafts.ts";
 import { SESSION_KEY } from "./types.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
@@ -213,6 +214,14 @@ export function createSendSlice(
         },
         clearOnFirst: false,
       });
+      // The text now lives in its bubble (or its error retry): the
+      // composer draft is spent — clear memory and the stored key.
+      set({ draft: "" });
+      try {
+        await ctx.storage.removeItem(draftKey(sid));
+      } catch {
+        // Non-critical: an empty string overwrites it next persist.
+      }
       return true;
     },
 

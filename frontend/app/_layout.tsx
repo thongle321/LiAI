@@ -33,6 +33,7 @@ export default function RootLayout() {
       }}
     >
       <Stack.Screen name="index" />
+      <Stack.Screen name="onboarding" />
       {/* Drawer group owns (tabs) + the navigator drawer (app/(drawer)/).
           Tab switches never animate, so the shared bar stays static. */}
       <Stack.Screen name="(drawer)" options={{ animation: "none" }} />

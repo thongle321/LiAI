@@ -121,7 +121,11 @@ export function Bubble({
           {formatTime(message.at)}
         </Text>
         {onRegenerate !== null && settled && (
-          <MessageActions text={message.text} onRegenerate={onRegenerate} />
+          <MessageActions
+            text={message.text}
+            usage={message.usage}
+            onRegenerate={onRegenerate}
+          />
         )}
       </View>
     </Animated.View>

@@ -7,12 +7,16 @@ import { Check, Copy, RotateCcw, Volume2, VolumeX } from "lucide-react-native";
 import { colors } from "../../themes/tokens.ts";
 import { useCopy } from "../../hooks/useCopy.ts";
 import { speakReply, stopSpeaking } from "../../lib/voiceSpeak.ts";
+import type { MessageUsage } from "../../types/chat.ts";
 
 export function MessageActions({
   text,
+  usage,
   onRegenerate,
 }: {
   text: string;
+  /** Token counts for the finished turn; hidden while streaming. */
+  usage?: MessageUsage;
   onRegenerate: () => void;
 }) {
   const { copied, copy } = useCopy();
@@ -72,6 +76,11 @@ export function MessageActions({
           {speaking ? "Stop" : "Speak"}
         </Text>
       </Pressable>
+      {usage !== undefined && (
+        <Text className="font-sans text-caption text-secondary-text">
+          {usage.promptTokens} in · {usage.completionTokens} out
+        </Text>
+      )}
     </View>
   );
 }

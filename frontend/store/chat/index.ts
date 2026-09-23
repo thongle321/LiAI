@@ -14,6 +14,7 @@ import type { KeyValueStorage } from "../../lib/storage.ts";
 import { useSearch } from "../search.ts";
 import { createSendSlice } from "./send.ts";
 import { createSessionsSlice } from "./sessions.ts";
+import { createDraftSlice } from "./draft.ts";
 import type { ChatCtx, ChatDeps, ChatState } from "./types.ts";
 import { resolveChatModel, type ChatModelRef } from "../../lib/chat/model-route.ts";
 import { providerKeySS } from "../../lib/secrets.ts";
@@ -85,6 +86,7 @@ export function createChatStore(storage: KeyValueStorage, deps?: ChatDeps) {
     connection: "unknown",
     ...createSessionsSlice(set, get, ctx),
     ...createSendSlice(set, get, ctx),
+    ...createDraftSlice(set, get, ctx),
 
     checkHealth: async () => {
       try {

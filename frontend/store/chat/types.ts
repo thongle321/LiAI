@@ -40,6 +40,10 @@ export interface ChatState {
   connection: Connection;
   sending: boolean;
   sessions: ChatSession[];
+  /** Composer draft for the active session (persisted on switch/send). */
+  draft: string;
+  setDraft: (text: string) => void;
+  persistDraft: () => Promise<void>;
   loadSession: () => Promise<void>;
   checkHealth: () => Promise<void>;
   send: (text: string, image?: string) => Promise<boolean>;

@@ -60,6 +60,7 @@ The mobile application is responsible for:
 - expo-document-picker (local model import, approved)
 - expo-secure-store (user-provided secret keys, approved)
 - expo-image-picker (in-chat camera/gallery attach, approved Wave 4 — needs dev-client rebuild)
+- expo-device (RAM-based model tier recommendation in onboarding, approved Wave 5)
 - link-preview-js via ./mobile export (uncredentialed public previews, the one ADR-004 exception, approved)
 
 - expo-linking + expo-constants (settings deep-link, app metadata)

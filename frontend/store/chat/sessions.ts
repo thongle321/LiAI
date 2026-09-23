@@ -4,7 +4,9 @@ import { deleteSession as deleteSessionApi, listSessions } from "../../lib/chat/
 import { updateSession as updateSessionApi } from "../../lib/chat/api.ts";
 import { getHistory } from "../../lib/api.ts";
 import { toMessages, toSession } from "../../lib/chat/messages.ts";
+import { draftKey } from "../../lib/chat/drafts.ts";
 import { HISTORY_KEY, SESSION_KEY } from "./types.ts";
+import { readDraftFor } from "./draft.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
 async function quiet(promise: Promise<unknown>): Promise<void> {
@@ -87,7 +89,7 @@ export function createSessionsSlice(
         stored = null;
       }
       if (stored === null) {
-        set({ sessionId: null, messages: [] });
+        set({ sessionId: null, messages: [], draft: await readDraftFor(ctx, null) });
         return;
       }
       if (!listed) {
@@ -97,7 +99,7 @@ export function createSessionsSlice(
       }
       if (!get().sessions.some((s) => s.id === stored)) {
         await quiet(ctx.storage.removeItem(SESSION_KEY));
-        set({ sessionId: null, messages: [] });
+        set({ sessionId: null, messages: [], draft: await readDraftFor(ctx, null) });
         return;
       }
       await get().switchSession(stored);
@@ -105,17 +107,28 @@ export function createSessionsSlice(
 
     newConversation: async () => {
       cancelActive();
+      await quiet(get().persistDraft());
       await quiet(ctx.storage.removeItem(SESSION_KEY));
-      set({ sessionId: null, messages: [], sending: false });
+      set({
+        sessionId: null,
+        messages: [],
+        sending: false,
+        draft: await readDraftFor(ctx, null),
+      });
     },
 
     switchSession: async (id: string) => {
       if (get().sending || get().sessionId === id) return false;
       if (!get().sessions.some((s) => s.id === id)) return false;
+      await quiet(get().persistDraft());
       try {
         const res = await getHistory(id);
         await quiet(ctx.storage.setItem(SESSION_KEY, res.session_id));
-        set({ sessionId: res.session_id, messages: toMessages(res.messages) });
+        set({
+          sessionId: res.session_id,
+          messages: toMessages(res.messages),
+          draft: await readDraftFor(ctx, res.session_id),
+        });
         return true;
       } catch {
         return false;
@@ -126,10 +139,18 @@ export function createSessionsSlice(
       // Never pull the rug on an in-flight turn.
       if (get().sending && get().sessionId === id) return;
       await quiet(deleteSessionApi(id));
+      await quiet(ctx.storage.removeItem(draftKey(id)));
       set((s) => ({ sessions: s.sessions.filter((sess) => sess.id !== id) }));
       if (get().sessionId === id) {
         await quiet(ctx.storage.removeItem(SESSION_KEY));
-        set({ sessionId: null, messages: [], sending: false });
+        // The deleted session's text must not haunt the fresh composer:
+        // fall back to whatever was parked under the new key.
+        set({
+          sessionId: null,
+          messages: [],
+          sending: false,
+          draft: await readDraftFor(ctx, null),
+        });
       }
     },
 
@@ -140,12 +161,17 @@ export function createSessionsSlice(
     recordVisionTurn: async (question, answer, sessionId, image) => {
       const nextSessionId = sessionId ?? get().sessionId;
       const now = Date.now();
+      // A vision turn can adopt a session the composer never opened:
+      // the typed draft stays with its own session key.
+      await quiet(get().persistDraft());
       if (nextSessionId !== null && nextSessionId !== get().sessionId) {
         await quiet(ctx.storage.setItem(SESSION_KEY, nextSessionId));
       }
+      const draft = await readDraftFor(ctx, nextSessionId);
       set((s) => ({
         sessionId: nextSessionId,
         sending: false,
+        draft,
         messages: [
           ...s.messages,
           {

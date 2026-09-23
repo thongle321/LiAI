@@ -6,6 +6,11 @@ import { ChevronDown, ChevronUp } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
 import { formatParams } from "../../lib/model-providers.ts";
+import { parseTiers } from "../../lib/models/device-tiers.ts";
+import tiersJson from "../../assets/device-tiers.json";
+
+// Parsed once (see onboarding/model.tsx): static bundle data.
+const TIERS = parseTiers(tiersJson);
 import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
 import { useModelStore } from "../../store/modelStore";
 import type { PresetModel, PresetModelFile } from "../../types/models";
@@ -18,7 +23,7 @@ import {
   isProgressVisible,
 } from "./ModelBits.tsx";
 
-function PresetModelCard({
+export function PresetModelCard({
   preset,
   onDownload,
 }: {
@@ -147,6 +152,7 @@ export function AvailableModels({
 }) {
   const { presets } = useModelStore();
   const guard = useLoadGuard();
+  const tiers = TIERS;
 
   return (
     <ModelAccordion
@@ -155,13 +161,26 @@ export function AvailableModels({
       open={open}
       onToggle={onToggle}
     >
-      {presets.map((item) => (
-        <PresetModelCard
-          key={item.id}
-          preset={item}
-          onDownload={(modelId, file) => guard(file.size, () => onDownload(modelId, file))}
-        />
-      ))}
+      {tiers.map((tier) => {
+        const tierPresets = presets.filter((p) => tier.presetIds.includes(p.id));
+        if (tierPresets.length === 0) return null;
+        return (
+          <View key={tier.id}>
+            <Text className="mb-1 mt-3 font-sans-semibold text-body-sm text-secondary-text">
+              {tier.label} — {tier.blurb}
+            </Text>
+            {tierPresets.map((item) => (
+              <PresetModelCard
+                key={item.id}
+                preset={item}
+                onDownload={(modelId, file) =>
+                  guard(file.size, () => onDownload(modelId, file))
+                }
+              />
+            ))}
+          </View>
+        );
+      })}
     </ModelAccordion>
   );
 }

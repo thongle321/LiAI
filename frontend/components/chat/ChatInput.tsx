@@ -17,6 +17,7 @@ import {
 } from "expo-speech-recognition";
 
 import { colors } from "../../themes/tokens.ts";
+import { useChatStore } from "../../store/chat.ts";
 import { mergeDictation, VOICE_LISTEN_OPTS } from "../../lib/voiceListen.ts";
 import { ensureMicAccess } from "../../lib/micAccess.ts";
 import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../../lib/voiceStatus.ts";
@@ -29,7 +30,10 @@ export function ChatInput({
   sending: boolean;
   onSend: (text: string, image?: string) => Promise<boolean>;
 }) {
-  const [draft, setDraft] = useState("");
+  // Composer text lives in the chat store (per-session drafts survive
+  // switches); dictation mechanics stay local below.
+  const draft = useChatStore((s) => s.draft);
+  const setDraft = useChatStore((s) => s.setDraft);
   const [plusOpen, setPlusOpen] = useState(false);
   // One attached photo per turn (the backend image path takes a single
   // data-uri); text stays required — the contract 422s blank messages.
@@ -162,10 +166,9 @@ export function ChatInput({
     // Spurious stop() with nothing live confuses the native session;
     // only stop an active dictate before sending.
     if (listening) safeStopDictation();
-    if (await onSend(draft, attached ?? undefined)) {
-      setDraft("");
-      setAttached(null);
-    }
+    // The store clears the draft once the text lives in its bubble.
+    await onSend(draft, attached ?? undefined);
+    setAttached(null);
   }
 
   return (

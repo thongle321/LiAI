@@ -48,7 +48,6 @@ def test_default_agent_build_without_key_fails(
     from app.providers.factory import clear_provider_cache
 
     clear_provider_cache()
-    monkeypatch.delenv("LLM_PROVIDER", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     try:

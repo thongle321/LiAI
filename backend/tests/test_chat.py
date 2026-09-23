@@ -101,8 +101,7 @@ def test_agent_run_replies_through_provider() -> None:
     assert result.output == "Echo: hi"
 
 
-def test_factory_defaults_to_openrouter(monkeypatch: MonkeyPatch) -> None:
-    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+def test_factory_defaults_to_openrouter() -> None:
     assert isinstance(get_provider(), OpenRouterChatProvider)
 
 

@@ -95,7 +95,6 @@ def test_image_turn_replies_through_vlm(monkeypatch: pytest.MonkeyPatch) -> None
     store = InMemoryConversationStore()
     out = asyncio.run(run_turn(store, None, "what is this?", image=b"\xff\xd8\xff"))
     assert out.reply == "seen: what is this?"
-    assert out.tool_names is None
     turns = store.get(out.session_id)
     assert turns is not None and len(turns) == 2
 

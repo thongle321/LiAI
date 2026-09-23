@@ -1,10 +1,4 @@
 from .base import ChatProvider
-from .factory import clear_provider_cache, get_provider
-from .openrouter import OpenRouterChatProvider
+from .factory import get_provider
 
-__all__ = [
-    "ChatProvider",
-    "OpenRouterChatProvider",
-    "clear_provider_cache",
-    "get_provider",
-]
+__all__ = ["ChatProvider", "get_provider"]

@@ -26,7 +26,6 @@ class StoreError(Exception):
 class TurnOutcome:
     reply: str
     session_id: str
-    tool_names: list[str] | None
 
 
 async def run_turn(
@@ -76,4 +75,4 @@ async def run_turn(
         session_id = persist_turn(store, session_id, message, reply, names)
     except Exception as exc:
         raise StoreError(str(exc)) from exc
-    return TurnOutcome(reply=reply, session_id=session_id, tool_names=names)
+    return TurnOutcome(reply=reply, session_id=session_id)

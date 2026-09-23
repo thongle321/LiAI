@@ -1,7 +1,7 @@
 """Companion personality — application content, not secrets.
 
 Lives in the config layer so it stays separate from environment secrets
-(LLM_PROVIDER, OPENROUTER_*) and from the agent implementation that consumes it.
+(OPENROUTER_*) and from the agent implementation that consumes it.
 """
 
 COMPANION_SYSTEM_PROMPT = (

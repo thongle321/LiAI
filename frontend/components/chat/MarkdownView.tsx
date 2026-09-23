@@ -32,6 +32,14 @@ const baseText = {
   color: colors.primaryText,
 };
 
+// Every text-bearing key gets the family: the library's internals set
+// sizes and weights but no fontFamily, so any key missed here falls
+// back to Roboto and sits visibly off-baseline next to Raleway body.
+const headingText = {
+  fontFamily: font.sansSemiBold,
+  color: colors.primaryText,
+};
+
 export function MarkdownView({ text }: { text: string }) {
   const elements = useMarkdown(text === "" ? " " : text, {
     colorScheme: "dark",
@@ -41,7 +49,15 @@ export function MarkdownView({ text }: { text: string }) {
       paragraph: { marginBottom: 8 },
       strong: { ...baseText, fontFamily: font.sansSemiBold },
       em: { ...baseText, fontStyle: "italic" },
+      strikethrough: { ...baseText },
       link: { ...baseText, color: colors.primary },
+      h1: { ...headingText },
+      h2: { ...headingText },
+      h3: { ...headingText },
+      h4: { ...headingText },
+      h5: { ...headingText },
+      h6: { ...headingText },
+      li: { ...baseText },
       codespan: {
         fontFamily: font.sans,
         fontSize: 13,

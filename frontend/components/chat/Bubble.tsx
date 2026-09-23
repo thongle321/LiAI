@@ -7,7 +7,7 @@
 
 import { Image as RNImage, Pressable, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
-import { Bot, CheckCheck, Image, Wrench } from "lucide-react-native";
+import { Bot, CheckCheck, Wrench } from "lucide-react-native";
 
 // Reanimated v4 ships View/Text/Image/ScrollView only — Pressable
 // goes through the builtin factory instead of a hand-rolled wrapper.
@@ -19,6 +19,7 @@ import { bubbleEntering, useMotionDuration } from "../../lib/motion.ts";
 import type { ChatMessage } from "../../types/chat.ts";
 import { MarkdownView } from "./MarkdownView.tsx";
 import { MessageActions } from "./MessageActions.tsx";
+import { LinkPreviewCard } from "./LinkPreview.tsx";
 
 export function Bubble({
   message,
@@ -32,6 +33,9 @@ export function Bubble({
 }) {
   const duration = useMotionDuration();
   const entering = bubbleEntering(duration);
+  // Previews and actions target settled turns: a half-streamed URL would
+  // trigger a garbage preview fetch, and actions need final text.
+  const settled = message.streaming !== true;
   if (message.error) {
     return (
       <AnimatedPressable
@@ -62,6 +66,9 @@ export function Bubble({
             {message.text}
           </Text>
         </View>
+        <View className="w-full">
+          <LinkPreviewCard text={message.text} />
+        </View>
         <View className="mt-1 flex-row items-center">
           <Text className="font-sans text-caption text-secondary-text">
             {formatTime(message.at)}
@@ -80,11 +87,7 @@ export function Bubble({
       <View className="flex-1">
         <View className="rounded-card rounded-tl-sm border border-border bg-surface-1 px-4 py-2">
           <MarkdownView text={message.text} />
-          {message.image !== undefined && (
-            <View className="mt-2 aspect-video items-center justify-center rounded-card border border-border bg-surface-2">
-              <Image size={40} color={colors.secondaryText} />
-            </View>
-          )}
+          {settled && <LinkPreviewCard text={message.text} />}
           {message.steps !== undefined && message.steps.length > 0 && (
             <View className="mt-2 flex-row flex-wrap items-center gap-1.5">
               {message.steps.map((step, index) => (
@@ -117,7 +120,7 @@ export function Bubble({
         <Text className="mt-1 font-sans text-caption text-secondary-text">
           {formatTime(message.at)}
         </Text>
-        {onRegenerate !== null && message.streaming !== true && (
+        {onRegenerate !== null && settled && (
           <MessageActions text={message.text} onRegenerate={onRegenerate} />
         )}
       </View>

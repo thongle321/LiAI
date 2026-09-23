@@ -59,6 +59,8 @@ The mobile application is responsible for:
 - expo-file-system (+ legacy API, model files/downloads/uploads, approved)
 - expo-document-picker (local model import, approved)
 - expo-secure-store (user-provided secret keys, approved)
+- expo-image-picker (in-chat camera/gallery attach, approved Wave 4 — needs dev-client rebuild)
+- link-preview-js via ./mobile export (uncredentialed public previews, the one ADR-004 exception, approved)
 
 - expo-linking + expo-constants (settings deep-link, app metadata)
 - react-native-gesture-handler (navigator drawer gestures, approved; drawer-layout itself stays transitive inside expo-router per the Expo drawer guide)

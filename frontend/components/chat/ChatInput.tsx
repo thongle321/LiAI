@@ -7,10 +7,10 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Image as RNImage, Pressable, Text, TextInput, View } from "react-native";
 import { router, useIsFocused } from "expo-router";
 import { openSettings } from "expo-linking";
-import { Mic, Plus, Send } from "lucide-react-native";
+import { Mic, Plus, Send, X } from "lucide-react-native";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -20,6 +20,7 @@ import { colors } from "../../themes/tokens.ts";
 import { mergeDictation, VOICE_LISTEN_OPTS } from "../../lib/voiceListen.ts";
 import { ensureMicAccess } from "../../lib/micAccess.ts";
 import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../../lib/voiceStatus.ts";
+import { pickImage, type ImageSource } from "../../lib/chat/attachments.ts";
 
 export function ChatInput({
   sending,
@@ -30,6 +31,10 @@ export function ChatInput({
 }) {
   const [draft, setDraft] = useState("");
   const [plusOpen, setPlusOpen] = useState(false);
+  // One attached photo per turn (the backend image path takes a single
+  // data-uri); text stays required — the contract 422s blank messages.
+  const [attached, setAttached] = useState<string | null>(null);
+  const [attachIssue, setAttachIssue] = useState<string | null>(null);
   // Dictation: mic fills the draft, the user presses Send. Interim
   // updates replace the dictated tail (draftBase keeps typed text).
   const [listening, setListening] = useState(false);
@@ -142,12 +147,24 @@ export function ChatInput({
 
   const canSend = !sending && draft.trim() !== "";
 
+  async function handleAttach(source: ImageSource): Promise<void> {
+    setPlusOpen(false);
+    setAttachIssue(null);
+    const uri = await pickImage(source);
+    if (uri === null) {
+      setAttachIssue("Couldn't attach that photo — try again.");
+      return;
+    }
+    setAttached(uri);
+  }
+
   async function handleSend(): Promise<void> {
     // Spurious stop() with nothing live confuses the native session;
     // only stop an active dictate before sending.
     if (listening) safeStopDictation();
-    if (await onSend(draft)) {
+    if (await onSend(draft, attached ?? undefined)) {
       setDraft("");
+      setAttached(null);
     }
   }
 
@@ -165,6 +182,22 @@ export function ChatInput({
             {voiceIssue}
           </Text>
         ))}
+      {attachIssue !== null && (
+        <Text className="px-5 pb-1 font-sans text-body-sm text-secondary-text">
+          {attachIssue}
+        </Text>
+      )}
+      {attached !== null && (
+        <View className="mx-4 mb-2 flex-row items-center gap-2 rounded-card border border-border bg-surface-1 p-2">
+          <RNImage source={{ uri: attached }} className="h-14 w-14 rounded-lg" />
+          <Text className="flex-1 font-sans text-body-sm text-secondary-text">
+            Attached — sent with your message
+          </Text>
+          <Pressable onPress={() => setAttached(null)} className="p-2">
+            <X size={18} color={colors.secondaryText} />
+          </Pressable>
+        </View>
+      )}
       <View className="mx-4 mb-2 flex-row items-center rounded-full border border-border bg-surface-1 px-2 py-1">
         <View>
           <Pressable
@@ -174,10 +207,14 @@ export function ChatInput({
             <Plus size={22} color={colors.primary} />
           </Pressable>
           {plusOpen && (
-            <View className="absolute bottom-11 left-0 w-40 rounded-card border border-border bg-surface-1 py-1">
+            <View className="absolute bottom-11 left-0 w-44 rounded-card border border-border bg-surface-1 py-1">
               <PlusItem
                 label="Take photo"
-                onPress={() => router.navigate("/vision")}
+                onPress={() => void handleAttach("camera")}
+              />
+              <PlusItem
+                label="Choose from gallery"
+                onPress={() => void handleAttach("gallery")}
               />
               <PlusItem label="Speak" onPress={() => router.push("/voice")} />
             </View>

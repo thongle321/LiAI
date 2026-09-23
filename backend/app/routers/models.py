@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 @router.post("/api/models/upload", response_model=ModelUploadResponse)
 async def upload_model(
-    file: UploadFile = File(...),
+    file: UploadFile = File(...),  # noqa: B008 — canonical FastAPI UploadFile pattern
 ) -> ModelUploadResponse | JSONResponse:
     """Upload a GGUF model file from the mobile client to the backend.
 
@@ -55,7 +55,7 @@ async def upload_model(
             size_bytes=total_size,
             path=str(dest_path),
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — upload boundary maps to 500 envelope
         # Clean up partial file on error
         if dest_path.exists():
             dest_path.unlink()
@@ -68,7 +68,7 @@ async def list_models() -> ModelListResponse | JSONResponse:
     """List available GGUF models in the backend models directory."""
     try:
         return ModelListResponse(models=model_files.list_models())
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — list boundary maps to 500 envelope
         return error_response(500, "list_failed", str(exc))
 
 
@@ -88,6 +88,6 @@ async def delete_model(filename: str) -> JSONResponse:
         model_path.unlink()
         logger.info("Model deleted: %s", safe_filename)
         return JSONResponse(content={"message": f"Model {safe_filename} deleted"})
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — delete boundary maps to 500 envelope
         logger.error("Model deletion failed: %s", exc)
         return error_response(500, "delete_failed", str(exc))

@@ -34,7 +34,7 @@ async def history(session_id: str | None = None) -> HistoryResponse | JSONRespon
                 HistoryMessage(role=t.role, content=t.content) for t in turns
             ],
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — store boundary maps to 503 envelope
         return error_response(503, "store_error", str(exc))
 
 

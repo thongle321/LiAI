@@ -1,18 +1,18 @@
-/** "Available to download" group: preset compact models for mobile. */
+/** "Available to download" group: preset cards with their quantization files. */
 
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 
-import { colors } from "../themes/tokens.ts";
-import { formatParams } from "../lib/model-providers.ts";
-import { useLoadGuard } from "../hooks/useLoadGuard.ts";
-import { useModelStore } from "../store/modelStore";
-import type { PresetModel, PresetModelFile } from "../types/models";
+import { colors } from "../../themes/tokens.ts";
+import { formatParams } from "../../lib/model-providers.ts";
+import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
+import { useModelStore } from "../../store/modelStore";
+import type { PresetModel, PresetModelFile } from "../../types/models";
+import { ModelAccordion } from "./ModelAccordion.tsx";
 import {
   DownloadButton,
   DownloadProgressBar,
-  ModelGroup,
   StatusBadge,
   formatBytes,
   isProgressVisible,
@@ -33,7 +33,7 @@ function PresetModelCard({
   );
 
   const getStatus = (_file: PresetModelFile) => {
-    if (!existingModel) return "idle";
+    if (!existingModel) return "idle" as const;
     return existingModel.downloadStatus;
   };
 
@@ -101,34 +101,33 @@ function PresetModelCard({
           {preset.files.map((item) => {
             const st = getStatus(item);
             return (
-            <View key={item.name} className="py-3 border-b border-border/50">
-              <View className="flex-row items-center justify-between">
-                <View className="flex-1">
-                  <Text className="font-sans text-body-md text-primary-text">{item.name}</Text>
-                  <View className="flex-row items-center gap-2 mt-1.5">
-                    <View className="px-1.5 py-0.5 bg-surface-2 border border-border rounded">
-                      <Text className="font-sans text-xs text-secondary-text">{item.quantization}</Text>
+              <View key={item.name} className="py-3 border-b border-border/50">
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-1">
+                    <Text className="font-sans text-body-md text-primary-text">{item.name}</Text>
+                    <View className="flex-row items-center gap-2 mt-1.5">
+                      <View className="px-1.5 py-0.5 bg-surface-2 border border-border rounded">
+                        <Text className="font-sans text-xs text-secondary-text">{item.quantization}</Text>
+                      </View>
+                      <Text className="font-sans text-body-sm text-secondary-text/70">{formatBytes(item.size)}</Text>
                     </View>
-                    <Text className="font-sans text-body-sm text-secondary-text/70">{formatBytes(item.size)}</Text>
                   </View>
+                  <DownloadButton
+                    file={item}
+                    status={st}
+                    progress={getProgress(item)}
+                    onPress={() => onDownload(preset.id, item)}
+                    disabled={st === "downloading"}
+                  />
                 </View>
-                <DownloadButton
-                  modelId={preset.id}
-                  file={item}
-                  status={st}
-                  progress={getProgress(item)}
-                  onPress={() => onDownload(preset.id, item)}
-                  disabled={st === "downloading"}
-                />
+                {isProgressVisible(st) && existingModel && (
+                  <DownloadProgressBar
+                    progress={existingModel.downloadProgress}
+                    downloaded={existingModel.downloadedBytes}
+                    total={existingModel.totalBytes}
+                  />
+                )}
               </View>
-              {isProgressVisible(st) && existingModel && (
-                <DownloadProgressBar
-                  progress={existingModel.downloadProgress}
-                  downloaded={existingModel.downloadedBytes}
-                  total={existingModel.totalBytes}
-                />
-              )}
-            </View>
             );
           })}
         </View>
@@ -148,8 +147,9 @@ export function AvailableModels({
 }) {
   const { presets } = useModelStore();
   const guard = useLoadGuard();
+
   return (
-    <ModelGroup
+    <ModelAccordion
       title="Available to download"
       count={presets.length}
       open={open}
@@ -162,6 +162,6 @@ export function AvailableModels({
           onDownload={(modelId, file) => guard(file.size, () => onDownload(modelId, file))}
         />
       ))}
-    </ModelGroup>
+    </ModelAccordion>
   );
 }

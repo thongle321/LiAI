@@ -1,15 +1,14 @@
 /** Per-model settings editor: display name, system prompt, stop words.
  *
- * RN Modal reusing the Add-provider modal pattern. Settings persist in
- * modelStore (liai_model_settings_v1), keyed by model id.
+ * Persists in modelStore (liai_model_settings_v1), keyed by model id.
  */
 
 import { useEffect, useState } from "react";
 import { Modal, Pressable, Text, TextInput, View } from "react-native";
 import { X } from "lucide-react-native";
 
-import { colors } from "../themes/tokens.ts";
-import { useModelStore } from "../store/modelStore";
+import { colors } from "../../themes/tokens.ts";
+import { useModelStore } from "../../store/modelStore";
 
 function parseStopWords(text: string): string[] {
   return text
@@ -18,7 +17,7 @@ function parseStopWords(text: string): string[] {
     .filter((w) => w.length > 0);
 }
 
-export function ModelSettingsModal({
+export function ModelSettingsSheet({
   modelId,
   onClose,
 }: {
@@ -87,7 +86,9 @@ export function ModelSettingsModal({
             </View>
 
             <View>
-              <Text className="font-sans text-body-sm text-secondary-text mb-1">Stop words (one per line)</Text>
+              <Text className="font-sans text-body-sm text-secondary-text mb-1">
+                Stop words (one per line)
+              </Text>
               <TextInput
                 value={stopWordsText}
                 onChangeText={setStopWordsText}

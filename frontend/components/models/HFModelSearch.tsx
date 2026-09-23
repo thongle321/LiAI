@@ -1,22 +1,17 @@
-/** Upgraded Hugging Face search: debounced query, stats rows, rich file cards.
+/** Hugging Face search: debounced query, stats rows, rich file cards.
  *
- * Shown in the full-screen Add-from-HF modal. First page only; pagination deferred.
+ * Shown in the full-screen Add-from-HF modal. First page only; pagination
+ * deferred.
  */
 
 import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 import { ChevronDown, Lock, X } from "lucide-react-native";
 
-import { colors } from "../themes/tokens.ts";
-import { useLoadGuard } from "../hooks/useLoadGuard.ts";
-import { useModelStore } from "../store/modelStore";
-import type { HFModelFile } from "../types/models";
+import { colors } from "../../themes/tokens.ts";
+import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
+import { useModelStore } from "../../store/modelStore";
+import type { HFModelFile } from "../../types/models";
 import {
   Chip,
   DownloadButton,
@@ -25,12 +20,17 @@ import {
   formatCompact,
 } from "./ModelBits.tsx";
 
-export function HFExplore({
-  onClose,
-}: {
-  onClose?: () => void;
-}) {
-  const { searchModels, searchResults, searchLoading, searchError, getModelFiles, startDownload, hfToken, setHfToken } = useModelStore();
+export function HFModelSearch({ onClose }: { onClose?: () => void }) {
+  const {
+    searchModels,
+    searchResults,
+    searchLoading,
+    searchError,
+    getModelFiles,
+    startDownload,
+    hfToken,
+    setHfToken,
+  } = useModelStore();
   const guard = useLoadGuard();
   const [query, setQuery] = useState("");
   const [expandedModel, setExpandedModel] = useState<string | null>(null);
@@ -90,7 +90,10 @@ export function HFExplore({
           placeholderTextColor={colors.secondaryText}
         />
         {hfToken ? null : (
-          <Pressable onPress={() => setHfToken("user_token_placeholder")} className="px-3 py-3 bg-primary/20 border border-primary/50 rounded-lg">
+          <Pressable
+            onPress={() => setHfToken("user_token_placeholder")}
+            className="px-3 py-3 bg-primary/20 border border-primary/50 rounded-lg"
+          >
             <Text className="font-sans text-body-sm text-primary">Add HF Token</Text>
           </Pressable>
         )}
@@ -159,7 +162,6 @@ export function HFExplore({
                           </View>
                         </View>
                         <DownloadButton
-                          modelId={item.modelId}
                           file={file}
                           status="idle"
                           progress={0}

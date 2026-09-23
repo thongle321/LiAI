@@ -1,7 +1,4 @@
-/** Models header filter menu: PocketPal-style tune dropdown in the header bar.
- *
- * Section toggles + expand/collapse-all. Rendered via ScreenHeader's `right` slot.
- */
+/** Models header filter menu: section toggles + expand/collapse all. */
 
 import { useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
@@ -12,7 +9,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react-native";
 
-import { colors } from "../themes/tokens.ts";
+import { colors } from "../../themes/tokens.ts";
 
 function ToggleRow({
   label,
@@ -37,7 +34,7 @@ function ToggleRow({
   );
 }
 
-export function ModelsHeaderMenu({
+export function ModelsHeaderRight({
   readyVisible,
   availableVisible,
   onToggleReady,
@@ -74,7 +71,11 @@ export function ModelsHeaderMenu({
         <Pressable className="flex-1" onPress={() => setOpen(false)}>
           <View className="absolute right-4 top-16 w-60 bg-surface-1 border border-border rounded-xl overflow-hidden">
             <ToggleRow label="Ready to use" on={readyVisible} onPress={() => run(onToggleReady)} />
-            <ToggleRow label="Available to download" on={availableVisible} onPress={() => run(onToggleAvailable)} />
+            <ToggleRow
+              label="Available to download"
+              on={availableVisible}
+              onPress={() => run(onToggleAvailable)}
+            />
             <View className="h-px bg-border mx-4" />
             <Pressable onPress={() => run(onExpandAll)} className="flex-row items-center gap-2 px-4 py-2.5">
               <ChevronsUpDown size={16} color={colors.secondaryText} />

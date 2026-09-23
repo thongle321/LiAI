@@ -1,18 +1,14 @@
-/** Shared Models-screen bits: formats, chips, status, progress, download button, group.
- *
- * Moved out of app/models.tsx per ARCH (screens compose, components render).
- */
+/** Shared models bits: formats, chips, status, progress, download button. */
 
-import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
-import { ChevronDown, ChevronUp, Download, Pause, Play } from "lucide-react-native";
+import { Download, Pause, Play } from "lucide-react-native";
 
-import { colors } from "../themes/tokens.ts";
+import { colors } from "../../themes/tokens.ts";
 import type {
   HFModelFile,
   ModelDownloadStatus,
   PresetModelFile,
-} from "../types/models";
+} from "../../types/models";
 
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -64,12 +60,7 @@ export function Chip({ label }: { label: string }) {
 }
 
 export function StatusDot({ color }: { color: string }) {
-  return (
-    <View
-      className="w-2 h-2 rounded-full"
-      style={{ backgroundColor: color }}
-    />
-  );
+  return <View className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />;
 }
 
 export function StatusBadge({ status }: { status: ModelDownloadStatus }) {
@@ -108,14 +99,12 @@ export function DownloadProgressBar({
 }
 
 export function DownloadButton({
-  modelId,
   file,
   status,
   progress,
   onPress,
   disabled = false,
 }: {
-  modelId: string;
   file: PresetModelFile | HFModelFile;
   status: string;
   progress: number;
@@ -128,7 +117,10 @@ export function DownloadButton({
 
   if (isCompleted) {
     return (
-      <Pressable onPress={onPress} className="flex-row items-center px-3 py-2 bg-green-500/20 border border-green-500/50 rounded-lg">
+      <Pressable
+        onPress={onPress}
+        className="flex-row items-center px-3 py-2 bg-green-500/20 border border-green-500/50 rounded-lg"
+      >
         <Download size={16} color={colors.primary} />
         <Text className="ml-2 font-sans text-body-sm text-green-500">Downloaded</Text>
       </Pressable>
@@ -136,7 +128,11 @@ export function DownloadButton({
   }
 
   return (
-    <Pressable onPress={onPress} disabled={disabled} className="flex-row items-center px-3 py-2 bg-surface-2 border border-border rounded-lg">
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      className="flex-row items-center px-3 py-2 bg-surface-2 border border-border rounded-lg"
+    >
       {isDownloading ? (
         <Pause size={16} color={colors.primary} />
       ) : isPaused ? (
@@ -152,42 +148,5 @@ export function DownloadButton({
           : "Download"}
       </Text>
     </Pressable>
-  );
-}
-
-/** PocketPal-style collapsible group (Ready to use / Available to download). */
-export function ModelGroup({
-  title,
-  count,
-  open,
-  onToggle,
-  children,
-}: {
-  title: string;
-  count: number;
-  open: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <View className="mb-6">
-      <Pressable
-        onPress={onToggle}
-        className="flex-row items-center justify-between mb-3"
-      >
-        <View className="flex-row items-center gap-2">
-          <Text className="font-sans-semibold text-h4 text-primary-text">{title}</Text>
-          <View className="px-1.5 py-0.5 bg-surface-2 border border-border rounded">
-            <Text className="font-sans text-xs text-secondary-text">{count}</Text>
-          </View>
-        </View>
-        {open ? (
-          <ChevronUp size={20} color={colors.secondaryText} />
-        ) : (
-          <ChevronDown size={20} color={colors.secondaryText} />
-        )}
-      </Pressable>
-      {open && children}
-    </View>
   );
 }

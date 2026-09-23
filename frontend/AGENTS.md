@@ -144,7 +144,7 @@ UI state with AsyncStorage; persist user-provided secret keys
 (HF token, provider keys) with SecureStore only, never AsyncStorage.
 **lib/** holds pure tested helpers (format.ts, load-guard.ts,
 model-settings.ts), external service clients (api.ts,
-download-service.ts, upload-service.ts, model-strategies/),
+download-service.ts, upload-service.ts, models/),
 and device I/O adapters (snapshot.ts, voiceSpeak.ts, motion.ts).
 A cohesive group may live in a `lib/<name>/` subfolder.
 Never expose secret keys here.

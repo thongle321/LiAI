@@ -7,7 +7,7 @@
  */
 
 import { API_BASE_URL, isApiErrorResponse, request } from "../api.ts";
-import type { ApiError, SearchAuth } from "../../types/api.ts";
+import type { ApiError, ByokAuth, SearchAuth } from "../../types/api.ts";
 import type { SessionInfo } from "../../types/chat.ts";
 import { createSseAccumulator, type ChatStreamEvent } from "./sse.ts";
 
@@ -76,6 +76,8 @@ export interface StreamBody {
   stream: true;
   retry?: boolean;
   search?: SearchAuth;
+  model_id?: string;
+  byok?: ByokAuth;
 }
 
 export interface StreamHandle {

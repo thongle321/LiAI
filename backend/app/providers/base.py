@@ -1,7 +1,7 @@
 from typing import Protocol
 
 from pydantic_ai.messages import ModelRequest, TextPart, UserPromptPart
-from pydantic_ai.models import Model
+from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
@@ -9,8 +9,10 @@ from pydantic_ai.providers.openai import OpenAIProvider
 class ChatProvider(Protocol):
     """Unified interface for chat providers.
 
-    One live adapter today (OpenRouter). Second adapter ships -> revisit.
+    Live adapters: OpenRouter (app-owned or BYOK), custom BYOK endpoints,
+    local GGUF via llama.cpp. Selection lives in factory.resolve().
     """
+
     model_name: str
 
     async def reply(self, message: str) -> str: ...
@@ -47,9 +49,20 @@ class CachedChatModel:
         return self._get_model()
 
 
-async def request_text(model: OpenAIChatModel, message: str, *, empty_error: str) -> str:
-    """One request + first-TextPart extraction, shared by all providers."""
-    response = await model.request(ModelRequest(parts=[UserPromptPart(content=message)]))
+async def request_text(
+    model: OpenAIChatModel, message: str, *, empty_error: str
+) -> str:
+    """One request + first-TextPart extraction, shared by all providers.
+
+    Passes all three request args explicitly: the installed SDK requires
+    settings + parameters positionally (no defaults), so a bare
+    model.request(messages) dies with TypeError.
+    """
+    response = await model.request(
+        [ModelRequest(parts=[UserPromptPart(content=message)])],
+        None,
+        ModelRequestParameters(),
+    )
     for part in response.parts:
         if isinstance(part, TextPart):
             return part.content

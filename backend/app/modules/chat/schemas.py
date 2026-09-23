@@ -25,6 +25,32 @@ class SearchAuth(BaseModel):
         return self
 
 
+class ByokAuth(BaseModel):
+    """Per-request provider credentials (BYOK, ADR-004/006).
+
+    Transient: the route maps this to the talent context and never stores
+    or logs it. Nested (not top-level) by design: the guardrail test
+    forbids top-level provider-selection names (provider_type, base_url,
+    api_key, model_path...), and this is the ADR-006 vocabulary instead.
+    provider mirrors the app's RemoteApiProvider values.
+    """
+
+    provider: Literal["custom_openai", "openrouter"]
+    base_url: str = Field(min_length=1)
+    api_key: str = Field(min_length=1)
+    model: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _no_blanks(self) -> "ByokAuth":
+        if (
+            not self.base_url.strip()
+            or not self.api_key.strip()
+            or not self.model.strip()
+        ):
+            raise ValueError("byok fields must not be blank")
+        return self
+
+
 class ChatRequest(BaseModel):
     # None only on retry (regenerate reuses the stored question); the
     # validator below keeps every existing blank/missing 422 exactly.
@@ -37,9 +63,17 @@ class ChatRequest(BaseModel):
     # Optional web-search credentials for the talent loop (Wave 2); the
     # client sends these only with consent + a stored key, per request.
     search: SearchAuth | None = None
+    # Model selection (ADR-006): backend GGUF filename serves locally,
+    # a provider-backed id routes by byok, absent means the default.
+    model_id: str | None = None
+    # Per-request BYOK creds for provider-backed ids; meaningless without
+    # a selection, so the schema rejects it alone (422, like retry rules).
+    byok: ByokAuth | None = None
 
     @model_validator(mode="after")
     def _message_rules(self) -> "ChatRequest":
+        if self.byok is not None and self.model_id is None:
+            raise ValueError("byok requires model_id")
         if self.retry and not self.stream:
             raise ValueError("retry requires stream")
         if self.retry:
@@ -94,6 +128,7 @@ class SessionUpdateRequest(BaseModel):
 
 
 __all__ = [
+    "ByokAuth",
     "ChatRequest",
     "ChatResponse",
     "HistoryMessage",

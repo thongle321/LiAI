@@ -20,7 +20,7 @@ client = TestClient(app)
 def models_dir(tmp_path, monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
     path = tmp_path / "models"
     path.mkdir()
-    monkeypatch.setattr(model_files, "MODELS_DIR", path)
+    monkeypatch.setattr("app.shared.paths.MODELS_DIR", path)
     return path
 
 

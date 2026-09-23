@@ -2,6 +2,7 @@
 
 from .router import router
 from .schemas import (
+    ByokAuth,
     ChatRequest,
     ChatResponse,
     HistoryMessage,
@@ -13,6 +14,7 @@ from .schemas import (
 )
 
 __all__ = [
+    "ByokAuth",
     "ChatRequest",
     "ChatResponse",
     "HistoryMessage",

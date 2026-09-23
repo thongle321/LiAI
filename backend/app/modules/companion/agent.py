@@ -5,7 +5,7 @@ model via pydantic-ai's Agent.override, not by patching this factory).
 """
 
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -215,6 +215,23 @@ def provider_function(
     return run
 
 
+def provider_stream_function(
+    provider: ChatProvider,
+) -> Callable[[list[ModelMessage], AgentInfo], AsyncIterator[str]]:
+    """Streaming twin: the whole reply as one chunk (plain-chat providers).
+
+    Lets run_stream work for providers without a native streaming model
+    (local GGUF); token-by-token deltas need a native model behind the slot.
+    """
+
+    async def stream(
+        messages: list[ModelMessage], _info: AgentInfo
+    ) -> AsyncIterator[str]:
+        yield await provider.reply(latest_user_text(messages))
+
+    return stream
+
+
 def to_message_history(turns: list[Turn]) -> list[ModelMessage]:
     """Agent-boundary adapter: portable turns in, framework messages out."""
     history: list[ModelMessage] = []
@@ -242,7 +259,11 @@ def get_companion_agent(
     # pathologically stubborn model would stream until the client goes away.
     agent: Agent[None, str] = Agent(
         provider.create_tool_model()
-        or FunctionModel(provider_function(provider), model_name="liai-provider"),
+        or FunctionModel(
+            provider_function(provider),
+            stream_function=provider_stream_function(provider),
+            model_name="liai-provider",
+        ),
         system_prompt=COMPANION_SYSTEM_PROMPT,
         tool_timeout=60.0,
     )

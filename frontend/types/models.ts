@@ -92,6 +92,8 @@ export interface DownloadJob {
   modelId: string;
   fileName: string;
   downloadUrl: string;
+  /** Auth headers for gated URLs (HF token); absent for public files. */
+  headers?: Record<string, string>;
   destinationPath: string;
   status: ModelDownloadStatus;
   progress: number;

@@ -53,9 +53,14 @@ export function ModelCard({
               {params > 0 ? <Chip label={formatParams(params)} /> : null}
               <Chip label={formatBytes(item.files[0]?.size || 0)} />
               {item.files.length > 1 && <Chip label={`${item.files.length} files`} />}
-              {isActive ? <ActiveBadge /> : <StatusBadge status="completed" />}
-            </View>
+            {isActive ? <ActiveBadge /> : <StatusBadge status="completed" />}
           </View>
+          {isActive && (
+            <Text className="font-sans text-caption text-secondary-text mt-1.5">
+              Runs on the backend • plain chat, no tools
+            </Text>
+          )}
+        </View>
           <View className="flex-row items-center gap-2">
             {!isActive && (
               <Pressable

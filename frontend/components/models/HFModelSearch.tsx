@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, Text, TextInput, View } from "react-native";
 import { ChevronDown, Lock, X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
@@ -36,6 +36,8 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
   const [expandedModel, setExpandedModel] = useState<string | null>(null);
   const [modelFiles, setModelFiles] = useState<Record<string, HFModelFile[]>>({});
   const [loadingFiles, setLoadingFiles] = useState<Set<string>>(new Set());
+  const [tokenOpen, setTokenOpen] = useState(false);
+  const [draft, setDraft] = useState("");
 
   // ponytail: debounce so we search once per pause, not per keystroke.
   useEffect(() => {
@@ -89,14 +91,17 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
           className="flex-1 font-sans text-body-md text-primary-text bg-surface-1 border border-border rounded-lg px-4 py-3"
           placeholderTextColor={colors.secondaryText}
         />
-        {hfToken ? null : (
-          <Pressable
-            onPress={() => setHfToken("user_token_placeholder")}
-            className="px-3 py-3 bg-primary/20 border border-primary/50 rounded-lg"
-          >
-            <Text className="font-sans text-body-sm text-primary">Add HF Token</Text>
-          </Pressable>
-        )}
+        <Pressable
+          onPress={() => {
+            setDraft("");
+            setTokenOpen(true);
+          }}
+          className="px-3 py-3 bg-primary/20 border border-primary/50 rounded-lg"
+        >
+          <Text className="font-sans text-body-sm text-primary">
+            {hfToken ? "HF Token ✓" : "Add HF Token"}
+          </Text>
+        </Pressable>
       </View>
 
       {searchError && (
@@ -185,6 +190,61 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
           No models found. Try a different search term.
         </Text>
       )}
+      <Modal
+        visible={tokenOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTokenOpen(false)}
+      >
+        <View className="flex-1 bg-black/60 items-center justify-center p-4">
+          <View className="bg-surface-1 border border-border rounded-2xl w-full p-6">
+            <Text className="font-sans-semibold text-h4 text-primary-text mb-2">
+              Hugging Face token
+            </Text>
+            <Text className="font-sans text-body-sm text-secondary-text mb-4">
+              Needed only for gated repos. Stored on this device, sent per request.
+            </Text>
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              placeholder="hf_..."
+              secureTextEntry
+              autoFocus
+              className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-4 py-3"
+              placeholderTextColor={colors.secondaryText}
+            />
+            <View className="flex-row gap-2 pt-4">
+              {hfToken ? (
+                <Pressable
+                  onPress={() => {
+                    void setHfToken(null);
+                    setTokenOpen(false);
+                  }}
+                  className="flex-1 py-3 px-4 bg-surface-2 border border-border rounded-lg items-center"
+                >
+                  <Text className="font-sans text-body-md text-secondary-text">Remove</Text>
+                </Pressable>
+              ) : null}
+              <Pressable
+                onPress={() => setTokenOpen(false)}
+                className="flex-1 py-3 px-4 bg-surface-2 border border-border rounded-lg items-center"
+              >
+                <Text className="font-sans text-body-md text-secondary-text">Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  if (draft.trim() === "") return;
+                  void setHfToken(draft.trim());
+                  setTokenOpen(false);
+                }}
+                className="flex-1 py-3 px-4 bg-primary border border-primary/50 rounded-lg items-center"
+              >
+                <Text className="font-sans-semibold text-body-md text-base">Save</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

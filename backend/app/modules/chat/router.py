@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic_ai import Agent
 
+from ...providers import ChatProvider
+from ...providers.factory import ByokContext, UnknownModelError, resolve
 from ...shared.kernel import error_response
 from ...shared.ports import ConversationStore, SessionInfo, Turn
 from ...shared.validators import validate_jpeg
@@ -157,6 +159,14 @@ async def chat(
             validate_jpeg(image_bytes)
         except ValueError as exc:
             return error_response(400, "invalid_request", str(exc))
+    try:
+        provider = _resolve_provider(body)
+    except UnknownModelError as exc:
+        return error_response(400, "invalid_request", str(exc))
+    # A selected model builds its agent from the resolved provider in the
+    # service; the Depends agent always carries the default provider, so
+    # passing it would silently ignore the selection.
+    turn_agent = None if body.model_id is not None else agent
     if not body.stream:
         try:
             outcome = await run_turn(
@@ -164,8 +174,9 @@ async def chat(
                 body.session_id,
                 body.message or "",
                 image=image_bytes,
-                agent=agent,
+                agent=turn_agent,
                 search=_search_context(body),
+                provider=provider,
             )
         except StoreError as exc:
             return error_response(503, "store_error", str(exc))
@@ -182,7 +193,14 @@ async def chat(
         return error_response(503, "store_error", str(exc))
     return StreamingResponse(
         _stream_events(
-            store, sid, text, history, image_bytes, agent, _search_context(body)
+            store,
+            sid,
+            text,
+            history,
+            image_bytes,
+            turn_agent,
+            _search_context(body),
+            provider,
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
@@ -200,6 +218,23 @@ def _search_context(body: ChatRequest) -> SearchContext | None:
     )
 
 
+def _byok_context(body: ChatRequest) -> ByokContext | None:
+    """Wire creds -> provider context (transient; never stored or logged)."""
+    if body.byok is None:
+        return None
+    return ByokContext(
+        provider=body.byok.provider,
+        base_url=body.byok.base_url.strip(),
+        api_key=body.byok.api_key.strip(),
+        model=body.byok.model.strip(),
+    )
+
+
+def _resolve_provider(body: ChatRequest) -> ChatProvider:
+    """Select the turn's runtime (ADR-006); unknown ids are client bugs."""
+    return resolve(body.model_id, _byok_context(body))
+
+
 async def _stream_events(
     store: ConversationStore,
     session_id: str,
@@ -208,6 +243,7 @@ async def _stream_events(
     image: bytes | None,
     agent: Agent[None, str],
     search: SearchContext | None,
+    provider: ChatProvider | None,
 ):
     """SSE body: start first, then companion events; failures become error events.
 
@@ -217,7 +253,14 @@ async def _stream_events(
     yield event_to_sse(StreamStart(session_id))
     try:
         async for event in stream_turn_events(
-            store, session_id, text, history, image=image, agent=agent, search=search
+            store,
+            session_id,
+            text,
+            history,
+            image=image,
+            agent=agent,
+            search=search,
+            provider=provider,
         ):
             yield event_to_sse(event)
     except asyncio.CancelledError:

@@ -126,8 +126,9 @@ backend/app/
   delete. `GET /api/history` is unchanged: both stores cap a session at
   the newest 100 turns, so the client loads the full window per open
   (the actual lazy-load) and cursor paging would be vacuous.
-- `GET /api/models/hf/search?q=&token=` and `/api/models/hf/files?repo=&token=`
-  — HF proxy; token passed per request, never stored or logged.
+- `GET /api/models/hf/search?q=` and `/api/models/hf/files?repo=`
+  — HF proxy; token passed per request in the `X-HF-Token` header (never
+  the URL — query strings land in access logs), never stored or logged.
 
 ### Chat data flow (streaming)
 

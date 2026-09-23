@@ -15,6 +15,8 @@ import { useSearch } from "../search.ts";
 import { createSendSlice } from "./send.ts";
 import { createSessionsSlice } from "./sessions.ts";
 import type { ChatCtx, ChatDeps, ChatState } from "./types.ts";
+import { resolveChatModel, type ChatModelRef } from "../../lib/chat/model-route.ts";
+import { providerKeySS } from "../../lib/secrets.ts";
 
 // ponytail: lazy import keeps the native module out of plain-Node tests;
 // Metro still bundles it statically for the app.
@@ -46,11 +48,35 @@ async function defaultSearchAuth(): Promise<SearchAuth | null> {
   return { provider: search.activeProviderId, key, count: search.resultCount };
 }
 
+/** Default model router: live models store + SecureStore key.
+ *
+ * The models store pulls the native file graph, so it loads lazily here
+ * (Metro bundles it statically for the app; plain-Node tests fall into
+ * the catch and degrade to default). Failures degrade to omit, never block.
+ */
+async function defaultChatModel(): Promise<ChatModelRef | null> {
+  try {
+    const { useModelStore } = await import("../modelStore.ts");
+    const { readSecret } = await import("../models/storage.ts");
+    const m = useModelStore.getState();
+    return await resolveChatModel({
+      activeModelId: m.activeModelId,
+      activeProviderType: m.activeProviderType,
+      models: m.models,
+      remoteApis: m.remoteApis,
+      readKey: (id) => readSecret(providerKeySS(id)),
+    });
+  } catch {
+    return null;
+  }
+}
+
 export function createChatStore(storage: KeyValueStorage, deps?: ChatDeps) {
   const ctx: ChatCtx = {
     storage,
     openXhr: deps?.openXhr,
     getSearchAuth: deps?.getSearchAuth ?? defaultSearchAuth,
+    getChatModel: deps?.getChatModel ?? defaultChatModel,
     active: { handle: null },
     streamGen: 0,
   };

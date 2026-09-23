@@ -80,8 +80,13 @@ export function createSendSlice(
     // BYOK search creds ride every streamed turn (consent-gated); a
     // settings failure degrades to no-search rather than blocking the turn.
     const search = await ctx.getSearchAuth().catch(() => null);
+    const model = await ctx.getChatModel().catch(() => null);
     const handle = postChatStream(
-      { ...opts.body, ...(search !== null ? { search } : {}) },
+      {
+        ...opts.body,
+        ...(search !== null ? { search } : {}),
+        ...(model !== null ? model : {}),
+      },
       (event: ChatStreamEvent) => {
         // Superseded (cancelled or replaced) streams never touch state.
         if (gen !== ctx.streamGen) return;

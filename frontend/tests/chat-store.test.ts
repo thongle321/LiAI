@@ -487,6 +487,43 @@ describe("chat store streaming", () => {
     assert.ok(!("search" in JSON.parse(sent.body ?? "")));
   });
 
+  it("attaches model routing when the seam provides it", async () => {
+    const { factory, sent } = fakeXhr(STREAM_OK);
+    const useStore = createChatStore(memoryStorage(), {
+      openXhr: factory,
+      getChatModel: async () => ({
+        model_id: "m.gguf",
+        byok: {
+          provider: "custom_openai",
+          base_url: "https://llm.example/v1",
+          api_key: "k",
+          model: "user-model",
+        },
+      }),
+    });
+    await useStore.getState().send("hi");
+    assert.deepEqual(JSON.parse(sent.body ?? ""), {
+      message: "hi",
+      stream: true,
+      model_id: "m.gguf",
+      byok: {
+        provider: "custom_openai",
+        base_url: "https://llm.example/v1",
+        api_key: "k",
+        model: "user-model",
+      },
+    });
+  });
+
+  it("omits model routing when the seam provides none", async () => {
+    const { factory, sent } = fakeXhr(STREAM_OK);
+    const useStore = createChatStore(memoryStorage(), { openXhr: factory });
+    await useStore.getState().send("hi");
+    const body = JSON.parse(sent.body ?? "");
+    assert.ok(!("model_id" in body));
+    assert.ok(!("byok" in body));
+  });
+
   it("marks the user bubble when the stream never opens", async () => {
     const { factory } = fakeXhr(
       ['{"error":{"code":"llm_error","message":"down"}}'],

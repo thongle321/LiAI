@@ -1,4 +1,16 @@
 from .base import ChatProvider
-from .factory import get_provider
+from .custom import CustomChatProvider
+from .factory import ByokContext, UnknownModelError, get_provider, resolve
+from .llamacpp import LlamaCppChatProvider
+from .openrouter import OpenRouterChatProvider
 
-__all__ = ["ChatProvider", "get_provider"]
+__all__ = [
+    "ByokContext",
+    "ChatProvider",
+    "CustomChatProvider",
+    "LlamaCppChatProvider",
+    "OpenRouterChatProvider",
+    "UnknownModelError",
+    "get_provider",
+    "resolve",
+]

@@ -13,6 +13,7 @@ from typing import Any
 
 from pydantic_ai import Agent
 
+from ...providers import ChatProvider
 from ...shared import vlm
 from ...shared.ports import ConversationStore, Turn
 from . import agent as agent_module
@@ -112,6 +113,7 @@ async def run_turn(
     use_history: bool = True,
     agent: Agent[None, str] | None = None,
     search: SearchContext | None = None,
+    provider: ChatProvider | None = None,
 ) -> TurnOutcome:
     """Run one companion turn and store user + final text.
 
@@ -142,7 +144,7 @@ async def run_turn(
     if image is not None:
         reply = await vlm.describe_frame(image, message)
     else:
-        agent = agent or agent_module.get_companion_agent()
+        agent = agent or agent_module.get_companion_agent(provider)
         result = await agent.run(
             prompt or message,
             message_history=to_message_history(history),
@@ -237,6 +239,7 @@ async def stream_turn_events(
     image: bytes | None = None,
     agent: Agent[None, str] | None = None,
     search: SearchContext | None = None,
+    provider: ChatProvider | None = None,
 ) -> AsyncIterator[StreamEvent]:
     """Yield the reply as stream events, then persist the assistant turn.
 
@@ -253,7 +256,7 @@ async def stream_turn_events(
         paired: list[ToolRun] = []
         dones: list[dict[str, object]] = []
     else:
-        agent = agent or agent_module.get_companion_agent()
+        agent = agent or agent_module.get_companion_agent(provider)
         parts: list[str] = []
         async with agent.run_stream(
             text,

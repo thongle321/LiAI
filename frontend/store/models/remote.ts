@@ -3,9 +3,8 @@
 import type { StateCreator } from "zustand";
 
 import type { ModelStore, RemoteSlice } from "./types";
-import type { RemoteApiProvider } from "../../types/models";
-import { buildRemoteModelSpec, validateRemoteApi } from "../../lib/models/remote-api";
-import { providerKeySS } from "../../lib/secrets";
+import { buildRemoteModelSpec, validateRemoteApi } from "../../lib/models/remote-api.ts";
+import { providerKeySS } from "../../lib/secrets.ts";
 import {
   ACTIVE_MODEL_KEY,
   asyncStorage,
@@ -13,7 +12,7 @@ import {
   REMOTE_CAPS_KEY,
   deleteSecret,
   writeSecret,
-} from "./storage";
+} from "./storage.ts";
 
 export const createRemoteSlice: StateCreator<ModelStore, [], [], RemoteSlice> = (
   set,
@@ -58,12 +57,15 @@ export const createRemoteSlice: StateCreator<ModelStore, [], [], RemoteSlice> = 
   },
 
   removeRemoteApi: async (providerId) => {
+    // Active ids carry the remote- prefix (buildRemoteModelSpec); compare
+    // against it or a deleted provider leaves a stale active ref behind.
+    const activeId = `remote-${providerId}`;
     set((state) => ({
       remoteApis: state.remoteApis.filter((p) => p.id !== providerId),
       activeModelId:
-        state.activeModelId === providerId ? null : state.activeModelId,
+        state.activeModelId === activeId ? null : state.activeModelId,
       activeProviderType:
-        state.activeModelId === providerId ? null : state.activeProviderType,
+        state.activeModelId === activeId ? null : state.activeProviderType,
     }));
     await deleteSecret(providerKeySS(providerId));
     get().saveRemoteApis();

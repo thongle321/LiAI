@@ -23,7 +23,7 @@ router = APIRouter()
 @router.get("/api/history", response_model=HistoryResponse)
 async def history(
     session_id: str | None = None,
-    store: ConversationStore = Depends(get_store),
+    store: ConversationStore = Depends(get_store),  # noqa: B008 — resolved by FastAPI
 ) -> HistoryResponse | JSONResponse:
     try:
         if session_id is None:
@@ -51,7 +51,7 @@ def _decode_image(data_uri: str) -> bytes:
 
 @router.post("/api/chat", response_model=ChatResponse)
 async def chat(
-    body: ChatRequest, store: ConversationStore = Depends(get_store)
+    body: ChatRequest, store: ConversationStore = Depends(get_store)  # noqa: B008 — resolved by FastAPI
 ) -> ChatResponse | JSONResponse:
     image_bytes: bytes | None = None
     if body.image is not None:

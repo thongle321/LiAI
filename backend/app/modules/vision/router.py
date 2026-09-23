@@ -1,10 +1,10 @@
-"""Vision socket route: framing and dispatch live in realtime/ws.py."""
+"""Vision socket route: thin wiring; framing lives in internal/ws.py."""
 
 from fastapi import APIRouter, Depends, WebSocket
 from pydantic_ai import Agent
 
-from ..modules.companion import agent_dependency
-from ..realtime.ws import handle_vision_socket
+from ..companion import agent_dependency
+from .internal.ws import handle_vision_socket
 
 router = APIRouter()
 

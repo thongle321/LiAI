@@ -14,7 +14,7 @@ import time
 import pytest
 from PIL import Image
 
-from app.realtime import vlm
+from app.shared import vlm
 
 
 def _jpeg() -> bytes:

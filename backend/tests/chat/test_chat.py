@@ -34,7 +34,7 @@ def test_chat_rejects_missing_and_blank() -> None:
 def test_chat_image_rejects_non_jpeg_bytes(monkeypatch: MonkeyPatch) -> None:
     import base64
 
-    from app.realtime import vlm as vlm_module
+    from app.shared import vlm as vlm_module
 
     def _boom(image: bytes, question: str) -> str:
         raise AssertionError("validation must reject before inference")
@@ -72,7 +72,7 @@ def test_chat_image_routes_to_vlm(monkeypatch: MonkeyPatch) -> None:
         seen["question"] = question
         return "a red mug"
 
-    monkeypatch.setattr("app.realtime.vlm.describe_frame", fake_describe)
+    monkeypatch.setattr("app.shared.vlm.describe_frame", fake_describe)
     payload = base64.b64encode(jpeg).decode()
     resp = client.post(
         "/api/chat",
@@ -116,7 +116,7 @@ def test_provider_surface_is_openrouter_only() -> None:
 
 
 def test_chat_request_has_no_provider_selection_fields() -> None:
-    from app.schemas.chat import ChatRequest
+    from app.modules.chat.schemas import ChatRequest
 
     for field in ("provider_type", "model_name", "base_url", "api_key", "model_path"):
         assert field not in ChatRequest.model_fields

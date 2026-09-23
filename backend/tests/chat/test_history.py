@@ -1,8 +1,8 @@
 """History tests: GET /api/history returns stored turns, forgiving session lifecycle."""
 
 import pytest
+from conftest import assert_envelope
 from fastapi.testclient import TestClient
-from test_contract import assert_envelope
 
 from app.main import app
 

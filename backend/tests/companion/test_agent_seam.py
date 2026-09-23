@@ -32,8 +32,8 @@ def test_explicit_agent_routes_frame_qa() -> None:
     from PIL import Image
 
     from app.modules.companion import get_store
-    from app.realtime import vlm
-    from app.realtime.qa import answer_about_frame
+    from app.modules.vision.internal.qa import answer_about_frame
+    from app.shared import vlm
 
     real_describe = vlm.describe_frame
 

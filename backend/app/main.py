@@ -15,11 +15,12 @@ from pydantic_ai.exceptions import UserError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .modules import companion
+from .modules.chat import router as chat_router
 from .modules.models import router as models_router
+from .modules.vision import router as vision_router
 from .providers.factory import clear_provider_cache, get_provider
-from .realtime import vlm
-from .routers import chat, vision
 from .schemas import HealthResponse
+from .shared import vlm
 from .shared.kernel import error_response
 
 logging.basicConfig(
@@ -41,9 +42,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     # Fail fast: no keyless boot. The SDK validates the key eagerly at
     # build, so a truly missing key crashes startup with an actionable
-    # hint instead of failing every turn. Tests patch the single seam
-    # (app.agents.companion.get_companion_agent), never this
-    # source-namespace build.
+    # hint instead of failing every turn. Tests inject the agent via
+    # dependency_overrides, never this source-namespace build.
     try:
         companion.get_companion_agent(provider)
     except UserError as exc:
@@ -98,6 +98,6 @@ async def unhandled_handler(request: Request, exc: Exception):
     return error_response(500, "internal_error", str(exc))
 
 
-app.include_router(chat.router)
-app.include_router(vision.router)
+app.include_router(chat_router)
+app.include_router(vision_router)
 app.include_router(models_router)

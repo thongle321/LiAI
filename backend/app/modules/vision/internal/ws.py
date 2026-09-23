@@ -10,8 +10,8 @@ from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import TypeAdapter
 from pydantic_ai import Agent
 
-from ..schemas import ErrorDetail
-from ..schemas.vision import VisionClientMessage
+from ....schemas import ErrorDetail
+from ..schemas import VisionClientMessage
 from .qa import answer_about_frame, caption_frame, store_caption, validate_jpeg
 
 _adapter = TypeAdapter(VisionClientMessage)

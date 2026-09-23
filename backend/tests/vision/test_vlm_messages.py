@@ -5,7 +5,7 @@ import io
 
 from PIL import Image
 
-from app.realtime import vlm
+from app.shared import vlm
 
 
 def _jpeg(w: int, h: int) -> bytes:

@@ -88,7 +88,7 @@ def test_llm_failure_bubbles_not_store_error() -> None:
 
 
 def test_image_turn_replies_through_vlm(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.realtime import vlm
+    from app.shared import vlm
 
     async def fake_describe(image: bytes, question: str) -> str:
         assert image == b"\xff\xd8\xff"

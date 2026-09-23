@@ -6,8 +6,8 @@ Fake-gated: VLM stubbed, synthetic JPEG, no camera/network/keys.
 
 import base64
 import io
-from collections.abc import Awaitable
-from typing import TypeVar
+from collections.abc import Coroutine
+from typing import Any, TypeVar
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,7 +15,7 @@ from PIL import Image
 
 from app.main import app
 from app.modules.companion import get_store
-from app.realtime import vlm
+from app.shared import vlm
 
 client = TestClient(app)
 
@@ -90,7 +90,7 @@ def test_unknown_message_type_is_rejected() -> None:
 T = TypeVar("T")
 
 
-def _run(coro: Awaitable[T]) -> T:
+def _run(coro: Coroutine[Any, Any, T]) -> T:
     import asyncio
 
     return asyncio.run(coro)
@@ -105,7 +105,7 @@ def test_text_chat_unaffected_by_vision() -> None:
 def test_startup_preloads_vlm_weights(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import app.realtime.vlm as vlm_module
+    import app.shared.vlm as vlm_module
     from app.main import app as app_module
     from app.providers.factory import clear_provider_cache
 
@@ -184,7 +184,7 @@ def test_narration_tick_sends_caption_and_persists(
     monkeypatch.setattr(vlm, "describe_frame", fake_describe)
     import asyncio
 
-    from app.realtime.ws import SocketState, narration_tick
+    from app.modules.vision.internal.ws import SocketState, narration_tick
 
     ws = FakeSocket()
     state = SocketState(latest=FAKE_JPEG)
@@ -202,7 +202,7 @@ def test_send_on_closing_socket_is_clean_exit() -> None:
     sends must report False, never raise (no ASGI traceback)."""
     from fastapi import WebSocketDisconnect
 
-    from app.realtime.ws import send_error, send_json
+    from app.modules.vision.internal.ws import send_error, send_json
 
     class ClosingSocket:
         async def send_json(self, msg: dict) -> None:
@@ -222,7 +222,7 @@ def test_describe_frame_keeps_loop_responsive(
     loop, or the phone's socket times out with no ping/pong answered."""
     import time
 
-    import app.realtime.vlm as vlm_module
+    import app.shared.vlm as vlm_module
 
     class SlowLlama:
         def create_chat_completion(self, **kwargs: object) -> dict:
@@ -270,7 +270,7 @@ def test_narration_tick_survives_vlm_failure(
         return "recovered view"
 
     monkeypatch.setattr(vlm, "describe_frame", flaky_describe)
-    from app.realtime.ws import SocketState, narration_tick
+    from app.modules.vision.internal.ws import SocketState, narration_tick
 
     async def two_ticks() -> FakeSocket:
         import asyncio
@@ -291,14 +291,14 @@ def test_narration_tick_survives_vlm_failure(
 def test_narration_tick_skips_when_busy_or_empty() -> None:
     import asyncio
 
-    from app.realtime.ws import SocketState, narration_tick
+    from app.modules.vision.internal.ws import SocketState, narration_tick
 
     async def run_skips() -> list[dict]:
         ws = FakeSocket()
-        await narration_tick(ws, asyncio.Lock(), SocketState(latest=None))
+        await narration_tick(ws, asyncio.Lock(), SocketState(latest=None))  # type: ignore[arg-type]
         locked = asyncio.Lock()
         await locked.acquire()
-        await narration_tick(ws, locked, SocketState(latest=FAKE_JPEG))
+        await narration_tick(ws, locked, SocketState(latest=FAKE_JPEG))  # type: ignore[arg-type]
         return ws.sent
 
     assert _run(run_skips()) == []
@@ -325,7 +325,7 @@ def test_duplicate_captions_send_but_persist_once(
         return "a red square"
 
     monkeypatch.setattr(vlm, "describe_frame", fake_describe)
-    from app.realtime.ws import SocketState, narration_tick
+    from app.modules.vision.internal.ws import SocketState, narration_tick
 
     async def run_two_ticks() -> tuple[FakeSocket, SocketState]:
         import asyncio

@@ -1,17 +1,11 @@
 """Contract tests: every backend error uses the {error: {code, message}} envelope."""
 
+from conftest import assert_envelope
 from fastapi.testclient import TestClient
 
 from app.main import app
 
 client = TestClient(app)
-
-
-def assert_envelope(resp_json: object, code: str) -> None:
-    assert isinstance(resp_json, dict)
-    err = resp_json["error"]
-    assert err["code"] == code
-    assert isinstance(err["message"], str) and err["message"]
 
 
 def test_blank_message_is_invalid_request_envelope() -> None:

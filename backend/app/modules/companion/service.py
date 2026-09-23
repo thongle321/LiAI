@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from pydantic_ai import Agent
 
-from ...realtime import vlm
+from ...shared import vlm
 from ...shared.ports import ConversationStore, Turn
 from . import agent as agent_module
 from .agent import (

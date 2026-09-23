@@ -19,11 +19,19 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-import app.realtime.vlm as vlm
+import app.shared.vlm as vlm
 from app.main import app
 from app.modules.companion import agent_dependency
 from app.modules.companion import get_companion_agent as build_agent
 from app.providers.base import ChatProvider
+
+
+def assert_envelope(resp_json: object, code: str) -> None:
+    """Shared contract assertion: every backend error uses the envelope."""
+    assert isinstance(resp_json, dict)
+    err = resp_json["error"]
+    assert err["code"] == code
+    assert isinstance(err["message"], str) and err["message"]
 
 
 class EchoProvider(ChatProvider):

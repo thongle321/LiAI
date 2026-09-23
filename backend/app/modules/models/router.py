@@ -5,9 +5,9 @@ import logging
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse
 
-from ...schemas import ModelListResponse, ModelUploadResponse
 from ...shared.kernel import error_response
 from . import internal as model_files
+from .schemas import ModelListResponse, ModelUploadResponse
 
 router = APIRouter()
 

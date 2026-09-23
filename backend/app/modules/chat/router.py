@@ -6,21 +6,16 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic_ai import Agent
 
-from ..modules.companion import (
+from ...shared.kernel import error_response
+from ...shared.ports import ConversationStore
+from ...shared.validators import validate_jpeg
+from ..companion import (
     StoreError,
     agent_dependency,
     get_store,
     run_turn,
 )
-from ..realtime.qa import validate_jpeg
-from ..schemas import (
-    ChatRequest,
-    ChatResponse,
-    HistoryMessage,
-    HistoryResponse,
-)
-from ..shared.kernel import error_response
-from ..shared.ports import ConversationStore
+from .schemas import ChatRequest, ChatResponse, HistoryMessage, HistoryResponse
 
 router = APIRouter()
 

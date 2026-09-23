@@ -64,8 +64,8 @@ export function SessionList({
         </Text>
       </Pressable>
       <View className="flex-row items-center px-4 pb-1 pt-3">
-        <History size={16} color={colors.secondaryText} />
-        <Text className="ml-2 font-sans text-body-sm text-secondary-text">
+        <History size={20} color={colors.secondaryText} />
+        <Text className="ml-3 font-sans text-body-sm text-secondary-text">
           History
         </Text>
       </View>

@@ -82,7 +82,6 @@ export function Bubble({
     <Animated.View entering={entering} className="my-1 max-w-[85%] flex-row self-start">
       <View className="mr-2 mt-1 h-8 w-8 items-center justify-center rounded-full bg-surface-3">
         <Bot size={16} color={colors.primary} />
-        <View className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border border-base bg-success" />
       </View>
       <View className="flex-1">
         <View className="rounded-card rounded-tl-sm border border-border bg-surface-1 px-4 py-2">

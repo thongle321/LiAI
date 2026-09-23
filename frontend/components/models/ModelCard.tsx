@@ -48,20 +48,21 @@ export function ModelCard({
             <Text className="font-sans text-body-sm text-secondary-text/70 mt-0.5">
               by {item.author}
             </Text>
-            <View className="flex-row items-center gap-2 mt-1.5">
+            <View className="flex-row flex-wrap items-center gap-2 mt-1.5">
               <Chip label={typeLabel(item.type)} />
               {params > 0 ? <Chip label={formatParams(params)} /> : null}
               <Chip label={formatBytes(item.files[0]?.size || 0)} />
               {item.files.length > 1 && <Chip label={`${item.files.length} files`} />}
-            {isActive ? <ActiveBadge /> : <StatusBadge status="completed" />}
+              {isActive ? <ActiveBadge /> : <StatusBadge status="completed" />}
+            </View>
           </View>
-          {isActive && (
-            <Text className="font-sans text-caption text-secondary-text mt-1.5">
-              Runs on the backend • plain chat, no tools
-            </Text>
-          )}
         </View>
-          <View className="flex-row items-center gap-2">
+        {isActive && (
+          <Text className="font-sans text-caption text-secondary-text mt-1.5">
+            Runs on the backend • plain chat, no tools
+          </Text>
+        )}
+        <View className="flex-row items-center gap-2 mt-3">
             {!isActive && (
               <Pressable
                 onPress={onActivate}
@@ -89,7 +90,6 @@ export function ModelCard({
               <Trash2 size={16} color={colors.error} />
             </Pressable>
           </View>
-        </View>
       </View>
     </View>
   );

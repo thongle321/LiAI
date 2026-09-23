@@ -20,7 +20,6 @@ import Animated from "react-native-reanimated";
 import { Check, Menu, Search, Share, X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
-import { CONNECTION_DOT_CLASS } from "../../lib/connection.ts";
 import { filterMessages } from "../../lib/chat/filter.ts";
 import { buildTranscript } from "../../lib/chat/transcript.ts";
 import { useCopy } from "../../hooks/useCopy.ts";
@@ -31,7 +30,7 @@ import { Bubble } from "./Bubble.tsx";
 import { ChatInput } from "./ChatInput.tsx";
 import { UsageStats } from "./UsageStats.tsx";
 import { SuggestedPrompts } from "./SuggestedPrompts.tsx";
-import { GREETING_ID, MessageList } from "./MessageList.tsx";
+import { MessageList } from "./MessageList.tsx";
 import { Connecting, Unavailable } from "../Unavailable.tsx";
 
 export function ChatScreen() {
@@ -59,7 +58,6 @@ export function ChatScreen() {
     void loadSession().then(() => checkHealth());
   }, [loadSession, checkHealth]);
 
-  const dot = CONNECTION_DOT_CLASS[connection];
   const motionDuration = useMotionDuration();
   const contentFade = useTabContentFade();
   const navigation = useNavigation<{ openDrawer: () => void }>();
@@ -74,7 +72,6 @@ export function ChatScreen() {
           <Pressable onPress={() => navigation.openDrawer()} className="px-1 py-1">
             <Menu size={22} color={colors.primary} />
           </Pressable>
-          <View className={`${dot} ml-2`} />
         </View>
         <Text className="flex-1 text-center font-sans-semibold text-h3 text-primary">
           {APP_NAME}
@@ -143,7 +140,7 @@ export function ChatScreen() {
                   message={item}
                   onRetry={() => void retry(item.id)}
                   onRegenerate={
-                    item.role === "assistant" && item.id !== GREETING_ID
+                    item.role === "assistant"
                       ? () => void regenerate(item.id)
                       : null
                   }

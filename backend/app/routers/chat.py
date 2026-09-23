@@ -2,7 +2,7 @@
 
 import base64
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from ..memory import get_store
@@ -14,14 +14,17 @@ from ..schemas import (
     HistoryResponse,
 )
 from ..shared.kernel import error_response
+from ..shared.ports import ConversationStore
 from ..turns import StoreError, run_turn
 
 router = APIRouter()
 
 
 @router.get("/api/history", response_model=HistoryResponse)
-async def history(session_id: str | None = None) -> HistoryResponse | JSONResponse:
-    store = get_store()
+async def history(
+    session_id: str | None = None,
+    store: ConversationStore = Depends(get_store),
+) -> HistoryResponse | JSONResponse:
     try:
         if session_id is None:
             return HistoryResponse(session_id=store.create(), messages=[])
@@ -47,7 +50,9 @@ def _decode_image(data_uri: str) -> bytes:
 
 
 @router.post("/api/chat", response_model=ChatResponse)
-async def chat(body: ChatRequest) -> ChatResponse | JSONResponse:
+async def chat(
+    body: ChatRequest, store: ConversationStore = Depends(get_store)
+) -> ChatResponse | JSONResponse:
     image_bytes: bytes | None = None
     if body.image is not None:
         try:
@@ -57,7 +62,7 @@ async def chat(body: ChatRequest) -> ChatResponse | JSONResponse:
             return error_response(400, "invalid_request", str(exc))
     try:
         outcome = await run_turn(
-            get_store(), body.session_id, body.message, image=image_bytes
+            store, body.session_id, body.message, image=image_bytes
         )
     except StoreError as exc:
         return error_response(503, "store_error", str(exc))

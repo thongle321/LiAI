@@ -32,8 +32,8 @@ def test_llm_failure_is_llm_error_envelope(broken_agent) -> None:  # type: ignor
     assert_envelope(resp.json(), "llm_error")
 
 
-def test_store_failure_is_store_error_envelope(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    import app.routers.chat as chat_router
+def test_store_failure_is_store_error_envelope() -> None:  # type: ignore[no-untyped-def]
+    from app.memory import get_store
 
     class BrokenStore:
         def get(self, session_id: str) -> object:
@@ -45,7 +45,10 @@ def test_store_failure_is_store_error_envelope(monkeypatch) -> None:  # type: ig
         def append(self, session_id: str, turn: object) -> None:
             raise RuntimeError("db down")
 
-    monkeypatch.setattr(chat_router, "get_store", lambda: BrokenStore())
-    resp = client.post("/api/chat", json={"message": "hi"})
+    app.dependency_overrides[get_store] = lambda: BrokenStore()
+    try:
+        resp = client.post("/api/chat", json={"message": "hi"})
+    finally:
+        app.dependency_overrides.clear()
     assert resp.status_code == 503
     assert_envelope(resp.json(), "store_error")

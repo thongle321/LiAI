@@ -3,11 +3,6 @@
   "description": "LiAI — multimodal AI companion for mobile.",
   "version": "0.1.0",
   "main": "expo-router/entry",
-  "expo": {
-    "autolinking": {
-      "exclude": ["llama.rn"]
-    }
-  },
   "dependencies": {
     "@expo-google-fonts/raleway": "^0.4.2",
     "@qvac/sdk": "0.20.0",
@@ -34,7 +29,6 @@
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.4",
     "link-preview-js": "^5.0.0",
-    "llama.rn": "^0.13.0-rc.5",
     "lucide-react-native": "^1.45.0",
     "react": "19.2.3",
     "react-native": "0.86.3",

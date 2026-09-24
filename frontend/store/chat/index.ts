@@ -15,6 +15,7 @@ import { createSendSlice } from "./send.ts";
 import { createSessionsSlice } from "./sessions.ts";
 import { createDraftSlice } from "./draft.ts";
 import type { ChatCtx, ChatDeps, ChatState, TurnRunner } from "./types.ts";
+import type { QvacClientLike } from "../../lib/inference/qvac-engine.ts";
 import { selectEngineSource, type EngineSource } from "../../lib/inference/engine.ts";
 import { EngineManager } from "../../lib/inference/manager.ts";
 import { createRemoteEngine } from "../../lib/inference/remote-engine.ts";
@@ -92,19 +93,34 @@ function getManager(): EngineManager {
     manager = new EngineManager(
       {
         loadLocal: async (fileName, mmprojPath) => {
-          const [fs, engine, local] = await Promise.all([
+          const [fs, engine, sdk, qvac] = await Promise.all([
             import("expo-file-system/legacy"),
             import("../../lib/inference/engine.ts"),
-            import("../../lib/inference/local-engine.ts"),
+            import("@qvac/sdk"),
+            import("../../lib/inference/qvac-engine.ts"),
           ]);
+          type Sdk = typeof sdk;
+          type LoadArg = Parameters<Sdk["loadModel"]>[0];
+          type RunArg = Parameters<Sdk["completion"]>[0];
+          const client: QvacClientLike = {
+            // SAFETY: the loader only passes local-file sources (Q2) with
+            // llamacpp-completion type, which the SDK's load overload accepts.
+            loadModel: (opts) => sdk.loadModel(opts as unknown as LoadArg),
+            unloadModel: (opts) => sdk.unloadModel(opts),
+            // SAFETY: the seam only ever carries user-role history, which
+            // the SDK's history union accepts; stream is always true here.
+            completion: (opts) =>
+              sdk.completion({ ...opts, stream: true } as unknown as RunArg),
+            cancel: (opts) => sdk.cancel(opts),
+          };
           const docsDir = fs.documentDirectory ?? "";
-          const ctx = await local.loadLlamaContext(
-            engine.resolveLocalFile(docsDir, fileName),
-            mmprojPath,
-          );
+          const modelId = await qvac.loadQvacModel(client, {
+            filePath: engine.resolveLocalFile(docsDir, fileName),
+            ...(mmprojPath ? { mmprojPath } : {}),
+          });
           return {
-            engine: local.createLocalEngine(ctx),
-            release: () => local.releaseLocalEngine(ctx),
+            engine: qvac.createQvacEngine(client, modelId),
+            release: () => qvac.unloadQvacModel(client, modelId),
           };
         },
         createRemote: (provider, getKey) => createRemoteEngine(provider, getKey),

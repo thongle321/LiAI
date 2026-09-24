@@ -6,6 +6,8 @@ import { describe, it } from "node:test";
 
 import {
   createQvacEngine,
+  loadQvacModel,
+  unloadQvacModel,
   type QvacClientLike,
   type QvacEvent,
 } from "../lib/inference/qvac-engine.ts";
@@ -16,6 +18,8 @@ function fakeClient(events: QvacEvent[], final: Record<string, unknown>) {
     cancels: [],
   };
   const client: QvacClientLike = {
+    loadModel: async () => "m1",
+    unloadModel: async () => {},
     completion: (params) => {
       calls.completions.push(params);
       return {
@@ -187,5 +191,50 @@ describe("createQvacEngine", () => {
         parameters: { type: "object", properties: {} },
       },
     ]);
+  });
+});
+
+describe("loadQvacModel", () => {
+  function loader() {
+    const calls: { loads: unknown[]; unloads: unknown[] } = { loads: [], unloads: [] };
+    const client = {
+      loadModel: async (opts: unknown) => {
+        calls.loads.push(opts);
+        return "mid";
+      },
+      unloadModel: async (opts: unknown) => {
+        calls.unloads.push(opts);
+      },
+    };
+    return { client, calls };
+  }
+
+  it("loads a local file with CPU defaults", async () => {
+    const { client, calls } = loader();
+    const id = await loadQvacModel(client, { filePath: "/d/models/a.gguf" });
+    assert.equal(id, "mid");
+    assert.deepEqual(calls.loads, [
+      {
+        modelSrc: "/d/models/a.gguf",
+        modelType: "llamacpp-completion",
+        modelConfig: { ctx_size: 2048, device: "cpu" },
+      },
+    ]);
+  });
+
+  it("attaches a projector when given", async () => {
+    const { client, calls } = loader();
+    await loadQvacModel(client, { filePath: "/d/a.gguf", mmprojPath: "/d/mm.gguf" });
+    assert.deepEqual((calls.loads[0] as { modelConfig: unknown }).modelConfig, {
+      ctx_size: 2048,
+      device: "cpu",
+      projectionModelSrc: "/d/mm.gguf",
+    });
+  });
+
+  it("unloads without clearing downloads", async () => {
+    const { client, calls } = loader();
+    await unloadQvacModel(client, "mid");
+    assert.deepEqual(calls.unloads, [{ modelId: "mid", clearStorage: false }]);
   });
 });

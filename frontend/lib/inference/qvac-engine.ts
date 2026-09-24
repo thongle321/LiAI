@@ -57,8 +57,46 @@ export interface QvacRun {
   }>;
 }
 
+/** Model type for chat/vision turns (QVAC llamacpp-completion plugin). */
+export const QVAC_COMPLETION_MODEL = "llamacpp-completion";
+
+/** Load a GGUF by absolute path with CPU defaults (Q3/Q6). */
+export async function loadQvacModel(
+  client: QvacModelClient,
+  opts: { filePath: string; mmprojPath?: string; ctxSize?: number; device?: string },
+): Promise<string> {
+  const { filePath, mmprojPath, ctxSize = 2048, device = "cpu" } = opts;
+  return client.loadModel({
+    modelSrc: filePath,
+    modelType: QVAC_COMPLETION_MODEL,
+    modelConfig: {
+      ctx_size: ctxSize,
+      device,
+      ...(mmprojPath ? { projectionModelSrc: mmprojPath } : {}),
+    },
+  });
+}
+
+/** Unload a model, always keeping its downloaded files. */
+export async function unloadQvacModel(
+  client: QvacModelClient,
+  modelId: string,
+): Promise<void> {
+  await client.unloadModel({ modelId, clearStorage: false });
+}
+
+/** Structural slice of `@qvac/sdk` model loading (fakes satisfy it). */
+export interface QvacModelClient {
+  loadModel(opts: {
+    modelSrc: string;
+    modelType: string;
+    modelConfig: Record<string, unknown>;
+  }): Promise<string>;
+  unloadModel(opts: { modelId: string; clearStorage: boolean }): Promise<void> | void;
+}
+
 /** Structural slice of `@qvac/sdk` a turn touches (fakes satisfy it). */
-export interface QvacClientLike {
+export interface QvacClientLike extends QvacModelClient {
   completion(params: {
     modelId: string;
     history: QvacHistoryMessage[];

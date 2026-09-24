@@ -63,7 +63,6 @@
         }
       ],
       "expo-secure-store",
-      "llama.rn",
       "@qvac/sdk/expo-plugin"
     ],
     "extra": {

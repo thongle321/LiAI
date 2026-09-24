@@ -26,3 +26,6 @@ npm-debug.log*
 .vscode/
 .idea/
 .gradle/
+
+.vercel
+.env*

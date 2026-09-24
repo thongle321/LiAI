@@ -63,7 +63,8 @@
         }
       ],
       "expo-secure-store",
-      "llama.rn"
+      "llama.rn",
+      "@qvac/sdk/expo-plugin"
     ],
     "extra": {
       "router": {},

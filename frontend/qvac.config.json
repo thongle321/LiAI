@@ -1,0 +1,4 @@
+{
+  "$comment": "QVAC spike (Q4): LLM + multimodal only. Every unlisted engine stays out of the native build.",
+  "plugins": ["@qvac/sdk/llamacpp-completion/plugin"]
+}

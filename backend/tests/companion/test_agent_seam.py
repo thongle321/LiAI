@@ -59,9 +59,7 @@ def test_explicit_agent_routes_frame_qa() -> None:
 def test_framework_override_changes_model() -> None:
     """Agent.override (pydantic-ai seam) swaps the model with no app patching."""
 
-    async def fixed(
-        messages: object, _info: AgentInfo
-    ) -> ModelResponse:
+    async def fixed(messages: object, _info: AgentInfo) -> ModelResponse:
         return ModelResponse(parts=[TextPart("OVERRIDDEN")])
 
     async def _go() -> str:

@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, Header, UploadFile
 from fastapi.responses import JSONResponse
 
 from ...shared.kernel import error_response
@@ -70,6 +70,39 @@ async def list_models_route() -> ModelListResponse | JSONResponse:
         return ModelListResponse(models=model_files.list_models())
     except Exception as exc:  # noqa: BLE001 — list boundary maps to 500 envelope
         return error_response(500, "list_failed", str(exc))
+
+
+def _hf_error(exc: model_files.HfError) -> JSONResponse:
+    code = {400: "invalid_request", 404: "not_found"}.get(exc.status, "http_error")
+    return error_response(exc.status, code, str(exc))
+
+
+@router.get("/api/models/hf/search")
+async def hf_search_route(
+    q: str = "",
+    x_hf_token: str | None = Header(default=None),
+) -> JSONResponse:
+    """Browse HuggingFace through the backend.
+
+    The token rides a header (never the URL), per request, never stored.
+    HF's JSON passes through verbatim so client parsers stay unchanged.
+    """
+    try:
+        return JSONResponse(content=model_files.hf_search(q, x_hf_token))
+    except model_files.HfError as exc:
+        return _hf_error(exc)
+
+
+@router.get("/api/models/hf/files")
+async def hf_files_route(
+    repo: str = "",
+    x_hf_token: str | None = Header(default=None),
+) -> JSONResponse:
+    """List a repo's tree through the backend (same token rule as search)."""
+    try:
+        return JSONResponse(content=model_files.hf_files(repo, x_hf_token))
+    except model_files.HfError as exc:
+        return _hf_error(exc)
 
 
 @router.delete("/api/models/{filename}")

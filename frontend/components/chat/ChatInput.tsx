@@ -1,36 +1,44 @@
-/** ONE persistent bottom interaction panel: composer + dictation.
+/** Chat composer: text input + dictation + vision/voice shortcuts.
  *
- * The composer mic dictates into the draft (you press Send); the
- * Voice tab opens the standalone /voice hands-free screen, and
- * the Vision entry opens the standalone /vision camera screen. The
- * message list always stays visible above; nothing else navigates away.
- * The bottom tab bar lives in app/(drawer)/(tabs)/_layout.tsx, not here.
+ * Moved from components/InteractionPanel.tsx (Wave 1 chat): same behavior,
+ * new home. The composer mic dictates into the draft (you press Send); the
+ * Voice tab opens the standalone /voice hands-free screen, and the Vision
+ * entry opens the standalone /vision camera screen.
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
-import { router, useIsFocused } from "expo-router";
+import { Image as RNImage, Pressable, Text, TextInput, View } from "react-native";
+import { useIsFocused } from "expo-router";
 import { openSettings } from "expo-linking";
-import { Mic, Plus, Send } from "lucide-react-native";
+import { Camera, Image as ImageIcon, Mic, Plus, Send, X, type LucideIcon } from "lucide-react-native";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
 
-import { colors } from "../themes/tokens.ts";
-import { mergeDictation, VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
-import { ensureMicAccess } from "../lib/micAccess.ts";
-import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../lib/voiceStatus.ts";
+import { colors } from "../../themes/tokens.ts";
+import { useChatStore } from "../../store/chat.ts";
+import { mergeDictation, VOICE_LISTEN_OPTS } from "../../lib/voiceListen.ts";
+import { ensureMicAccess } from "../../lib/micAccess.ts";
+import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../../lib/voiceStatus.ts";
+import { pickImage, type ImageSource } from "../../lib/chat/attachments.ts";
 
-export function InteractionPanel({
+export function ChatInput({
   sending,
   onSend,
 }: {
   sending: boolean;
   onSend: (text: string, image?: string) => Promise<boolean>;
 }) {
-  const [draft, setDraft] = useState("");
+  // Composer text lives in the chat store (per-session drafts survive
+  // switches); dictation mechanics stay local below.
+  const draft = useChatStore((s) => s.draft);
+  const setDraft = useChatStore((s) => s.setDraft);
   const [plusOpen, setPlusOpen] = useState(false);
+  // One attached photo per turn (the backend image path takes a single
+  // data-uri); text stays required — the contract 422s blank messages.
+  const [attached, setAttached] = useState<string | null>(null);
+  const [attachIssue, setAttachIssue] = useState<string | null>(null);
   // Dictation: mic fills the draft, the user presses Send. Interim
   // updates replace the dictated tail (draftBase keeps typed text).
   const [listening, setListening] = useState(false);
@@ -143,13 +151,24 @@ export function InteractionPanel({
 
   const canSend = !sending && draft.trim() !== "";
 
+  async function handleAttach(source: ImageSource): Promise<void> {
+    setPlusOpen(false);
+    setAttachIssue(null);
+    const uri = await pickImage(source);
+    if (uri === null) {
+      setAttachIssue("Couldn't attach that photo — try again.");
+      return;
+    }
+    setAttached(uri);
+  }
+
   async function handleSend(): Promise<void> {
     // Spurious stop() with nothing live confuses the native session;
     // only stop an active dictate before sending.
     if (listening) safeStopDictation();
-    if (await onSend(draft)) {
-      setDraft("");
-    }
+    // The store clears the draft once the text lives in its bubble.
+    await onSend(draft, attached ?? undefined);
+    setAttached(null);
   }
 
   return (
@@ -166,6 +185,22 @@ export function InteractionPanel({
             {voiceIssue}
           </Text>
         ))}
+      {attachIssue !== null && (
+        <Text className="px-5 pb-1 font-sans text-body-sm text-secondary-text">
+          {attachIssue}
+        </Text>
+      )}
+      {attached !== null && (
+        <View className="mx-4 mb-2 flex-row items-center gap-2 rounded-card border border-border bg-surface-1 p-2">
+          <RNImage source={{ uri: attached }} className="h-14 w-14 rounded-lg" />
+          <Text className="flex-1 font-sans text-body-sm text-secondary-text">
+            Attached — sent with your message
+          </Text>
+          <Pressable onPress={() => setAttached(null)} className="p-2">
+            <X size={18} color={colors.secondaryText} />
+          </Pressable>
+        </View>
+      )}
       <View className="mx-4 mb-2 flex-row items-center rounded-full border border-border bg-surface-1 px-2 py-1">
         <View>
           <Pressable
@@ -175,12 +210,17 @@ export function InteractionPanel({
             <Plus size={22} color={colors.primary} />
           </Pressable>
           {plusOpen && (
-            <View className="absolute bottom-11 left-0 w-40 rounded-card border border-border bg-surface-1 py-1">
+            <View className="absolute bottom-11 left-0 w-48 rounded-card border border-border bg-surface-1 py-1">
               <PlusItem
+                Icon={Camera}
                 label="Take photo"
-                onPress={() => router.navigate("/vision")}
+                onPress={() => void handleAttach("camera")}
               />
-              <PlusItem label="Speak" onPress={() => router.push("/voice")} />
+              <PlusItem
+                Icon={ImageIcon}
+                label="Choose from gallery"
+                onPress={() => void handleAttach("gallery")}
+              />
             </View>
           )}
         </View>
@@ -205,9 +245,18 @@ export function InteractionPanel({
   );
 }
 
-function PlusItem({ label, onPress }: { label: string; onPress: () => void }) {
+function PlusItem({
+  Icon,
+  label,
+  onPress,
+}: {
+  Icon: LucideIcon;
+  label: string;
+  onPress: () => void;
+}) {
   return (
-    <Pressable onPress={onPress} className="px-4 py-2">
+    <Pressable onPress={onPress} className="flex-row items-center gap-2.5 px-4 py-2.5">
+      <Icon size={18} color={colors.primary} />
       <Text className="font-sans text-body-md text-primary-text">{label}</Text>
     </Pressable>
   );

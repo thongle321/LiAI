@@ -41,17 +41,13 @@ def test_chat_image_rejects_non_jpeg_bytes(monkeypatch: MonkeyPatch) -> None:
 
     monkeypatch.setattr(vlm_module, "describe_frame", _boom)
     payload = base64.b64encode(b"not a jpeg").decode()
-    resp = client.post(
-        "/api/chat", json={"message": "what is this?", "image": payload}
-    )
+    resp = client.post("/api/chat", json={"message": "what is this?", "image": payload})
     assert resp.status_code == 400
     assert resp.json()["error"]["code"] == "invalid_request"
 
 
 def test_chat_image_rejects_bad_base64() -> None:
-    resp = client.post(
-        "/api/chat", json={"message": "what is this?", "image": "!!!"}
-    )
+    resp = client.post("/api/chat", json={"message": "what is this?", "image": "!!!"})
     assert resp.status_code == 400
     assert resp.json()["error"]["code"] == "invalid_request"
 

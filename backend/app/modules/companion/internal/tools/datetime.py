@@ -1,4 +1,4 @@
-"""Companion tool implementations (pure; registered on the agent in agent.py)."""
+"""Datetime talent (pure implementation; registered in agent.py)."""
 
 from datetime import datetime
 

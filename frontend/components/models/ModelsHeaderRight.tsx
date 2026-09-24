@@ -22,7 +22,7 @@ function ToggleRow({
 }) {
   return (
     <Pressable onPress={onPress} className="flex-row items-center justify-between px-4 py-2.5">
-      <Text className="font-sans text-body-md text-primary-text">{label}</Text>
+      <Text className="flex-1 font-sans text-body-md text-primary-text mr-2">{label}</Text>
       <View
         className={`w-5 h-5 rounded-md border items-center justify-center ${
           on ? "bg-primary border-primary" : "border-border"
@@ -77,13 +77,17 @@ export function ModelsHeaderRight({
               onPress={() => run(onToggleAvailable)}
             />
             <View className="h-px bg-border mx-4" />
-            <Pressable onPress={() => run(onExpandAll)} className="flex-row items-center gap-2 px-4 py-2.5">
-              <ChevronsUpDown size={16} color={colors.secondaryText} />
-              <Text className="font-sans text-body-md text-primary-text">Expand all</Text>
+            <Pressable onPress={() => run(onExpandAll)} className="flex-row items-center justify-between px-4 py-2.5">
+              <Text className="flex-1 font-sans text-body-md text-primary-text mr-2">Expand all</Text>
+              <View className="w-5 items-center">
+                <ChevronsUpDown size={16} color={colors.secondaryText} />
+              </View>
             </Pressable>
-            <Pressable onPress={() => run(onCollapseAll)} className="flex-row items-center gap-2 px-4 py-2.5">
-              <ChevronsDownUp size={16} color={colors.secondaryText} />
-              <Text className="font-sans text-body-md text-primary-text">Collapse all</Text>
+            <Pressable onPress={() => run(onCollapseAll)} className="flex-row items-center justify-between px-4 py-2.5">
+              <Text className="flex-1 font-sans text-body-md text-primary-text mr-2">Collapse all</Text>
+              <View className="w-5 items-center">
+                <ChevronsDownUp size={16} color={colors.secondaryText} />
+              </View>
             </Pressable>
           </View>
         </Pressable>

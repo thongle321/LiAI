@@ -108,11 +108,13 @@ function ipv4From(value: string | null): string | null {
 
 export const REQUEST_TIMEOUT_MS = 30_000;
 
+export { request };
+
 function apiError(code: ApiErrorCode, message: string): ApiError {
   return { code, message };
 }
 
-function isApiErrorResponse(body: unknown): body is ApiErrorResponse {
+export function isApiErrorResponse(body: unknown): body is ApiErrorResponse {
   if (typeof body !== "object" || body === null) return false;
   const error = (body as { error?: unknown }).error;
   if (typeof error !== "object" || error === null) return false;

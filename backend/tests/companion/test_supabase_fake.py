@@ -9,7 +9,7 @@ offline — one adapter hypothetical seam, two = real.
 from typing import Any
 
 import pytest
-from test_store import run_conformance_battery
+from test_store import run_conformance_battery, run_session_battery
 
 from app.modules.companion import (
     MAX_STORED_MESSAGES,
@@ -51,6 +51,15 @@ class _Query:
         self._payload = row
         return self
 
+    def update(self, row: dict[str, Any]) -> "_Query":
+        self._op = "update"
+        self._payload = row
+        return self
+
+    def delete(self) -> "_Query":
+        self._op = "delete"
+        return self
+
     def upsert(self, row: dict[str, Any]) -> "_Query":
         self._op = "upsert"
         self._payload = row
@@ -76,8 +85,23 @@ class _Query:
                 row["id"] = len(rows) + 1  # DB-like autoincrement for order()
             if "created_at" not in row:
                 row["created_at"] = row["id"]
+            if self._table == "sessions":
+                # Mirror the DB defaults from the sessions migrations.
+                row.setdefault("title", "")
+                row.setdefault("pinned", False)
+                row.setdefault("updated_at", f"t{len(rows):06d}")
             rows.append(row)
             return _Result([row])
+        if self._op == "update":
+            matched = [r for r in rows if all(r.get(c) == v for c, v in self._filters)]
+            for row in matched:
+                row.update(self._payload)
+            return _Result([dict(r) for r in matched])
+        if self._op == "delete":
+            kept = [r for r in rows if not all(r.get(c) == v for c, v in self._filters)]
+            removed = [r for r in rows if r not in kept]
+            self._tables[self._table] = kept
+            return _Result([dict(r) for r in removed])
         if self._op == "upsert":
             key = self._payload.get("id")
             for i, row in enumerate(rows):
@@ -111,6 +135,11 @@ class FakeSupabaseClient:
 def test_supabase_fake_passes_conformance() -> None:
     client = FakeSupabaseClient()
     run_conformance_battery(lambda: SupabaseConversationStore(client=client))
+
+
+def test_supabase_fake_passes_session_battery() -> None:
+    client = FakeSupabaseClient()
+    run_session_battery(lambda: SupabaseConversationStore(client=client))
 
 
 def test_injected_client_skips_singleton(monkeypatch) -> None:  # type: ignore[no-untyped-def]

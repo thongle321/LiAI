@@ -5,6 +5,7 @@ Owned by companion (ADR-0002 data ownership); shared/db holds only the client.
 """
 
 import json
+from datetime import UTC, datetime
 from typing import (
     Any,
     cast,
@@ -14,7 +15,7 @@ from typing import (
 from uuid import uuid4
 
 from ...db.client import get_client
-from ...shared.ports import MAX_STORED_MESSAGES, Turn
+from ...shared.ports import MAX_STORED_MESSAGES, SessionInfo, Turn
 
 
 def turn_to_row(session_id: str, turn: Turn) -> dict[str, Any]:
@@ -36,7 +37,9 @@ def row_to_turn(row: dict[str, Any]) -> Turn:
         parsed = metadata
     elif isinstance(metadata, str):
         try:
-            loaded: Any = json.loads(metadata)  # reason: json.loads is dynamic by nature
+            loaded: Any = json.loads(
+                metadata
+            )  # reason: json.loads is dynamic by nature
             parsed = loaded if isinstance(loaded, dict) else None
         except (ValueError, TypeError):
             parsed = None
@@ -45,6 +48,23 @@ def row_to_turn(row: dict[str, Any]) -> Turn:
         content=row["content"],
         type=row["type"] if isinstance(row.get("type"), str) else "text",
         metadata=parsed,
+    )
+
+
+def _utcnow() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def _row_to_session(row: dict[str, Any]) -> SessionInfo:
+    """sessions row -> SessionInfo. Pre-migration rows degrade to defaults."""
+    title = row.get("title")
+    pinned = row.get("pinned")
+    updated = row.get("updated_at")
+    return SessionInfo(
+        id=row["id"],
+        title=title if isinstance(title, str) else "",
+        pinned=isinstance(pinned, bool) and pinned,
+        updated_at=updated if isinstance(updated, str) else "",
     )
 
 
@@ -86,3 +106,58 @@ class SupabaseConversationStore:
     def append(self, session_id: str, turn: Turn) -> None:
         self._client.from_("sessions").upsert({"id": session_id}).execute()
         self._client.from_("messages").insert(turn_to_row(session_id, turn)).execute()
+
+    def list_sessions(self) -> list[SessionInfo]:
+        rows = (
+            self._client.from_("sessions")
+            .select("id,title,pinned,updated_at")
+            .order("pinned", desc=True)
+            .order("updated_at", desc=True)
+            .execute()
+        )
+        return [_row_to_session(cast(dict[str, Any], r)) for r in rows.data]
+
+    def rename_session(self, session_id: str, title: str) -> bool:
+        res = (
+            self._client.from_("sessions")
+            .update({"title": title, "updated_at": _utcnow()})
+            .eq("id", session_id)
+            .execute()
+        )
+        return bool(res.data)
+
+    def set_session_pinned(self, session_id: str, pinned: bool) -> bool:
+        res = (
+            self._client.from_("sessions")
+            .update({"pinned": pinned, "updated_at": _utcnow()})
+            .eq("id", session_id)
+            .execute()
+        )
+        return bool(res.data)
+
+    def delete_session(self, session_id: str) -> bool:
+        self._client.from_("messages").delete().eq("session_id", session_id).execute()
+        res = self._client.from_("sessions").delete().eq("id", session_id).execute()
+        return bool(res.data)
+
+    def set_title_if_empty(self, session_id: str, title: str) -> None:
+        self._client.from_("sessions").update({"title": title}).eq("id", session_id).eq(
+            "title", ""
+        ).execute()
+
+    def pop_last_assistant(self, session_id: str) -> bool:
+        latest = (
+            self._client.from_("messages")
+            .select("id,role")
+            .eq("session_id", session_id)
+            .order("id", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if not latest.data:
+            return False
+        row = cast(dict[str, Any], latest.data[0])
+        if row.get("role") != "assistant":
+            return False
+        self._client.from_("messages").delete().eq("id", row["id"]).execute()
+        return True

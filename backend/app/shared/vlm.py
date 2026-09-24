@@ -32,6 +32,7 @@ def _max_edge() -> int:
     # ponytail: cap pixels before the handler — visual tokens dominate prefill
     return int(os.getenv("VISION_MAX_EDGE", "512"))
 
+
 logger = logging.getLogger(__name__)
 
 _llm: Llama | None = None
@@ -101,9 +102,9 @@ def _thumbnail_jpeg(image: bytes) -> bytes:
 
 def _chat_messages(image: bytes, question: str) -> list[dict[str, Any]]:
     """Pure message builder (no weights) — the unit-testable seam."""
-    data_uri = "data:image/jpeg;base64," + base64.b64encode(
-        _thumbnail_jpeg(image)
-    ).decode()
+    data_uri = (
+        "data:image/jpeg;base64," + base64.b64encode(_thumbnail_jpeg(image)).decode()
+    )
     return [
         {
             "role": "user",

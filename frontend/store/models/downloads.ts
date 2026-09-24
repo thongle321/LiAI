@@ -69,6 +69,8 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       modelId: specId,
       fileName: file.name,
       downloadUrl: file.downloadUrl,
+      // Gated repos need the token at fetch time too, not just for browse.
+      ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
       destinationPath: `${LegacyFileSystem.documentDirectory}models/${file.name}`,
       status: "downloading",
       progress: 0,

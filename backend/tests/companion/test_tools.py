@@ -71,7 +71,9 @@ def route_agent(monkeypatch: pytest.MonkeyPatch, clock: Callable[[], str]) -> No
     def _tool_override() -> object:
         return build_agent(provider, clock=clock)
 
-    monkeypatch.setitem(fastapi_app.dependency_overrides, agent_dependency, _tool_override)
+    monkeypatch.setitem(
+        fastapi_app.dependency_overrides, agent_dependency, _tool_override
+    )
 
 
 def post_time_question(clock: Callable[[], str]) -> dict:

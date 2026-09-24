@@ -6,6 +6,7 @@
  *   preset-<presetId>-<fileName>   hf-<modelId>-<fileName>
  */
 
+import { request } from "../api.ts";
 import type {
   ModelSpec,
   ModelType,
@@ -15,10 +16,11 @@ import type {
   HFModelFile,
 } from "../../types/models";
 
-const HF_API_BASE = "https://huggingface.co/api";
 const HF_HUB_BASE = "https://huggingface.co";
 
-/** Minimal shape of the HF models API we actually read. */
+/** Backend proxy base is same-origin: API_BASE_URL lives in lib/api. */
+
+/** Wire shape of the HF browse proxy (verbatim HF rows we actually read). */
 interface HFSearchItem {
   modelId: string;
   cardData?: { description?: string };
@@ -28,7 +30,7 @@ interface HFSearchItem {
   private?: boolean;
 }
 
-/** Minimal shape of the HF tree API we actually read. */
+/** Wire shape of the HF tree proxy (verbatim HF rows we actually read). */
 interface HFTreeItem {
   type?: string;
   path: string;
@@ -163,35 +165,50 @@ export async function getPresets(): Promise<PresetModel[]> {
   return PRESETS;
 }
 
-function authHeaders(token?: string): Record<string, string> {
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+/** Backend envelope errors arrive as plain {code,message} objects;
+ * rethrow them as Errors so the existing UI surfaces the message. */
+function apiMessage(error: unknown, fallback: string): string {
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message) return message;
   }
-  return headers;
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
+/** Backend HF proxy GET: header token, verbatim JSON list, Error surfacing. */
+async function proxyGet<T>(
+  path: string,
+  params: Record<string, string>,
+  token: string | undefined,
+  fallback: string,
+): Promise<T[]> {
+  const query = new URLSearchParams(params);
+  const headers: Record<string, string> = {};
+  if (token) headers["X-HF-Token"] = token;
+  let data: unknown;
+  try {
+    data = await request<unknown>(`${path}?${query}`, {
+      method: "GET",
+      headers,
+    });
+  } catch (error) {
+    throw new Error(apiMessage(error, fallback));
+  }
+  if (!Array.isArray(data)) throw new Error(fallback);
+  // SAFETY: Array.isArray proves list shape at runtime; T only documents
+  // which verbatim HF row fields the mapper below reads (no coercion).
+  return data as T[];
 }
 
 export async function searchModels(
   query: string,
   token?: string,
 ): Promise<HFModelSearchResult[]> {
-  const params = new URLSearchParams({
-    search: query,
-    filter: "gguf",
-    limit: "20",
-    sort: "downloads",
-  });
-
-  const response = await fetch(`${HF_API_BASE}/models?${params}`, {
-    headers: authHeaders(token),
-  });
-  if (!response.ok) {
-    throw new Error(`HF search failed: ${response.status}`);
-  }
-
-  const data = (await response.json()) as HFSearchItem[];
+  const data = await proxyGet<HFSearchItem>("/api/models/hf/search", { q: query }, token, "Search failed");
+  // No visibility filter: HF scopes results to what the token may see,
+  // and gated rows are downloadable now that downloads carry the token.
   return data
-    .filter((m) => m.private === false)
     .map((m) => ({
       modelId: m.modelId,
       author: m.modelId.split("/")[0],
@@ -209,14 +226,12 @@ export async function getModelFiles(
   modelId: string,
   token?: string,
 ): Promise<HFModelFile[]> {
-  const response = await fetch(`${HF_API_BASE}/models/${modelId}/tree/main`, {
-    headers: authHeaders(token),
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to fetch model files: ${response.status}`);
-  }
-
-  const data = (await response.json()) as HFTreeItem[];
+  const data = await proxyGet<HFTreeItem>(
+    "/api/models/hf/files",
+    { repo: modelId },
+    token,
+    "Failed to fetch model files",
+  );
   return data
     .filter((f) => f.type === "file" && f.path.toLowerCase().endsWith(".gguf"))
     .map((f) => ({

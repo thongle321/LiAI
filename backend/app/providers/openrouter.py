@@ -19,10 +19,14 @@ class OpenRouterChatProvider(CachedChatModel):
         model: str | None = None,
     ) -> None:
         self.api_key = (
-            api_key or os.getenv("OPENROUTER_API_KEY", "") or os.getenv("OPENAI_API_KEY", "")
+            api_key
+            or os.getenv("OPENROUTER_API_KEY", "")
+            or os.getenv("OPENAI_API_KEY", "")
         )
         self.model_name = (
-            model or os.getenv("OPENROUTER_MODEL", "") or os.getenv("OPENAI_MODEL", "openai/gpt-4o-mini")
+            model
+            or os.getenv("OPENROUTER_MODEL", "")
+            or os.getenv("OPENAI_MODEL", "openai/gpt-4o-mini")
         )
 
     def _prepare(self) -> None:
@@ -41,9 +45,8 @@ class OpenRouterChatProvider(CachedChatModel):
         """
         if not self.api_key:
             from pydantic_ai.exceptions import UserError
-            raise UserError(
-                "OPENROUTER_API_KEY must be set to use OpenRouter provider"
-            )
+
+            raise UserError("OPENROUTER_API_KEY must be set to use OpenRouter provider")
         return OpenRouterModel(self.model_name, provider=self._provider())
 
     async def reply(self, message: str) -> str:

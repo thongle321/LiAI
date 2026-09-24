@@ -57,6 +57,7 @@ class ResumableDownloadService {
     await makeDirectoryAsync(getModelsDirectoryPath(), { intermediates: true });
 
     const task = new DownloadTask(job.downloadUrl, file, {
+      headers: job.headers,
       onProgress: (progress: DownloadProgress) => {
         const totalBytes = progress.bytesWritten;
         const progressPercent = job.totalBytes > 0

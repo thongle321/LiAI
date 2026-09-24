@@ -1,123 +1,34 @@
-/** Chat store tests (Wave 1: backend-owned sessions + SSE streaming).
+/** Chat store tests (on-device: Supabase sessions + local turns).
  * Run: node --test frontend/tests/chat-store.test.ts */
 
-import { describe, it, beforeEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { createChatStore, SESSION_KEY } from "../store/chat.ts";
-import type { MinimalXhr } from "../lib/chat/api.ts";
-import type { KeyValueStorage } from "../lib/storage.ts";
+import { draftKey } from "../lib/chat/drafts.ts";
+import {
+  fakeRunTurn,
+  fakeSessionStore,
+  gatedRunTurn,
+  memoryStorage,
+} from "./fakes.ts";
 
-function memoryStorage(seed: Record<string, string> = {}): KeyValueStorage & {
-  data: Record<string, string>;
-} {
-  const data: Record<string, string> = { ...seed };
+function storeWith(seeds: Parameters<typeof fakeSessionStore>[0]) {
+  const fake = fakeSessionStore(seeds);
   return {
-    data,
-    getItem: async (k: string) => data[k] ?? null,
-    setItem: async (k: string, v: string) => {
-      data[k] = v;
-    },
-    removeItem: async (k: string) => {
-      delete data[k];
-    },
+    ...fake,
+    getStore: async () => fake.store,
   };
-}
-
-function mockFetch(
-  impl: (url: string, init?: RequestInit) => Promise<Response>,
-): void {
-  (globalThis as Record<string, unknown>).fetch = impl;
-}
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-/** Scripted fake XHR: replays chunks on send, then finishes with a status.
- * With auto=false the request stays pending until abort (cancel tests). */
-function fakeXhr(
-  chunks: string[],
-  status = 200,
-  auto = true,
-): {
-  factory: () => MinimalXhr;
-  sent: { method: string; url: string; body?: string };
-} {
-  const sent: { method: string; url: string; body?: string } = {
-    method: "",
-    url: "",
-  };
-  let seen = "";
-  const xhr: MinimalXhr = {
-    responseText: "",
-    status: 0,
-    timeout: 0,
-    onprogress: null,
-    onload: null,
-    onerror: null,
-    ontimeout: null,
-    onabort: null,
-    open(method: string, url: string) {
-      sent.method = method;
-      sent.url = url;
-    },
-    setRequestHeader() {},
-    send(body?: string) {
-      sent.body = body;
-      // Real XHR delivers on later tasks; keep the fake faithful so
-      // mid-flight assertions (sending, pending bubble) hold.
-      setTimeout(() => {
-        if (!auto) return;
-        for (const chunk of chunks) {
-        seen += chunk;
-        (xhr as { responseText: string }).responseText = seen;
-        xhr.onprogress?.(null);
-        }
-        (xhr as { status: number }).status = status;
-        xhr.onload?.();
-      }, 0);
-    },
-    abort() {
-      xhr.onabort?.();
-    },
-  };
-  return { factory: () => xhr, sent };
-}
-
-const STREAM_OK = [
-  'event: start\ndata: {"session_id":"s1"}\n\n',
-  'event: token\ndata: {"text":"Echo"}\n\n',
-  'event: token\ndata: {"text":" hi"}\n\n',
-  'event: usage\ndata: {"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}\n\n',
-  'event: done\ndata: {"session_id":"s1"}\n\n',
-];
-
-function mockSessionsList() {
-  mockFetch(async (url) => {
-    if (String(url).includes("/api/sessions")) {
-      return jsonResponse({
-        sessions: [{ id: "s1", title: "Hi", pinned: false, updated_at: "t" }],
-      });
-    }
-    if (String(url).includes("/api/history")) {
-      return jsonResponse({ session_id: "s1", messages: [] });
-    }
-    return jsonResponse({ reply: "Echo", session_id: "s1" });
-  });
 }
 
 describe("chat store sessions", () => {
-  beforeEach(() => {
-    mockSessionsList();
-  });
-
-  it("loads the backend session list and history on loadSession", async () => {
+  it("loads the session list and history on loadSession", async () => {
+    const { getStore } = storeWith([{ id: "s1", title: "Hi" }]);
     const storage = memoryStorage({ liai_session_id: "s1" });
-    const useStore = createChatStore(storage);
+    const useStore = createChatStore(storage, {
+      getStore,
+      runTurn: fakeRunTurn([]).runTurn,
+    });
     await useStore.getState().loadSession();
     const state = useStore.getState();
     assert.equal(state.sessionId, "s1");
@@ -129,72 +40,67 @@ describe("chat store sessions", () => {
   });
 
   it("starts empty when no session is stored, without minting", async () => {
-    let historyCalls = 0;
-    mockFetch(async (url) => {
-      if (String(url).includes("/api/sessions")) {
-        return jsonResponse({ sessions: [] });
-      }
-      if (String(url).includes("/api/history")) {
-        historyCalls += 1;
-        return jsonResponse({ session_id: "fresh", messages: [] });
-      }
-      return jsonResponse({ reply: "Echo", session_id: "fresh" });
+    const fake = fakeSessionStore([]);
+    const useStore = createChatStore(memoryStorage(), {
+      getStore: async () => fake.store,
+      runTurn: fakeRunTurn([]).runTurn,
     });
-    const useStore = createChatStore(memoryStorage());
     await useStore.getState().loadSession();
     assert.equal(useStore.getState().sessionId, null);
     assert.deepEqual(useStore.getState().messages, []);
-    assert.equal(historyCalls, 0);
+    assert.equal(fake.calls.creates, 0);
   });
 
-  it("keeps state when the session list fails", async () => {
-    mockFetch(async () => {
-      throw new TypeError("fetch failed");
+  it("keeps state when the store fails", async () => {
+    const useStore = createChatStore(memoryStorage({ liai_session_id: "s1" }), {
+      getStore: async () => {
+        throw new Error("supabase down");
+      },
+      runTurn: fakeRunTurn([]).runTurn,
     });
-    const useStore = createChatStore(memoryStorage({ liai_session_id: "s1" }));
     await useStore.getState().loadSession();
     assert.equal(useStore.getState().sessionId, "s1");
     assert.deepEqual(useStore.getState().sessions, []);
   });
 
   it("drops the legacy on-device history index", async () => {
+    const { getStore } = storeWith([{ id: "s1", title: "Hi" }]);
     const storage = memoryStorage({
       liai_session_id: "s1",
       liai_history_v1: JSON.stringify([{ id: "s1", title: "old", at: 1 }]),
     });
-    const useStore = createChatStore(storage);
+    const useStore = createChatStore(storage, {
+      getStore,
+      runTurn: fakeRunTurn([]).runTurn,
+    });
     await useStore.getState().loadSession();
     assert.equal(storage.data["liai_history_v1"], undefined);
   });
 
-  it("switchSession loads backend history with steps and usage", async () => {
-    mockFetch(async (url) => {
-      if (String(url).includes("/api/sessions")) {
-        return jsonResponse({
-          sessions: [{ id: "s2", title: "T", pinned: false, updated_at: "t" }],
-        });
-      }
-      if (String(url).includes("session_id=s2")) {
-        return jsonResponse({
-          session_id: "s2",
-          messages: [
-            { role: "user", content: "time?" },
-            {
-              role: "assistant",
-              content: "It is noon",
-              metadata: {
-                tool_calls: ["get_current_time"],
-                usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
-              },
+  it("switchSession loads history with steps and usage", async () => {
+    const { getStore } = storeWith([
+      { id: "s2", title: "T" },
+      {
+        id: "s2",
+        title: "T",
+        turns: [
+          { role: "user", content: "time?", type: "text" },
+          {
+            role: "assistant",
+            content: "It is noon",
+            type: "text",
+            metadata: {
+              tool_calls: ["get_current_time"],
+              usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
             },
-          ],
-        });
-      }
-      return jsonResponse({ session_id: "s1", messages: [] });
-    });
+          },
+        ],
+      },
+    ]);
     const storage = memoryStorage();
     const useStore = createChatStore(storage, {
-      openXhr: fakeXhr([]).factory,
+      getStore,
+      runTurn: fakeRunTurn([]).runTurn,
     });
     await useStore.getState().loadSession();
     assert.equal(await useStore.getState().switchSession("s2"), true);
@@ -219,38 +125,27 @@ describe("chat store sessions", () => {
   });
 
   it("switchSession prefers persisted tool_runs over bare names", async () => {
-    mockFetch(async (url) => {
-      if (String(url).includes("/api/sessions")) {
-        return jsonResponse({
-          sessions: [{ id: "s2", title: "T", pinned: false, updated_at: "t" }],
-        });
-      }
-      if (String(url).includes("session_id=s2")) {
-        return jsonResponse({
-          session_id: "s2",
-          messages: [
-            { role: "user", content: "search?" },
-            {
-              role: "assistant",
-              content: "Found it",
-              metadata: {
-                tool_calls: ["web_search"],
-                tool_runs: [
-                  {
-                    name: "web_search",
-                    input: { query: "q" },
-                    result: "R",
-                  },
-                ],
-              },
+    const { getStore } = storeWith([
+      {
+        id: "s2",
+        title: "T",
+        turns: [
+          { role: "user", content: "search?", type: "text" },
+          {
+            role: "assistant",
+            content: "Found it",
+            type: "text",
+            metadata: {
+              tool_calls: ["web_search"],
+              tool_runs: [{ name: "web_search", input: { query: "q" }, result: "R" }],
             },
-          ],
-        });
-      }
-      return jsonResponse({ session_id: "s1", messages: [] });
-    });
+          },
+        ],
+      },
+    ]);
     const useStore = createChatStore(memoryStorage(), {
-      openXhr: fakeXhr([]).factory,
+      getStore,
+      runTurn: fakeRunTurn([]).runTurn,
     });
     await useStore.getState().loadSession();
     assert.equal(await useStore.getState().switchSession("s2"), true);
@@ -264,137 +159,86 @@ describe("chat store sessions", () => {
     ]);
   });
 
-  it("renameSession patches the backend and updates the row", async () => {
-    mockFetch(async (url, init) => {
-      if (String(url).includes("/api/sessions") && init?.method === "PATCH") {
-        const body = JSON.parse(String(init?.body));
-        assert.deepEqual(body, { title: "New" });
-        return jsonResponse({
-          id: "s1",
-          title: "New",
-          pinned: false,
-          updated_at: "t2",
-        });
-      }
-      if (String(url).includes("/api/sessions")) {
-        return jsonResponse({
-          sessions: [{ id: "s1", title: "Hi", pinned: false, updated_at: "t" }],
-        });
-      }
-      return jsonResponse({ session_id: "s1", messages: [] });
+  it("renameSession patches the store and updates the row", async () => {
+    const { getStore } = storeWith([{ id: "s1", title: "Hi" }]);
+    const useStore = createChatStore(memoryStorage({ liai_session_id: "s1" }), {
+      getStore,
+      runTurn: fakeRunTurn([]).runTurn,
     });
-    const useStore = createChatStore(memoryStorage({ liai_session_id: "s1" }));
     await useStore.getState().loadSession();
     assert.equal(await useStore.getState().renameSession("s1", "New"), true);
     assert.equal(useStore.getState().sessions[0].title, "New");
   });
 
-  it("renameSession returns false when the backend rejects", async () => {
-    mockFetch(async (url) => {
-      if (String(url).includes("/api/sessions") && !String(url).includes("history")) {
-        if (url.toString().endsWith("/api/sessions")) {
-          return jsonResponse({
-            sessions: [{ id: "s1", title: "Hi", pinned: false, updated_at: "t" }],
-          });
-        }
-        return jsonResponse(
-          { error: { code: "not_found", message: "gone" } },
-          404,
-        );
-      }
-      return jsonResponse({ session_id: "s1", messages: [] });
+  it("renameSession returns false when the store rejects", async () => {
+    const fake = fakeSessionStore([{ id: "s1", title: "Hi" }]);
+    const useStore = createChatStore(memoryStorage({ liai_session_id: "s1" }), {
+      getStore: async () => ({
+        ...fake.store,
+        renameSession: async () => {
+          throw new Error("down");
+        },
+      }),
+      runTurn: fakeRunTurn([]).runTurn,
     });
-    const useStore = createChatStore(memoryStorage({ liai_session_id: "s1" }));
     await useStore.getState().loadSession();
     assert.equal(await useStore.getState().renameSession("s1", "New"), false);
     assert.equal(useStore.getState().sessions[0].title, "Hi");
   });
 
-  it("setPinned toggles pin state through the backend", async () => {
-    mockFetch(async (url, init) => {
-      if (String(url).includes("/api/sessions") && init?.method === "PATCH") {
-        return jsonResponse({
-          id: "s1",
-          title: "Hi",
-          pinned: true,
-          updated_at: "t2",
-        });
-      }
-      if (String(url).includes("/api/sessions")) {
-        return jsonResponse({
-          sessions: [{ id: "s1", title: "Hi", pinned: false, updated_at: "t" }],
-        });
-      }
-      return jsonResponse({ session_id: "s1", messages: [] });
+  it("setPinned toggles pin state through the store", async () => {
+    const { getStore } = storeWith([{ id: "s1", title: "Hi" }]);
+    const useStore = createChatStore(memoryStorage({ liai_session_id: "s1" }), {
+      getStore,
+      runTurn: fakeRunTurn([]).runTurn,
     });
-    const useStore = createChatStore(memoryStorage({ liai_session_id: "s1" }));
     await useStore.getState().loadSession();
     assert.equal(useStore.getState().sessions[0].pinned, false);
     assert.equal(await useStore.getState().setPinned("s1", true), true);
     assert.equal(useStore.getState().sessions[0].pinned, true);
   });
 
-  it("deleteSession removes the backend session and clears the active view", async () => {
-    const deleted: string[] = [];
-    mockFetch(async (url, init) => {
-      if (String(url).includes("/api/sessions") && init?.method === "DELETE") {
-        deleted.push(String(url));
-        return jsonResponse({ message: "deleted" });
-      }
-      if (String(url).includes("/api/sessions")) {
-        return jsonResponse({
-          sessions: [{ id: "s1", title: "Hi", pinned: false, updated_at: "t" }],
-        });
-      }
-      return jsonResponse({ session_id: "s1", messages: [] });
-    });
+  it("deleteSession removes the session and clears the active view", async () => {
+    const fake = fakeSessionStore([{ id: "s1", title: "Hi" }]);
     const storage = memoryStorage({ liai_session_id: "s1" });
-    const useStore = createChatStore(storage);
+    const useStore = createChatStore(storage, {
+      getStore: async () => fake.store,
+      runTurn: fakeRunTurn([]).runTurn,
+    });
     await useStore.getState().loadSession();
     await useStore.getState().deleteSession("s1");
-    assert.equal(deleted.length, 1);
-    assert.ok(deleted[0].includes("/api/sessions/s1"));
+    assert.deepEqual(fake.calls.deletes, ["s1"]);
     const state = useStore.getState();
     assert.deepEqual(state.sessions, []);
     assert.equal(state.sessionId, null);
     assert.equal(storage.data[SESSION_KEY], undefined);
   });
 
-  it("newConversation clears the view without a backend call", async () => {
-    let posts = 0;
-    mockFetch(async (url) => {
-      if (String(url).includes("/api/sessions")) {
-        return jsonResponse({
-          session_id: "s1",
-          sessions: [{ id: "s1", title: "Hi", pinned: false, updated_at: "t" }],
-        });
-      }
-      if (String(url).includes("/api/history")) {
-        return jsonResponse({ session_id: "s1", messages: [] });
-      }
-      posts += 1;
-      return jsonResponse({ reply: "Echo", session_id: "s1" });
-    });
+  it("newConversation clears the view without touching the store", async () => {
+    const fake = fakeSessionStore([{ id: "s1", title: "Hi" }]);
     const storage = memoryStorage({ liai_session_id: "s1" });
-    const useStore = createChatStore(storage);
+    const useStore = createChatStore(storage, {
+      getStore: async () => fake.store,
+      runTurn: fakeRunTurn([]).runTurn,
+    });
     await useStore.getState().loadSession();
     await useStore.getState().newConversation();
     const state = useStore.getState();
     assert.equal(state.sessionId, null);
     assert.deepEqual(state.messages, []);
-    assert.equal(posts, 0);
+    assert.equal(fake.calls.creates, 0);
+    assert.equal(fake.calls.appends.length, 0);
   });
 });
 
-describe("chat store streaming", () => {
-  beforeEach(() => {
-    mockSessionsList();
-  });
-
+describe("chat store turns", () => {
   it("streams tokens into a pending bubble, then finalizes", async () => {
-    const { factory, sent } = fakeXhr(STREAM_OK);
+    const gate = gatedRunTurn();
     const storage = memoryStorage();
-    const useStore = createChatStore(storage, { openXhr: factory });
+    const useStore = createChatStore(storage, {
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn: gate.runTurn,
+    });
     const promise = useStore.getState().send("hi");
     assert.equal(useStore.getState().sending, true);
     assert.deepEqual(
@@ -404,6 +248,7 @@ describe("chat store streaming", () => {
         ["assistant", true],
       ],
     );
+    gate.release("Echo hi");
     await promise;
     const state = useStore.getState();
     assert.equal(state.sending, false);
@@ -420,20 +265,31 @@ describe("chat store streaming", () => {
       completionTokens: 2,
       totalTokens: 3,
     });
-    assert.equal(state.sessionId, "s1");
-    assert.equal(storage.data[SESSION_KEY], "s1");
-    assert.deepEqual(JSON.parse(sent.body ?? ""), { message: "hi", stream: true });
+    assert.equal(state.sessionId, "s-new");
+    assert.equal(storage.data[SESSION_KEY], "s-new");
+    assert.equal(state.draft, "");
+    assert.equal(storage.data[draftKey(null)], undefined);
   });
 
-  it("upserts running/done pairs into a single step", async () => {
-    const { factory } = fakeXhr([
-      'event: start\ndata: {"session_id":"s1"}\n\n',
-      'event: tool\ndata: {"name":"web_search","status":"running","id":"w1","input":{"query":"q"}}\n\n',
-      'event: tool\ndata: {"name":"web_search","status":"done","id":"w1","input":{"query":"q"},"result":"R"}\n\n',
-      'event: token\ndata: {"text":"done"}\n\n',
-      'event: done\ndata: {"session_id":"s1"}\n\n',
+  it("renders outcome steps as done chips", async () => {
+    const { runTurn } = fakeRunTurn([
+      {
+        reply: "done",
+        steps: [
+          {
+            id: "w1",
+            tool: "web_search",
+            status: "done",
+            input: { query: "q" },
+            result: "R",
+          },
+        ],
+      },
     ]);
-    const useStore = createChatStore(memoryStorage(), { openXhr: factory });
+    const useStore = createChatStore(memoryStorage(), {
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+    });
     await useStore.getState().send("search?");
     assert.deepEqual(useStore.getState().messages[1].steps, [
       {
@@ -446,283 +302,124 @@ describe("chat store streaming", () => {
     ]);
   });
 
-  it("keeps parallel same-name calls on their own steps", async () => {
-    const { factory } = fakeXhr([
-      'event: start\ndata: {"session_id":"s1"}\n\n',
-      'event: tool\ndata: {"name":"web_search","status":"running","id":"w1","input":{"query":"a"}}\n\n',
-      'event: tool\ndata: {"name":"web_search","status":"running","id":"w2","input":{"query":"b"}}\n\n',
-      'event: tool\ndata: {"name":"web_search","status":"done","id":"w2","input":{"query":"b"},"result":"B"}\n\n',
-      'event: tool\ndata: {"name":"web_search","status":"done","id":"w1","input":{"query":"a"},"result":"A"}\n\n',
-      'event: done\ndata: {"session_id":"s1"}\n\n',
-    ]);
-    const useStore = createChatStore(memoryStorage(), { openXhr: factory });
-    await useStore.getState().send("compare?");
-    assert.deepEqual(
-      useStore.getState().messages[1].steps?.map((s) => [s.id, s.result]),
-      [
-        ["w1", "A"],
-        ["w2", "B"],
-      ],
-    );
-  });
-
-  it("attaches search auth when the seam provides it", async () => {
-    const { factory, sent } = fakeXhr(STREAM_OK);
+  it("marks the bubble when the runner fails", async () => {
+    const { runTurn } = fakeRunTurn([{ fail: "boom" }]);
     const useStore = createChatStore(memoryStorage(), {
-      openXhr: factory,
-      getSearchAuth: async () => ({ provider: "tavily", key: "k", count: 3 }),
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
     });
-    await useStore.getState().send("hi");
-    assert.deepEqual(JSON.parse(sent.body ?? ""), {
-      message: "hi",
-      stream: true,
-      search: { provider: "tavily", key: "k", count: 3 },
-    });
-  });
-
-  it("omits search when the seam provides none", async () => {
-    const { factory, sent } = fakeXhr(STREAM_OK);
-    const useStore = createChatStore(memoryStorage(), { openXhr: factory });
-    await useStore.getState().send("hi");
-    assert.ok(!("search" in JSON.parse(sent.body ?? "")));
-  });
-
-  it("attaches model routing when the seam provides it", async () => {
-    const { factory, sent } = fakeXhr(STREAM_OK);
-    const useStore = createChatStore(memoryStorage(), {
-      openXhr: factory,
-      getChatModel: async () => ({
-        model_id: "m.gguf",
-        byok: {
-          provider: "custom_openai",
-          base_url: "https://llm.example/v1",
-          api_key: "k",
-          model: "user-model",
-        },
-      }),
-    });
-    await useStore.getState().send("hi");
-    assert.deepEqual(JSON.parse(sent.body ?? ""), {
-      message: "hi",
-      stream: true,
-      model_id: "m.gguf",
-      byok: {
-        provider: "custom_openai",
-        base_url: "https://llm.example/v1",
-        api_key: "k",
-        model: "user-model",
-      },
-    });
-  });
-
-  it("omits model routing when the seam provides none", async () => {
-    const { factory, sent } = fakeXhr(STREAM_OK);
-    const useStore = createChatStore(memoryStorage(), { openXhr: factory });
-    await useStore.getState().send("hi");
-    const body = JSON.parse(sent.body ?? "");
-    assert.ok(!("model_id" in body));
-    assert.ok(!("byok" in body));
-  });
-
-  it("marks the user bubble when the stream never opens", async () => {
-    const { factory } = fakeXhr(
-      ['{"error":{"code":"llm_error","message":"down"}}'],
-      502,
-    );
-    const useStore = createChatStore(memoryStorage(), { openXhr: factory });
     await useStore.getState().send("hi");
     const state = useStore.getState();
     assert.equal(state.sending, false);
-    assert.equal(state.messages.length, 1);
-    assert.deepEqual(state.messages[0].error, {
-      code: "llm_error",
-      message: "down",
-    });
-  });
-
-  it("marks the assistant bubble on mid-stream error events", async () => {
-    const { factory } = fakeXhr([
-      'event: start\ndata: {"session_id":"s1"}\n\n',
-      'event: token\ndata: {"text":"half"}\n\n',
-      'event: error\ndata: {"code":"llm_error","message":"cut"}\n\n',
-    ]);
-    const useStore = createChatStore(memoryStorage(), { openXhr: factory });
-    await useStore.getState().send("hi");
-    const state = useStore.getState();
-    assert.deepEqual(
-      state.messages.map((m) => [m.role, m.text]),
-      [
-        ["user", "hi"],
-        ["assistant", "half"],
-      ],
-    );
     assert.deepEqual(state.messages[1].error, {
       code: "llm_error",
-      message: "cut",
+      message: "boom",
     });
   });
 
-  it("retry on a failed assistant streams retry:true without a message", async () => {
-    const first = fakeXhr([
-      'event: start\ndata: {"session_id":"s1"}\n\n',
-      'event: error\ndata: {"code":"timeout","message":"slow"}\n\n',
+  it("retry on a failed assistant reruns the prior question", async () => {
+    const { runTurn, calls } = fakeRunTurn([
+      { fail: "slow" },
+      { reply: "recovered" },
     ]);
-    const second = fakeXhr(STREAM_OK);
-    let calls = 0;
-    const factory = () => {
-      calls += 1;
-      return (calls === 1 ? first : second).factory();
-    };
-    // Capture bodies through a wrapping factory.
-    const posted: string[] = [];
-    const capturing = () => {
-      const xhr = factory();
-      const innerSend = xhr.send.bind(xhr);
-      xhr.send = (body?: string) => {
-        posted.push(body ?? "");
-        innerSend(body);
-      };
-      return xhr;
-    };
-    const useStore = createChatStore(memoryStorage(), { openXhr: capturing });
+    const useStore = createChatStore(memoryStorage(), {
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+    });
     await useStore.getState().send("hi");
     const failedId = useStore.getState().messages[1].id;
     await useStore.getState().retry(failedId);
-    assert.deepEqual(
-      posted.map((b) => JSON.parse(b)),
-      [
-        { message: "hi", stream: true },
-        { session_id: "s1", stream: true, retry: true },
-      ],
-    );
+    assert.deepEqual(calls.texts, ["hi", "hi"]);
     const state = useStore.getState();
     assert.equal(state.messages.length, 2);
-    assert.equal(state.messages[1].text, "Echo hi");
+    assert.equal(state.messages[1].text, "recovered");
     assert.equal(state.messages[1].error, undefined);
   });
 
-  it("regenerate replaces a completed reply through the same retry shape", async () => {
-    const posted: string[] = [];
-    const factory = () => {
-      const xhr = fakeXhr(STREAM_OK).factory();
-      const innerSend = xhr.send.bind(xhr);
-      xhr.send = (body?: string) => {
-        posted.push(body ?? "");
-        innerSend(body);
-      };
-      return xhr;
-    };
-    const useStore = createChatStore(memoryStorage(), { openXhr: factory });
+  it("retry on a bubble without error returns false", async () => {
+    const { runTurn, calls } = fakeRunTurn([{ reply: "ok" }]);
+    const useStore = createChatStore(memoryStorage(), {
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+    });
     await useStore.getState().send("hi");
-    const assistantId = useStore.getState().messages[1].id;
-    await useStore.getState().regenerate(assistantId);
-    assert.deepEqual(
-      posted.map((b) => JSON.parse(b)),
-      [
-        { message: "hi", stream: true },
-        { session_id: "s1", stream: true, retry: true },
-      ],
-    );
-    assert.equal(useStore.getState().messages[1].text, "Echo hi");
+    assert.equal(await useStore.getState().retry(useStore.getState().messages[0].id), false);
+    assert.deepEqual(calls.texts, ["hi"]);
   });
 
-  it("retry on a failed user bubble resends as a fresh turn", async () => {
-    const posted: string[] = [];
-    const bad = fakeXhr(['{"error":{"code":"network","message":"down"}}'], 0);
-    const good = fakeXhr(STREAM_OK);
-    let calls = 0;
-    const factory = () => {
-      calls += 1;
-      const xhr = (calls === 1 ? bad : good).factory();
-      const innerSend = xhr.send.bind(xhr);
-      xhr.send = (body?: string) => {
-        posted.push(body ?? "");
-        innerSend(body);
-      };
-      return xhr;
-    };
-    const useStore = createChatStore(memoryStorage(), { openXhr: factory });
-    await useStore.getState().send("hi");
-    const userId = useStore.getState().messages[0].id;
-    await useStore.getState().retry(userId);
+  it("regenerate replaces a completed reply and pops the stored turn", async () => {
+    const fake = fakeSessionStore([
+      {
+        id: "s1",
+        title: "T",
+        turns: [
+          { role: "user", content: "hi", type: "text" },
+          { role: "assistant", content: "first", type: "text" },
+        ],
+      },
+    ]);
+    const { runTurn, calls } = fakeRunTurn([{ reply: "second" }]);
+    const storage = memoryStorage({ liai_session_id: "s1" });
+    const useStore = createChatStore(storage, {
+      getStore: async () => fake.store,
+      runTurn,
+    });
+    await useStore.getState().loadSession();
+    const assistantId = useStore.getState().messages[1].id;
+    await useStore.getState().regenerate(assistantId);
+    assert.deepEqual(calls.texts, ["hi"]);
+    assert.equal(useStore.getState().messages[1].text, "second");
+    // The store level pops the stale turn; the re-append is the turn
+    // builder's tested job (the fake runner bypasses it by design).
+    const stored = await fake.store.get("s1");
     assert.deepEqual(
-      posted.map((b) => JSON.parse(b)),
-      [
-        { message: "hi", stream: true },
-        { message: "hi", stream: true },
-      ],
+      stored?.map((t) => t.content),
+      ["hi"],
     );
-    const state = useStore.getState();
-    assert.deepEqual(
-      state.messages.map((m) => [m.role, m.text]),
-      [
-        ["user", "hi"],
-        ["assistant", "Echo hi"],
-      ],
-    );
-    assert.equal(state.messages[0].error, undefined);
   });
 
   it("blocked sends return false and change nothing", async () => {
+    const { runTurn, calls } = fakeRunTurn([]);
     const useStore = createChatStore(memoryStorage(), {
-      openXhr: fakeXhr([]).factory,
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
     });
     assert.equal(await useStore.getState().send("   "), false);
     assert.deepEqual(useStore.getState().messages, []);
+    assert.deepEqual(calls.texts, []);
   });
 
-  it("ignores a second send while a stream is in flight", async () => {
-    const { factory } = fakeXhr(STREAM_OK);
-    const useStore = createChatStore(memoryStorage(), { openXhr: factory });
+  it("ignores a second send while a turn is in flight", async () => {
+    const gate = gatedRunTurn();
+    const useStore = createChatStore(memoryStorage(), {
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn: gate.runTurn,
+    });
     const first = useStore.getState().send("one");
     assert.equal(await useStore.getState().send("two"), false);
+    gate.release("Echo one");
     await first;
     assert.deepEqual(
       useStore.getState().messages.map((m) => m.text),
-      ["one", "Echo hi"],
+      ["one", "Echo one"],
     );
   });
 
-  it("checkHealth flips connection up and down", async () => {
-    const useStore = createChatStore(memoryStorage());
-    mockFetch(async () => jsonResponse({ status: "ok" }));
-    await useStore.getState().checkHealth();
-    assert.equal(useStore.getState().connection, "up");
-    mockFetch(async () => {
-      throw new TypeError("fetch failed");
+  it("checkHealth reflects engine readiness, not the network", async () => {
+    const up = createChatStore(memoryStorage(), {
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn: fakeRunTurn([]).runTurn,
+      getEngineSource: async () => ({ kind: "local", fileName: "a.gguf" }),
     });
-    await useStore.getState().checkHealth();
-    assert.equal(useStore.getState().connection, "down");
+    await up.getState().checkHealth();
+    assert.equal(up.getState().connection, "up");
+    const down = createChatStore(memoryStorage(), {
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn: fakeRunTurn([]).runTurn,
+      getEngineSource: async () => null,
+    });
+    await down.getState().checkHealth();
+    assert.equal(down.getState().connection, "down");
   });
 
-  it("records a vision turn locally without a backend POST", async () => {
-    let posts = 0;
-    mockFetch(async (url) => {
-      if (String(url).includes("/api/sessions")) {
-        return jsonResponse({ sessions: [] });
-      }
-      posts += 1;
-      return jsonResponse({ reply: "x", session_id: "s1" });
-    });
-    const useStore = createChatStore(memoryStorage());
-    await useStore
-      .getState()
-      .recordVisionTurn(
-        "what is this?",
-        "a chair",
-        "vision-1",
-        "data:image/jpeg;base64,AAA",
-      );
-    const state = useStore.getState();
-    assert.equal(state.sessionId, "vision-1");
-    assert.deepEqual(
-      state.messages.map((m) => [m.role, m.text]),
-      [
-        ["user", "what is this?"],
-        ["assistant", "a chair"],
-      ],
-    );
-    assert.equal(state.messages[0].image, "data:image/jpeg;base64,AAA");
-    assert.equal(posts, 0);
-  });
 });

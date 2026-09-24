@@ -6,6 +6,7 @@
   "dependencies": {
     "@expo-google-fonts/raleway": "^0.4.2",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@supabase/supabase-js": "^2.117.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "expo": "~57.0.24",
@@ -26,6 +27,7 @@
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.4",
     "link-preview-js": "^5.0.0",
+    "llama.rn": "^0.13.0-rc.5",
     "lucide-react-native": "^1.45.0",
     "react": "19.2.3",
     "react-native": "0.86.3",

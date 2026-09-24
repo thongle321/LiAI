@@ -2,7 +2,7 @@
  *
  * Uncredentialed public pages only, fetched from the app via
  * `link-preview-js/mobile` (Node-free entrypoint — no undici/node:net).
- * Anything needing a credential stays backend-only. Failures stay silent:
+ * Anything needing a credential is never fetched. Failures stay silent:
  * a bubble without a preview is still a complete bubble.
  */
 

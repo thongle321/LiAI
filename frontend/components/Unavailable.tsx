@@ -4,10 +4,10 @@ export function Unavailable({ onRetry }: { onRetry: () => void }) {
   return (
     <View className="flex-1 items-center justify-center bg-base px-8">
       <Text className="text-center font-sans-semibold text-h3 text-primary-text">
-        Backend unreachable
+        No model active
       </Text>
       <Text className="mt-1 text-center font-sans text-body-md text-secondary-text">
-        Start the backend, then retry.
+        Download and activate a model, then retry.
       </Text>
       <Pressable onPress={onRetry} className="btn btn--primary mt-4">
         <Text className="font-sans-semibold text-on-primary">Retry</Text>

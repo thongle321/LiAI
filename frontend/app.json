@@ -56,11 +56,14 @@
             "targetSdkVersion": 36,
             "usePrecompiledHeaders": true,
             "buildToolsVersion": "36.0.0",
-            "buildArchs": ["arm64-v8a"]
+            "buildArchs": [
+              "arm64-v8a"
+            ]
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "llama.rn"
     ],
     "extra": {
       "router": {},

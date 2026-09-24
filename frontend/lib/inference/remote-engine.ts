@@ -1,0 +1,154 @@
+/** Remote BYOK engine: OpenAI-compatible completion (ADR-0008 fallback).
+ *
+ * Non-streaming request (RN fetch has no streaming body); the full reply
+ * emits as one token. Tool calls project to the shared EngineToolCall
+ * shape with fallback ids. AbortController gives stopCompletion teeth.
+ */
+
+import type {
+  CompletionEngine,
+  CompletionRequest,
+  CompletionCallbacks,
+  CompletionOutcome,
+  EngineToolCall,
+} from "./engine.ts";
+import type { RemoteApiProvider } from "../../types/models.ts";
+
+export interface RemoteEngineOptions {
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+}
+
+const DEFAULT_TIMEOUT_MS = 120_000;
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function asNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function toWireMessages(request: CompletionRequest): Record<string, unknown>[] {
+  return request.messages.map((m) => {
+    const base: Record<string, unknown> = { role: m.role, content: m.content };
+    if (m.tool_calls !== undefined) {
+      base["tool_calls"] = m.tool_calls.map((c) => ({
+        id: c.id,
+        type: "function",
+        function: { name: c.name, arguments: c.arguments },
+      }));
+    }
+    if (m.tool_call_id !== undefined) base["tool_call_id"] = m.tool_call_id;
+    if (m.name !== undefined) base["name"] = m.name;
+    return base;
+  });
+}
+
+function toEngineCalls(raw: unknown): EngineToolCall[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((entry, index) => {
+    const row = asRecord(entry);
+    const fn = row ? asRecord(row["function"]) : null;
+    const name = fn ? asString(fn["name"]) : null;
+    if (!name) return [];
+    const id = asString(row?.["id"]) ?? `remote_${index}`;
+    const args = fn ? asString(fn["arguments"]) ?? "{}" : "{}";
+    return [{ id, name, arguments: args }];
+  });
+}
+
+/** BYOK OpenAI-compatible engine; key arrives per call, never stored. */
+export function createRemoteEngine(
+  provider: RemoteApiProvider,
+  getKey: () => Promise<string | null>,
+  options: RemoteEngineOptions = {},
+): CompletionEngine {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  let controller: AbortController | null = null;
+  // A stop can land while the async key lookup is still in flight —
+  // remember it so the fetch below aborts instead of escaping.
+  let stopped = false;
+
+  return {
+    async completion(
+      request: CompletionRequest,
+      callbacks: CompletionCallbacks,
+    ): Promise<CompletionOutcome> {
+      stopped = false;
+      const key = await getKey().catch(() => null);
+      if (stopped) {
+        throw new Error("remote completion aborted");
+      }
+      if (!key || key.trim() === "") {
+        throw new Error("remote key is required");
+      }
+      const baseUrl = provider.baseUrl.replace(/\/$/, "");
+      controller = new AbortController();
+      const timer = setTimeout(() => controller?.abort(), timeoutMs);
+      try {
+        const resp = await fetchImpl(`${baseUrl}/v1/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${key}`,
+          },
+          body: JSON.stringify({
+            model: provider.modelName,
+            messages: toWireMessages(request),
+            ...(request.tools && request.tools.length > 0
+              ? { tools: request.tools }
+              : {}),
+          }),
+          signal: controller.signal,
+        });
+        if (!resp.ok) {
+          throw new Error(`remote completion failed (${resp.status})`);
+        }
+        const payload: unknown = await resp.json();
+        const choice = asRecord(payload)
+          ? ((): Record<string, unknown> | null => {
+              const choices = (payload as Record<string, unknown>)["choices"];
+              if (!Array.isArray(choices) || choices.length === 0) return null;
+              return asRecord(choices[0]);
+            })()
+          : null;
+        const message = choice ? asRecord(choice["message"]) : null;
+        const text = message ? (asString(message["content"]) ?? "") : "";
+        const toolCalls = message ? toEngineCalls(message["tool_calls"]) : [];
+        const usage = asRecord(payload) ? asRecord((payload as Record<string, unknown>)["usage"]) : null;
+        const promptTokens = usage ? (asNumber(usage["prompt_tokens"]) ?? 0) : 0;
+        const completionTokens = usage ? (asNumber(usage["completion_tokens"]) ?? 0) : 0;
+        if (text !== "") callbacks.onToken(text);
+        callbacks.onToolCalls?.(toolCalls);
+        return {
+          text,
+          toolCalls,
+          promptTokens,
+          completionTokens,
+          stoppedEarly: false,
+        };
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          throw new Error("remote completion aborted");
+        }
+        throw err instanceof Error ? err : new Error(String(err));
+      } finally {
+        clearTimeout(timer);
+        controller = null;
+      }
+    },
+
+    async stopCompletion(): Promise<void> {
+      stopped = true;
+      controller?.abort();
+    },
+  };
+}

@@ -20,7 +20,7 @@ function launcher(over: Record<string, unknown> = {}) {
 }
 
 describe("toDataUri", () => {
-  it("builds a data-uri the backend image path accepts", () => {
+  it("builds a data-uri the local turn accepts", () => {
     assert.equal(toDataUri("aGVsbG8=", "image/jpeg"), "data:image/jpeg;base64,aGVsbG8=");
   });
 

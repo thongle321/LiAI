@@ -1,4 +1,4 @@
-/** Downloads slice: resumable GGUF downloads + backend upload.
+/** Downloads slice: resumable GGUF downloads for on-device inference.
  *
  * Progress/completion always target the stored spec id (job.modelId), never
  * the raw preset/HF id the UI passed in — those differ, and targeting the
@@ -18,7 +18,6 @@ import {
   hfRefFromSearch,
 } from "../../lib/models/huggingface";
 import { downloadService } from "../../lib/download-service";
-import { uploadService } from "../../lib/upload-service";
 import { asyncStorage, MEMORY_GUARD_KEY, generateId } from "./storage";
 
 function hfRefFor(modelId: string, results: HFModelSearchResult[]) {
@@ -159,36 +158,5 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       downloadService.getAllJobs().map((job) => [job.id, job.status]),
     );
     set({ activeDownloads });
-  },
-
-  uploadToBackend: async (modelId) => {
-    const model = get().getModel(modelId);
-    if (!model || model.origin === "remote_api") {
-      return false;
-    }
-
-    const file = model.files[0];
-    if (!file) {
-      return false;
-    }
-
-    // ponytail: downloads live in models/, imports in models/local/.
-    const base = LegacyFileSystem.documentDirectory ?? "";
-    let filePath = `${base}models/${file.name}`;
-    try {
-      const info = await LegacyFileSystem.getInfoAsync(filePath);
-      if (!info.exists) {
-        filePath = `${base}models/local/${file.name}`;
-      }
-    } catch {
-      // Fall through with default path
-    }
-
-    try {
-      const result = await uploadService.uploadModel(filePath, file.name);
-      return result.success;
-    } catch {
-      return false;
-    }
   },
 });

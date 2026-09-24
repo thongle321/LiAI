@@ -1,7 +1,7 @@
 /** Ready-model rows: a downloaded local/HF/preset card and a remote-provider row. */
 
 import { Pressable, Text, View } from "react-native";
-import { Settings, Trash2, Upload } from "lucide-react-native";
+import { Settings, Trash2 } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
 import { useModelStore } from "../../store/modelStore";
@@ -34,7 +34,7 @@ export function ModelCard({
   onActivate: () => void;
   onSettings: () => void;
 }) {
-  const { removeModel, uploadToBackend, getModelSettings } = useModelStore();
+  const { removeModel, getModelSettings } = useModelStore();
   const settings = getModelSettings(item.id);
   const title = settings.displayName || item.name;
   const params = item.params ?? 0;
@@ -59,7 +59,7 @@ export function ModelCard({
         </View>
         {isActive && (
           <Text className="font-sans text-caption text-secondary-text mt-1.5">
-            Runs on the backend • plain chat, no tools
+            Active on this device
           </Text>
         )}
         <View className="flex-row items-center gap-2 mt-3">
@@ -76,12 +76,6 @@ export function ModelCard({
               className="px-3 py-1.5 bg-surface-2 border border-border rounded-lg"
             >
               <Settings size={16} color={colors.primary} />
-            </Pressable>
-            <Pressable
-              onPress={() => uploadToBackend(item.id)}
-              className="px-3 py-1.5 bg-blue-500/20 border border-blue-500/50 rounded-lg"
-            >
-              <Upload size={16} color={colors.info} />
             </Pressable>
             <Pressable
               onPress={() => removeModel(item.id)}

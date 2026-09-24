@@ -1,44 +1,19 @@
-/** Send slice: streamed turns, error retry, and regenerate.
+/** Send slice: on-device turns, error retry, and regenerate (ADR-0009).
  *
- * Every turn streams (stream:true). The backend `retry` contract regenerates
- * without resending text: the client drops nothing server-side itself, it
- * just asks for a fresh answer to the stored question.
+ * Every turn runs locally through the injected TurnRunner: tokens stream
+ * into the bubble as they arrive, steps/usage land at the end. Failures
+ * mark the bubble (tap-to-retry) and persist nothing.
  */
 
-import {
-  postChatStream,
-  type StreamBody,
-} from "../../lib/chat/api.ts";
-import type { ApiError, ApiErrorCode } from "../../types/api.ts";
-import type { ChatStreamEvent } from "../../lib/chat/sse.ts";
-import type { AgentStep, ChatMessage } from "../../types/chat.ts";
+import type { ApiError } from "../../types/api.ts";
+import type { ChatMessage } from "../../types/chat.ts";
 import { newId } from "../../lib/chat/messages.ts";
 import { draftKey } from "../../lib/chat/drafts.ts";
 import { SESSION_KEY } from "./types.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
-/** Codes the backend may send mid-stream (its error envelope). Anything
- * else degrades to internal_error rather than smuggling an unknown code
- * into render state. */
-const STREAM_ERROR_CODES: readonly string[] = [
-  "invalid_request",
-  "llm_error",
-  "store_error",
-  "not_found",
-  "http_error",
-  "internal_error",
-  "network",
-  "timeout",
-  "conflict",
-  "cancelled",
-  "upload_failed",
-  "list_failed",
-  "delete_failed",
-];
-
-function toApiError(code: string, message: string): ApiError {
-  const known = STREAM_ERROR_CODES.includes(code) ? code : "internal_error";
-  return { code: known as ApiErrorCode, message };
+function llmError(message: string): ApiError {
+  return { code: "llm_error", message };
 }
 
 export function createSendSlice(
@@ -57,10 +32,6 @@ export function createSendSlice(
     }));
   }
 
-  function removeBubble(id: string): void {
-    set((s) => ({ messages: s.messages.filter((m) => m.id !== id) }));
-  }
-
   function adoptSession(id: string): void {
     if (get().sessionId !== id) {
       set({ sessionId: id });
@@ -68,116 +39,74 @@ export function createSendSlice(
     }
   }
 
-  async function runStream(opts: {
+  /** Run one turn, streaming tokens live into the bubble. Retry reruns a
+   * stored question, so it skips the user append (no duplicate). */
+  async function runLocal(opts: {
     assistantId: string;
-    userId?: string;
-    body: StreamBody;
-    /** Reused bubbles drop stale text/steps on the first fresh token. */
+    text: string;
+    sessionId: string | null;
+    image?: string;
+    history: ChatMessage[];
+    retry?: boolean;
     clearOnFirst: boolean;
   }): Promise<void> {
     const gen = (ctx.streamGen += 1);
-    let started = false;
-    let firstToken = true;
-    // BYOK search creds ride every streamed turn (consent-gated); a
-    // settings failure degrades to no-search rather than blocking the turn.
-    const search = await ctx.getSearchAuth().catch(() => null);
-    const model = await ctx.getChatModel().catch(() => null);
-    const handle = postChatStream(
-      {
-        ...opts.body,
-        ...(search !== null ? { search } : {}),
-        ...(model !== null ? model : {}),
-      },
-      (event: ChatStreamEvent) => {
-        // Superseded (cancelled or replaced) streams never touch state.
-        if (gen !== ctx.streamGen) return;
-        switch (event.type) {
-          case "start": {
-            started = true;
-            adoptSession(event.sessionId);
-            break;
-          }
-          case "token": {
-            if (opts.clearOnFirst && firstToken) {
-              updateBubble(opts.assistantId, {
-                text: "",
-                steps: undefined,
-                usage: undefined,
-              });
-            }
-            firstToken = false;
-            updateBubble(opts.assistantId, (m) => ({ text: m.text + event.text }));
-            break;
-          }
-          case "tool": {
-            updateBubble(opts.assistantId, (m) => {
-              const steps = [...(m.steps ?? [])];
-              const next: AgentStep = {
-                id: event.id,
-                tool: event.name,
-                status: event.status,
-                ...(event.input !== undefined ? { input: event.input } : {}),
-                ...(event.result !== undefined ? { result: event.result } : {}),
-              };
-              // Pairs close by wire id: a done event completes its running
-              // entry; an unmatched done (or a repeat call) appends, so
-              // parallel same-name calls keep their own results.
-              const at = steps.findIndex(
-                (s) => s.id !== undefined && s.id === event.id,
-              );
-              if (at >= 0) steps[at] = { ...steps[at], ...next };
-              else steps.push(next);
-              return { steps };
-            });
-            break;
-          }
-          case "usage": {
-            updateBubble(opts.assistantId, {
-              usage: {
-                promptTokens: event.promptTokens,
-                completionTokens: event.completionTokens,
-                totalTokens: event.totalTokens,
-              },
-            });
-            break;
-          }
-          case "done": {
-            updateBubble(opts.assistantId, { streaming: false, at: Date.now() });
-            adoptSession(event.sessionId);
-            set({ sending: false });
-            void get().refreshSessions();
-            break;
-          }
-          case "error": {
-            updateBubble(opts.assistantId, {
-              streaming: false,
-              error: toApiError(event.code, event.message),
-            });
-            set({ sending: false });
-            void get().refreshSessions();
-            break;
-          }
-        }
-      },
-      ctx.openXhr,
-    );
-    ctx.active.handle = handle;
-    try {
-      await handle.done;
-    } catch (err) {
-      // Transport failure (never opened or cut mid-stream).
-      if (gen !== ctx.streamGen) return;
-      const apiErr = err as ApiError;
-      if (!started && opts.userId !== undefined) {
-        removeBubble(opts.assistantId);
-        updateBubble(opts.userId, { error: apiErr });
-      } else {
-        updateBubble(opts.assistantId, { streaming: false, error: apiErr });
-      }
-      set({ sending: false });
-    } finally {
-      if (ctx.active.handle === handle) ctx.active.handle = null;
+    if (opts.clearOnFirst) {
+      updateBubble(opts.assistantId, { text: "", steps: undefined, usage: undefined });
     }
+    try {
+      const outcome = await ctx.runTurn(
+        opts.text,
+        {
+          sessionId: opts.sessionId,
+          ...(opts.image !== undefined ? { image: opts.image } : {}),
+          history: opts.history,
+          ...(opts.retry ? { retry: true } : {}),
+        },
+        (token) => {
+          if (gen !== ctx.streamGen) return;
+          updateBubble(opts.assistantId, (m) => ({ text: m.text + token }));
+        },
+      );
+      if (gen !== ctx.streamGen) return;
+      updateBubble(opts.assistantId, {
+        text: outcome.reply,
+        streaming: false,
+        at: Date.now(),
+        ...(outcome.steps.length > 0 ? { steps: outcome.steps } : {}),
+        usage: {
+          promptTokens: outcome.promptTokens,
+          completionTokens: outcome.completionTokens,
+          totalTokens: outcome.promptTokens + outcome.completionTokens,
+        },
+      });
+      adoptSession(outcome.sessionId);
+      set({ sending: false });
+      void get().refreshSessions();
+    } catch (err) {
+      if (gen !== ctx.streamGen) return;
+      const message = err instanceof Error ? err.message : "Local run failed";
+      updateBubble(opts.assistantId, {
+        streaming: false,
+        error: llmError(message),
+      });
+      set({ sending: false });
+    }
+  }
+
+  /** Last user text before (excluding) a bubble — the question to rerun. */
+  function priorUserText(beforeId: string): ChatMessage | null {
+    const messages = get().messages;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].id === beforeId) {
+        for (let j = i - 1; j >= 0; j -= 1) {
+          if (messages[j].role === "user") return messages[j];
+        }
+        return null;
+      }
+    }
+    const last = [...messages].reverse().find((m) => m.role === "user");
+    return last ?? null;
   }
 
   return {
@@ -189,6 +118,7 @@ export function createSendSlice(
       const userId = newId();
       const assistantId = newId();
       const sid = get().sessionId;
+      const history = get().messages;
       set((s) => ({
         sending: true,
         messages: [
@@ -203,15 +133,12 @@ export function createSendSlice(
           { id: assistantId, role: "assistant", text: "", at: Date.now(), streaming: true },
         ],
       }));
-      await runStream({
-        userId,
+      await runLocal({
         assistantId,
-        body: {
-          message: trimmed,
-          ...(image !== undefined ? { image } : {}),
-          ...(sid !== null ? { session_id: sid } : {}),
-          stream: true,
-        },
+        text: trimmed,
+        sessionId: sid,
+        ...(image !== undefined ? { image } : {}),
+        history,
         clearOnFirst: false,
       });
       // The text now lives in its bubble (or its error retry): the
@@ -230,10 +157,11 @@ export function createSendSlice(
       const target = get().messages.find((m) => m.id === messageId);
       if (!target || target.error === undefined) return false;
       if (target.role === "user") {
-        // The turn never reached the backend: fresh re-send, same bubble.
+        // The turn never persisted: fresh re-send, same bubble text.
         updateBubble(target.id, { error: undefined });
         const assistantId = newId();
         const sid = get().sessionId;
+        const history = get().messages.filter((m) => m.id !== target.id);
         set((s) => ({
           sending: true,
           messages: [
@@ -241,26 +169,30 @@ export function createSendSlice(
             { id: assistantId, role: "assistant", text: "", at: Date.now(), streaming: true },
           ],
         }));
-        await runStream({
-          userId: target.id,
+        await runLocal({
           assistantId,
-          body: {
-            message: target.text,
-            ...(target.image !== undefined ? { image: target.image } : {}),
-            ...(sid !== null ? { session_id: sid } : {}),
-            stream: true,
-          },
+          text: target.text,
+          sessionId: sid,
+          ...(target.image !== undefined ? { image: target.image } : {}),
+          history,
+          retry: true,
           clearOnFirst: false,
         });
         return true;
       }
+      const question = priorUserText(target.id);
+      if (!question) return false;
+      // A failed first turn mints no session; the runner creates one.
       const sid = get().sessionId;
-      if (sid === null) return false;
       updateBubble(target.id, { error: undefined, streaming: true });
       set({ sending: true });
-      await runStream({
+      await runLocal({
         assistantId: target.id,
-        body: { session_id: sid, stream: true, retry: true },
+        text: question.text,
+        sessionId: sid,
+        ...(question.image !== undefined ? { image: question.image } : {}),
+        history: get().messages.filter((m) => m.id !== target.id),
+        retry: true,
         clearOnFirst: true,
       });
       return true;
@@ -274,16 +206,29 @@ export function createSendSlice(
         target.role !== "assistant" ||
         target.error !== undefined ||
         target.streaming === true ||
-        get().sending ||
-        sid === null
+        get().sending
       ) {
         return false;
       }
+      const question = priorUserText(target.id);
+      if (!question) return false;
+      // Drop the stored assistant turn so history + bubble agree.
+      if (sid !== null) {
+        try {
+          await (await ctx.getStore())?.popLastAssistant(sid);
+        } catch {
+          // Best-effort: the rerun overwrites the bubble regardless.
+        }
+      }
       updateBubble(target.id, { streaming: true });
       set({ sending: true });
-      await runStream({
+      await runLocal({
         assistantId: target.id,
-        body: { session_id: sid, stream: true, retry: true },
+        text: question.text,
+        sessionId: sid,
+        ...(question.image !== undefined ? { image: question.image } : {}),
+        history: get().messages.filter((m) => m.id !== target.id),
+        retry: true,
         clearOnFirst: true,
       });
       return true;

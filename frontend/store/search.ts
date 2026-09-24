@@ -1,8 +1,8 @@
 /** Web-search settings: provider, result count, consent, per-provider keys.
  *
  * Factory takes KV storage + SecureStore adapter so tests inject memory
- * (see chat.ts pattern). Keys never touch KV. The backend tool is
- * deferred; this is the shape it will consume (incl. consent gate).
+ * (see chat.ts pattern). Keys never touch KV. The on-device talent
+ * consumes this shape (incl. consent gate).
  */
 
 import { create } from "zustand";
@@ -127,6 +127,8 @@ export function createSearchStore(storage: KeyValueStorage, secure: SecureAdapte
 
 async function rnStorage(): Promise<AsyncStorageStatic> {
   const mod = await import("@react-native-async-storage/async-storage");
+  // SAFETY: the module's default export is the AsyncStorage instance; the
+  // interop shim can surface it under `.default` or on the namespace itself.
   return (mod.default ?? mod) as unknown as AsyncStorageStatic;
 }
 

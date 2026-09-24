@@ -52,8 +52,6 @@ export default function VisionScreen() {
     answer,
     issue,
     needsSettings,
-    streamProblem,
-    frameProcessor,
     bargeIn,
     retry,
     sendText,
@@ -87,7 +85,6 @@ export default function VisionScreen() {
           focused={focused}
           fade={contentFade}
           cameraRef={camera}
-          frameProcessor={frameProcessor}
           onReady={() => setCamLive(true)}
           onProblem={setCamProblem}
           onGrant={() => void requestPermission()}
@@ -109,7 +106,6 @@ export default function VisionScreen() {
           answer={answer}
           statusLabel={VOICE_STATUS_LABEL[phase]}
           camProblem={camProblem}
-          streamProblem={streamProblem}
           inputOpen={inputOpen}
           draft={draft}
           onDraftChange={setDraft}

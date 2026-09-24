@@ -1,7 +1,7 @@
 /** Chat domain types: messages, steps, sessions.
  *
- * Mirrors the backend chat contract (backend/app/modules/chat/schemas.py)
- * plus client-only render state (streaming bubbles, errors).
+ * Stored turns (Supabase rows) plus client-only render state
+ * (streaming bubbles, errors).
  */
 
 import type { ApiError } from "./api.ts";
@@ -40,7 +40,7 @@ export interface ChatMessage {
   streaming?: boolean;
 }
 
-/** One row of the backend-owned session list. */
+/** One row of the Supabase-owned session list. */
 export interface SessionInfo {
   id: string;
   title: string;

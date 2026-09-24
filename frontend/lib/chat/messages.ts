@@ -1,6 +1,5 @@
-/** Pure chat mappers: backend shapes -> render state (tested indirectly). */
+/** Pure chat mappers: stored turns -> render state (tested indirectly). */
 
-import type { HistoryMessage } from "../../types/api.ts";
 import type {
   AgentStep,
   ChatMessage,
@@ -11,7 +10,7 @@ import type {
 
 let nextId = 0;
 
-/** Local bubble ids (backend turns carry no ids). */
+/** Local bubble ids (stored turns carry no ids). */
 export function newId(): string {
   nextId += 1;
   return `${Date.now()}-${nextId}`;
@@ -72,11 +71,20 @@ function toRunSteps(value: unknown): AgentStep[] | undefined {
   return steps.length > 0 ? steps : undefined;
 }
 
+/** Stored turn shape both readers share (history rows + Supabase rows). */
+export interface StoredTurn {
+  role: "user" | "assistant";
+  content: string;
+  metadata?: unknown;
+}
+
 /** History turns -> bubbles. Images are send-time only (never stored). */
-export function toMessages(messages: HistoryMessage[]): ChatMessage[] {
+export function toMessages(messages: StoredTurn[]): ChatMessage[] {
   return messages.map((m) => {
     const metadata =
-      typeof m.metadata === "object" && m.metadata !== null ? m.metadata : null;
+      typeof m.metadata === "object" && m.metadata !== null
+        ? (m.metadata as Record<string, unknown>)
+        : null;
     // tool_runs (Wave 2 provenance) wins; bare tool_calls stay as fallback.
     const steps =
       metadata !== null

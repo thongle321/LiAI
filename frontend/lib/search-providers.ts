@@ -1,8 +1,8 @@
 /** Web-search provider abstraction (pure, tested).
  *
  * Two providers prove the shape isn't single-vendor. Keys live in
- * SecureStore; only selection + preferences persist in KV. The backend
- * search tool lands later and consumes this exact shape.
+ * SecureStore; only selection + preferences persist in KV. The on-device
+ * search talent consumes this exact shape.
  */
 
 export type SearchProviderId = "tavily" | "brave";

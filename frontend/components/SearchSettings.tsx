@@ -1,7 +1,7 @@
 /** Web-search settings: provider, key, result count, consent.
  *
- * Scaffolding for the deferred backend tool: shape is final, no tool
- * calls anything yet. Keys go straight to SecureStore, never KV.
+ * Keys go straight to SecureStore, never KV; the on-device talent
+ * reads them per run (consent-gated).
  */
 
 import { useEffect, useState } from "react";

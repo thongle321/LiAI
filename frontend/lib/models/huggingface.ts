@@ -6,7 +6,6 @@
  *   preset-<presetId>-<fileName>   hf-<modelId>-<fileName>
  */
 
-import { request } from "../api.ts";
 import type {
   ModelSpec,
   ModelType,
@@ -17,8 +16,7 @@ import type {
 } from "../../types/models";
 
 const HF_HUB_BASE = "https://huggingface.co";
-
-/** Backend proxy base is same-origin: API_BASE_URL lives in lib/api. */
+const HF_API_BASE = "https://huggingface.co/api";
 
 /** Wire shape of the HF browse proxy (verbatim HF rows we actually read). */
 interface HFSearchItem {
@@ -165,39 +163,37 @@ export async function getPresets(): Promise<PresetModel[]> {
   return PRESETS;
 }
 
-/** Backend envelope errors arrive as plain {code,message} objects;
- * rethrow them as Errors so the existing UI surfaces the message. */
-function apiMessage(error: unknown, fallback: string): string {
-  if (typeof error === "object" && error !== null && "message" in error) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === "string" && message) return message;
-  }
-  if (error instanceof Error && error.message) return error.message;
-  return fallback;
-}
-
-/** Backend HF proxy GET: header token, verbatim JSON list, Error surfacing. */
-async function proxyGet<T>(
-  path: string,
-  params: Record<string, string>,
+/** Direct Hub GET: Bearer token header, verbatim JSON list, Error surfacing. */
+async function hubGet<T>(
+  url: string,
   token: string | undefined,
   fallback: string,
 ): Promise<T[]> {
-  const query = new URLSearchParams(params);
-  const headers: Record<string, string> = {};
-  if (token) headers["X-HF-Token"] = token;
-  let data: unknown;
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  let resp: Response;
   try {
-    data = await request<unknown>(`${path}?${query}`, {
+    resp = await fetch(url, {
       method: "GET",
       headers,
+      signal: AbortSignal.timeout(15000),
     });
   } catch (error) {
-    throw new Error(apiMessage(error, fallback));
+    throw new Error(error instanceof Error && error.message ? error.message : fallback);
+  }
+  if (resp.status === 401 || resp.status === 403) {
+    throw new Error("check your Hugging Face token");
+  }
+  if (!resp.ok) throw new Error(fallback);
+  let data: unknown;
+  try {
+    data = await resp.json();
+  } catch {
+    throw new Error(fallback);
   }
   if (!Array.isArray(data)) throw new Error(fallback);
   // SAFETY: Array.isArray proves list shape at runtime; T only documents
-  // which verbatim HF row fields the mapper below reads (no coercion).
+  // which verbatim Hub row fields the mapper below reads (no coercion).
   return data as T[];
 }
 
@@ -205,7 +201,18 @@ export async function searchModels(
   query: string,
   token?: string,
 ): Promise<HFModelSearchResult[]> {
-  const data = await proxyGet<HFSearchItem>("/api/models/hf/search", { q: query }, token, "Search failed");
+  if (query.trim() === "") return [];
+  const params = new URLSearchParams({
+    search: query.trim(),
+    filter: "gguf",
+    limit: "20",
+    sort: "downloads",
+  });
+  const data = await hubGet<HFSearchItem>(
+    `${HF_API_BASE}/models?${params}`,
+    token,
+    "Search failed",
+  );
   // No visibility filter: HF scopes results to what the token may see,
   // and gated rows are downloadable now that downloads carry the token.
   return data
@@ -226,9 +233,9 @@ export async function getModelFiles(
   modelId: string,
   token?: string,
 ): Promise<HFModelFile[]> {
-  const data = await proxyGet<HFTreeItem>(
-    "/api/models/hf/files",
-    { repo: modelId },
+  if (modelId.trim() === "") return [];
+  const data = await hubGet<HFTreeItem>(
+    `${HF_API_BASE}/models/${modelId.trim()}/tree/main`,
     token,
     "Failed to fetch model files",
   );

@@ -1,9 +1,9 @@
 /** In-chat image attach: picker seam over expo-image-picker.
  *
- * The store and backend already accept one image per turn
- * (`send(text, image?)` → `ChatRequest.image` data-uri); the composer had
- * no way to supply one. This module owns the native picker calls so the
- * UI stays declarative and node tests inject a fake launcher.
+ * The store already accepts one image per turn (`send(text, image?)` →
+ * multimodal turn); the composer had no way to supply one. This module
+ * owns the native picker calls so the UI stays declarative and node
+ * tests inject a fake launcher.
  */
 
 export type ImageSource = "camera" | "gallery";
@@ -27,7 +27,7 @@ async function defaultLauncher(): Promise<ImageLauncher> {
   return (await import("expo-image-picker")) as unknown as ImageLauncher;
 }
 
-/** Backend image path takes `data:<mime>;base64,<payload>`. */
+/** Attached photos travel as `data:<mime>;base64,<payload>`. */
 export function toDataUri(base64: string, mime: string | undefined): string {
   return `data:${mime ?? "image/jpeg"};base64,${base64}`;
 }

@@ -1,4 +1,4 @@
-/** Drawer session section: new-conversation row + backend session list.
+/** Drawer session section: new-conversation row + Supabase session list.
  *
  * Moved out of AppDrawer (Wave 1 chat): the drawer owns the panel chrome
  * and footer nav, this owns the history list. Switching shows an inline

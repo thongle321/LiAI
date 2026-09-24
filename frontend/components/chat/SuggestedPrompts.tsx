@@ -1,7 +1,7 @@
 /** Opening prompt chips under the greeting (empty conversation only).
  *
  * Tapping sends the prompt as a normal turn — no special path, the
- * store/backend treat it like typed text.
+ * store treats it like typed text.
  */
 
 import { Pressable, Text, View } from "react-native";

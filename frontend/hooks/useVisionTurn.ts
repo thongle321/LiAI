@@ -29,13 +29,10 @@ import { speakReply, stopSpeaking } from "../lib/voiceSpeak.ts";
 import { useVoice } from "../store/voice.ts";
 import { VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
 import { snapshotToBase64 } from "../lib/snapshot.ts";
-import { shouldStreamFrames } from "../lib/vision.ts";
 import { useChatStore } from "../store/chat.ts";
-import { useVisionStream } from "./useVisionStream.ts";
 
 const NOTHING_HEARD = "Didn't hear anything — tap the mic to try again.";
 const NO_FRAME = "Couldn't capture a frame — try again.";
-const VISION_ANSWER_TIMEOUT_MS = 30_000;
 
 export function useVisionTurn(
   camera: RefObject<VisionCameraView | null>,
@@ -47,16 +44,12 @@ export function useVisionTurn(
   const [needsSettings, setNeedsSettings] = useState(false);
   const send = useChatStore((s) => s.send);
   const sending = useChatStore((s) => s.sending);
-  const recordVisionTurn = useChatStore((s) => s.recordVisionTurn);
 
   const phaseRef = useRef<VoicePhase>("idle");
   const aliveRef = useRef(true);
   const sentRef = useRef(false);
   const startingRef = useRef(false);
   const errorStreakRef = useRef(0);
-  const questionRef = useRef("");
-  const frameRef = useRef<string | null>(null);
-  const answerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focused = useIsFocused();
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
@@ -67,39 +60,6 @@ export function useVisionTurn(
     phaseRef.current = next;
     setPhase(next);
   }
-
-  function clearAnswerTimeout(): void {
-    if (answerTimeoutRef.current !== null) {
-      clearTimeout(answerTimeoutRef.current);
-      answerTimeoutRef.current = null;
-    }
-    frameRef.current = null;
-  }
-
-  const stream = useVisionStream(camera, cameraReady, shouldStreamFrames(phase, sending), {
-    onAnswer: (text, sessionId) => {
-      clearAnswerTimeout();
-      if (!aliveRef.current || phaseRef.current !== "thinking") return;
-      const said = questionRef.current;
-      const image = frameRef.current ?? undefined;
-      questionRef.current = "";
-      frameRef.current = null;
-      if (said !== "") {
-        void recordVisionTurn(said, text, sessionId, image).catch(() => undefined);
-      }
-      speak(text);
-    },
-    onError: (message) => {
-      if (!aliveRef.current) return;
-      clearAnswerTimeout();
-      if (phaseRef.current === "thinking") {
-        questionRef.current = "";
-        setIssue(message);
-        setBoth("idle");
-      }
-      // Keep uploads paused during TTS even if the socket drops mid-reply.
-    },
-  });
 
   function safeStopListen(): void {
     try {
@@ -169,25 +129,15 @@ export function useVisionTurn(
     setBoth("idle");
   }
 
-  /** Pause the stream, send the current frame + question, then answer. */
+  /** Capture the current frame and answer it on-device (ADR-0008). */
   async function askAboutFrame(text: string): Promise<void> {
     const said = text.trim();
     if (said === "" || !aliveRef.current) {
       setBoth("idle");
       return;
     }
-    questionRef.current = said;
     setBoth("thinking");
     setIssue(null);
-
-    // Wait briefly if a periodic background stream snapshot is in flight to
-    // prevent concurrent camera hardware snapshot calls on native Android.
-    let waitedSnap = 0;
-    while (stream.isCapturing() && waitedSnap < 10 && aliveRef.current) {
-      await new Promise((r) => setTimeout(r, 100));
-      waitedSnap += 1;
-    }
-    if (!aliveRef.current) return;
 
     let rawJpeg: string | null = null;
     try {
@@ -206,23 +156,9 @@ export function useVisionTurn(
     }
 
     const dataUri = `data:image/jpeg;base64,${rawJpeg}`;
-    frameRef.current = dataUri;
 
-    // The fresh frame is sent before the question so the backend cancels
-    // any caption narration and answers exactly what the user saw.
-    if (stream.sendQuestion(said, rawJpeg)) {
-      answerTimeoutRef.current = setTimeout(() => {
-        answerTimeoutRef.current = null;
-        if (!aliveRef.current || phaseRef.current !== "thinking") return;
-        questionRef.current = "";
-        frameRef.current = null;
-        setIssue("Vision answer timed out — try again.");
-        setBoth("idle");
-      }, VISION_ANSWER_TIMEOUT_MS);
-      return;
-    }
-
-    // Socket fallback keeps vision usable when the dev backend is down.
+    // A chat send may still be in flight (store.send refuses while busy):
+    // wait for it instead of failing the turn.
     let waited = 0;
     while (useChatStore.getState().sending && waited < 10 && aliveRef.current) {
       await new Promise((r) => setTimeout(r, 1000));
@@ -250,7 +186,6 @@ export function useVisionTurn(
 
   function speak(text: string): void {
     if (!aliveRef.current) return;
-    clearAnswerTimeout();
     stopSpeaking();
     setAnswer(text);
     setIssue(null);
@@ -287,7 +222,6 @@ export function useVisionTurn(
       case "ignore":
         return;
       case "interrupt":
-        clearAnswerTimeout();
         stopSpeaking();
         setBoth("idle");
         return;
@@ -309,8 +243,6 @@ export function useVisionTurn(
 
   /** Stop everything (screen exit): recognizer, speech, back to idle. */
   function stopAll(): void {
-    clearAnswerTimeout();
-    questionRef.current = "";
     safeStopListen();
     stopSpeaking();
     setBoth("idle");
@@ -343,8 +275,6 @@ export function useVisionTurn(
     aliveRef.current = true;
     return () => {
       aliveRef.current = false;
-      clearAnswerTimeout();
-      questionRef.current = "";
       safeStopListen();
       stopSpeaking();
     };
@@ -356,8 +286,6 @@ export function useVisionTurn(
     answer,
     issue,
     needsSettings,
-    streamProblem: stream.problem,
-    frameProcessor: stream.frameProcessor,
     bargeIn,
     retry,
     sendText,

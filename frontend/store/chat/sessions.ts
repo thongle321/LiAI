@@ -1,10 +1,8 @@
-/** Sessions slice: backend-owned list + active-session lifecycle. */
+/** Sessions slice: Supabase-owned list + active-session lifecycle. */
 
-import { deleteSession as deleteSessionApi, listSessions } from "../../lib/chat/api.ts";
-import { updateSession as updateSessionApi } from "../../lib/chat/api.ts";
-import { getHistory } from "../../lib/api.ts";
 import { toMessages, toSession } from "../../lib/chat/messages.ts";
 import { draftKey } from "../../lib/chat/drafts.ts";
+import type { SessionStore } from "../../lib/chat/supabase-store.ts";
 import { HISTORY_KEY, SESSION_KEY } from "./types.ts";
 import { readDraftFor } from "./draft.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
@@ -14,6 +12,14 @@ async function quiet(promise: Promise<unknown>): Promise<void> {
     await promise;
   } catch {
     // best-effort persistence/UI refresh only
+  }
+}
+
+async function storeOf(ctx: ChatCtx): Promise<SessionStore | null> {
+  try {
+    return await ctx.getStore();
+  } catch {
+    return null;
   }
 }
 
@@ -32,7 +38,6 @@ export function createSessionsSlice(
   | "renameSession"
   | "setPinned"
   | "refreshSessions"
-  | "recordVisionTurn"
 > {
   function cancelActive(): void {
     ctx.streamGen += 1;
@@ -41,8 +46,10 @@ export function createSessionsSlice(
   }
 
   async function refreshSessions(): Promise<void> {
+    const store = await storeOf(ctx);
+    if (!store) return;
     try {
-      set({ sessions: (await listSessions()).map(toSession) });
+      set({ sessions: (await store.listSessions()).map(toSession) });
     } catch {
       // best-effort: the drawer keeps whatever it has
     }
@@ -52,13 +59,17 @@ export function createSessionsSlice(
     id: string,
     patch: { title?: string; pinned?: boolean },
   ): Promise<boolean> {
+    const store = await storeOf(ctx);
+    if (!store) return false;
     try {
-      const updated = await updateSessionApi(id, patch);
+      const ok =
+        patch.title !== undefined
+          ? await store.renameSession(id, patch.title)
+          : await store.setSessionPinned(id, patch.pinned ?? false);
+      if (!ok) return false;
       set((s) => ({
         sessions: s.sessions.map((sess) =>
-          sess.id === id
-            ? { ...sess, title: updated.title, pinned: updated.pinned }
-            : sess,
+          sess.id === id ? { ...sess, ...patch } : sess,
         ),
       }));
       return true;
@@ -75,10 +86,13 @@ export function createSessionsSlice(
 
     loadSession: async () => {
       await quiet(ctx.storage.removeItem(HISTORY_KEY));
+      const store = await storeOf(ctx);
       let listed = false;
       try {
-        set({ sessions: (await listSessions()).map(toSession) });
-        listed = true;
+        if (store) {
+          set({ sessions: (await store.listSessions()).map(toSession) });
+          listed = true;
+        }
       } catch {
         // keep whatever is already in state
       }
@@ -93,7 +107,7 @@ export function createSessionsSlice(
         return;
       }
       if (!listed) {
-        // Couldn't verify against the backend: keep the stored id.
+        // Couldn't verify against the store: keep the stored id.
         set({ sessionId: stored });
         return;
       }
@@ -121,13 +135,16 @@ export function createSessionsSlice(
       if (get().sending || get().sessionId === id) return false;
       if (!get().sessions.some((s) => s.id === id)) return false;
       await quiet(get().persistDraft());
+      const store = await storeOf(ctx);
+      if (!store) return false;
       try {
-        const res = await getHistory(id);
-        await quiet(ctx.storage.setItem(SESSION_KEY, res.session_id));
+        const turns = await store.get(id);
+        if (turns === null) return false;
+        await quiet(ctx.storage.setItem(SESSION_KEY, id));
         set({
-          sessionId: res.session_id,
-          messages: toMessages(res.messages),
-          draft: await readDraftFor(ctx, res.session_id),
+          sessionId: id,
+          messages: toMessages(turns),
+          draft: await readDraftFor(ctx, id),
         });
         return true;
       } catch {
@@ -138,7 +155,8 @@ export function createSessionsSlice(
     deleteSession: async (id: string) => {
       // Never pull the rug on an in-flight turn.
       if (get().sending && get().sessionId === id) return;
-      await quiet(deleteSessionApi(id));
+      const store = await storeOf(ctx);
+      if (store) await quiet(store.deleteSession(id));
       await quiet(ctx.storage.removeItem(draftKey(id)));
       set((s) => ({ sessions: s.sessions.filter((sess) => sess.id !== id) }));
       if (get().sessionId === id) {
@@ -157,36 +175,5 @@ export function createSessionsSlice(
     renameSession: (id: string, title: string) => patchSession(id, { title }),
 
     setPinned: (id: string, pinned: boolean) => patchSession(id, { pinned }),
-
-    recordVisionTurn: async (question, answer, sessionId, image) => {
-      const nextSessionId = sessionId ?? get().sessionId;
-      const now = Date.now();
-      // A vision turn can adopt a session the composer never opened:
-      // the typed draft stays with its own session key.
-      await quiet(get().persistDraft());
-      if (nextSessionId !== null && nextSessionId !== get().sessionId) {
-        await quiet(ctx.storage.setItem(SESSION_KEY, nextSessionId));
-      }
-      const draft = await readDraftFor(ctx, nextSessionId);
-      set((s) => ({
-        sessionId: nextSessionId,
-        sending: false,
-        draft,
-        messages: [
-          ...s.messages,
-          {
-            id: `${now}-q`,
-            role: "user",
-            text: question,
-            at: now,
-            ...(image !== undefined ? { image } : {}),
-          },
-          { id: `${now}-a`, role: "assistant", text: answer, at: now },
-        ],
-      }));
-      // Vision turns persist server-side already; refresh so the drawer
-      // lists sessions the chat tab never opened.
-      await refreshSessions();
-    },
   };
 }

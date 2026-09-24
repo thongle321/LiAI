@@ -35,8 +35,8 @@ export function ChatInput({
   const draft = useChatStore((s) => s.draft);
   const setDraft = useChatStore((s) => s.setDraft);
   const [plusOpen, setPlusOpen] = useState(false);
-  // One attached photo per turn (the backend image path takes a single
-  // data-uri); text stays required — the contract 422s blank messages.
+  // One attached photo per turn (the local turn takes a single data-uri);
+  // text stays required — blank messages are rejected before the run.
   const [attached, setAttached] = useState<string | null>(null);
   const [attachIssue, setAttachIssue] = useState<string | null>(null);
   // Dictation: mic fills the draft, the user presses Send. Interim

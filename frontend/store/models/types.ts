@@ -51,7 +51,6 @@ export interface DownloadsSlice {
   resumeDownload: (jobId: string) => Promise<void>;
   cancelDownload: (jobId: string) => Promise<void>;
   syncDownloadStatus: () => void;
-  uploadToBackend: (modelId: string) => Promise<boolean>;
 }
 
 export interface RemoteSlice {

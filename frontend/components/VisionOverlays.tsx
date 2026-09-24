@@ -24,7 +24,6 @@ export function VisionPreview({
   focused,
   fade,
   cameraRef,
-  frameProcessor,
   onReady,
   onProblem,
   onGrant,
@@ -34,7 +33,6 @@ export function VisionPreview({
   focused: boolean;
   fade: ReturnType<typeof useTabContentFade>;
   cameraRef: RefObject<VisionCameraView | null>;
-  frameProcessor: ComponentProps<typeof Camera>["frameProcessor"];
   onReady: () => void;
   onProblem: (message: string) => void;
   onGrant: () => void;
@@ -48,7 +46,6 @@ export function VisionPreview({
           device={device}
           isActive={focused}
           photo
-          frameProcessor={frameProcessor}
           onInitialized={onReady}
           onError={(e: { message?: unknown }) =>
             onProblem(`Camera error: ${String(e.message ?? e)}`)
@@ -115,7 +112,6 @@ export function VisionBottomPanel({
   answer,
   statusLabel,
   camProblem,
-  streamProblem,
   inputOpen,
   draft,
   onDraftChange,
@@ -132,7 +128,6 @@ export function VisionBottomPanel({
   answer: string;
   statusLabel: string;
   camProblem: string | null;
-  streamProblem: string | null;
   inputOpen: boolean;
   draft: string;
   onDraftChange: (s: string) => void;
@@ -181,11 +176,6 @@ export function VisionBottomPanel({
         {camProblem !== null && (
           <Text className="mt-1 text-center font-sans text-body-sm text-white/70">
             {camProblem}
-          </Text>
-        )}
-        {streamProblem !== null && (
-          <Text className="mt-1 text-center font-sans text-body-sm text-white/70">
-            {streamProblem}
           </Text>
         )}
       </View>

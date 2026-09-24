@@ -39,6 +39,7 @@ describe("createQvacEngine", () => {
       [
         { type: "contentDelta", text: "hel" },
         { type: "thinkingDelta", text: "should-drop" },
+        { type: "rawDelta", text: "should-drop-too" },
         { type: "contentDelta", text: "lo" },
         { type: "completionDone", stopReason: "eos" },
       ],

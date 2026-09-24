@@ -38,13 +38,14 @@ export interface QvacTool {
 export type QvacEvent =
   | { type: "contentDelta"; text: string }
   | { type: "thinkingDelta"; text: string }
+  | { type: "rawDelta"; text: string }
   | {
       type: "toolCall";
       call: { id: string; name: string; arguments: Record<string, unknown> };
     }
   | { type: "toolError"; error: { message: string } }
   | { type: "completionStats"; stats: { promptTokens?: number; generatedTokens?: number } }
-  | { type: "completionDone"; stopReason: string };
+  | { type: "completionDone"; stopReason?: string };
 
 export interface QvacRun {
   requestId: string;

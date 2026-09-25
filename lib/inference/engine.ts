@@ -57,6 +57,8 @@ export interface CompletionRequest {
   tools?: ToolDefinition[];
   /** Local file paths for multimodal turns (llama media_paths). */
   imagePaths?: string[];
+  /** Local-only: jinja thinking blocks on/off (native default true). */
+  enableThinking?: boolean;
 }
 
 /** PocketPal's CompletionEngine shape: stream + stop. */

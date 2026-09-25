@@ -15,7 +15,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation } from "expo-router";
+import { useNavigation, useRouter } from "expo-router";
 import Animated from "react-native-reanimated";
 import { Check, Menu, Search, Share, X } from "lucide-react-native";
 
@@ -26,6 +26,7 @@ import { useCopy } from "../../hooks/useCopy.ts";
 import { fadeEntering, fadeExiting, useMotionDuration, useTabContentFade } from "../../lib/motion.ts";
 import { APP_NAME } from "../../constants/app.ts";
 import { useChatStore } from "../../store/chat.ts";
+import { useModelStore } from "../../store/modelStore";
 import { Bubble } from "./Bubble.tsx";
 import { ChatInput } from "./ChatInput.tsx";
 import { UsageStats } from "./UsageStats.tsx";
@@ -61,6 +62,15 @@ export function ChatScreen() {
   const motionDuration = useMotionDuration();
   const contentFade = useTabContentFade();
   const navigation = useNavigation<{ openDrawer: () => void }>();
+  const router = useRouter();
+  // Header shows the loaded model (PocketPal header-title parity);
+  // tapping it opens Models to switch. Falls back to the app name.
+  const headerTitle =
+    useModelStore((s) => {
+      const local = s.models.find((m) => m.id === s.activeModelId);
+      if (local) return s.modelSettings[local.id]?.displayName || local.name;
+      return s.remoteApis.find((p) => p.id === s.activeModelId)?.name ?? APP_NAME;
+    });
 
   return (
     <SafeAreaView
@@ -73,9 +83,14 @@ export function ChatScreen() {
             <Menu size={22} color={colors.primary} />
           </Pressable>
         </View>
-        <Text className="flex-1 text-center font-sans-semibold text-h3 text-primary">
-          {APP_NAME}
-        </Text>
+        <Pressable onPress={() => router.push("/models")} className="flex-1">
+          <Text
+            numberOfLines={1}
+            className="text-center font-sans-semibold text-h3 text-primary"
+          >
+            {headerTitle}
+          </Text>
+        </Pressable>
         <View className="w-16 flex-row items-center justify-end">
           <Pressable
             onPress={() => {

@@ -82,6 +82,24 @@ describe("createLocalEngine", () => {
     assert.equal(out.toolCalls[1].id, "c9");
   });
 
+  it("forwards enableThinking as enable_thinking, omits when unset", async () => {
+    const seen: LlamaCompletionParams[] = [];
+    const ctx = fakeContext({
+      completion: async (params: LlamaCompletionParams) => {
+        seen.push(params);
+        return { text: "t", content: "t", tool_calls: [], tokens_predicted: 1, tokens_evaluated: 1 };
+      },
+    });
+    const engine = createLocalEngine(ctx);
+    await engine.completion(
+      { messages: [{ role: "user", content: "x" }], enableThinking: false },
+      { onToken: () => {} },
+    );
+    await engine.completion({ messages: [{ role: "user", content: "y" }] }, { onToken: () => {} });
+    assert.equal(seen[0].enable_thinking, false);
+    assert.equal("enable_thinking" in seen[1], false);
+  });
+
   it("forwards stop and release to the native context", async () => {
     const ctx = fakeContext();
     const engine = createLocalEngine(ctx);

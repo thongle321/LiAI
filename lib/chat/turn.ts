@@ -47,6 +47,8 @@ export interface TurnDeps {
   getStore(): Promise<TurnSessionStore | null>;
   getSearch(): Promise<TalentSearchAuth | null>;
   getSystemPrompt(): Promise<string | undefined>;
+  /** Local-only thinking preference; omitted keeps the native default. */
+  getThinking?: () => Promise<boolean>;
   /** Data-uri → temp file path for multimodal turns; null = text-only. */
   saveImage(dataUri: string): Promise<string | null>;
 }
@@ -97,6 +99,7 @@ export function createTurnRunner(deps: TurnDeps) {
 
     const search = await deps.getSearch().catch(() => null);
     const systemPrompt = await deps.getSystemPrompt().catch(() => undefined);
+    const thinking = await deps.getThinking?.().catch(() => undefined);
     let imagePaths: string[] | undefined;
     if (paths.image) {
       const saved = await deps.saveImage(paths.image).catch(() => null);
@@ -109,6 +112,7 @@ export function createTurnRunner(deps: TurnDeps) {
       tools: talentDefinitions(),
       // Local reads imagePaths (llama media_paths); remote stays text-only.
       ...(imagePaths ? { imagePaths } : {}),
+      ...(thinking !== undefined ? { enableThinking: thinking } : {}),
       fetchImpl: fetch,
       search,
       userTexts: userTextsOf(paths.history),

@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { Image as RNImage, Pressable, Text, TextInput, View } from "react-native";
 import { useIsFocused } from "expo-router";
 import { openSettings } from "expo-linking";
-import { Camera, Image as ImageIcon, Mic, Plus, Send, X, type LucideIcon } from "lucide-react-native";
+import { Brain, Camera, Image as ImageIcon, Mic, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -18,6 +18,8 @@ import {
 
 import { colors } from "../../themes/tokens.ts";
 import { useChatStore } from "../../store/chat.ts";
+import { useInference } from "../../store/inference.ts";
+import { useModelStore } from "../../store/modelStore";
 import { mergeDictation, VOICE_LISTEN_OPTS } from "../../lib/voiceListen.ts";
 import { ensureMicAccess } from "../../lib/micAccess.ts";
 import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../../lib/voiceStatus.ts";
@@ -34,6 +36,11 @@ export function ChatInput({
   // switches); dictation mechanics stay local below.
   const draft = useChatStore((s) => s.draft);
   const setDraft = useChatStore((s) => s.setDraft);
+  const stop = useChatStore((s) => s.stop);
+  // Thinking pill: local-only (remote endpoints ignore enable_thinking).
+  const thinkingEnabled = useInference((s) => s.thinkingEnabled);
+  const setThinkingEnabled = useInference((s) => s.setThinkingEnabled);
+  const isLocal = useModelStore((s) => s.activeProviderType === "local");
   const [plusOpen, setPlusOpen] = useState(false);
   // One attached photo per turn (the local turn takes a single data-uri);
   // text stays required — blank messages are rejected before the run.
@@ -140,6 +147,7 @@ export function ChatInput({
   });
 
   useEffect(() => {
+    void useInference.getState().load();
     return () => {
       try {
         ExpoSpeechRecognitionModule.stop();
@@ -237,9 +245,20 @@ export function ChatInput({
         <Pressable onPress={() => void toggleDictation()} className="px-1 py-1">
           <Mic size={22} color={listening ? colors.primary : colors.secondaryText} />
         </Pressable>
-        <Pressable disabled={!canSend} onPress={() => void handleSend()} className="px-2 py-1">
-          <Send size={22} color={canSend ? colors.primary : colors.secondaryText} />
-        </Pressable>
+        {isLocal && (
+          <Pressable onPress={() => setThinkingEnabled(!thinkingEnabled)} className="px-1 py-1">
+            <Brain size={22} color={thinkingEnabled ? colors.primary : colors.secondaryText} />
+          </Pressable>
+        )}
+        {sending ? (
+          <Pressable onPress={stop} className="px-2 py-1">
+            <Square size={22} color={colors.error} />
+          </Pressable>
+        ) : (
+          <Pressable disabled={!canSend} onPress={() => void handleSend()} className="px-2 py-1">
+            <Send size={22} color={canSend ? colors.primary : colors.secondaryText} />
+          </Pressable>
+        )}
       </View>
     </View>
   );

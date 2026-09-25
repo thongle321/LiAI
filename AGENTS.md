@@ -22,7 +22,6 @@ The mobile application is responsible for:
 - Voice input/output integration
 - Local client state
 - Local persistence
-- Communication with the backend
 - Presenting AI responses and companion interactions
 
 ---
@@ -140,17 +139,12 @@ or business logic.
 **components/** is for reusable UI. Create a component when it is
 reused in multiple places, when it makes a screen easier to read, or
 when it represents a clear UI concept. Examples for this app:
-Bubble, BottomNav, InteractionPanel. Do not create components too early.
+[EXAMPLE_COMPONENT_NAMES]. Do not create components too early.
+**data/** holds hardcoded content. Keep it typed.
 **store/** holds Zustand stores. Examples of state to keep here:
-chat messages, session id, connection, sending flag. Persist prefs and
-UI state with AsyncStorage; persist user-provided secret keys
-(HF token, provider keys) with SecureStore only, never AsyncStorage.
-**lib/** holds pure tested helpers (format.ts, load-guard.ts,
-model-settings.ts), on-device AI (agent/, inference/, chat/turn.ts),
-Supabase access (supabase.ts, chat/supabase-store.ts), service clients
-(download-service.ts, models/, search providers), and device I/O adapters
-(snapshot.ts, voiceSpeak.ts, motion.ts).
-A cohesive group may live in a `lib/<name>/` subfolder.
+[EXAMPLE_STATE_FIELDS]. Persist with AsyncStorage when needed.
+**lib/** holds external service helpers (clerk.ts, api.ts, cn.ts). 
+Never expose secret keys here.
 Never expose secret keys here.
 ---
 

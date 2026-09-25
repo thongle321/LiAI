@@ -92,15 +92,33 @@ function getManager(): EngineManager {
     manager = new EngineManager(
       {
         loadLocal: async (fileName, mmprojPath) => {
-          const [fs, engine, local] = await Promise.all([
+          const [fs, engine, local, inference] = await Promise.all([
             import("expo-file-system/legacy"),
             import("../../lib/inference/engine.ts"),
             import("../../lib/inference/local-engine.ts"),
+            import("../inference.ts"),
           ]);
           const docsDir = fs.documentDirectory ?? "";
+          const params = inference.useInference.getState();
           const ctx = await local.loadLlamaContext(
             engine.resolveLocalFile(docsDir, fileName),
             mmprojPath,
+            {
+              n_ctx: params.nCtx,
+              n_gpu_layers: params.nGpuLayers,
+              use_mlock: params.useMlock,
+              use_mmap: params.useMmap,
+              n_batch: params.nBatch,
+              n_ubatch: params.nUbatch,
+              n_threads: params.nThreads,
+              flash_attn_type: params.flashAttn,
+              cache_type_k: params.cacheK,
+              cache_type_v: params.cacheV,
+              speculative: params.speculativeEnabled,
+              spec_draft_n_gpu_layers: params.specDraftGpuLayers,
+              spec_draft_cache_type_k: params.specDraftCacheK,
+              spec_draft_cache_type_v: params.specDraftCacheV,
+            },
           );
           return {
             engine: local.createLocalEngine(ctx),
@@ -148,6 +166,16 @@ async function defaultSaveImage(dataUri: string): Promise<string | null> {
   }
 }
 
+/** Local-only thinking preference from the inference store. */
+async function defaultThinking(): Promise<boolean> {
+  try {
+    const { useInference } = await import("../inference.ts");
+    return useInference.getState().thinkingEnabled;
+  } catch {
+    return true;
+  }
+}
+
 /** Per-model system prompt override; absent stays absent. */
 async function defaultSystemPrompt(): Promise<string | undefined> {
   try {
@@ -173,6 +201,7 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
         return auth ? { provider: auth.provider, key: auth.key, count: auth.count } : null;
       },
       getSystemPrompt: () => defaultSystemPrompt(),
+      getThinking: () => defaultThinking(),
       saveImage: (uri: string) => defaultSaveImage(uri),
     });
     return runTurn(text, paths, onToken);
@@ -187,6 +216,9 @@ export function createChatStore(storage: KeyValueStorage, deps?: ChatDeps) {
     getSearchAuth,
     getEngineSource: deps?.getEngineSource ?? defaultEngineSource,
     runTurn: deps?.runTurn ?? defaultRunTurn(getSearchAuth),
+    stopEngine: () => {
+      void getManager().stopActive();
+    },
     active: { handle: null },
     streamGen: 0,
   };

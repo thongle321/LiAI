@@ -45,6 +45,8 @@ export interface AgentRunOptions {
   tools: ToolDefinition[];
   /** Local file paths for a multimodal first turn (llama media_paths). */
   imagePaths?: string[];
+  /** Local-only: jinja thinking blocks on/off for every loop turn. */
+  enableThinking?: boolean;
   fetchImpl: typeof fetch;
   search: TalentSearchAuth | null;
   userTexts?: string[];
@@ -111,6 +113,9 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
             ...(forcedFinal ? {} : tools.length > 0 ? { tools } : {}),
             ...(turn === 0 && options.imagePaths && options.imagePaths.length > 0
               ? { imagePaths: options.imagePaths }
+              : {}),
+            ...(options.enableThinking !== undefined
+              ? { enableThinking: options.enableThinking }
               : {}),
           },
           {

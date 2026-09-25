@@ -55,6 +55,8 @@ export interface ChatCtx {
   getSearchAuth: () => Promise<SearchAuth | null>;
   getEngineSource: () => Promise<EngineSource | null>;
   runTurn: TurnRunner;
+  /** Stop the live generation; the loaded model stays cached. */
+  stopEngine: () => void;
   active: { handle: { cancel(): void } | null };
   streamGen: number;
 }
@@ -72,6 +74,8 @@ export interface ChatState {
   loadSession: () => Promise<void>;
   checkHealth: () => Promise<void>;
   send: (text: string, image?: string) => Promise<boolean>;
+  /** Stop the live reply; the partial text stays in its bubble. */
+  stop: () => void;
   retry: (messageId: string) => Promise<boolean>;
   regenerate: (messageId: string) => Promise<boolean>;
   newConversation: () => Promise<void>;

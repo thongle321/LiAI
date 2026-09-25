@@ -32,11 +32,12 @@ export interface LlamaCompletionResult {
   tokens_evaluated?: number;
 }
 
-/** Params the wrapper forwards (messages/tools/media only). */
+/** Params the wrapper forwards (messages/tools/media/thinking only). */
 export interface LlamaCompletionParams {
   messages: Array<{ role: string; content: string }>;
   tools?: unknown;
   media_paths?: string[];
+  enable_thinking?: boolean;
 }
 
 /** Structural slice of LlamaContext: completion + stop + release. */
@@ -91,6 +92,9 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
           ...(request.imagePaths && request.imagePaths.length > 0
             ? { media_paths: request.imagePaths }
             : {}),
+          ...(request.enableThinking !== undefined
+            ? { enable_thinking: request.enableThinking }
+            : {}),
         },
         (data) => {
           const delta = data.content ?? data.token ?? "";
@@ -126,15 +130,68 @@ export async function releaseLocalEngine(ctx: LlamaContextLike): Promise<void> {
   await ctx.release();
 }
 
+/** Init params forwarded to llama.rn (subset of its context options). */
+export type LlamaCacheType =
+  | "f16"
+  | "f32"
+  | "q8_0"
+  | "q4_0"
+  | "q4_1"
+  | "iq4_nl"
+  | "q5_0"
+  | "q5_1";
+
+export interface LlamaInitParams {
+  n_ctx: number;
+  n_gpu_layers: number;
+  use_mlock: boolean;
+  use_mmap: boolean;
+  n_batch: number;
+  n_ubatch: number;
+  n_threads: number;
+  flash_attn_type: "auto" | "on" | "off";
+  cache_type_k: LlamaCacheType;
+  cache_type_v: LlamaCacheType;
+  speculative: boolean;
+  spec_draft_n_gpu_layers: number;
+  spec_draft_cache_type_k: LlamaCacheType;
+  spec_draft_cache_type_v: LlamaCacheType;
+}
+
 /** Default loader: lazy llama.rn import + optional mmproj attach. */
 export async function loadLlamaContext(
   filePath: string,
   mmprojPath?: string,
+  init?: LlamaInitParams,
 ): Promise<LlamaContextLike> {
   const { initLlama } = await import("llama.rn");
   // SAFETY: initLlama's LlamaContext is a superset of the structural
   // LlamaContextLike slice (same completion/stop/release signatures).
-  const ctx = (await initLlama({ model: filePath })) as unknown as LlamaContextLike & {
+  const ctx = (await initLlama({
+    model: filePath,
+    ...(init
+      ? {
+          n_ctx: init.n_ctx,
+          n_gpu_layers: init.n_gpu_layers,
+          use_mlock: init.use_mlock,
+          use_mmap: init.use_mmap,
+          n_batch: init.n_batch,
+          n_ubatch: init.n_ubatch,
+          n_threads: init.n_threads,
+          flash_attn_type: init.flash_attn_type,
+          cache_type_k: init.cache_type_k,
+          cache_type_v: init.cache_type_v,
+          speculative: init.speculative,
+          ...(init.speculative
+            ? {
+                spec_draft_n_gpu_layers: init.spec_draft_n_gpu_layers,
+                spec_draft_cache_type_k: init.spec_draft_cache_type_k,
+                spec_draft_cache_type_v: init.spec_draft_cache_type_v,
+              }
+            : {}),
+        }
+      : {}),
+  })) as unknown as LlamaContextLike & {
     initMultimodal?: (opts: { path: string }) => Promise<boolean>;
   };
   if (mmprojPath) {

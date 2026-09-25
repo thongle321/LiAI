@@ -9,7 +9,6 @@
     "babel.config.js",
     "metro.config.js",
     "tests",
-    "pocketpal-ai"
   ],
   "include": [
     "**/*.ts",

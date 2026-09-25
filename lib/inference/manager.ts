@@ -7,10 +7,15 @@
  */
 
 import type { CompletionEngine, EngineSource } from "./engine.ts";
+import type { LlamaInitParams } from "./local-engine.ts";
 import type { RemoteApiProvider } from "../../types/models.ts";
 
 export interface EngineLoader {
-  loadLocal(filePath: string, mmprojPath?: string): Promise<{
+  loadLocal(
+    filePath: string,
+    mmprojPath?: string,
+    init?: LlamaInitParams,
+  ): Promise<{
     engine: CompletionEngine;
     release(): Promise<void>;
   }>;
@@ -18,6 +23,26 @@ export interface EngineLoader {
     provider: RemoteApiProvider,
     getKey: () => Promise<string | null>,
   ): CompletionEngine;
+}
+
+/** Slot key fragment: any init change reloads the local context. */
+function initKey(init: LlamaInitParams): string {
+  return [
+    init.n_ctx,
+    init.n_gpu_layers,
+    init.use_mlock ? 1 : 0,
+    init.use_mmap ? 1 : 0,
+    init.n_batch,
+    init.n_ubatch,
+    init.n_threads,
+    init.flash_attn_type,
+    init.cache_type_k,
+    init.cache_type_v,
+    init.speculative ? 1 : 0,
+    init.spec_draft_n_gpu_layers,
+    init.spec_draft_cache_type_k,
+    init.spec_draft_cache_type_v,
+  ].join("/");
 }
 
 async function quiet(promise: Promise<unknown>): Promise<void> {
@@ -45,10 +70,14 @@ export class EngineManager {
   }
 
   /** Engine for the source, reusing the slot when the key matches. */
-  async ensure(source: EngineSource, mmprojPath?: string): Promise<CompletionEngine> {
+  async ensure(
+    source: EngineSource,
+    mmprojPath?: string,
+    init?: LlamaInitParams,
+  ): Promise<CompletionEngine> {
     const key =
       source.kind === "local"
-        ? `local:${source.fileName}`
+        ? `local:${source.fileName}:${init ? initKey(init) : "default"}`
         : `remote:${source.provider.id}`;
     if (this.engine && this.key === key) return this.engine;
     if (this.engine) await quiet(this.engine.stopCompletion());
@@ -56,7 +85,7 @@ export class EngineManager {
     this.engine = null;
     this.release = null;
     if (source.kind === "local") {
-      const loaded = await this.loader.loadLocal(source.fileName, mmprojPath);
+      const loaded = await this.loader.loadLocal(source.fileName, mmprojPath, init);
       this.engine = loaded.engine;
       this.release = loaded.release;
     } else {
@@ -67,6 +96,11 @@ export class EngineManager {
     }
     this.key = key;
     return this.engine;
+  }
+
+  /** Stop the live generation without dropping the loaded model. */
+  async stopActive(): Promise<void> {
+    if (this.engine) await quiet(this.engine.stopCompletion());
   }
 
   /** Stop and drop the slot (model switch, new conversation teardown). */

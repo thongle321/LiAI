@@ -20,7 +20,7 @@ export function createSendSlice(
   set: ChatSet,
   get: ChatGet,
   ctx: ChatCtx,
-): Pick<ChatState, "sending" | "send" | "retry" | "regenerate"> {
+): Pick<ChatState, "sending" | "send" | "stop" | "retry" | "regenerate"> {
   function updateBubble(
     id: string,
     patch: Partial<ChatMessage> | ((m: ChatMessage) => Partial<ChatMessage>),
@@ -111,6 +111,20 @@ export function createSendSlice(
 
   return {
     sending: false,
+
+    stop: () => {
+      if (!get().sending) return;
+      // Invalidate in-flight token callbacks, then halt the engine.
+      // The partial reply stays in its bubble as the turn's text.
+      ctx.streamGen += 1;
+      ctx.stopEngine();
+      set((s) => ({
+        sending: false,
+        messages: s.messages.map((m) =>
+          m.streaming === true ? { ...m, streaming: false, at: Date.now() } : m,
+        ),
+      }));
+    },
 
     send: async (text: string, image?: string) => {
       const trimmed = text.trim();

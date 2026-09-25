@@ -1,0 +1,2 @@
+allowBuilds:
+  llama.rn: set this to true or false

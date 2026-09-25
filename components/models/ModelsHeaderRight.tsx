@@ -44,14 +44,12 @@ function ToggleRow({
   icon?: ReactNode;
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={{ height: 46, paddingLeft: 16, paddingRight: 16 }}
-      className="flex-row items-center"
-    >
-      {/* Fixed icon slot + fixed menu width (PocketPal Menu.Item geometry:
-          46pt rows, 16pt gutters) so labels can never collapse vertical. */}
-      <View style={{ width: 28, marginRight: 10, alignItems: "center" }}>{icon}</View>
+    <Pressable onPress={onPress} className="flex-row items-center px-4 py-3">
+      {/* Fixed icon slot + explicit menu width (PocketPal Menu.Item geometry).
+          The width stays an inline style: the w-60 class failed to resolve
+          on device, collapsing the menu into vertical text. Rows use
+          classes; only the proven width fix keeps a style. */}
+      <View className="mr-2.5 w-7 items-center justify-center">{icon}</View>
       <Text
         numberOfLines={1}
         className="mr-2 flex-1 font-sans text-body-md text-primary-text"
@@ -177,8 +175,7 @@ export function ModelsHeaderRight({
             <View className="h-px bg-border mx-4" />
             <Pressable
               onPress={() => run(onExpandAll)}
-              style={{ height: 46, paddingLeft: 16, paddingRight: 16 }}
-              className="flex-row items-center"
+              className="flex-row items-center px-4 py-3"
             >
               <Text
                 numberOfLines={1}
@@ -186,14 +183,13 @@ export function ModelsHeaderRight({
               >
                 Expand all
               </Text>
-              <View style={{ width: 28, alignItems: "center" }}>
+              <View className="w-7 items-center">
                 <ChevronsUpDown size={16} color={colors.secondaryText} />
               </View>
             </Pressable>
             <Pressable
               onPress={() => run(onCollapseAll)}
-              style={{ height: 46, paddingLeft: 16, paddingRight: 16 }}
-              className="flex-row items-center"
+              className="flex-row items-center px-4 py-3"
             >
               <Text
                 numberOfLines={1}
@@ -201,7 +197,7 @@ export function ModelsHeaderRight({
               >
                 Collapse all
               </Text>
-              <View style={{ width: 28, alignItems: "center" }}>
+              <View className="w-7 items-center">
                 <ChevronsDownUp size={16} color={colors.secondaryText} />
               </View>
             </Pressable>

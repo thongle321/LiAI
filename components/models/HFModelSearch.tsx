@@ -6,19 +6,22 @@
 
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, Text, TextInput, View } from "react-native";
-import { ChevronDown, Lock, X } from "lucide-react-native";
+import { Check, ChevronDown, Lock, X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
 import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
 import { useModelStore } from "../../store/modelStore";
+import { hfSpecId } from "../../lib/models/huggingface.ts";
 import type { HFModelFile } from "../../types/models";
 import {
   Chip,
   DownloadButton,
+  DownloadProgressBar,
   ModelTypeIcon,
   StatusBadge,
   formatBytes,
   formatCompact,
+  isProgressVisible,
 } from "./ModelBits.tsx";
 
 /** Vision signal without opening the repo (PocketPal DetailsView parity):
@@ -106,10 +109,11 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
             setDraft("");
             setTokenOpen(true);
           }}
-          className="px-3 py-3 bg-primary/20 border border-primary/50 rounded-lg"
+          className="flex-row items-center gap-1.5 px-3 py-3 bg-primary/20 border border-primary/50 rounded-lg"
         >
+          {hfToken ? <Check size={14} color={colors.primary} /> : null}
           <Text className="font-sans text-body-sm text-primary">
-            {hfToken ? "HF Token ✓" : "Add HF Token"}
+            {hfToken ? "HF Token" : "Add HF Token"}
           </Text>
         </Pressable>
       </View>
@@ -172,8 +176,8 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
                     <Text className="font-sans-semibold text-body-sm text-secondary-text mb-2">GGUF Files</Text>
                   </View>
                   {(modelFiles[item.modelId] || []).map((file) => {
-                    // Store spec id mirrors buildHfModelSpec: hf-<modelId>-<file>.
-                    const spec = models.find((m) => m.id === `hf-${item.modelId}-${file.name}`);
+                    // Store spec id mirrors buildHfModelSpec.
+                    const spec = models.find((m) => m.id === hfSpecId(item.modelId, file.name));
                     const st = spec?.downloadStatus ?? "idle";
                     const prog = spec?.downloadProgress ?? 0;
                     return (
@@ -194,11 +198,17 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
                               startDownload(item.modelId, file, hfToken || undefined),
                             )
                           }
-                          onPause={() => void pauseModelDownload(`hf-${item.modelId}-${file.name}`)}
-                          onResume={() => void resumeModelDownload(`hf-${item.modelId}-${file.name}`)}
+                          onPause={() => void pauseModelDownload(hfSpecId(item.modelId, file.name))}
+                          onResume={() => void resumeModelDownload(hfSpecId(item.modelId, file.name))}
                           disabled={st === "completed"}
                         />
                       </View>
+                      {isProgressVisible(st) && (
+                        <DownloadProgressBar
+                          progress={prog}
+                          speed={spec?.speedBytesPerSec}
+                        />
+                      )}
                     </View>
                     );
                   })}

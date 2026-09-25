@@ -42,6 +42,14 @@ The mobile application is responsible for:
 
 - AsyncStorage
 
+- llama.rn (on-device GGUF inference, approved)
+
+- @supabase/supabase-js (chat session persistence, approved)
+
+- react-native-marked + react-native-code-highlighter (chat markdown + code, approved)
+
+- expo-clipboard (copy message/transcript, approved)
+
 - VisionCamera (preview + snapshots + Worklet Frame Processor at 2fps;
   needs `enableFrameProcessors` and a dev-client binary — not Expo Go)
 
@@ -60,7 +68,7 @@ The mobile application is responsible for:
 - expo-secure-store (user-provided secret keys, approved)
 - expo-image-picker (in-chat camera/gallery attach, approved Wave 4 — needs dev-client rebuild)
 - expo-device (RAM-based model tier recommendation in onboarding, approved Wave 5)
-- link-preview-js via ./mobile export (uncredentialed public previews, the one ADR-004 exception, approved)
+- link-preview-js via the `link-preview-js/mobile` entrypoint (uncredentialed public previews, the one ADR-004 exception, approved)
 
 - expo-linking + expo-constants (settings deep-link, app metadata)
 - react-native-gesture-handler (navigator drawer gestures, approved; drawer-layout itself stays transitive inside expo-router per the Expo drawer guide)
@@ -139,12 +147,15 @@ or business logic.
 **components/** is for reusable UI. Create a component when it is
 reused in multiple places, when it makes a screen easier to read, or
 when it represents a clear UI concept. Examples for this app:
-[EXAMPLE_COMPONENT_NAMES]. Do not create components too early.
-**data/** holds hardcoded content. Keep it typed.
+ChatScreen, ChatInput, ModelCard, AvailableModels, HFModelSearch,
+InferenceSettings. Do not create components too early.
+**assets/device-tiers.json** holds bundled content (RAM-tier model
+recommendations). Keep it typed (see `lib/models/device-tiers.ts`).
 **store/** holds Zustand stores. Examples of state to keep here:
-[EXAMPLE_STATE_FIELDS]. Persist with AsyncStorage when needed.
-**lib/** holds external service helpers (clerk.ts, api.ts, cn.ts). 
-Never expose secret keys here.
+activeModelId, download jobs/progress, chat sessions/drafts,
+inference params, voice state. Persist with AsyncStorage when needed.
+**lib/** holds external service helpers (inference/, models/,
+chat/, supabase.ts, secrets.ts).
 Never expose secret keys here.
 ---
 
@@ -226,14 +237,14 @@ Use centralized image imports.
 4. Use them through the centralized object.
 
 ```ts
-import mascot from "@/assets/images/mascot.png";
+import icon from "../assets/icon.png";
 export const images = {
-    mascot,
+    icon,
 };
 ```
 
 ```tsx
-<Image source={images.mascot} />
+<Image source={images.icon} />
 ```
 
 Do not import image assets directly inside screens or components.

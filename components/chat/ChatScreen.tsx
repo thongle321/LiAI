@@ -28,30 +28,11 @@ import { APP_NAME } from "../../constants/app.ts";
 import { useChatStore } from "../../store/chat.ts";
 import { useModelStore } from "../../store/modelStore";
 import { Bubble } from "./Bubble.tsx";
+import { ChatEmptyPlaceholder } from "./ChatEmptyPlaceholder.tsx";
 import { ChatInput } from "./ChatInput.tsx";
 import { UsageStats } from "./UsageStats.tsx";
 import { SuggestedPrompts } from "./SuggestedPrompts.tsx";
 import { MessageList } from "./MessageList.tsx";
-
-/** Bottom go-to-models bar (PocketPal ModelNotLoadedMessage parity):
- * visible only while no model is loaded, gone the moment one is —
- * no Retry tap needed. */
-function ModelNotLoadedBar() {
-  const router = useRouter();
-  return (
-    <View className="mx-4 mb-2 flex-row items-center justify-between rounded-xl border border-border bg-surface-1 px-4 py-3">
-      <Text className="flex-1 font-sans text-body-md text-primary-text">
-        No model active
-      </Text>
-      <Pressable
-        onPress={() => router.push("/models")}
-        className="ml-3 rounded-lg border border-primary/50 bg-primary/20 px-3 py-1.5"
-      >
-        <Text className="font-sans text-body-sm text-primary">Go to Models</Text>
-      </Pressable>
-    </View>
-  );
-}
 
 export function ChatScreen() {
   const messages = useChatStore((s) => s.messages);
@@ -94,14 +75,6 @@ export function ChatScreen() {
   const contentFade = useTabContentFade();
   const navigation = useNavigation<{ openDrawer: () => void }>();
   const router = useRouter();
-  // Header shows the loaded model (PocketPal header-title parity);
-  // tapping it opens Models to switch. Falls back to the app name.
-  const headerTitle =
-    useModelStore((s) => {
-      const local = s.models.find((m) => m.id === s.activeModelId);
-      if (local) return s.modelSettings[local.id]?.displayName || local.name;
-      return s.remoteApis.find((p) => p.id === s.activeModelId)?.name ?? APP_NAME;
-    });
 
   return (
     <SafeAreaView
@@ -119,7 +92,7 @@ export function ChatScreen() {
             numberOfLines={1}
             className="text-center font-sans-semibold text-h3 text-primary"
           >
-            {headerTitle}
+            {APP_NAME}
           </Text>
         </Pressable>
         <View className="w-16 flex-row items-center justify-end">
@@ -203,8 +176,10 @@ export function ChatScreen() {
         {ready && messages.length === 0 && query.trim() === "" && (
           <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
         )}
+        {!ready && messages.length === 0 && query.trim() === "" && (
+          <ChatEmptyPlaceholder />
+        )}
         <UsageStats messages={messages} />
-        {!ready && connection === "down" && <ModelNotLoadedBar />}
         <ChatInput
           sending={sending}
           ready={ready}

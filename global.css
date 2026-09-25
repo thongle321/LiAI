@@ -148,6 +148,30 @@
   border-color: #ef4444;
 }
 
+/* Segmented pickers: .seg + .seg--active | .seg-label + .seg-label--active */
+.seg {
+  flex: 1;
+  align-items: center;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #3f3f46;
+  border-radius: 12px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.seg--active {
+  background-color: rgba(220, 232, 125, 0.2);
+  border-color: rgba(220, 232, 125, 0.5);
+}
+.seg-label {
+  font-family: 'Raleway_400Regular';
+  font-size: 14px;
+  color: #a1a1aa;
+}
+.seg-label--active {
+  color: #dce87d;
+}
+
 /* Status dots: .status-dot + .status-dot--online | --warning | --error | --info | --offline */
 .status-dot {
   width: 10px;

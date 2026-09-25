@@ -50,15 +50,9 @@ function Segmented<T extends string>({
           <Pressable
             key={o}
             onPress={() => onPick(o)}
-            className={`flex-1 py-2 rounded-lg border items-center ${
-              o === value ? "bg-primary/20 border-primary/50" : "border-border"
-            }`}
+            className={o === value ? "seg seg--active" : "seg"}
           >
-            <Text
-              className={`font-sans text-body-sm ${
-                o === value ? "text-primary" : "text-secondary-text"
-              }`}
-            >
+            <Text className={o === value ? "seg-label seg-label--active" : "seg-label"}>
               {o}
             </Text>
           </Pressable>

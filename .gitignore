@@ -27,7 +27,8 @@ expo-env.d.ts
 # Reference / scratch — never part of the app
 scratch/
 prompt_material/
-models/
+/models/
+/pocketpal-ai/
 .agents/
 skills-lock.json
 

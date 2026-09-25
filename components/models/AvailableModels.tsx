@@ -151,6 +151,11 @@ export function AvailableModels({
     guard(file.size, () => onDownload(modelId, file));
   }
 
+  const cards = (items: PresetModel[]) =>
+    items.map((item) => (
+      <PresetModelCard key={item.id} preset={item} onDownload={onGuardedDownload} />
+    ));
+
   return (
     <ModelAccordion
       title="Available to download"
@@ -167,26 +172,12 @@ export function AvailableModels({
               <Text className="mb-1 mt-3 font-sans-semibold text-body-sm text-secondary-text">
                 {tier.label} — {tier.blurb}
               </Text>
-              {tierPresets.map((item) => (
-                <PresetModelCard
-                  key={item.id}
-                  preset={item}
-                  onDownload={onGuardedDownload}
-                />
-              ))}
+              {cards(tierPresets)}
             </View>
           );
         })
       ) : (
-        <View className="mt-3">
-          {visible.map((item) => (
-            <PresetModelCard
-              key={item.id}
-              preset={item}
-              onDownload={onGuardedDownload}
-            />
-          ))}
-        </View>
+        <View className="mt-3">{cards(visible)}</View>
       )}
     </ModelAccordion>
   );

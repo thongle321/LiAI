@@ -1,4 +1,4 @@
-﻿/** One-slot engine manager: local context cached by file, remote per provider.
+/** One-slot engine manager: local context cached by file, remote per provider.
  *
  * Switching models stops the old engine first so generation never answers
  * on the wrong model. Factories inject (tests pass fakes); the app wires

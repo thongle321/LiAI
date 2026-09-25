@@ -1,4 +1,4 @@
-﻿/** Local llama engine: thin wrapper over a llama.rn context (TDD).
+/** Local llama engine: thin wrapper over a llama.rn context (TDD).
  * Run: node --test frontend/tests/local-engine.test.ts */
 
 import { describe, it } from "node:test";

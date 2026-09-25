@@ -1,4 +1,4 @@
-﻿/** On-device inference engine seam (ADR-0008).
+/** On-device inference engine seam (ADR-0008).
  *
  * Pure parts (file resolution, source selection) live here and are
  * node-tested. The native runner (llama.rn context lifecycle) hangs off

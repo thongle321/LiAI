@@ -1,4 +1,4 @@
-﻿/** llama.rn local engine: thin native wrapper (ADR-0008).
+/** llama.rn local engine: thin native wrapper (ADR-0008).
  *
  * The context itself is injected (tests pass fakes); the default loader
  * lazy-imports llama.rn so node --test never touches the native module.

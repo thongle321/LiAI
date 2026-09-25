@@ -1,4 +1,4 @@
-﻿# LiAI Ubiquitous Language
+# LiAI Ubiquitous Language
 
 Glossary only. No implementation details.
 

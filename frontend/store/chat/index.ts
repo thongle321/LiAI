@@ -1,4 +1,4 @@
-﻿/** Chat store: Supabase-owned sessions, on-device turns.
+/** Chat store: Supabase-owned sessions, on-device turns.
  *
  * Composed from focused slices; the public path stays `../store/chat`
  * (that file re-exports this). The factory takes storage plus injectable

@@ -1,4 +1,4 @@
-# LiAI Ubiquitous Language
+﻿# LiAI Ubiquitous Language
 
 Glossary only. No implementation details.
 
@@ -6,11 +6,10 @@ Glossary only. No implementation details.
 
 - **Model** — A GGUF artifact the user downloads, imports, or picks from the
   catalog in the app, loaded on-device into the local inference context
-  (ADR-0008, engine ADR-0011). Spans file management and serving, both
-  client-side.
+  (ADR-0008). Spans file management and serving, both client-side.
 - **Inference engine** — The on-device runner behind a `CompletionEngine`
-  interface: local GGUF via QVAC (streaming + stop), remote BYOK
-  endpoint as fallback behind the same shape (ADR-0011).
+  interface: local GGUF via `llama.rn` (streaming + stop), remote BYOK
+  endpoint as fallback behind the same shape (ADR-0008).
 - **Provider** — A remote API connection (OpenRouter or custom OpenAI-compatible),
   user-owned and unbounded in number. Displayed generically; never special-cased
   by type.

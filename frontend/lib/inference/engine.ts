@@ -1,9 +1,9 @@
-/** On-device inference engine seam (ADR-0011).
+﻿/** On-device inference engine seam (ADR-0008).
  *
  * Pure parts (file resolution, source selection) live here and are
- * node-tested. Native runners (QVAC model lifecycle) hang off
- * the CompletionEngine interface below — this file never imports
- * them, so tests stay native-free.
+ * node-tested. The native runner (llama.rn context lifecycle) hangs off
+ * the CompletionEngine interface below once the dep lands — this file
+ * must not import it until then, so tests stay native-free.
  */
 
 import { buildRemoteModelSpec } from "../models/remote-api.ts";
@@ -55,7 +55,7 @@ export interface ToolDefinition {
 export interface CompletionRequest {
   messages: CompletionMessage[];
   tools?: ToolDefinition[];
-  /** Local file paths for multimodal turns (provider media attachments). */
+  /** Local file paths for multimodal turns (llama media_paths). */
   imagePaths?: string[];
 }
 

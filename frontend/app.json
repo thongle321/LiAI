@@ -1,4 +1,4 @@
-{
+﻿{
   "expo": {
     "name": "LiAI",
     "slug": "liai",
@@ -63,7 +63,7 @@
         }
       ],
       "expo-secure-store",
-      "@qvac/sdk/expo-plugin"
+      "llama.rn"
     ],
     "extra": {
       "router": {},

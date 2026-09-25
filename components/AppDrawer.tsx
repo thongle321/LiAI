@@ -1,0 +1,109 @@
+/** PocketPal-style drawer content, LiAI tokens only.
+ *
+ * Rendered by the navigator-owned <Drawer> (app/(drawer)/_layout.tsx),
+ * which provides the panel slide, scrim, gestures, and back handling —
+ * this file is only the panel chrome and footer nav. The history section
+ * lives in components/chat/SessionList (Supabase-owned sessions).
+ */
+
+import { Pressable, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { router } from "expo-router";
+import Constants from "expo-constants";
+import {
+  CircleHelp,
+  Settings,
+  X,
+  Download,
+  type LucideIcon,
+} from "lucide-react-native";
+
+import { colors } from "../themes/tokens.ts";
+import { APP_NAME } from "../constants/app.ts";
+import { useChatStore } from "../store/chat.ts";
+import { SessionList } from "./chat/SessionList.tsx";
+
+const VERSION = Constants.expoConfig?.version ?? "0.1.0";
+
+export function AppDrawerContent({ onClose }: { onClose: () => void }) {
+  const sessionId = useChatStore((s) => s.sessionId);
+  const sessions = useChatStore((s) => s.sessions);
+  const newConversation = useChatStore((s) => s.newConversation);
+  const switchSession = useChatStore((s) => s.switchSession);
+  const deleteSession = useChatStore((s) => s.deleteSession);
+  const renameSession = useChatStore((s) => s.renameSession);
+  const setPinned = useChatStore((s) => s.setPinned);
+
+  function go(path: "/settings" | "/about" | "/models"): void {
+    onClose();
+    router.push(path);
+  }
+
+  async function openSession(id: string): Promise<boolean> {
+    // Tapping the already-open conversation just closes the drawer.
+    if (id === sessionId) {
+      onClose();
+      return true;
+    }
+    const ok = await switchSession(id);
+    if (ok) onClose();
+    return ok;
+  }
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface1 }}>
+      <View className="flex-1">
+        <View className="flex-row items-center border-b border-border px-4 py-3">
+          <Text className="flex-1 font-sans-semibold text-h3 text-primary">
+            {APP_NAME}
+          </Text>
+          <Pressable onPress={onClose} className="px-1 py-1">
+            <X size={20} color={colors.secondaryText} />
+          </Pressable>
+        </View>
+
+        <View className="flex-1">
+          <SessionList
+            sessions={sessions}
+            sessionId={sessionId}
+            onNew={() => {
+              void newConversation();
+              onClose();
+            }}
+            onOpen={(id) => openSession(id)}
+            onDelete={(id) => void deleteSession(id)}
+            onRename={(id, title) => renameSession(id, title)}
+            onTogglePin={(id, pinned) => setPinned(id, pinned)}
+          />
+        </View>
+
+        <View className="border-t border-border">
+          <DrawerItem Icon={Download} label="Models" onPress={() => go("/models")} />
+          <DrawerItem Icon={Settings} label="Settings" onPress={() => go("/settings")} />
+          <DrawerItem Icon={CircleHelp} label="About" onPress={() => go("/about")} />
+        </View>
+
+        <Text className="border-t border-border px-4 py-3 font-sans text-body-sm text-secondary-text">
+          v{VERSION}
+        </Text>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function DrawerItem({
+  Icon,
+  label,
+  onPress,
+}: {
+  Icon: LucideIcon;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} className="flex-row items-center px-4 py-3">
+      <Icon size={20} color={colors.primary} />
+      <Text className="ml-3 font-sans text-body-md text-primary-text">{label}</Text>
+    </Pressable>
+  );
+}

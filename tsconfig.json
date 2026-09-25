@@ -8,7 +8,8 @@
     "node_modules",
     "babel.config.js",
     "metro.config.js",
-    "tests"
+    "tests",
+    "pocketpal-ai"
   ],
   "include": [
     "**/*.ts",

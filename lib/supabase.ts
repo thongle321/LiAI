@@ -3,10 +3,15 @@
  * Config comes from public Expo config (URL + anon key); RLS — not
  * secrecy — is the protection. Auth persists in AsyncStorage with silent
  * anonymous provision at first run (no login screen; upgradeable later).
- * Lazy imports keep the SDK out of plain-Node tests; node never touches
- * this file (the store seam takes a fake client instead).
+ * supabase-js is imported statically: its dual CJS/ESM exports map
+ * (react-native→index.cjs vs import→index.mjs) made Metro's async-import
+ * path ask for a file the module map never registered ("Requiring unknown
+ * module"). A static import resolves once at build time. The native
+ * async-storage import stays lazy so plain-Node tests never load it;
+ * node never touches this file anyway (the store seam takes a fake).
  */
 
+import { createClient } from "@supabase/supabase-js";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { SupabaseChatClient } from "./chat/supabase-store.ts";
 import { wrapSupabaseClient } from "./chat/supabase-store.ts";
@@ -42,7 +47,6 @@ async function rnStorage(): Promise<AsyncStorageStatic> {
  * in-app and is simply undefined under node --test (→ null client). */
 export async function getSupabase(): Promise<SupabaseInstance | null> {
   if (client !== undefined) return client;
-  const { createClient } = await import("@supabase/supabase-js");
   const url = process.env["EXPO_PUBLIC_SUPABASE_URL"];
   const key = process.env["EXPO_PUBLIC_SUPABASE_ANON_KEY"];
   if (typeof url !== "string" || url === "" || typeof key !== "string" || key === "") {

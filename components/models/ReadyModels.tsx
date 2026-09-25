@@ -9,10 +9,13 @@ export function ReadyModels({
   open,
   onToggle,
   onOpenSettings,
+  hfOnly = false,
 }: {
   open: boolean;
   onToggle: () => void;
   onOpenSettings: (modelId: string) => void;
+  /** PocketPal `hf` filter: HuggingFace-origin downloads only, no remotes. */
+  hfOnly?: boolean;
 }) {
   const {
     models,
@@ -25,13 +28,18 @@ export function ReadyModels({
   } = useModelStore();
 
   const downloaded = models.filter(
-    (m) => m.origin !== "remote_api" && m.downloadStatus === "completed",
+    (m) =>
+      m.origin !== "remote_api" &&
+      m.downloadStatus === "completed" &&
+      (!hfOnly || m.origin === "huggingface"),
   );
+  // Remote providers are not HuggingFace models: hidden by the hf filter.
+  const remotes = hfOnly ? [] : remoteApis;
 
   return (
     <ModelAccordion
       title="Ready to use"
-      count={downloaded.length + remoteApis.length}
+      count={downloaded.length + remotes.length}
       open={open}
       onToggle={onToggle}
     >
@@ -45,7 +53,7 @@ export function ReadyModels({
         />
       ))}
 
-      {remoteApis.map((item) => (
+      {remotes.map((item) => (
         <RemoteProviderCard
           key={item.id}
           item={item}

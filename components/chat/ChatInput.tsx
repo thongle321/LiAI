@@ -27,9 +27,12 @@ import { pickImage, type ImageSource } from "../../lib/chat/attachments.ts";
 
 export function ChatInput({
   sending,
+  ready,
   onSend,
 }: {
   sending: boolean;
+  /** False with no loaded model: send disables (PocketPal parity). */
+  ready: boolean;
   onSend: (text: string, image?: string) => Promise<boolean>;
 }) {
   // Composer text lives in the chat store (per-session drafts survive
@@ -157,7 +160,7 @@ export function ChatInput({
     };
   }, []);
 
-  const canSend = !sending && draft.trim() !== "";
+  const canSend = ready && !sending && draft.trim() !== "";
 
   async function handleAttach(source: ImageSource): Promise<void> {
     setPlusOpen(false);
@@ -235,7 +238,7 @@ export function ChatInput({
         <TextInput
           value={draft}
           onChangeText={setDraft}
-          placeholder="Type a message…"
+          placeholder={ready ? "Type a message…" : "Select a model to start chatting"}
           placeholderTextColor={colors.secondaryText}
           multiline
           editable={!sending}

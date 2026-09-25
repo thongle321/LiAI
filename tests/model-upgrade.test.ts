@@ -27,7 +27,35 @@ describe("upgradeModelSpec", () => {
     assert.equal(out?.params, undefined);
   });
 
-  it("keeps valid new fields", () => {
+  it("resets transient download state: downloading restarts idle, errors drop", () => {
+    const out = upgradeModelSpec({
+      id: "m1",
+      name: "M",
+      downloadStatus: "downloading",
+      downloadProgress: 42,
+      downloadedBytes: 100,
+      totalBytes: 200,
+      error: "Call to function 'FileSystemDownloadTask.start' has been rejected",
+    });
+    assert.equal(out?.downloadStatus, "idle");
+    assert.equal(out?.downloadProgress, 0);
+    assert.equal(out?.downloadedBytes, 0);
+    assert.equal(out?.totalBytes, 200);
+    assert.equal(out?.error, undefined);
+  });
+
+  it("keeps a failed badge but drops its message", () => {
+    const out = upgradeModelSpec({
+      id: "m1",
+      name: "M",
+      downloadStatus: "failed",
+      error: "HTTP 403",
+    });
+    assert.equal(out?.downloadStatus, "failed");
+    assert.equal(out?.error, undefined);
+  });
+
+  it("keeps valid new fields", async () => {
     const out = upgradeModelSpec({
       id: "m1",
       name: "M",

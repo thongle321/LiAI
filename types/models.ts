@@ -41,6 +41,8 @@ export interface ModelSpec {
   downloadProgress: number; // 0-100
   downloadedBytes: number;
   totalBytes: number;
+  /** Live bytes/sec while downloading; transient, never persisted. */
+  speedBytesPerSec?: number;
   error?: string;
   // Catalog metadata (PocketPal parity, minus pal features)
   params?: number; // parameter count, e.g. 135_000_000
@@ -53,7 +55,7 @@ export interface PresetModel {
   name: string;
   author: string;
   description: string;
-  repo: string; // HF repo like "HuggingFaceTB/SmolLM-135M"
+  repo: string; // HF repo like "ggml-org/gemma-3-1b-it-GGUF"
   files: PresetModelFile[];
   type: ModelType;
   recommended?: boolean;
@@ -102,6 +104,8 @@ export interface DownloadJob {
   error?: string;
   resumable: boolean;
   pauseToken?: string;
+  /** Live bytes/sec while downloading; computed per progress callback. */
+  speedBytesPerSec?: number;
 }
 
 export interface RemoteApiProvider {

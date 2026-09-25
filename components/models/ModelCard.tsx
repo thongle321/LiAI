@@ -7,7 +7,7 @@ import { colors } from "../../themes/tokens.ts";
 import { useModelStore } from "../../store/modelStore";
 import type { ModelSpec, RemoteApiProvider } from "../../types/models";
 import { formatParams } from "../../lib/model-providers.ts";
-import { Chip, StatusBadge, StatusDot, formatBytes } from "./ModelBits.tsx";
+import { Chip, ModelTypeIcon, StatusBadge, StatusDot, formatBytes } from "./ModelBits.tsx";
 
 function typeLabel(type: ModelSpec["type"]): string {
   if (type === "llm") return "LLM";
@@ -44,7 +44,10 @@ export function ModelCard({
       <View className="p-4">
         <View className="flex-row items-center justify-between">
           <View className="flex-1">
-            <Text className="font-sans-semibold text-body-md text-primary-text">{title}</Text>
+            <View className="flex-row items-center gap-2">
+              <ModelTypeIcon type={item.type} />
+              <Text className="font-sans-semibold text-body-md text-primary-text">{title}</Text>
+            </View>
             <Text className="font-sans text-body-sm text-secondary-text/70 mt-0.5">
               by {item.author}
             </Text>

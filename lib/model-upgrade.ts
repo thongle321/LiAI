@@ -40,6 +40,11 @@ export function upgradeModelSpec(raw: unknown): ModelSpec | null {
       ? (v.downloadStatus as ModelDownloadStatus)
       : "idle";
 
+  // Transient states never survive a restart: the download task handle is
+  // in-memory, so a persisted "downloading" could never resume, and a
+  // persisted error would paint the row forever. Retry starts clean.
+  const live = status === "downloading" ? "idle" : status;
+
   const files = Array.isArray(v.files)
     ? v.files.filter(
         (f): f is ModelSpec["files"][number] => {
@@ -79,11 +84,11 @@ export function upgradeModelSpec(raw: unknown): ModelSpec | null {
     apiKey: typeof v.apiKey === "string" ? v.apiKey : undefined,
     modelName: typeof v.modelName === "string" ? v.modelName : undefined,
     localPath: typeof v.localPath === "string" ? v.localPath : undefined,
-    downloadStatus: status,
-    downloadProgress: asNumber(v.downloadProgress, 0),
-    downloadedBytes: asNumber(v.downloadedBytes, 0),
+    downloadStatus: live,
+    downloadProgress: live === "idle" ? 0 : asNumber(v.downloadProgress, 0),
+    downloadedBytes: live === "idle" ? 0 : asNumber(v.downloadedBytes, 0),
     totalBytes: asNumber(v.totalBytes, 0),
-    error: typeof v.error === "string" ? v.error : undefined,
+    error: undefined,
     params: typeof v.params === "number" && Number.isFinite(v.params) ? v.params : undefined,
     capabilities: Array.isArray(v.capabilities)
       ? v.capabilities.filter((c): c is string => typeof c === "string")

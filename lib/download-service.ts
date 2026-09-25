@@ -1,7 +1,20 @@
-/** Resumable download service using expo-file-system DownloadTask. */
+/** Resumable download service (PocketPal semantics, Expo-idiomatic).
+ *
+ * PocketPal downloads GGUFs with progress + pause/resume through its own
+ * native module (RNFS on iOS, a DownloadModule TurboModule on Android).
+ * The Expo equivalent is the legacy DownloadResumable path — same shape
+ * (headers, progress callback, pause/resume/cancel), one shared native
+ * FileSystem module, no custom native code.
+ */
 
-import { File, Directory, Paths, DownloadTask, DownloadProgress } from "expo-file-system";
-import { makeDirectoryAsync, deleteAsync, documentDirectory } from "expo-file-system/legacy";
+import {
+  createDownloadResumable,
+  makeDirectoryAsync,
+  deleteAsync,
+  documentDirectory,
+  type DownloadResumable,
+  type DownloadProgressData,
+} from "expo-file-system/legacy";
 import type { DownloadJob } from "../types/models.ts";
 
 export interface DownloadProgressCallback {
@@ -14,20 +27,31 @@ export interface DownloadCompleteCallback {
 
 function getModelsDirectoryPath(): string {
   // Use legacy documentDirectory for string path operations
-  return (documentDirectory ?? "") + "models/";
-}
-
-function getModelsDirectory(): Directory {
-  return new Directory(Paths.document, "models");
+  return `${documentDirectory ?? ""}models/`;
 }
 
 class ResumableDownloadService {
   private activeDownloads: Map<string, {
     job: DownloadJob;
-    task: DownloadTask | null;
+    task: DownloadResumable | null;
     progressCallback: DownloadProgressCallback;
     completeCallback: DownloadCompleteCallback;
   }> = new Map();
+
+  /** Last progress mark per job: speed is bytes/dt, refreshed ≥500ms apart. */
+  private speedMarks = new Map<string, { at: number; bytes: number; speed: number }>();
+
+  private trackSpeed(jobId: string, totalBytes: number): number {
+    const now = Date.now();
+    const prev = this.speedMarks.get(jobId);
+    if (prev && now - prev.at >= 500 && now > prev.at) {
+      const speed = Math.max(0, (totalBytes - prev.bytes) / ((now - prev.at) / 1000));
+      this.speedMarks.set(jobId, { at: now, bytes: totalBytes, speed });
+      return speed;
+    }
+    if (!prev) this.speedMarks.set(jobId, { at: now, bytes: totalBytes, speed: 0 });
+    return prev?.speed ?? 0;
+  }
 
   private callbacks: {
     onProgress?: DownloadProgressCallback;
@@ -44,11 +68,19 @@ class ResumableDownloadService {
     this.callbacks.onComplete = callback;
   }
 
-  /** Start a new download */
+  /** Start a new download.
+   *
+   * resumeData continues a partial file (`Range: bytes=N-`, native
+   * append) after the app died mid-flight — the Expo equivalent of
+   * PocketPal's worker resume. When the server ignores Range (200
+   * instead of 206) the partial is dropped and fetched cleanly, once:
+   * appending a full body onto a partial would corrupt the GGUF.
+   */
   async startDownload(
     job: DownloadJob,
     progressCallback?: DownloadProgressCallback,
     completeCallback?: DownloadCompleteCallback,
+    resumeData?: string,
   ): Promise<void> {
     const onProgress = progressCallback || (() => {});
     const onComplete = completeCallback || (() => {});
@@ -58,6 +90,7 @@ class ResumableDownloadService {
         status: "failed",
         error: message,
       };
+      this.speedMarks.delete(job.id);
       this.activeDownloads.set(job.id, {
         job: failedJob,
         task: this.activeDownloads.get(job.id)?.task ?? null,
@@ -71,61 +104,91 @@ class ResumableDownloadService {
       throw new Error(message);
     };
 
-    let file: File;
-    let task: DownloadTask;
+    // Nullable: assigned inside startTask; closures run after it.
+    let task: DownloadResumable | null = null;
     try {
-      const modelsDir = getModelsDirectory();
-      file = new File(modelsDir, job.fileName);
+      const destPath = getModelsDirectoryPath() + job.fileName;
 
       // Ensure directory exists (legacy API expects string)
       await makeDirectoryAsync(getModelsDirectoryPath(), { intermediates: true });
 
-      task = new DownloadTask(job.downloadUrl, file, {
-        headers: job.headers,
-        onProgress: (progress: DownloadProgress) => {
-          const totalBytes = progress.bytesWritten;
-          const progressPercent =
-            job.totalBytes > 0 ? Math.round((totalBytes / job.totalBytes) * 100) : 0;
-          const updatedJob: DownloadJob = {
-            ...job,
-            status: "downloading",
-            progress: progressPercent,
-            downloadedBytes: totalBytes,
-            totalBytes: job.totalBytes || progress.totalBytes,
-          };
-          this.activeDownloads.set(job.id, {
-            job: updatedJob,
-            task,
-            progressCallback: onProgress,
-            completeCallback: onComplete,
-          });
-          onProgress(updatedJob);
-          this.callbacks.onProgress?.(updatedJob);
-        },
-      });
+      const handleProgress = (progress: DownloadProgressData) => {
+        const totalBytes = progress.totalBytesWritten;
+        const expected = progress.totalBytesExpectedToWrite;
+        const progressPercent =
+          job.totalBytes > 0 ? Math.round((totalBytes / job.totalBytes) * 100) : 0;
+        const updatedJob: DownloadJob = {
+          ...job,
+          status: "downloading",
+          progress: progressPercent,
+          downloadedBytes: totalBytes,
+          totalBytes: job.totalBytes || expected,
+          speedBytesPerSec: this.trackSpeed(job.id, totalBytes),
+        };
+        this.activeDownloads.set(job.id, {
+          job: updatedJob,
+          task: this.activeDownloads.get(job.id)?.task ?? null,
+          progressCallback: onProgress,
+          completeCallback: onComplete,
+        });
+        onProgress(updatedJob);
+        this.callbacks.onProgress?.(updatedJob);
+      };
 
-      this.activeDownloads.set(job.id, {
-        job: { ...job, status: "downloading" },
-        task,
-        progressCallback: onProgress,
-        completeCallback: onComplete,
-      });
+      const startTask = (resume?: string): DownloadResumable => {
+        const next = createDownloadResumable(
+          job.downloadUrl,
+          destPath,
+          { headers: job.headers },
+          handleProgress,
+          resume,
+        );
+        task = next;
+        this.activeDownloads.set(job.id, {
+          job: { ...job, status: "downloading" },
+          task: next,
+          progressCallback: onProgress,
+          completeCallback: onComplete,
+        });
+        return next;
+      };
 
-      const result = await task.downloadAsync();
-
-      if (!result) {
+      const reportPaused = (): void => {
         // Paused before completion: keep the task so resume works, and
         // report paused instead of sticking at downloading forever.
         const pausedJob: DownloadJob = { ...job, status: "paused" };
         this.activeDownloads.set(job.id, {
           job: pausedJob,
-          task,
+          task: this.activeDownloads.get(job.id)?.task ?? null,
           progressCallback: onProgress,
           completeCallback: onComplete,
         });
         onProgress(pausedJob);
         this.callbacks.onProgress?.(pausedJob);
+      };
+
+      let result = await startTask(resumeData).downloadAsync();
+
+      if (!result) {
+        reportPaused();
         return;
+      }
+
+      if (resumeData && result.status === 200) {
+        try {
+          await deleteAsync(destPath, { idempotent: true });
+        } catch {
+          // The fresh fetch below reports the truth.
+        }
+        result = await startTask().downloadAsync();
+        if (!result) {
+          reportPaused();
+          return;
+        }
+      }
+
+      if (result.status !== 200 && result.status !== 206) {
+        fail(`HTTP ${result.status}`);
       }
 
       const completedJob: DownloadJob = {
@@ -135,6 +198,7 @@ class ResumableDownloadService {
         downloadedBytes: job.totalBytes,
         resumable: true,
       };
+      this.speedMarks.delete(job.id);
       this.activeDownloads.set(job.id, {
         job: completedJob,
         task,
@@ -157,7 +221,7 @@ class ResumableDownloadService {
       return null;
     }
 
-    entry.task.pause();
+    await entry.task.pauseAsync();
 
     const pausedJob: DownloadJob = {
       ...entry.job,
@@ -173,11 +237,27 @@ class ResumableDownloadService {
     return pausedJob;
   }
 
-  /** Resume a paused download */
+  /** Resume a paused download.
+   *
+   * Idempotent on terminal/live states so stale UI taps can't throw:
+   * completed re-fires success, downloading is a no-op. Only a missing
+   * task or a dead (failed/cancelled) entry rejects — those need a
+   * fresh startDownload, which the UI's Retry path already performs.
+   */
   async resumeDownload(jobId: string): Promise<void> {
     const entry = this.activeDownloads.get(jobId);
     if (!entry || !entry.task) {
       throw new Error("Download not found or not resumable");
+    }
+
+    if (entry.job.status === "completed") {
+      this.callbacks.onProgress?.(entry.job);
+      this.callbacks.onComplete?.(entry.job, true);
+      return;
+    }
+
+    if (entry.job.status === "downloading") {
+      return;
     }
 
     if (entry.job.status !== "paused") {
@@ -200,7 +280,18 @@ class ResumableDownloadService {
     try {
       const result = await entry.task.resumeAsync();
 
-      if (result) {
+      if (!result) {
+        const pausedJob: DownloadJob = { ...entry.job, status: "paused" };
+        this.activeDownloads.set(jobId, { ...entry, job: pausedJob });
+        this.callbacks.onProgress?.(pausedJob);
+        return;
+      }
+
+      if (result.status !== 200 && result.status !== 206) {
+        throw new Error(`HTTP ${result.status}`);
+      }
+
+      {
         const completedJob: DownloadJob = {
           ...entry.job,
           status: "completed",
@@ -243,7 +334,7 @@ class ResumableDownloadService {
     }
 
     if (entry.task) {
-      entry.task.cancel();
+      await entry.task.cancelAsync();
     }
 
     // Delete partial file (legacy API expects string)
@@ -260,6 +351,7 @@ class ResumableDownloadService {
       status: "cancelled",
     };
 
+    this.speedMarks.delete(jobId);
     this.activeDownloads.delete(jobId);
     this.callbacks.onProgress?.(cancelledJob);
     this.callbacks.onComplete?.(cancelledJob, false);
@@ -283,6 +375,7 @@ class ResumableDownloadService {
 
   /** Delete a completed/failed/cancelled download from tracking */
   removeJob(jobId: string): void {
+    this.speedMarks.delete(jobId);
     this.activeDownloads.delete(jobId);
   }
 }

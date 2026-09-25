@@ -53,6 +53,9 @@ export const createPersistenceSlice: StateCreator<
             }
           }
           set({ models });
+          // Killed downloads leave partial files: mark them paused so the
+          // manual Resume button continues from kept bytes (no auto-start).
+          await get().reconcileInterrupted();
         } catch {
           // Corrupt payload: start empty rather than crash.
           set({ models: [] });

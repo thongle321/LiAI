@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { LucideIcon } from "lucide-react-native";
 import { Cloud, FolderPlus, Plus, Search, X } from "lucide-react-native";
 
@@ -38,6 +39,7 @@ export function FABGroup({
   onAddRemoteModel: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const insets = useSafeAreaInsets();
 
   function run(action: () => void): void {
     setOpen(false);
@@ -45,7 +47,16 @@ export function FABGroup({
   }
 
   return (
-    <View className="absolute right-4 bottom-4 items-end">
+    <View
+      className="items-end"
+      // SAFETY: runtime-anchored position (safe-area bottom + exact right
+      // gutter) — className offsets did not hold right on-device.
+      style={{
+        position: "absolute",
+        right: 16,
+        bottom: insets.bottom + 16,
+      }}
+    >
       {open && (
         <>
           <FabAction Icon={Search} label="Add from Hugging Face" onPress={() => run(onAddHFModel)} />

@@ -9,15 +9,19 @@ import type { StateCreator } from "zustand";
 import * as LegacyFileSystem from "expo-file-system/legacy";
 
 import type { DownloadsSlice, ModelStore } from "./types";
-import type { DownloadJob, PresetModel, PresetModelFile } from "../../types/models";
+import type { DownloadJob, PresetModel } from "../../types/models";
 import type { HFModelSearchResult } from "../../types/models";
 import {
   buildHfModelSpec,
   buildPresetModelSpec,
+  HF_USER_AGENT,
   hfRefFromId,
   hfRefFromSearch,
+  isHuggingFaceUrl,
 } from "../../lib/models/huggingface";
 import { downloadService } from "../../lib/download-service";
+import { latestJobForModel } from "../../lib/models/download-jobs.ts";
+import { resumeDataForPartial } from "../../lib/models/resume-state.ts";
 import { asyncStorage, MEMORY_GUARD_KEY, generateId } from "./storage";
 
 function hfRefFor(modelId: string, results: HFModelSearchResult[]) {
@@ -56,34 +60,89 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       "path" in file
         ? buildHfModelSpec(hfRefFor(modelId, get().searchResults), file)
         : buildPresetModelSpec(presetFor(modelId, get().presets), file);
+    await get().startSpecDownload(spec, file, token);
+  },
+
+  startSpecDownload: async (spec, file, token) => {
     const specId = spec.id;
+
+    // One live job per model: double-taps and retries must not stack tasks
+    // on the same file (stale entries made resume grab dead jobs and throw).
+    const live = latestJobForModel(downloadService.getAllJobs(), specId);
+    if (live && (live.status === "downloading" || live.status === "paused")) return;
+    for (const stale of downloadService
+      .getAllJobs()
+      .filter((j) => j.modelId === specId)) {
+      downloadService.removeJob(stale.id);
+    }
 
     // Create the spec once; a re-download keeps its existing row.
     if (!get().getModel(specId)) {
       get().addModel(spec);
     }
 
+    // A partial file means the app died mid-flight: continue from its
+    // bytes (Range resume) instead of restarting from zero.
+    let partialBytes = 0;
+    try {
+      const info = await LegacyFileSystem.getInfoAsync(
+        `${LegacyFileSystem.documentDirectory}models/${file.name}`,
+      );
+      if (info.exists && "size" in info && typeof info.size === "number") {
+        partialBytes = info.size;
+      }
+    } catch {
+      // Unreadable destination: the transfer reports the truth.
+    }
+    const resume = resumeDataForPartial(partialBytes, file.size);
+    const resumeProgress =
+      resume !== null && file.size > 0
+        ? Math.round((partialBytes / file.size) * 100)
+        : 0;
+    const auth = token ?? get().hfToken ?? undefined;
+
     const job: DownloadJob = {
       id: `download-${generateId()}`,
       modelId: specId,
       fileName: file.name,
       downloadUrl: file.downloadUrl,
-      // Gated repos need the token at fetch time too, not just for browse.
-      ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+      // HF's CDN refuses anonymous clients: always identify (PocketPal
+      // parity); the Bearer token rides along only to huggingface.co.
+      headers: {
+        "User-Agent": HF_USER_AGENT,
+        ...(auth && isHuggingFaceUrl(file.downloadUrl)
+          ? { Authorization: `Bearer ${auth}` }
+          : {}),
+      },
       destinationPath: `${LegacyFileSystem.documentDirectory}models/${file.name}`,
       status: "downloading",
-      progress: 0,
-      downloadedBytes: 0,
+      progress: resumeProgress,
+      downloadedBytes: partialBytes,
       totalBytes: file.size,
       resumable: true,
     };
 
     get().updateModel(specId, {
       downloadStatus: "downloading",
-      downloadProgress: 0,
+      downloadProgress: resumeProgress,
       totalBytes: file.size,
-      downloadedBytes: 0,
+      downloadedBytes: partialBytes,
+      error: undefined,
     });
+
+    // PocketPal parity: refuse before bytes move when the disk can't fit it.
+    try {
+      const free = await LegacyFileSystem.getFreeDiskStorageAsync();
+      if (Number.isFinite(free) && free < file.size) {
+        get().updateModel(specId, {
+          downloadStatus: "failed",
+          error: "Not enough storage space to download the model",
+        });
+        return;
+      }
+    } catch {
+      // Unknown free space: attempt anyway, the transfer reports the truth.
+    }
 
     // The service's callbacks are global (last registered wins); keying each
     // update off the job's own modelId makes re-registration harmless.
@@ -93,6 +152,7 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
         downloadProgress: downloadJob.progress,
         downloadedBytes: downloadJob.downloadedBytes,
         totalBytes: downloadJob.totalBytes,
+        speedBytesPerSec: downloadJob.speedBytesPerSec,
         error: downloadJob.error,
       });
       get().syncDownloadStatus();
@@ -106,6 +166,11 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
           downloadedBytes: downloadJob.totalBytes,
           localPath: downloadJob.destinationPath,
         });
+        // First download activates itself: no manual step, and a working
+        // chat is never yanked away (only-when-none scope).
+        if (!get().activeModelId) {
+          get().setActiveModel(downloadJob.modelId, "local");
+        }
         // ponytail: learn the ceiling from what actually succeeded.
         if (downloadJob.totalBytes > get().largestSuccessfulBytes) {
           set({ largestSuccessfulBytes: downloadJob.totalBytes });
@@ -121,7 +186,7 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
     });
 
     try {
-      await downloadService.startDownload(job);
+      await downloadService.startDownload(job, undefined, undefined, resume ?? undefined);
     } catch (error) {
       get().updateModel(specId, {
         downloadStatus: "failed",
@@ -137,6 +202,76 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
 
   resumeDownload: async (jobId) => {
     await downloadService.resumeDownload(jobId);
+    get().syncDownloadStatus();
+  },
+
+  pauseModelDownload: async (specId) => {
+    try {
+      const job = latestJobForModel(downloadService.getAllJobs(), specId);
+      if (!job) return;
+      await get().pauseDownload(job.id);
+    } catch {
+      // Best-effort: the row keeps its last state, Retry restarts cleanly.
+    }
+  },
+
+  resumeModelDownload: async (specId) => {
+    try {
+      const job = latestJobForModel(downloadService.getAllJobs(), specId);
+      if (job) {
+        await get().resumeDownload(job.id);
+        return;
+      }
+    } catch {
+      // Dead job handle: fall through to the partial-file resume below.
+    }
+    await get().resumeInterruptedDownload(specId);
+  },
+
+  resumeInterruptedDownload: async (specId) => {
+    try {
+      const spec = get().getModel(specId);
+      const file = spec?.files[0];
+      if (!spec || !file) return;
+      await get().startSpecDownload(spec, file, get().hfToken ?? undefined);
+    } catch {
+      // Best-effort: the row keeps its state, tapping retries.
+    }
+  },
+
+  reconcileInterrupted: async () => {
+    const dir = `${LegacyFileSystem.documentDirectory}models/`;
+    for (const spec of get().models) {
+      if (spec.downloadStatus === "completed" || spec.origin === "remote_api") continue;
+      const file = spec.files[0];
+      if (!file || !(file.size > 0)) continue;
+      try {
+        const info = await LegacyFileSystem.getInfoAsync(dir + file.name);
+        if (!info.exists || !("size" in info) || typeof info.size !== "number") continue;
+        if (info.size >= file.size) {
+          // Whole file on disk but never marked: killed at the finish line.
+          get().updateModel(spec.id, {
+            downloadStatus: "completed",
+            downloadProgress: 100,
+            downloadedBytes: file.size,
+            totalBytes: file.size,
+            localPath: dir + file.name,
+            error: undefined,
+          });
+        } else if (resumeDataForPartial(info.size, file.size) !== null) {
+          // Partial file: manual Resume continues it, nothing auto-starts.
+          get().updateModel(spec.id, {
+            downloadStatus: "paused",
+            downloadProgress: Math.round((info.size / file.size) * 100),
+            downloadedBytes: info.size,
+            totalBytes: file.size,
+            error: undefined,
+          });
+        }
+      } catch {
+        // Unreadable file: leave the row as loaded.
+      }
+    }
     get().syncDownloadStatus();
   },
 

@@ -47,9 +47,22 @@ export interface DownloadsSlice {
     file: HFModelFile | PresetModelFile,
     token?: string,
   ) => Promise<void>;
+  /** Start from an already-built spec (interrupted-resume re-entry). */
+  startSpecDownload: (
+    spec: ModelSpec,
+    file: { name: string; size: number; downloadUrl: string },
+    token?: string,
+  ) => Promise<void>;
+  /** Resume a killed download from its partial file (manual Resume). */
+  resumeInterruptedDownload: (specId: string) => Promise<void>;
+  /** Mark partial on-disk files paused after launch so Resume continues them. */
+  reconcileInterrupted: () => Promise<void>;
   pauseDownload: (jobId: string) => Promise<void>;
   resumeDownload: (jobId: string) => Promise<void>;
   cancelDownload: (jobId: string) => Promise<void>;
+  /** Pause/resume by stored spec id (UI rows don't track job ids). */
+  pauseModelDownload: (specId: string) => Promise<void>;
+  resumeModelDownload: (specId: string) => Promise<void>;
   syncDownloadStatus: () => void;
 }
 

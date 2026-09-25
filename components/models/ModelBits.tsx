@@ -1,14 +1,10 @@
 /** Shared models bits: formats, chips, status, progress, download button. */
 
 import { Pressable, Text, View } from "react-native";
-import { Download, Pause, Play } from "lucide-react-native";
+import { Download, Eye, MessageSquare, Pause, Play } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
-import type {
-  HFModelFile,
-  ModelDownloadStatus,
-  PresetModelFile,
-} from "../../types/models";
+import type { ModelDownloadStatus, ModelType } from "../../types/models";
 
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -16,10 +12,6 @@ export function formatBytes(bytes: number): string {
   const sizes = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-}
-
-export function formatProgress(downloaded: number, total: number): string {
-  return `${formatBytes(downloaded)} / ${formatBytes(total)}`;
 }
 
 /** Compact stat for HF rows (e.g. 12.4k downloads). */
@@ -63,6 +55,19 @@ export function StatusDot({ color }: { color: string }) {
   return <View className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />;
 }
 
+/** Leading model-type icon (PocketPal ModelCard.getModelTypeIcon parity):
+ * eye for vision models, chat bubble for text. 16px before the name. */
+export function ModelTypeIcon({ type }: { type: ModelType }) {
+  const vision = type === "vision";
+  const Icon = vision ? Eye : MessageSquare;
+  return (
+    <Icon
+      size={16}
+      color={vision ? colors.primary : colors.secondaryText}
+    />
+  );
+}
+
 export function StatusBadge({ status }: { status: ModelDownloadStatus }) {
   return (
     <View className="flex-row items-center gap-1.5">
@@ -74,50 +79,47 @@ export function StatusBadge({ status }: { status: ModelDownloadStatus }) {
   );
 }
 
-/** Failed-row error line: the stored message, never just "Failed". */
-export function DownloadError({ message }: { message: string }) {
-  return (
-    <Text className="font-sans text-body-sm text-red-500 mt-1" numberOfLines={3}>
-      {message}
-    </Text>
-  );
-}
-
 export function DownloadProgressBar({
   progress,
-  downloaded,
-  total,
+  speed,
 }: {
   progress: number;
-  downloaded: number;
-  total: number;
+  /** Live bytes/sec; shown PocketPal-style when known. */
+  speed?: number;
 }) {
+  // PocketPal ModelCard geometry: 8pt bar, 6/12 vertical margins,
+  // right-aligned 12pt status line (percent + live speed).
   return (
-    <View className="mt-2">
-      <View className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
+    <View className="mt-1.5 mb-3 mx-0.5">
+      <View className="h-2 bg-surface-2 rounded-full overflow-hidden">
         <View
           className="h-full bg-primary rounded-full"
           style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
         />
       </View>
-      <Text className="font-sans text-body-sm text-secondary-text/70 mt-1">
-        {formatProgress(downloaded, total)} ({Math.round(progress)}%)
+      <Text className="font-sans text-xs text-secondary-text mt-1 text-right">
+        {speed !== undefined && speed > 0
+          ? `${Math.round(progress)}% · ${formatBytes(speed)}/s`
+          : `${Math.round(progress)}%`}
       </Text>
     </View>
   );
 }
 
 export function DownloadButton({
-  file,
   status,
   progress,
   onPress,
+  onPause,
+  onResume,
   disabled = false,
 }: {
-  file: PresetModelFile | HFModelFile;
   status: string;
   progress: number;
   onPress: () => void;
+  /** Pause/resume taps; fall back to onPress when absent. */
+  onPause?: () => void;
+  onResume?: () => void;
   disabled?: boolean;
 }) {
   const isDownloading = status === "downloading";
@@ -138,7 +140,7 @@ export function DownloadButton({
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={isDownloading ? onPause ?? onPress : isPaused ? onResume ?? onPress : onPress}
       disabled={disabled}
       className="flex-row items-center px-3 py-2 bg-surface-2 border border-border rounded-lg"
     >

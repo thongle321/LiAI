@@ -12,16 +12,32 @@ export const UI_STATE_KEY = "liai_models_ui_v1";
 
 export type ModelsUiSection = "ready" | "available";
 
+/** PocketPal `filters` mapped onto our two groups:
+ * - downloadedOnly (PocketPal `downloaded`): hide Available, show only Ready.
+ * - hfOnly (PocketPal `hf`): Ready shows HuggingFace-origin downloads only,
+ *   remote providers hidden. Available presets are all HF-repo-backed, so
+ *   that section is unaffected.
+ * - grouped (PocketPal `grouped`): Available presets render under device-tier
+ *   headers; off renders one flat list. Our Ready/Available split itself is
+ *   fixed (PocketPal groups by type instead when `grouped` is set — no
+ *   equivalent here; see ModelsScreen).
+ */
+export type ModelsUiFilter = "downloadedOnly" | "hfOnly" | "grouped";
+
 export interface ModelsUiState {
   readyVisible: boolean;
   availableVisible: boolean;
   readyOpen: boolean;
   availableOpen: boolean;
+  downloadedOnly: boolean;
+  hfOnly: boolean;
+  grouped: boolean;
   loaded: boolean;
   load: () => Promise<void>;
   setVisible: (section: ModelsUiSection, visible: boolean) => void;
   setOpen: (section: ModelsUiSection, open: boolean) => void;
   setAllOpen: (open: boolean) => void;
+  setFilter: (filter: ModelsUiFilter, value: boolean) => void;
 }
 
 const DEFAULTS = {
@@ -29,6 +45,9 @@ const DEFAULTS = {
   availableVisible: true,
   readyOpen: true,
   availableOpen: true,
+  downloadedOnly: false,
+  hfOnly: false,
+  grouped: true,
 };
 
 function parseUiState(raw: string | null): typeof DEFAULTS {
@@ -37,12 +56,17 @@ function parseUiState(raw: string | null): typeof DEFAULTS {
     const v: unknown = JSON.parse(raw);
     if (!v || typeof v !== "object" || Array.isArray(v)) return { ...DEFAULTS };
     const r = v as Record<string, unknown>;
-    const flag = (k: string) => (typeof r[k] === "boolean" ? (r[k] as boolean) : true);
+    const flag = (k: string, dflt: boolean) =>
+      typeof r[k] === "boolean" ? (r[k] as boolean) : dflt;
     return {
-      readyVisible: flag("readyVisible"),
-      availableVisible: flag("availableVisible"),
-      readyOpen: flag("readyOpen"),
-      availableOpen: flag("availableOpen"),
+      readyVisible: flag("readyVisible", true),
+      availableVisible: flag("availableVisible", true),
+      readyOpen: flag("readyOpen", true),
+      availableOpen: flag("availableOpen", true),
+      // Old payloads predate filters: fall back to defaults (compat).
+      downloadedOnly: flag("downloadedOnly", false),
+      hfOnly: flag("hfOnly", false),
+      grouped: flag("grouped", true),
     };
   } catch {
     return { ...DEFAULTS };
@@ -52,11 +76,27 @@ function parseUiState(raw: string | null): typeof DEFAULTS {
 export function createModelsUiStore(storage: KeyValueStorage) {
   return create<ModelsUiState>()((set, get) => {
     async function persist(): Promise<void> {
-      const { readyVisible, availableVisible, readyOpen, availableOpen } = get();
+      const {
+        readyVisible,
+        availableVisible,
+        readyOpen,
+        availableOpen,
+        downloadedOnly,
+        hfOnly,
+        grouped,
+      } = get();
       try {
         await storage.setItem(
           UI_STATE_KEY,
-          JSON.stringify({ readyVisible, availableVisible, readyOpen, availableOpen }),
+          JSON.stringify({
+            readyVisible,
+            availableVisible,
+            readyOpen,
+            availableOpen,
+            downloadedOnly,
+            hfOnly,
+            grouped,
+          }),
         );
       } catch {
         // Ignore persistence failures; UI state is non-critical.
@@ -82,12 +122,18 @@ export function createModelsUiStore(storage: KeyValueStorage) {
         set({ readyOpen: open, availableOpen: open });
         void persist();
       },
+      setFilter: (filter, value) => {
+        set({ [filter]: value });
+        void persist();
+      },
     };
   });
 }
 
 async function rnStorage(): Promise<AsyncStorageStatic> {
   const mod = await import("@react-native-async-storage/async-storage");
+  // SAFETY: the AsyncStorage module's default export is the static singleton;
+  // the fallback covers bundlers that expose it as the namespace itself.
   return (mod.default ?? mod) as unknown as AsyncStorageStatic;
 }
 

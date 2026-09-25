@@ -13,12 +13,14 @@ import tiersJson from "../../assets/device-tiers.json";
 const TIERS = parseTiers(tiersJson);
 import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
 import { useModelStore } from "../../store/modelStore";
+import { presetSpecId } from "../../lib/models/huggingface.ts";
+import { isPresetDownloaded, presetCardState, presetFileState } from "../../lib/models/file-state.ts";
 import type { PresetModel, PresetModelFile } from "../../types/models";
 import { ModelAccordion } from "./ModelAccordion.tsx";
 import {
   DownloadButton,
-  DownloadError,
   DownloadProgressBar,
+  ModelTypeIcon,
   StatusBadge,
   formatBytes,
   isProgressVisible,
@@ -32,25 +34,15 @@ export function PresetModelCard({
   onDownload: (modelId: string, file: PresetModelFile) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const { models } = useModelStore();
+  const models = useModelStore((s) => s.models);
+  const pauseModelDownload = useModelStore((s) => s.pauseModelDownload);
+  const resumeModelDownload = useModelStore((s) => s.resumeModelDownload);
 
-  const existingModel = models.find(
-    (m) => m.origin === "preset" && m.id.startsWith(`preset-${preset.id}-`),
-  );
-
-  const getStatus = (_file: PresetModelFile) => {
-    if (!existingModel) return "idle" as const;
-    return existingModel.downloadStatus;
-  };
-
-  const getProgress = (_file: PresetModelFile) => {
-    if (!existingModel) return 0;
-    return existingModel.downloadProgress;
-  };
-
-  const cardStatus = existingModel ? existingModel.downloadStatus : "idle";
-  const showCardProgress =
-    existingModel !== undefined && isProgressVisible(cardStatus);
+  // Per-file states by exact spec id (one shared status smeared every row).
+  const fileState = (file: PresetModelFile) => presetFileState(models, preset.id, file);
+  const card = presetCardState(models, preset);
+  const cardStatus = card.status;
+  const showCardProgress = isProgressVisible(cardStatus);
   const params = preset.params ?? 0;
 
   return (
@@ -59,6 +51,7 @@ export function PresetModelCard({
         <View className="flex-row items-center justify-between">
           <View className="flex-1">
             <View className="flex-row items-center gap-2 mb-1">
+              <ModelTypeIcon type={preset.type} />
               <Text className="font-sans-semibold text-h4 text-primary-text">{preset.name}</Text>
               {preset.recommended && (
                 <View className="px-1.5 py-0.5 bg-primary/20 border border-primary/50 rounded">
@@ -90,14 +83,7 @@ export function PresetModelCard({
         </View>
 
         {showCardProgress && (
-          <DownloadProgressBar
-            progress={existingModel.downloadProgress}
-            downloaded={existingModel.downloadedBytes}
-            total={existingModel.totalBytes}
-          />
-        )}
-        {cardStatus === "failed" && existingModel?.error && (
-          <DownloadError message={existingModel.error} />
+          <DownloadProgressBar progress={card.progress} speed={card.speed} />
         )}
       </Pressable>
 
@@ -108,7 +94,7 @@ export function PresetModelCard({
             <Text className="font-sans-semibold text-body-sm text-secondary-text mb-2">Available Quantizations</Text>
           </View>
           {preset.files.map((item) => {
-            const st = getStatus(item);
+            const st = fileState(item);
             return (
               <View key={item.name} className="py-3 border-b border-border/50">
                 <View className="flex-row items-center justify-between">
@@ -122,22 +108,16 @@ export function PresetModelCard({
                     </View>
                   </View>
                   <DownloadButton
-                    file={item}
-                    status={st}
-                    progress={getProgress(item)}
+                    status={st.status}
+                    progress={st.progress}
                     onPress={() => onDownload(preset.id, item)}
-                    disabled={st === "downloading"}
+                    onPause={() => void pauseModelDownload(presetSpecId(preset.id, item.name))}
+                    onResume={() => void resumeModelDownload(presetSpecId(preset.id, item.name))}
+                    disabled={st.status === "completed"}
                   />
                 </View>
-                {st === "failed" && existingModel?.error && (
-                  <DownloadError message={existingModel.error} />
-                )}
-                {isProgressVisible(st) && existingModel && (
-                  <DownloadProgressBar
-                    progress={existingModel.downloadProgress}
-                    downloaded={existingModel.downloadedBytes}
-                    total={existingModel.totalBytes}
-                  />
+                {isProgressVisible(st.status) && (
+                  <DownloadProgressBar progress={st.progress} speed={st.speed} />
                 )}
               </View>
             );
@@ -152,42 +132,62 @@ export function AvailableModels({
   open,
   onToggle,
   onDownload,
+  grouped = true,
 }: {
   open: boolean;
   onToggle: () => void;
   onDownload: (modelId: string, file: PresetModelFile) => void;
+  /** PocketPal `grouped` filter: tier headers on, or one flat preset list. */
+  grouped?: boolean;
 }) {
-  const { presets } = useModelStore();
+  const presets = useModelStore((s) => s.presets);
+  const models = useModelStore((s) => s.models);
+  // Finished presets live in Ready: hide them here (PocketPal parity).
+  const visible = presets.filter((p) => !isPresetDownloaded(models, p));
   const guard = useLoadGuard();
   const tiers = TIERS;
+
+  function onGuardedDownload(modelId: string, file: PresetModelFile): void {
+    guard(file.size, () => onDownload(modelId, file));
+  }
 
   return (
     <ModelAccordion
       title="Available to download"
-      count={presets.length}
+      count={visible.length}
       open={open}
       onToggle={onToggle}
     >
-      {tiers.map((tier) => {
-        const tierPresets = presets.filter((p) => tier.presetIds.includes(p.id));
-        if (tierPresets.length === 0) return null;
-        return (
-          <View key={tier.id}>
-            <Text className="mb-1 mt-3 font-sans-semibold text-body-sm text-secondary-text">
-              {tier.label} — {tier.blurb}
-            </Text>
-            {tierPresets.map((item) => (
-              <PresetModelCard
-                key={item.id}
-                preset={item}
-                onDownload={(modelId, file) =>
-                  guard(file.size, () => onDownload(modelId, file))
-                }
-              />
-            ))}
-          </View>
-        );
-      })}
+      {grouped ? (
+        tiers.map((tier) => {
+          const tierPresets = visible.filter((p) => tier.presetIds.includes(p.id));
+          if (tierPresets.length === 0) return null;
+          return (
+            <View key={tier.id}>
+              <Text className="mb-1 mt-3 font-sans-semibold text-body-sm text-secondary-text">
+                {tier.label} — {tier.blurb}
+              </Text>
+              {tierPresets.map((item) => (
+                <PresetModelCard
+                  key={item.id}
+                  preset={item}
+                  onDownload={onGuardedDownload}
+                />
+              ))}
+            </View>
+          );
+        })
+      ) : (
+        <View className="mt-3">
+          {visible.map((item) => (
+            <PresetModelCard
+              key={item.id}
+              preset={item}
+              onDownload={onGuardedDownload}
+            />
+          ))}
+        </View>
+      )}
     </ModelAccordion>
   );
 }

@@ -15,11 +15,17 @@ import type { HFModelFile } from "../../types/models";
 import {
   Chip,
   DownloadButton,
-  DownloadError,
+  ModelTypeIcon,
   StatusBadge,
   formatBytes,
   formatCompact,
 } from "./ModelBits.tsx";
+
+/** Vision signal without opening the repo (PocketPal DetailsView parity):
+ * a projector file among the GGUF siblings means a vision model. */
+function isVisionSearchResult(files: HFModelFile[]): boolean {
+  return files.some((f) => f.name.toLowerCase().includes("mmproj"));
+}
 
 export function HFModelSearch({ onClose }: { onClose?: () => void }) {
   const {
@@ -29,6 +35,8 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
     searchError,
     getModelFiles,
     startDownload,
+    pauseModelDownload,
+    resumeModelDownload,
     hfToken,
     setHfToken,
     models,
@@ -126,7 +134,12 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
           <View className="p-4">
             <View className="flex-row items-center justify-between">
               <View className="flex-1">
-                <Text className="font-sans-semibold text-body-md text-primary-text">{item.name}</Text>
+                <View className="flex-row items-center gap-2">
+                  <ModelTypeIcon
+                    type={isVisionSearchResult(item.ggufFiles) ? "vision" : "llm"}
+                  />
+                  <Text className="font-sans-semibold text-body-md text-primary-text">{item.name}</Text>
+                </View>
                 <Text className="font-sans text-body-sm text-secondary-text/70 mt-0.5">by {item.author}</Text>
               </View>
               <ChevronDown size={20} color={colors.secondaryText} />
@@ -174,7 +187,6 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
                           </View>
                         </View>
                         <DownloadButton
-                          file={file}
                           status={st}
                           progress={prog}
                           onPress={() =>
@@ -182,12 +194,11 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
                               startDownload(item.modelId, file, hfToken || undefined),
                             )
                           }
-                          disabled={st === "downloading"}
+                          onPause={() => void pauseModelDownload(`hf-${item.modelId}-${file.name}`)}
+                          onResume={() => void resumeModelDownload(`hf-${item.modelId}-${file.name}`)}
+                          disabled={st === "completed"}
                         />
                       </View>
-                      {st === "failed" && spec?.error && (
-                        <DownloadError message={spec.error} />
-                      )}
                     </View>
                     );
                   })}

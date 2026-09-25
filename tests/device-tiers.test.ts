@@ -67,13 +67,26 @@ describe("device-tiers.json", () => {
       all.map((t) => t.id),
       ["light", "balanced", "capable"],
     );
-    const covered = all.flatMap((t) => t.presetIds).sort();
+    const covered = [...new Set(all.flatMap((t) => t.presetIds))].sort();
     assert.deepEqual(covered, [
-      "gemma-2-2b",
-      "llama-3.2-1b",
-      "qwen2.5-0.5b",
-      "smollm-135m",
-      "smollm-360m",
+      "bonsai-1.7b",
+      "bonsai-4b",
+      "bonsai-8b",
+      "gemma-3-1b",
+      "gemma-3-4b",
+      "gemma-4-e2b",
+      "gemma-4-e4b",
+      "lfm2-2.6b",
+      "lfm2-vl-1.6b",
+      "lfm2.5-1.2b",
+      "lfm2.5-350m",
+      "lfm2.5-8b-a1b",
+      "ministral-3-3b",
+      "phi-4-mini",
+      "qwen3-0.6b",
+      "qwen3-1.7b",
+      "qwen3.5-4b",
+      "smollm3-3b",
     ]);
   });
 });

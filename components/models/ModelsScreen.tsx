@@ -25,10 +25,14 @@ export function ModelsScreen() {
     availableVisible,
     readyOpen,
     availableOpen,
+    downloadedOnly,
+    hfOnly,
+    grouped,
     load: loadUi,
     setVisible,
     setOpen,
     setAllOpen,
+    setFilter,
   } = useModelsUi();
 
   useEffect(() => {
@@ -48,8 +52,15 @@ export function ModelsScreen() {
           <ModelsHeaderRight
             readyVisible={readyVisible}
             availableVisible={availableVisible}
+            downloadedOnly={downloadedOnly}
+            hfOnly={hfOnly}
+            grouped={grouped}
             onToggleReady={() => setVisible("ready", !readyVisible)}
             onToggleAvailable={() => setVisible("available", !availableVisible)}
+            onToggleFilter={(filter) => {
+              const current = { downloadedOnly, hfOnly, grouped };
+              setFilter(filter, !current[filter]);
+            }}
             onExpandAll={() => setAllOpen(true)}
             onCollapseAll={() => setAllOpen(false)}
           />
@@ -62,13 +73,16 @@ export function ModelsScreen() {
               open={readyOpen}
               onToggle={() => setOpen("ready", !readyOpen)}
               onOpenSettings={setSettingsModelId}
+              hfOnly={hfOnly}
             />
           )}
-          {availableVisible && (
+          {/* downloadedOnly (PocketPal `downloaded`): only Ready renders. */}
+          {availableVisible && !downloadedOnly && (
             <AvailableModels
               open={availableOpen}
               onToggle={() => setOpen("available", !availableOpen)}
               onDownload={(modelId, file) => startDownload(modelId, file)}
+              grouped={grouped}
             />
           )}
         </ScrollView>

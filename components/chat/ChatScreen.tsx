@@ -32,7 +32,26 @@ import { ChatInput } from "./ChatInput.tsx";
 import { UsageStats } from "./UsageStats.tsx";
 import { SuggestedPrompts } from "./SuggestedPrompts.tsx";
 import { MessageList } from "./MessageList.tsx";
-import { Connecting, Unavailable } from "../Unavailable.tsx";
+
+/** Bottom go-to-models bar (PocketPal ModelNotLoadedMessage parity):
+ * visible only while no model is loaded, gone the moment one is —
+ * no Retry tap needed. */
+function ModelNotLoadedBar() {
+  const router = useRouter();
+  return (
+    <View className="mx-4 mb-2 flex-row items-center justify-between rounded-xl border border-border bg-surface-1 px-4 py-3">
+      <Text className="flex-1 font-sans text-body-md text-primary-text">
+        No model active
+      </Text>
+      <Pressable
+        onPress={() => router.push("/models")}
+        className="ml-3 rounded-lg border border-primary/50 bg-primary/20 px-3 py-1.5"
+      >
+        <Text className="font-sans text-body-sm text-primary">Go to Models</Text>
+      </Pressable>
+    </View>
+  );
+}
 
 export function ChatScreen() {
   const messages = useChatStore((s) => s.messages);
@@ -58,6 +77,18 @@ export function ChatScreen() {
   useEffect(() => {
     void loadSession().then(() => checkHealth());
   }, [loadSession, checkHealth]);
+
+  // Activation happens on the Models screen while chat stays mounted:
+  // re-resolve readiness so the bar and prompts vanish on their own.
+  const activeModelId = useModelStore((s) => s.activeModelId);
+  useEffect(() => {
+    void checkHealth();
+  }, [activeModelId, checkHealth]);
+
+  // PocketPal parity: the composer is always visible. With no model the
+  // send button disables, the placeholder names it, and the bar below
+  // routes to Models — it dismisses itself the moment one loads.
+  const ready = connection === "up";
 
   const motionDuration = useMotionDuration();
   const contentFade = useTabContentFade();
@@ -138,50 +169,48 @@ export function ChatScreen() {
         </View>
       )}
 
-      {connection === "unknown" ? (
-        <Connecting />
-      ) : connection === "down" ? (
-        <Unavailable onRetry={() => void checkHealth()} />
-      ) : (
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={{ flex: 1 }}
-        >
-          <Animated.View style={contentFade} className="flex-1">
-            <MessageList
-              messages={visible}
-              renderBubble={(item) => (
-                <Bubble
-                  message={item}
-                  onRetry={() => void retry(item.id)}
-                  onRegenerate={
-                    item.role === "assistant"
-                      ? () => void regenerate(item.id)
-                      : null
-                  }
-                />
-              )}
-            />
-          </Animated.View>
-          {sending && (
-            <Animated.Text
-              entering={fadeEntering(motionDuration)}
-              exiting={fadeExiting(motionDuration)}
-              className="px-4 pb-1 font-sans text-body-sm text-secondary-text"
-            >
-              LiAI…
-            </Animated.Text>
-          )}
-          {messages.length === 0 && query.trim() === "" && (
-            <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
-          )}
-          <UsageStats messages={messages} />
-          <ChatInput
-            sending={sending}
-            onSend={(text, image) => send(text, image)}
+      {/* Composer always mounted (PocketPal ChatView parity): the
+          no-model bar auto-dismisses on activation, no Retry needed. */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={{ flex: 1 }}
+      >
+        <Animated.View style={contentFade} className="flex-1">
+          <MessageList
+            messages={visible}
+            renderBubble={(item) => (
+              <Bubble
+                message={item}
+                onRetry={() => void retry(item.id)}
+                onRegenerate={
+                  item.role === "assistant"
+                    ? () => void regenerate(item.id)
+                    : null
+                }
+              />
+            )}
           />
-        </KeyboardAvoidingView>
-      )}
+        </Animated.View>
+        {sending && (
+          <Animated.Text
+            entering={fadeEntering(motionDuration)}
+            exiting={fadeExiting(motionDuration)}
+            className="px-4 pb-1 font-sans text-body-sm text-secondary-text"
+          >
+            LiAI…
+          </Animated.Text>
+        )}
+        {ready && messages.length === 0 && query.trim() === "" && (
+          <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
+        )}
+        <UsageStats messages={messages} />
+        {!ready && connection === "down" && <ModelNotLoadedBar />}
+        <ChatInput
+          sending={sending}
+          ready={ready}
+          onSend={(text, image) => send(text, image)}
+        />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

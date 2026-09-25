@@ -4,7 +4,7 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
-import { getModelFiles, searchModels } from "../lib/models/huggingface.ts";
+import { getModelFiles, isHuggingFaceUrl, searchModels } from "../lib/models/huggingface.ts";
 
 function mockFetch(impl: (url: string, init?: RequestInit) => Promise<Response>): void {
   (globalThis as Record<string, unknown>).fetch = impl;
@@ -16,6 +16,14 @@ function jsonResponse(body: unknown, status = 200): Response {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+describe("isHuggingFaceUrl", () => {
+  it("matches huggingface.co hosts only", () => {
+    assert.equal(isHuggingFaceUrl("https://huggingface.co/Qwen/x/resolve/main/y.gguf"), true);
+    assert.equal(isHuggingFaceUrl("https://example.com/model.gguf"), false);
+    assert.equal(isHuggingFaceUrl("not a url"), false);
+  });
+});
 
 describe("hub search", () => {
   beforeEach(() => {
@@ -46,6 +54,7 @@ describe("hub search", () => {
     assert.ok(seen.url.includes("search=qwen"));
     assert.ok(seen.url.includes("filter=gguf"));
     assert.equal(seen.headers["Authorization"], "Bearer tok");
+    assert.equal(seen.headers["User-Agent"], "LiAI");
     // No visibility filter: the Hub scopes results to what the token may
     // see, and gated rows stay downloadable via the tokened fetch.
     assert.deepEqual(

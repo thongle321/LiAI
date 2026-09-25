@@ -75,4 +75,53 @@ describe("models ui store", () => {
     assert.equal(useStore.getState().availableOpen, false);
     assert.equal(JSON.parse(storage.data[UI_STATE_KEY]).readyOpen, false);
   });
+
+  it("starts with PocketPal-mapped filters at defaults", async () => {
+    const useStore = createModelsUiStore(storage);
+    await useStore.getState().load();
+    const s = useStore.getState();
+    assert.equal(s.downloadedOnly, false);
+    assert.equal(s.hfOnly, false);
+    assert.equal(s.grouped, true);
+  });
+
+  it("persists filters and restores them on load", async () => {
+    const useStore = createModelsUiStore(storage);
+    await useStore.getState().load();
+    useStore.getState().setFilter("downloadedOnly", true);
+    useStore.getState().setFilter("hfOnly", true);
+    useStore.getState().setFilter("grouped", false);
+    // persist() is async; wait a tick.
+    await new Promise((r) => setTimeout(r, 0));
+
+    const saved = JSON.parse(storage.data[UI_STATE_KEY]);
+    assert.equal(saved.downloadedOnly, true);
+    assert.equal(saved.hfOnly, true);
+    assert.equal(saved.grouped, false);
+
+    const useStore2 = createModelsUiStore(storage);
+    await useStore2.getState().load();
+    assert.equal(useStore2.getState().downloadedOnly, true);
+    assert.equal(useStore2.getState().hfOnly, true);
+    assert.equal(useStore2.getState().grouped, false);
+  });
+
+  it("old payloads without filter keys load with filter defaults", async () => {
+    const legacy = memoryStorage({
+      [UI_STATE_KEY]: JSON.stringify({
+        readyVisible: false,
+        availableVisible: true,
+        readyOpen: true,
+        availableOpen: false,
+      }),
+    });
+    const useStore = createModelsUiStore(legacy);
+    await useStore.getState().load();
+    const s = useStore.getState();
+    assert.equal(s.readyVisible, false);
+    assert.equal(s.availableOpen, false);
+    assert.equal(s.downloadedOnly, false);
+    assert.equal(s.hfOnly, false);
+    assert.equal(s.grouped, true);
+  });
 });

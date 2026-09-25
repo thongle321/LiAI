@@ -25,7 +25,6 @@ expo-env.d.ts
 /android/
 
 # Reference / scratch — never part of the app
-pocketpal-ai/
 scratch/
 prompt_material/
 models/

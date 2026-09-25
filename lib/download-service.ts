@@ -50,85 +50,103 @@ class ResumableDownloadService {
     progressCallback?: DownloadProgressCallback,
     completeCallback?: DownloadCompleteCallback,
   ): Promise<void> {
-    const modelsDir = getModelsDirectory();
-    const file = new File(modelsDir, job.fileName);
-
-    // Ensure directory exists (legacy API expects string)
-    await makeDirectoryAsync(getModelsDirectoryPath(), { intermediates: true });
-
-    const task = new DownloadTask(job.downloadUrl, file, {
-      headers: job.headers,
-      onProgress: (progress: DownloadProgress) => {
-        const totalBytes = progress.bytesWritten;
-        const progressPercent = job.totalBytes > 0
-          ? Math.round((totalBytes / job.totalBytes) * 100)
-          : 0;
-
-        const updatedJob: DownloadJob = {
-          ...job,
-          status: "downloading",
-          progress: progressPercent,
-          downloadedBytes: totalBytes,
-          totalBytes: job.totalBytes || progress.totalBytes,
-        };
-
-        this.activeDownloads.set(job.id, {
-          ...this.activeDownloads.get(job.id)!,
-          job: updatedJob,
-        });
-
-        progressCallback?.(updatedJob);
-        this.callbacks.onProgress?.(updatedJob);
-      },
-    });
-
-    this.activeDownloads.set(job.id, {
-      job: { ...job, status: "downloading" },
-      task,
-      progressCallback: progressCallback || (() => {}),
-      completeCallback: completeCallback || (() => {}),
-    });
-
-    try {
-      const result = await task.downloadAsync();
-
-      if (result) {
-        const completedJob: DownloadJob = {
-          ...job,
-          status: "completed",
-          progress: 100,
-          downloadedBytes: job.totalBytes,
-          resumable: true,
-        };
-
-        this.activeDownloads.set(job.id, {
-          ...this.activeDownloads.get(job.id)!,
-          job: completedJob,
-        });
-
-        progressCallback?.(completedJob);
-        completeCallback?.(completedJob, true);
-        this.callbacks.onProgress?.(completedJob);
-        this.callbacks.onComplete?.(completedJob, true);
-      }
-    } catch (error) {
+    const onProgress = progressCallback || (() => {});
+    const onComplete = completeCallback || (() => {});
+    const fail = (message: string): never => {
       const failedJob: DownloadJob = {
         ...job,
         status: "failed",
-        error: error instanceof Error ? error.message : "Download failed",
+        error: message,
       };
-
       this.activeDownloads.set(job.id, {
-        ...this.activeDownloads.get(job.id)!,
         job: failedJob,
+        task: this.activeDownloads.get(job.id)?.task ?? null,
+        progressCallback: onProgress,
+        completeCallback: onComplete,
       });
-
-      progressCallback?.(failedJob);
-      completeCallback?.(failedJob, false);
+      onProgress(failedJob);
+      onComplete(failedJob, false);
       this.callbacks.onProgress?.(failedJob);
       this.callbacks.onComplete?.(failedJob, false);
+      throw new Error(message);
+    };
 
-      throw error;
+    let file: File;
+    let task: DownloadTask;
+    try {
+      const modelsDir = getModelsDirectory();
+      file = new File(modelsDir, job.fileName);
+
+      // Ensure directory exists (legacy API expects string)
+      await makeDirectoryAsync(getModelsDirectoryPath(), { intermediates: true });
+
+      task = new DownloadTask(job.downloadUrl, file, {
+        headers: job.headers,
+        onProgress: (progress: DownloadProgress) => {
+          const totalBytes = progress.bytesWritten;
+          const progressPercent =
+            job.totalBytes > 0 ? Math.round((totalBytes / job.totalBytes) * 100) : 0;
+          const updatedJob: DownloadJob = {
+            ...job,
+            status: "downloading",
+            progress: progressPercent,
+            downloadedBytes: totalBytes,
+            totalBytes: job.totalBytes || progress.totalBytes,
+          };
+          this.activeDownloads.set(job.id, {
+            job: updatedJob,
+            task,
+            progressCallback: onProgress,
+            completeCallback: onComplete,
+          });
+          onProgress(updatedJob);
+          this.callbacks.onProgress?.(updatedJob);
+        },
+      });
+
+      this.activeDownloads.set(job.id, {
+        job: { ...job, status: "downloading" },
+        task,
+        progressCallback: onProgress,
+        completeCallback: onComplete,
+      });
+
+      const result = await task.downloadAsync();
+
+      if (!result) {
+        // Paused before completion: keep the task so resume works, and
+        // report paused instead of sticking at downloading forever.
+        const pausedJob: DownloadJob = { ...job, status: "paused" };
+        this.activeDownloads.set(job.id, {
+          job: pausedJob,
+          task,
+          progressCallback: onProgress,
+          completeCallback: onComplete,
+        });
+        onProgress(pausedJob);
+        this.callbacks.onProgress?.(pausedJob);
+        return;
+      }
+
+      const completedJob: DownloadJob = {
+        ...job,
+        status: "completed",
+        progress: 100,
+        downloadedBytes: job.totalBytes,
+        resumable: true,
+      };
+      this.activeDownloads.set(job.id, {
+        job: completedJob,
+        task,
+        progressCallback: onProgress,
+        completeCallback: onComplete,
+      });
+      onProgress(completedJob);
+      onComplete(completedJob, true);
+      this.callbacks.onProgress?.(completedJob);
+      this.callbacks.onComplete?.(completedJob, true);
+    } catch (error) {
+      fail(error instanceof Error ? error.message : "Download failed");
     }
   }
 

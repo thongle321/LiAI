@@ -15,6 +15,7 @@ import type { HFModelFile } from "../../types/models";
 import {
   Chip,
   DownloadButton,
+  DownloadError,
   StatusBadge,
   formatBytes,
   formatCompact,
@@ -30,6 +31,7 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
     startDownload,
     hfToken,
     setHfToken,
+    models,
   } = useModelStore();
   const guard = useLoadGuard();
   const [query, setQuery] = useState("");
@@ -156,7 +158,12 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
                   <View className="mb-3">
                     <Text className="font-sans-semibold text-body-sm text-secondary-text mb-2">GGUF Files</Text>
                   </View>
-                  {(modelFiles[item.modelId] || []).map((file) => (
+                  {(modelFiles[item.modelId] || []).map((file) => {
+                    // Store spec id mirrors buildHfModelSpec: hf-<modelId>-<file>.
+                    const spec = models.find((m) => m.id === `hf-${item.modelId}-${file.name}`);
+                    const st = spec?.downloadStatus ?? "idle";
+                    const prog = spec?.downloadProgress ?? 0;
+                    return (
                     <View key={file.name} className="py-3 border-b border-border/50">
                       <View className="flex-row items-center justify-between">
                         <View className="flex-1">
@@ -168,17 +175,22 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
                         </View>
                         <DownloadButton
                           file={file}
-                          status="idle"
-                          progress={0}
+                          status={st}
+                          progress={prog}
                           onPress={() =>
                             guard(file.size, () =>
                               startDownload(item.modelId, file, hfToken || undefined),
                             )
                           }
+                          disabled={st === "downloading"}
                         />
                       </View>
+                      {st === "failed" && spec?.error && (
+                        <DownloadError message={spec.error} />
+                      )}
                     </View>
-                  ))}
+                    );
+                  })}
                 </View>
               )}
             </View>

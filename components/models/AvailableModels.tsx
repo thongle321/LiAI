@@ -17,6 +17,7 @@ import type { PresetModel, PresetModelFile } from "../../types/models";
 import { ModelAccordion } from "./ModelAccordion.tsx";
 import {
   DownloadButton,
+  DownloadError,
   DownloadProgressBar,
   StatusBadge,
   formatBytes,
@@ -95,6 +96,9 @@ export function PresetModelCard({
             total={existingModel.totalBytes}
           />
         )}
+        {cardStatus === "failed" && existingModel?.error && (
+          <DownloadError message={existingModel.error} />
+        )}
       </Pressable>
 
       {expanded && (
@@ -125,6 +129,9 @@ export function PresetModelCard({
                     disabled={st === "downloading"}
                   />
                 </View>
+                {st === "failed" && existingModel?.error && (
+                  <DownloadError message={existingModel.error} />
+                )}
                 {isProgressVisible(st) && existingModel && (
                   <DownloadProgressBar
                     progress={existingModel.downloadProgress}

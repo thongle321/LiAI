@@ -1,4 +1,5 @@
 import { Pressable, Text, View } from "react-native";
+import { router } from "expo-router";
 
 export function Unavailable({ onRetry }: { onRetry: () => void }) {
   return (
@@ -9,8 +10,11 @@ export function Unavailable({ onRetry }: { onRetry: () => void }) {
       <Text className="mt-1 text-center font-sans text-body-md text-secondary-text">
         Download and activate a model, then retry.
       </Text>
-      <Pressable onPress={onRetry} className="btn btn--primary mt-4">
-        <Text className="font-sans-semibold text-on-primary">Retry</Text>
+      <Pressable onPress={() => router.push("/models")} className="btn btn--primary mt-4">
+        <Text className="font-sans-semibold text-on-primary">Go to Models</Text>
+      </Pressable>
+      <Pressable onPress={onRetry} className="mt-2 px-4 py-2">
+        <Text className="font-sans text-body-md text-secondary-text">Retry</Text>
       </Pressable>
     </View>
   );

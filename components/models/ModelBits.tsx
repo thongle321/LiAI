@@ -74,6 +74,15 @@ export function StatusBadge({ status }: { status: ModelDownloadStatus }) {
   );
 }
 
+/** Failed-row error line: the stored message, never just "Failed". */
+export function DownloadError({ message }: { message: string }) {
+  return (
+    <Text className="font-sans text-body-sm text-red-500 mt-1" numberOfLines={3}>
+      {message}
+    </Text>
+  );
+}
+
 export function DownloadProgressBar({
   progress,
   downloaded,
@@ -145,6 +154,8 @@ export function DownloadButton({
           ? `${Math.round(progress)}%`
           : isPaused
           ? "Paused"
+          : status === "failed"
+          ? "Retry"
           : "Download"}
       </Text>
     </Pressable>

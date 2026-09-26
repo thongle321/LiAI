@@ -17,6 +17,7 @@ import { isPresetDownloaded, presetCardState, presetFileState } from "../../lib/
 import type { PresetModel, PresetModelFile } from "../../types/models";
 import { ModelAccordion } from "./ModelAccordion.tsx";
 import {
+  CancelDownloadButton,
   DownloadButton,
   DownloadProgressBar,
   ModelTypeIcon,
@@ -35,6 +36,7 @@ function PresetModelCardInner({
   const models = useModelStore((s) => s.models);
   const pauseModelDownload = useModelStore((s) => s.pauseModelDownload);
   const resumeModelDownload = useModelStore((s) => s.resumeModelDownload);
+  const cancelModelDownload = useModelStore((s) => s.cancelModelDownload);
 
   // Per-file states by exact spec id (one shared status smeared every row).
   const fileState = (file: PresetModelFile) => presetFileState(models, preset.id, file);
@@ -44,6 +46,9 @@ function PresetModelCardInner({
   // per-quantization rows carry per-file progress, so keeping both showed
   // the same download twice.
   const showCardProgress = isProgressVisible(cardStatus) && !expanded;
+  // Hoisted so the closure keeps the narrowing (and needs no cast): cancel
+  // takes the downloading file's spec id, not the preset id.
+  const downloadingSpecId = showCardProgress ? card.specId : undefined;
 
   return (
     <View className="mb-4 bg-surface-1 border border-border rounded-lg overflow-hidden">
@@ -83,6 +88,13 @@ function PresetModelCardInner({
               </Text>
             </View>
           </View>
+          {/* Collapsed cards carry no action row, so a download started here
+              had no way out. */}
+          {downloadingSpecId && (
+            <CancelDownloadButton
+              onPress={() => void cancelModelDownload(downloadingSpecId)}
+            />
+          )}
         </View>
 
         {showCardProgress && (
@@ -110,14 +122,23 @@ function PresetModelCardInner({
                       <Text className="font-sans text-body-sm text-secondary-text">{formatBytes(item.size)}</Text>
                     </View>
                   </View>
-                  <DownloadButton
-                    status={st.status}
-                    progress={st.progress}
-                    onPress={() => onDownload(preset.id, item)}
-                    onPause={() => void pauseModelDownload(presetSpecId(preset.id, item.name))}
-                    onResume={() => void resumeModelDownload(presetSpecId(preset.id, item.name))}
-                    disabled={st.status === "completed"}
-                  />
+                  <View className="flex-row items-center gap-2">
+                    {isProgressVisible(st.status) && (
+                      <CancelDownloadButton
+                        onPress={() =>
+                          void cancelModelDownload(presetSpecId(preset.id, item.name))
+                        }
+                      />
+                    )}
+                    <DownloadButton
+                      status={st.status}
+                      progress={st.progress}
+                      onPress={() => onDownload(preset.id, item)}
+                      onPause={() => void pauseModelDownload(presetSpecId(preset.id, item.name))}
+                      onResume={() => void resumeModelDownload(presetSpecId(preset.id, item.name))}
+                      disabled={st.status === "completed"}
+                    />
+                  </View>
                 </View>
                 {isProgressVisible(st.status) && (
                   <DownloadProgressBar progress={st.progress} speed={st.speed} />

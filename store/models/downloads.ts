@@ -203,7 +203,10 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
           set({ largestSuccessfulBytes: downloadJob.totalBytes });
           void get().saveMemoryGuard();
         }
-      } else {
+      } else if (downloadJob.status !== "cancelled") {
+        // A cancelled job is a user action, not a failure: without this
+        // guard the cancel flow's own callback re-marked the row failed and
+        // the card offered "Retry" instead of a clean "Download".
         get().updateModel(downloadJob.modelId, {
           downloadStatus: "failed",
           error: downloadJob.error,
@@ -253,6 +256,15 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       // Dead job handle: fall through to the partial-file resume below.
     }
     await get().resumeInterruptedDownload(specId);
+  },
+
+  cancelModelDownload: async (specId) => {
+    // Cancel, not pause: the service deletes the partial file, so this
+    // abandons the download rather than parking it. No fallback resume
+    // path exists on purpose — there is nothing left on disk to resume.
+    const job = latestJobForModel(downloadService.getAllJobs(), specId);
+    if (!job) return;
+    await get().cancelDownload(job.id);
   },
 
   resumeInterruptedDownload: async (specId) => {

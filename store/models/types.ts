@@ -67,6 +67,9 @@ export interface DownloadsSlice {
   /** Pause/resume by stored spec id (UI rows don't track job ids). */
   pauseModelDownload: (specId: string) => Promise<void>;
   resumeModelDownload: (specId: string) => Promise<void>;
+  /** Abandon by stored spec id: cancels the job and deletes the partial
+   * file, so the row returns to a plain Download (no resume). */
+  cancelModelDownload: (specId: string) => Promise<void>;
   syncDownloadStatus: () => void;
 }
 

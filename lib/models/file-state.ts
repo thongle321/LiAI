@@ -51,6 +51,9 @@ export function isPresetDownloaded(models: ModelSpec[], preset: PresetModel): bo
 export interface PresetCardState extends PresetFileState {
   downloaded: number;
   total: number;
+  /** The spec actually downloading, so a collapsed card can cancel it
+   * without knowing which quantization the user picked. */
+  specId?: string;
 }
 
 export function presetCardState(models: ModelSpec[], preset: PresetModel): PresetCardState {
@@ -65,6 +68,7 @@ export function presetCardState(models: ModelSpec[], preset: PresetModel): Prese
       progress: downloading.spec.downloadProgress,
       downloaded: downloading.spec.downloadedBytes,
       total: downloading.spec.totalBytes,
+      specId: downloading.spec.id,
       ...(downloading.spec.speedBytesPerSec !== undefined
         ? { speed: downloading.spec.speedBytesPerSec }
         : {}),

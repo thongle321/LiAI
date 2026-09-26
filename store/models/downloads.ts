@@ -316,6 +316,12 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
 
   cancelDownload: async (jobId) => {
     const job = downloadService.getJob(jobId);
+    // Reset AFTER the service resolves, not before: the service's terminal
+    // "cancelled" event carries the last known byte count, so an early reset
+    // was immediately overwritten and left a stale 40% on the row. Awaiting
+    // first also keeps the card on its real state while the abort is in
+    // flight, then it snaps straight to Download.
+    await downloadService.cancelDownload(jobId);
     if (job) {
       get().updateModel(job.modelId, {
         downloadStatus: "idle",
@@ -323,7 +329,6 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
         downloadedBytes: 0,
       });
     }
-    await downloadService.cancelDownload(jobId);
     get().syncDownloadStatus();
   },
 

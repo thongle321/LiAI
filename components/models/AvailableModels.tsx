@@ -5,7 +5,6 @@ import { Pressable, Text, View } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
-import { formatParams } from "../../lib/model-providers.ts";
 import { parseTiers } from "../../lib/models/device-tiers.ts";
 import tiersJson from "../../assets/device-tiers.json";
 
@@ -21,7 +20,6 @@ import {
   DownloadButton,
   DownloadProgressBar,
   ModelTypeIcon,
-  StatusBadge,
   formatBytes,
   isProgressVisible,
 } from "./ModelBits.tsx";
@@ -42,8 +40,10 @@ export function PresetModelCard({
   const fileState = (file: PresetModelFile) => presetFileState(models, preset.id, file);
   const card = presetCardState(models, preset);
   const cardStatus = card.status;
-  const showCardProgress = isProgressVisible(cardStatus);
-  const params = preset.params ?? 0;
+  // The card bar is the collapsed-state affordance. Once expanded, the
+  // per-quantization rows carry per-file progress, so keeping both showed
+  // the same download twice.
+  const showCardProgress = isProgressVisible(cardStatus) && !expanded;
 
   return (
     <View className="mb-4 bg-surface-1 border border-border rounded-lg overflow-hidden">
@@ -64,16 +64,19 @@ export function PresetModelCard({
           {expanded ? <ChevronUp size={20} color={colors.secondaryText} /> : <ChevronDown size={20} color={colors.secondaryText} />}
         </View>
 
+        {/* No status row here: the section it lives in already means "not
+            downloaded", so a "Not downloaded" label is noise. The Download
+            button below carries the state. */}
         <View className="mt-3 flex-row items-center justify-between">
-          <StatusBadge status={cardStatus} />
           <View className="flex-row items-center gap-2">
-            {params > 0 ? (
-              <View className="rounded bg-surface-2 px-2 py-0.5">
-                <Text className="font-sans text-caption text-secondary-text">
-                  {formatParams(params)}
-                </Text>
-              </View>
-            ) : null}
+            {/* One size, named: the parameter count (0.6B) and the file size
+                (751 MB) are different facts, and showing both unlabelled
+                read as two competing sizes for one model. */}
+            <View className="rounded bg-surface-2 px-2 py-0.5">
+              <Text className="font-sans text-caption text-secondary-text">
+                {formatBytes(preset.files.reduce((sum, f) => sum + f.size, 0))}
+              </Text>
+            </View>
             <View className="rounded bg-surface-2 px-2 py-0.5">
               <Text className="font-sans text-caption text-secondary-text">
                 {preset.files.length} file{preset.files.length === 1 ? "" : "s"}

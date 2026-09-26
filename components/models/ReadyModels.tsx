@@ -50,6 +50,7 @@ export function ReadyModels({
           item={item}
           isActive={activeModelId === item.id}
           onActivate={() => setActiveModel(item.id, "local")}
+          onDeactivate={() => setActiveModel(null)}
           onSettings={() => onOpenSettings(item.id)}
         />
       ))}

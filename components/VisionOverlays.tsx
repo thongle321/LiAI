@@ -170,6 +170,8 @@ export function VisionBottomPanel({
   onSendDraft,
   onToggleInput,
   onTalk,
+  onGoToModels,
+  modelReady,
 }: {
   bottom: number;
   issue: string | null;
@@ -186,6 +188,10 @@ export function VisionBottomPanel({
   onSendDraft: () => void;
   onToggleInput: () => void;
   onTalk: () => void;
+  /** Way forward when no model is active (empty-state rule). */
+  onGoToModels: () => void;
+  /** No active model: talk + type are disabled and greyed. */
+  modelReady: boolean;
 }) {
   return (
     <View
@@ -229,8 +235,22 @@ export function VisionBottomPanel({
           </ScrollView>
         ) : (
           <Text className="text-center font-sans text-body-md text-white/80">
-            {phase === "idle" ? "Tap the mic and ask about what you see" : statusLabel}
+            {!modelReady
+              ? "Load a model to ask about what you see"
+              : phase === "idle"
+                ? "Tap the mic and ask about what you see"
+                : statusLabel}
           </Text>
+        )}
+        {!modelReady && (
+          <Pressable
+            onPress={onGoToModels}
+            className="btn btn--primary mx-auto mt-3 min-h-12 px-5 py-2"
+            accessibilityRole="button"
+            accessibilityLabel="Go to models"
+          >
+            <Text className="font-sans text-body-sm text-on-primary">Go to Models</Text>
+          </Pressable>
         )}
         {camProblem !== null && (
           <Text className="mt-1 text-center font-sans text-body-sm text-white/70">
@@ -243,51 +263,64 @@ export function VisionBottomPanel({
         <View className="mt-2 flex-row items-center rounded-lg px-2 py-1" style={{ backgroundColor: scrim }}>
           <TextInput
             value={draft}
-            onChangeText={onDraftChange}
-            placeholder="Ask about this…"
+            onChangeText={modelReady ? onDraftChange : () => undefined}
+            editable={modelReady}
+            placeholder={modelReady ? "Ask about this…" : "Load a model first"}
             placeholderTextColor={colors.secondaryText}
             multiline
-            autoFocus
+            autoFocus={modelReady}
             onSubmitEditing={onSendDraft}
             className="flex-1 px-3 font-sans text-body-md text-white"
           />
           <Pressable
             onPress={onSendDraft}
+            disabled={!modelReady}
             className="h-12 w-12 items-center justify-center"
             accessibilityRole="button"
-            accessibilityLabel="Send question"
+            accessibilityState={{ disabled: !modelReady }}
+            accessibilityLabel={modelReady ? "Send question" : "Load a model to send"}
           >
-            <Send size={22} color={colors.primary} />
+            <Send size={22} color={modelReady ? colors.primary : colors.secondaryText} />
           </Pressable>
         </View>
       )}
 
       <View className="mt-3 flex-row items-center justify-center">
         <Pressable
-          onPress={onToggleInput}
+          onPress={modelReady ? onToggleInput : undefined}
+          disabled={!modelReady}
           className="h-12 w-12 items-center justify-center rounded-full"
           style={{ backgroundColor: scrim }}
           accessibilityRole="button"
-          accessibilityLabel="Type a question"
+          accessibilityState={{ disabled: !modelReady }}
+          accessibilityLabel={modelReady ? "Type a question" : "Load a model to type"}
         >
-          <Keyboard size={22} color={colors.inverseText} />
+          <Keyboard size={22} color={modelReady ? colors.inverseText : colors.secondaryText} />
         </Pressable>
         <Pressable
-          onPress={onTalk}
+          onPress={modelReady ? onTalk : undefined}
+          disabled={!modelReady}
           className="h-20 w-20 items-center justify-center"
           accessibilityRole="button"
-          accessibilityLabel={phase === "idle" ? "Talk" : "Stop talking"}
+          accessibilityState={{ disabled: !modelReady }}
+          accessibilityLabel={
+            !modelReady ? "Load a model to talk" : phase === "idle" ? "Talk" : "Stop talking"
+          }
         >
-          {/* Listening is a Surface Tint circle with rings; the brackets are
-              the Vision Active HUD mark and are drawn, never bordered. */}
+          {/* Disabled on the camera ground: the scrim disc is the fill
+              (Mist would be a light disc on a dark frame) and DESIGN's
+              "disabled has no border" holds, so the primary ring is dropped
+              and only the muted icon remains. */}
           <View
             className={`h-20 w-20 items-center justify-center rounded-full ${
-              phase === "idle" ? "border border-primary" : "bg-surface-3"
+              !modelReady ? "" : phase === "idle" ? "border border-primary" : "bg-surface-3"
             }`}
-            {...(phase === "idle" ? { style: { backgroundColor: scrim } } : {})}
+            {...(phase === "idle" || !modelReady
+              ? { style: { backgroundColor: scrim } }
+              : {})}
           >
-            {phase !== "idle" && <VisionActiveFrame side={22} />}
-            <Mic size={30} color={colors.primary} />
+            {phase !== "idle" && modelReady && <VisionActiveFrame side={22} />}
+            <Mic size={30} color={modelReady ? colors.primary : colors.secondaryText} />
           </View>
         </Pressable>
         <View className="w-12" />

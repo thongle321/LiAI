@@ -20,6 +20,7 @@ import {
 import Animated from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { openSettings } from "expo-linking";
+import { router } from "expo-router";
 import { Mic } from "lucide-react-native";
 
 import { colors } from "../../../themes/tokens.ts";
@@ -30,6 +31,7 @@ import {
   useTabContentFade,
 } from "../../../lib/motion.ts";
 import { useVoiceLoop } from "../../../hooks/useVoiceLoop.ts";
+import { useModelReady } from "../../../hooks/useModelReady.ts";
 
 export default function VoiceScreen() {
   const { phase, heard, reply, issue, needsSettings, bargeIn, retry } = useVoiceLoop();
@@ -49,6 +51,13 @@ export default function VoiceScreen() {
   }, [replyVisible, fade]);
 
   const micLive = phase === "listening" || phase === "speaking";
+  // No model loaded: the mic would start a turn that can never answer, so
+  // it is disabled and the screen offers the way forward instead.
+  const modelReady = useModelReady();
+  // Disabled is the Mist+Slate pair, but the ring is dropped so a flat
+  // circle reads "off" next to the ringed enabled state. The word
+  // "Load a model" and its button carry the signal, not the colour alone.
+  const micRing = modelReady ? "border-border" : "border-transparent";
 
   return (
     <SafeAreaView
@@ -65,24 +74,35 @@ export default function VoiceScreen() {
         {/* The hit area IS the visual: a 44px target wrapped around a 160px
             circle would make the outer ring dead to the thumb. */}
         <Pressable
-          onPress={bargeIn}
+          onPress={modelReady ? bargeIn : undefined}
+          disabled={!modelReady}
           className="h-40 w-40 items-center justify-center rounded-full"
           accessibilityRole="button"
-          accessibilityLabel={micLive ? "Stop listening" : "Tap to speak"}
+          accessibilityState={{ disabled: !modelReady }}
+          accessibilityLabel={
+            modelReady
+              ? micLive
+                ? "Stop listening"
+                : "Tap to speak"
+              : "Load a model to speak"
+          }
         >
           {/* Listening is a machine-in-the-loop state: a Surface Tint circle
-              with concentric Signal Blue rings. */}
+              with concentric Signal Blue rings. Disabled is Mist + Slate,
+              kept findable (DESIGN: disabled is a fill/label change, never
+              opacity on a live element). */}
           <View
             className={`h-40 w-40 items-center justify-center rounded-full ${
-              micLive ? "bg-surface-3" : "bg-surface-2"
+              modelReady ? (micLive ? "bg-surface-3" : "bg-surface-2") : "bg-surface-2"
             }`}
           >
             <View
-              className={`h-32 w-32 items-center justify-center rounded-full border ${
-                micLive ? "border-primary" : "border-border"
-              }`}
+              className={`h-32 w-32 items-center justify-center rounded-full border ${micRing}`}
             >
-              <Mic size={56} color={micLive ? colors.primary : colors.secondaryText} />
+              <Mic
+                size={56}
+                color={modelReady ? (micLive ? colors.primary : colors.secondaryText) : colors.secondaryText}
+              />
             </View>
           </View>
         </Pressable>
@@ -155,9 +175,25 @@ export default function VoiceScreen() {
         )}
       </Animated.ScrollView>
 
-      <Text className="pb-2 text-center font-sans text-body-md text-secondary-text">
-        Tap the mic to talk
-      </Text>
+      {modelReady ? (
+        <Text className="pb-2 text-center font-sans text-body-md text-secondary-text">
+          Tap the mic to talk
+        </Text>
+      ) : (
+        <View className="items-center px-5 pb-2">
+          <Text className="text-center font-sans text-body-md text-secondary-text">
+            Load a model to talk
+          </Text>
+          <Pressable
+            onPress={() => router.push("/models")}
+            className="btn btn--primary mt-3 min-h-12 px-5 py-2"
+            accessibilityRole="button"
+            accessibilityLabel="Go to models"
+          >
+            <Text className="font-sans text-body-sm text-on-primary">Go to Models</Text>
+          </Pressable>
+        </View>
+      )}
     </SafeAreaView>
   );
 }

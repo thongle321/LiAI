@@ -155,7 +155,7 @@ export default function VoiceScreen() {
         )}
       </Animated.ScrollView>
 
-      <Text className="pb-2 text-center font-sans text-caption text-secondary-text">
+      <Text className="pb-2 text-center font-sans text-body-md text-secondary-text">
         Tap the mic to talk
       </Text>
     </SafeAreaView>

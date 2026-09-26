@@ -42,7 +42,7 @@ export function ModelCard({
 
   return (
     <View className="mb-3 bg-surface-1 border border-border rounded-lg overflow-hidden">
-    <View className="p-5">
+      <View className="p-5">
         <View className="flex-row items-center justify-between">
           <View className="flex-1">
             <View className="flex-row items-center gap-2">
@@ -61,11 +61,6 @@ export function ModelCard({
             </View>
           </View>
         </View>
-        {isActive && (
-          <Text className="font-sans text-caption text-secondary-text mt-2">
-            Active on this device
-          </Text>
-        )}
         {/* Wraps so a long model name + three actions reflow instead of
             clipping at 320pt. */}
         <View className="mt-3 flex-row flex-wrap items-center gap-2">
@@ -81,11 +76,13 @@ export function ModelCard({
             )}
             <Pressable
               onPress={onSettings}
-              className="h-12 w-12 items-center justify-center rounded-full border border-border bg-surface-1"
+              className="h-12 w-12 items-center justify-center rounded-full"
               accessibilityRole="button"
               accessibilityLabel={`Settings for ${title}`}
             >
-              <Settings size={16} color={colors.secondaryText} />
+              <View className="h-10 w-10 items-center justify-center rounded-full border border-border bg-surface-1">
+                <Settings size={16} color={colors.secondaryText} />
+              </View>
             </Pressable>
             {/* Destructive: Alert Tint fill, Alert Red icon, 40px circle. */}
             <Pressable
@@ -99,7 +96,7 @@ export function ModelCard({
               </View>
             </Pressable>
           </View>
-      </View>
+        </View>
     </View>
   );
 }

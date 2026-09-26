@@ -96,7 +96,7 @@ export function PresetModelCard({
           {preset.files.map((item) => {
             const st = fileState(item);
             return (
-              <View key={item.name} className="py-3 border-b border-border/50">
+              <View key={item.name} className="py-3 border-b border-border">
                 <View className="flex-row items-center justify-between">
                   <View className="flex-1">
                     <Text className="font-sans text-body-md text-primary-text">{item.name}</Text>

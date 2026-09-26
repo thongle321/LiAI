@@ -3,10 +3,16 @@
 import { Pressable, Text, View } from "react-native";
 import { Check, Copy } from "lucide-react-native";
 import CodeHighlighter from "react-native-code-highlighter";
-import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
+import github from "react-syntax-highlighter/dist/esm/styles/hljs/github";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors, font } from "../../themes/tokens.ts";
 import { useCopy } from "../../hooks/useCopy.ts";
+
+/** github's own white code background cleared so the Mist card shows through. */
+const CODE_STYLE = {
+  ...github,
+  hljs: { ...github.hljs, background: "transparent" },
+} as typeof github;
 
 export function CodeBlock({
   language,
@@ -29,16 +35,20 @@ export function CodeBlock({
           accessibilityLabel={copied ? "Copied" : "Copy code"}
         >
           {copied ? (
-            <Check size={14} color={colors.success} />
+            <Check size={16} color={colors.success} />
           ) : (
-            <Copy size={14} color={colors.secondaryText} />
+            <Copy size={16} color={colors.secondaryText} />
           )}
         </Pressable>
       </View>
       <CodeHighlighter
-        hljsStyle={atomOneDark}
+        // Light plan, not atomOneDark: the near-black code plane is the
+        // retired world. The card supplies the Mist ground, so the style's
+        // own white background is cleared. Inter carries the code
+        // (Single Family Rule — no monospace exception).
+        hljsStyle={CODE_STYLE}
         language={language}
-        textStyle={{ fontSize: 13 }}
+        textStyle={{ fontSize: 14, fontFamily: font.sans, lineHeight: 20 }}
       >
         {text}
       </CodeHighlighter>

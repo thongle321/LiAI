@@ -1,6 +1,7 @@
 /** "Ready to use" group: completed local downloads + connected remote APIs. */
 
 import { useModelStore } from "../../store/modelStore";
+import { useChatStore } from "../../store/chat";
 import { isProviderActive } from "../../lib/model-providers.ts";
 import { ModelAccordion } from "./ModelAccordion.tsx";
 import { ModelCard, RemoteProviderCard } from "./ModelCard.tsx";
@@ -27,6 +28,9 @@ export function ReadyModels({
     setActiveRemoteApi,
     removeRemoteApi,
   } = useModelStore();
+  // Unload must free memory, not just detach: point the model store at
+  // nothing AND drop the engine's cached context so the next Load reloads.
+  const releaseEngine = useChatStore((s) => s.releaseEngine);
 
   const downloaded = models.filter(
     (m) =>
@@ -50,7 +54,10 @@ export function ReadyModels({
           item={item}
           isActive={activeModelId === item.id}
           onActivate={() => setActiveModel(item.id, "local")}
-          onDeactivate={() => setActiveModel(null)}
+          onDeactivate={() => {
+            setActiveModel(null);
+            releaseEngine();
+          }}
           onSettings={() => onOpenSettings(item.id)}
         />
       ))}

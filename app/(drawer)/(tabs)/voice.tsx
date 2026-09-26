@@ -20,7 +20,6 @@ import {
 import Animated from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { openSettings } from "expo-linking";
-import { router } from "expo-router";
 import { Mic } from "lucide-react-native";
 
 import { colors } from "../../../themes/tokens.ts";
@@ -52,11 +51,11 @@ export default function VoiceScreen() {
 
   const micLive = phase === "listening" || phase === "speaking";
   // No model loaded: the mic would start a turn that can never answer, so
-  // it is disabled and the screen offers the way forward instead.
+  // it is disabled. The disabled mic IS the signal (flattened ring + greyed
+  // icon); no warning copy or way-forward button here.
   const modelReady = useModelReady();
-  // Disabled is the Mist+Slate pair, but the ring is dropped so a flat
-  // circle reads "off" next to the ringed enabled state. The word
-  // "Load a model" and its button carry the signal, not the colour alone.
+  // Disabled drops the ring so a flat circle reads "off" next to the ringed
+  // enabled state.
   const micRing = modelReady ? "border-border" : "border-transparent";
 
   return (
@@ -79,13 +78,7 @@ export default function VoiceScreen() {
           className="h-40 w-40 items-center justify-center rounded-full"
           accessibilityRole="button"
           accessibilityState={{ disabled: !modelReady }}
-          accessibilityLabel={
-            modelReady
-              ? micLive
-                ? "Stop listening"
-                : "Tap to speak"
-              : "Load a model to speak"
-          }
+          accessibilityLabel={micLive ? "Stop listening" : "Tap to speak"}
         >
           {/* Listening is a machine-in-the-loop state: a Surface Tint circle
               with concentric Signal Blue rings. Disabled is Mist + Slate,
@@ -175,25 +168,11 @@ export default function VoiceScreen() {
         )}
       </Animated.ScrollView>
 
-      {modelReady ? (
-        <Text className="pb-2 text-center font-sans text-body-md text-secondary-text">
-          Tap the mic to talk
-        </Text>
-      ) : (
-        <View className="items-center px-5 pb-2">
-          <Text className="text-center font-sans text-body-md text-secondary-text">
-            Load a model to talk
-          </Text>
-          <Pressable
-            onPress={() => router.push("/models")}
-            className="btn btn--primary mt-3 min-h-12 px-5 py-2"
-            accessibilityRole="button"
-            accessibilityLabel="Go to models"
-          >
-            <Text className="font-sans text-body-sm text-on-primary">Go to Models</Text>
-          </Pressable>
-        </View>
-      )}
+      {/* The disabled mic carries the no-model state on its own; no warning
+          copy or way-forward button here (the user removed it). */}
+      <Text className="pb-2 text-center font-sans text-body-md text-secondary-text">
+        Tap the mic to talk
+      </Text>
     </SafeAreaView>
   );
 }

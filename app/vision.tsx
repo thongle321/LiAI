@@ -122,7 +122,6 @@ export default function VisionScreen() {
               onSendDraft={sendDraft}
               onToggleInput={() => setInputOpen((o) => !o)}
               onTalk={() => void bargeIn()}
-              onGoToModels={() => router.push("/models")}
               modelReady={modelReady}
             />
           </>

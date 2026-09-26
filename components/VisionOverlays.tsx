@@ -170,7 +170,6 @@ export function VisionBottomPanel({
   onSendDraft,
   onToggleInput,
   onTalk,
-  onGoToModels,
   modelReady,
 }: {
   bottom: number;
@@ -188,8 +187,6 @@ export function VisionBottomPanel({
   onSendDraft: () => void;
   onToggleInput: () => void;
   onTalk: () => void;
-  /** Way forward when no model is active (empty-state rule). */
-  onGoToModels: () => void;
   /** No active model: talk + type are disabled and greyed. */
   modelReady: boolean;
 }) {
@@ -235,22 +232,8 @@ export function VisionBottomPanel({
           </ScrollView>
         ) : (
           <Text className="text-center font-sans text-body-md text-white/80">
-            {!modelReady
-              ? "Load a model to ask about what you see"
-              : phase === "idle"
-                ? "Tap the mic and ask about what you see"
-                : statusLabel}
+            {phase === "idle" ? "Tap the mic and ask about what you see" : statusLabel}
           </Text>
-        )}
-        {!modelReady && (
-          <Pressable
-            onPress={onGoToModels}
-            className="btn btn--primary mx-auto mt-3 min-h-12 px-5 py-2"
-            accessibilityRole="button"
-            accessibilityLabel="Go to models"
-          >
-            <Text className="font-sans text-body-sm text-on-primary">Go to Models</Text>
-          </Pressable>
         )}
         {camProblem !== null && (
           <Text className="mt-1 text-center font-sans text-body-sm text-white/70">
@@ -265,7 +248,7 @@ export function VisionBottomPanel({
             value={draft}
             onChangeText={modelReady ? onDraftChange : () => undefined}
             editable={modelReady}
-            placeholder={modelReady ? "Ask about this…" : "Load a model first"}
+            placeholder="Ask about this…"
             placeholderTextColor={colors.secondaryText}
             multiline
             autoFocus={modelReady}
@@ -278,7 +261,7 @@ export function VisionBottomPanel({
             className="h-12 w-12 items-center justify-center"
             accessibilityRole="button"
             accessibilityState={{ disabled: !modelReady }}
-            accessibilityLabel={modelReady ? "Send question" : "Load a model to send"}
+            accessibilityLabel="Send question"
           >
             <Send size={22} color={modelReady ? colors.primary : colors.secondaryText} />
           </Pressable>
@@ -293,7 +276,7 @@ export function VisionBottomPanel({
           style={{ backgroundColor: scrim }}
           accessibilityRole="button"
           accessibilityState={{ disabled: !modelReady }}
-          accessibilityLabel={modelReady ? "Type a question" : "Load a model to type"}
+          accessibilityLabel="Type a question"
         >
           <Keyboard size={22} color={modelReady ? colors.inverseText : colors.secondaryText} />
         </Pressable>
@@ -303,9 +286,7 @@ export function VisionBottomPanel({
           className="h-20 w-20 items-center justify-center"
           accessibilityRole="button"
           accessibilityState={{ disabled: !modelReady }}
-          accessibilityLabel={
-            !modelReady ? "Load a model to talk" : phase === "idle" ? "Talk" : "Stop talking"
-          }
+          accessibilityLabel={phase === "idle" ? "Talk" : "Stop talking"}
         >
           {/* Disabled on the camera ground: the scrim disc is the fill
               (Mist would be a light disc on a dark frame) and DESIGN's

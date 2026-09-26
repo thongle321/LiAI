@@ -10,6 +10,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
 import { colors } from "../../themes/tokens.ts";
+import { ContentColumn } from "../../components/ContentColumn.tsx";
 import {
   matchTier,
   parseTiers,
@@ -54,7 +55,8 @@ export default function ModelStep() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
-      <ScrollView contentContainerClassName="p-5">
+      <ScrollView contentContainerClassName="w-full">
+        <ContentColumn className="p-5">
         <Text className="font-sans-semibold text-h2 text-primary-text">
           Pick your model
         </Text>
@@ -97,6 +99,7 @@ export default function ModelStep() {
             Continue
           </Text>
         </Pressable>
+        </ContentColumn>
       </ScrollView>
     </SafeAreaView>
   );

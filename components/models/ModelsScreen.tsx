@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { colors } from "../../themes/tokens.ts";
 import { ScreenHeader } from "../ScreenHeader.tsx";
+import { ContentColumn } from "../ContentColumn.tsx";
 import { useLocalModelImport } from "../../hooks/useLocalModelImport.ts";
 import { useModelStore } from "../../store/modelStore";
 import { useModelsUi } from "../../store/modelsUi.ts";
@@ -67,24 +68,26 @@ export function ModelsScreen() {
         }
       />
       <View className="flex-1">
-        <ScrollView className="flex-1" contentContainerClassName="p-5 pb-[120px]">
-          {readyVisible && (
-            <ReadyModels
-              open={readyOpen}
-              onToggle={(next) => setOpen("ready", next)}
-              onOpenSettings={setSettingsModelId}
-              hfOnly={hfOnly}
-            />
-          )}
-          {/* downloadedOnly (PocketPal `downloaded`): only Ready renders. */}
-          {availableVisible && !downloadedOnly && (
-            <AvailableModels
-              open={availableOpen}
-              onToggle={(next) => setOpen("available", next)}
-              onDownload={(modelId, file) => startDownload(modelId, file)}
-              grouped={grouped}
-            />
-          )}
+        <ScrollView className="flex-1" contentContainerClassName="w-full">
+          <ContentColumn className="p-5 pb-[240px]">
+            {readyVisible && (
+              <ReadyModels
+                open={readyOpen}
+                onToggle={(next) => setOpen("ready", next)}
+                onOpenSettings={setSettingsModelId}
+                hfOnly={hfOnly}
+              />
+            )}
+            {/* downloadedOnly (PocketPal `downloaded`): only Ready renders. */}
+            {availableVisible && !downloadedOnly && (
+              <AvailableModels
+                open={availableOpen}
+                onToggle={(next) => setOpen("available", next)}
+                onDownload={(modelId, file) => startDownload(modelId, file)}
+                grouped={grouped}
+              />
+            )}
+          </ContentColumn>
         </ScrollView>
 
         <FABGroup
@@ -98,10 +101,12 @@ export function ModelsScreen() {
         <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
           <ScrollView
             className="flex-1"
-            contentContainerClassName="p-5"
+            contentContainerClassName="w-full"
             keyboardShouldPersistTaps="handled"
           >
-            <HFModelSearch onClose={() => setHfOpen(false)} />
+            <ContentColumn className="p-5">
+              <HFModelSearch onClose={() => setHfOpen(false)} />
+            </ContentColumn>
           </ScrollView>
         </SafeAreaView>
       </Modal>

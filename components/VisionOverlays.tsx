@@ -132,7 +132,7 @@ export function VisionTopFloat({
     >
       <Pressable
         onPress={onExit}
-        className="h-11 w-11 items-center justify-center"
+        className="h-12 w-12 items-center justify-center"
         accessibilityRole="button"
         accessibilityLabel="Stop vision"
       >
@@ -141,7 +141,7 @@ export function VisionTopFloat({
       <View className="flex-1" />
       <Pressable
         onPress={onFlip}
-        className="h-11 w-11 items-center justify-center"
+        className="h-12 w-12 items-center justify-center"
         accessibilityRole="button"
         accessibilityLabel="Switch camera"
       >
@@ -205,7 +205,14 @@ export function VisionBottomPanel({
               <Text className="text-center font-sans text-body-md text-white">
                 {issue}
               </Text>
-              <Pressable onPress={onRetry} className="mt-1 px-5 py-1">
+              {/* A labelled text action is a button, not a circular control:
+                  Default radius per the button spec, and a real 48px target. */}
+              <Pressable
+                onPress={onRetry}
+                className="btn btn--ghost mt-2 min-h-12 min-w-24"
+                accessibilityRole="button"
+                accessibilityLabel="Try again"
+              >
                 <Text className="font-sans text-body-md text-primary">Try again</Text>
               </Pressable>
             </View>
@@ -244,7 +251,12 @@ export function VisionBottomPanel({
             onSubmitEditing={onSendDraft}
             className="flex-1 px-3 font-sans text-body-md text-white"
           />
-          <Pressable onPress={onSendDraft} className="px-2 py-1">
+          <Pressable
+            onPress={onSendDraft}
+            className="h-12 w-12 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Send question"
+          >
             <Send size={22} color={colors.primary} />
           </Pressable>
         </View>

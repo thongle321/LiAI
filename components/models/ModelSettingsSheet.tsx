@@ -65,7 +65,7 @@ export function ModelSettingsSheet({
           <Text className="font-sans-semibold text-h3 text-primary-text">Model Settings</Text>
           <Pressable
             onPress={onClose}
-            className="h-11 w-11 items-center justify-center"
+            className="h-12 w-12 items-center justify-center"
             accessibilityRole="button"
             accessibilityLabel="Close model settings"
           >

@@ -101,7 +101,7 @@ export function StepperRow({
         <Pressable
           onPress={onMinus}
           disabled={minusDisabled}
-          className="h-11 w-11 items-center justify-center rounded-full border border-border bg-surface-1"
+          className="h-12 w-12 items-center justify-center rounded-full border border-border bg-surface-1"
           accessibilityRole="button"
           accessibilityLabel={`Decrease ${label}`}
         >
@@ -111,7 +111,7 @@ export function StepperRow({
         <Pressable
           onPress={onPlus}
           disabled={plusDisabled}
-          className="h-11 w-11 items-center justify-center rounded-full border border-border bg-surface-1"
+          className="h-12 w-12 items-center justify-center rounded-full border border-border bg-surface-1"
           accessibilityRole="button"
           accessibilityLabel={`Increase ${label}`}
         >

@@ -45,7 +45,7 @@ export function HfTokenSettings() {
           />
           <Pressable
             onPress={() => void save()}
-            className="btn btn--primary min-h-11 px-5 py-2"
+            className="btn btn--primary min-h-12 px-5 py-2"
             accessibilityRole="button"
             accessibilityLabel="Save token"
           >
@@ -54,7 +54,7 @@ export function HfTokenSettings() {
           {hfToken && (
             <Pressable
               onPress={() => void setHfToken(null)}
-              className="btn btn--ghost min-h-11 px-5 py-2"
+              className="btn btn--ghost min-h-12 px-5 py-2"
               accessibilityRole="button"
               accessibilityLabel="Clear token"
             >

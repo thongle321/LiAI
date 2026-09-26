@@ -70,7 +70,7 @@ export function ModelCard({
             {!isActive && (
               <Pressable
                 onPress={onActivate}
-                className="btn btn--primary min-h-11 px-5 py-2"
+                className="btn btn--primary min-h-12 px-5 py-2"
                 accessibilityRole="button"
                 accessibilityLabel={`Activate ${title}`}
               >
@@ -79,7 +79,7 @@ export function ModelCard({
             )}
             <Pressable
               onPress={onSettings}
-              className="h-11 w-11 items-center justify-center rounded-full border border-border bg-surface-1"
+              className="h-12 w-12 items-center justify-center rounded-full border border-border bg-surface-1"
               accessibilityRole="button"
               accessibilityLabel={`Settings for ${title}`}
             >
@@ -88,7 +88,7 @@ export function ModelCard({
             {/* Destructive: Alert Tint fill, Alert Red icon, 40px circle. */}
             <Pressable
               onPress={() => removeModel(item.id)}
-              className="h-11 w-11 items-center justify-center rounded-full"
+              className="h-12 w-12 items-center justify-center rounded-full"
               accessibilityRole="button"
               accessibilityLabel={`Delete ${title}`}
             >
@@ -135,7 +135,7 @@ export function RemoteProviderCard({
         {!isActive && (
           <Pressable
             onPress={onActivate}
-            className="btn btn--primary min-h-11 px-5 py-2"
+            className="btn btn--primary min-h-12 px-5 py-2"
             accessibilityRole="button"
             accessibilityLabel={`Activate ${item.name}`}
           >
@@ -144,7 +144,7 @@ export function RemoteProviderCard({
         )}
         <Pressable
           onPress={onRemove}
-          className="h-11 w-11 items-center justify-center rounded-full"
+          className="h-12 w-12 items-center justify-center rounded-full"
           accessibilityRole="button"
           accessibilityLabel={`Remove ${item.name}`}
         >

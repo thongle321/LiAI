@@ -58,7 +58,7 @@ function ProviderKeys({ id }: { id: SearchProviderId }) {
         />
         <Pressable
           onPress={save}
-          className="btn btn--primary min-h-11 px-5 py-2"
+          className="btn btn--primary min-h-12 px-5 py-2"
           accessibilityRole="button"
           accessibilityLabel="Save key"
         >
@@ -67,7 +67,7 @@ function ProviderKeys({ id }: { id: SearchProviderId }) {
         {hasKey && (
           <Pressable
             onPress={clear}
-            className="btn btn--ghost min-h-11 px-5 py-2"
+            className="btn btn--ghost min-h-12 px-5 py-2"
             accessibilityRole="button"
             accessibilityLabel="Clear key"
           >

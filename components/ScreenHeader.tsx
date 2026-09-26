@@ -25,7 +25,7 @@ export function ScreenHeader({ title, right }: { title: string; right?: ReactNod
       <View className="w-12 flex-row items-center">
         <Pressable
           onPress={back}
-          className="h-11 w-11 items-center justify-center"
+          className="h-12 w-12 items-center justify-center"
           accessibilityRole="button"
           accessibilityLabel="Go back"
           hitSlop={4}

@@ -183,33 +183,35 @@ export function ChatInput({
   }
 
   return (
+    // One owner for the gutter: the wrapper. Children stack no inset of
+    // their own (DESIGN.md "Gutters are owned by one layer").
     <View className="border-t border-border bg-base px-5 pt-2">
       {voiceIssue !== null &&
         (voiceSettings ? (
           <Pressable onPress={() => void openSettings()}>
-            <Text className="px-5 pb-1 font-sans text-body-sm text-primary">
+            <Text className="pb-1 font-sans text-body-sm text-primary">
               {voiceIssue}
             </Text>
           </Pressable>
         ) : (
-          <Text className="px-5 pb-1 font-sans text-body-sm text-secondary-text">
+          <Text className="pb-1 font-sans text-body-sm text-secondary-text">
             {voiceIssue}
           </Text>
         ))}
       {attachIssue !== null && (
-        <Text className="px-5 pb-1 font-sans text-body-sm text-secondary-text">
+        <Text className="pb-1 font-sans text-body-sm text-secondary-text">
           {attachIssue}
         </Text>
       )}
       {attached !== null && (
-        <View className="mx-5 mb-2 flex-row items-center gap-2 rounded-lg border border-border bg-surface-1 p-2">
+        <View className="mb-2 flex-row items-center gap-2 rounded-lg border border-border bg-surface-1 p-2">
           <RNImage source={{ uri: attached }} className="h-14 w-14 rounded" />
           <Text className="flex-1 font-sans text-body-sm text-secondary-text">
             Attached — sent with your message
           </Text>
           <Pressable
             onPress={() => setAttached(null)}
-            className="h-11 w-11 items-center justify-center"
+            className="h-12 w-12 items-center justify-center"
             accessibilityRole="button"
             accessibilityLabel="Remove attachment"
           >
@@ -221,11 +223,11 @@ export function ChatInput({
           field spec — Clean White, 1px Hairline, 8px radius, 12/16 padding —
           with a leading attach control and a trailing send icon button in
           its Primary state. Disabled send is Secondary, never dimmed. */}
-      <View className="mx-5 mb-3 flex-row items-end gap-2 rounded-lg border border-border bg-surface-1 px-4 py-3">
+      <View className="mb-3 flex-row items-end gap-2 rounded-lg border border-border bg-surface-1 px-4 py-3">
         <View>
           <Pressable
             onPress={() => setPlusOpen((o) => !o)}
-            className="h-10 w-10 items-center justify-center rounded-full bg-surface-3"
+            className="h-12 w-12 items-center justify-center rounded-full bg-surface-3"
             accessibilityRole="button"
             accessibilityLabel="Attach a photo"
           >
@@ -260,7 +262,7 @@ export function ChatInput({
         <View className="flex-row items-center gap-1">
           <Pressable
             onPress={() => void toggleDictation()}
-            className="h-10 w-10 items-center justify-center rounded-full bg-surface-2"
+            className="h-12 w-12 items-center justify-center rounded-full bg-surface-2"
             accessibilityRole="button"
             accessibilityLabel={listening ? "Stop dictation" : "Dictate a message"}
           >
@@ -269,7 +271,7 @@ export function ChatInput({
           {isLocal && (
             <Pressable
               onPress={() => setThinkingEnabled(!thinkingEnabled)}
-              className="h-10 w-10 items-center justify-center rounded-full bg-surface-2"
+              className="h-12 w-12 items-center justify-center rounded-full bg-surface-2"
               accessibilityRole="switch"
               accessibilityState={{ checked: thinkingEnabled }}
               accessibilityLabel="Thinking"
@@ -285,7 +287,7 @@ export function ChatInput({
         {sending ? (
           <Pressable
             onPress={stop}
-            className="h-10 w-10 items-center justify-center rounded-full bg-primary"
+            className="h-12 w-12 items-center justify-center rounded-full bg-primary"
             accessibilityRole="button"
             accessibilityLabel="Stop generating"
           >
@@ -295,7 +297,7 @@ export function ChatInput({
           <Pressable
             disabled={!canSend}
             onPress={() => void handleSend()}
-            className={`h-10 w-10 items-center justify-center rounded-full ${
+            className={`h-12 w-12 items-center justify-center rounded-full ${
               canSend ? "bg-primary" : "bg-surface-2"
             }`}
             accessibilityRole="button"

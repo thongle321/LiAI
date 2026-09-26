@@ -81,14 +81,15 @@ export function ChatScreen() {
       edges={["top", "left", "right"]}
       style={{ flex: 1, backgroundColor: colors.base }}
     >
-      {/* 56px header on Clean White with a 1px Hairline bottom. Leading and
-          trailing slots are equal width so the wordmark stays optically
-          centred regardless of how many trailing icons are present. */}
+      {/* 56px header on Clean White with a 1px Hairline bottom. Both slots
+          are w-24 (96px): the trailing group is two 48px targets, so equal
+          slots must be sized to the WIDER group or its overflow eats the
+          wordmark's flex space and shifts it off-centre. */}
       <View className="h-14 flex-row items-center border-b border-border bg-surface-1 px-5">
-        <View className="w-12 flex-row items-center">
+        <View className="w-24 flex-row items-center">
           <Pressable
             onPress={() => navigation.openDrawer()}
-            className="h-11 w-11 items-center justify-center"
+            className="h-12 w-12 items-center justify-center"
             accessibilityRole="button"
             accessibilityLabel="Open menu"
             hitSlop={4}
@@ -109,13 +110,13 @@ export function ChatScreen() {
             {APP_NAME}
           </Text>
         </Pressable>
-        <View className="w-12 flex-row items-center justify-end">
+        <View className="w-24 flex-row items-center justify-end">
           <Pressable
             onPress={() => {
               setSearchOpen((o) => !o);
               setQuery("");
             }}
-            className="h-11 w-11 items-center justify-center"
+            className="h-12 w-12 items-center justify-center"
             accessibilityRole="button"
             accessibilityLabel={searchOpen ? "Close search" : "Search this conversation"}
           >
@@ -130,7 +131,7 @@ export function ChatScreen() {
               const title = sessions.find((s) => s.id === sessionId)?.title;
               copy(buildTranscript(messages, title));
             }}
-            className="h-11 w-11 items-center justify-center"
+            className="h-12 w-12 items-center justify-center"
             accessibilityRole="button"
             accessibilityLabel={copied ? "Copied" : "Copy transcript"}
           >

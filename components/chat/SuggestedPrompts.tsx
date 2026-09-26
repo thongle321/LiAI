@@ -23,7 +23,7 @@ export function SuggestedPrompts({
         <Pressable
           key={prompt}
           onPress={() => onPick(prompt)}
-          className="min-h-11 justify-center rounded-lg border border-border bg-surface-1 px-4 py-2"
+          className="min-h-12 justify-center rounded-lg border border-border bg-surface-1 px-4 py-2"
           accessibilityRole="button"
           accessibilityLabel={prompt}
         >

@@ -62,9 +62,11 @@ export default function VoiceScreen() {
       </View>
 
       <Animated.ScrollView style={contentFade} contentContainerClassName="flex-1 items-center justify-center px-8">
+        {/* The hit area IS the visual: a 44px target wrapped around a 160px
+            circle would make the outer ring dead to the thumb. */}
         <Pressable
           onPress={bargeIn}
-          className="h-11 w-11"
+          className="h-40 w-40 items-center justify-center rounded-full"
           accessibilityRole="button"
           accessibilityLabel={micLive ? "Stop listening" : "Tap to speak"}
         >

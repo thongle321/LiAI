@@ -103,12 +103,12 @@ components:
     backgroundColor: "{colors.signal-blue}"
     textColor: "{colors.clean-white}"
     rounded: "999px"
-    size: "40px"
+    size: "48px"
   icon-button-secondary:
     backgroundColor: "{colors.surface-tint}"
     textColor: "{colors.signal-blue}"
     rounded: "999px"
-    size: "40px"
+    size: "48px"
   input-default:
     backgroundColor: "{colors.clean-white}"
     textColor: "{colors.ink}"
@@ -256,11 +256,13 @@ The spatial model is a 4px scale — 4, 8, 12, 16, 20, 24, 32, 40, 48 — with *
 
 **Containers.** Surfaces are full-bleed or inset by the gutter; there is no centred max-width column. Chat is the one exception to horizontal rhythm — message bubbles are edge-anchored (user right, assistant left) and capped at roughly 75% of viewport width, because a chat reads as a column of alternating edges, not a stack of equal cards.
 
-**Navigation geometry.** The header is 56px tall, sits on Clean White with a 1px Hairline bottom border, and holds a leading control, the wordmark, and trailing controls in fixed-width slots so the wordmark stays optically centred regardless of how many trailing icons are present. The tab bar is 64px plus the device's bottom safe-area inset, with a 1px Hairline top border; the inset is applied once, at the bar, and screens opt out of it rather than double-applying it.
+**Navigation geometry.** The header is 56px tall, sits on Clean White with a 1px Hairline bottom border, and holds a leading control, the wordmark, and trailing controls in slots of **equal width, sized to hold the wider of the two groups** — equal slots alone do not centre the wordmark if one group overflows its slot. The tab bar is 64px plus the device's bottom safe-area inset, with a 1px Hairline top border; the inset is applied once, at the bar, and screens opt out of it rather than double-applying it.
 
-**Density.** Fixed-format rows (settings, model lists, session history) are 44–52px tall — the accessibility floor is 44×44dp for every touch target, and a denser row is not worth the tradeoff. Prose surfaces (chat, empty states) are looser and centred.
+**Gutters are owned by one layer.** A screen gutter is applied once, at the outermost container of a column. A child that also insets itself stacks the gutter; that is the defect, not a style choice.
 
-**Responsive behaviour.** Portrait is the design target (`orientation: portrait` in app config). On tablets, the layout must not stretch: cap content columns at a comfortable reading measure and centre them in the viewport rather than letting cards span full width. Safe-area insets are applied exactly once per edge by whichever component owns that edge.
+**Density.** Fixed-format rows (settings, model lists, session history) are 48–56px tall — the accessibility floor is **48×48dp** for every touch target (Android's Material minimum; iOS's 44pt is the lower bar and the shared target must clear the higher one), and a denser row is not worth the tradeoff. Prose surfaces (chat, empty states) are looser and centred. Where a control's *visual* is smaller than the floor, pad the hit area rather than the circle — never the reverse.
+
+**Responsive behaviour.** Portrait is the design target (`orientation: portrait` in app config). On tablets the layout must not stretch: cap the content column at `CONTENT_MAX_WIDTH` (see `lib/layout.ts`) and centre it in the viewport rather than letting cards span full width. Chat bubbles stay edge-anchored and are exempt — they are a conversation, not a column. Safe-area insets are applied exactly once per edge by whichever component owns that edge.
 
 ## Elevation & Depth
 
@@ -323,7 +325,7 @@ Confident and flat. Buttons never lift, never glow, and never animate their own 
 - **Primary:** Signal Blue fill, Clean White icon. Reserve for the single most important action in a surface — the send arrow, the primary add.
 - **Secondary:** Surface Tint fill, Signal Blue icon. The default for every other icon-only control.
 - **Destructive:** Alert Tint fill, Alert Red icon.
-- **Touch target:** the visual circle is 40px; the touch target is 44×44dp minimum. Pad the hit area, not the circle.
+- **Touch target:** the visual circle is 40px; the touch target is 48×48dp minimum. Pad the hit area, not the circle. A control whose visual is already the target (the voice mic) takes its target straight from the visual.
 - **Every icon-only button carries an accessibility label.** No exceptions, including destructive and decorative-adjacent controls.
 
 ### Inputs / Fields
@@ -349,7 +351,7 @@ Confident and flat. Buttons never lift, never glow, and never animate their own 
 - **Header (56px, Clean White, 1px Hairline bottom):** a leading control (menu or back), the wordmark in Headline (600, 24/32) Ink, and trailing controls. Leading and trailing slots are **fixed width and equal** so the wordmark stays optically centred no matter how many trailing icons appear. Icons are 2px stroke at 20px in Ink; a header control that opens something live takes Signal Blue.
 - **Tab bar (64px + safe-area inset, Clean White, 1px Hairline top):** items are icon-over-label, 2px stroke icon at 24px, Caption label. Inactive is Slate. Active is Signal Blue on both icon and label, sitting on a Surface Tint pill (Large radius) with a 2px Signal Blue indicator bar above the label. Exactly one tab is active.
 - **The active pill is always mounted.** Swap its fill and its indicator's opacity; do not mount and unmount it. Mounting on selection changes the row's height and makes the whole bar jump.
-- **Screen transitions do not animate.** Pushed and popped routes cut. The tab bar and composer are shared chrome that must never move underneath the user.
+- **Predictive Back and transitions.** Predictive Back is enabled so the system gesture animates the pop. The "transitions do not animate" rule governs the app's own JS navigator — tab and screen switches cut, and shared chrome (tab bar, composer) never moves. The OS back gesture is a platform affordance, not an app transition.
 - **Nav chrome is static.** No fade, no slide, no scale on the bar itself — only the content behind it may transition.
 
 ### Chat Messages
@@ -392,7 +394,7 @@ Machine-in-the-loop feedback. These are the only places Coolant Cyan is allowed.
 - **Do** let Signal Blue mark exactly one thing per screen. Scan any screen and count the blue elements; if the count exceeds one live/selected/actionable element, something is competing.
 - **Do** separate with a 1px Hairline border or one step between Cool Paper, Clean White, and Mist. That is the whole depth model.
 - **Do** keep every value on the 4px spacing scale and every radius on the five-step scale. If a number is not on a scale, it does not ship.
-- **Do** meet the accessibility floor on every screen: 4.5:1 text contrast, 44×44dp touch targets, 16px minimum body text, dynamic type support, and reduced-motion honoured.
+- **Do** meet the accessibility floor on every screen: 4.5:1 text contrast, 48×48dp touch targets, 16px minimum body text, dynamic type support, and reduced-motion honoured.
 - **Do** pair every status colour with a glyph and a word — check, exclamation, dot trail, word. Colour is never the only indicator.
 - **Do** use Coolant Cyan only for machine-in-the-loop states (thinking, vision, streaming) and Signal Blue everywhere else.
 - **Do** keep nav chrome and the composer static. Only the content behind them transitions.

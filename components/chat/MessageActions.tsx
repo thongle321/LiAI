@@ -49,7 +49,7 @@ export function MessageActions({
     <View className="mt-2 flex-row items-center gap-3">
       <Pressable
         onPress={() => copy(text)}
-        className="h-11 w-11 items-center justify-center"
+        className="h-12 w-12 items-center justify-center"
         accessibilityRole="button"
         accessibilityLabel={copied ? "Copied" : "Copy message"}
       >
@@ -61,7 +61,7 @@ export function MessageActions({
       </Pressable>
       <Pressable
         onPress={onRegenerate}
-        className="h-11 w-11 items-center justify-center"
+        className="h-12 w-12 items-center justify-center"
         accessibilityRole="button"
         accessibilityLabel="Regenerate message"
       >
@@ -69,7 +69,7 @@ export function MessageActions({
       </Pressable>
       <Pressable
         onPress={toggleSpeak}
-        className="h-11 w-11 items-center justify-center"
+        className="h-12 w-12 items-center justify-center"
         accessibilityRole="button"
         accessibilityLabel={speaking ? "Stop speaking" : "Speak message"}
       >

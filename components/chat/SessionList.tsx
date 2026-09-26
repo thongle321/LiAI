@@ -106,7 +106,7 @@ export function SessionList({
             </View>
             <Pressable
               onPress={() => void onTogglePin(item.id, !item.pinned)}
-              className="h-11 w-11 items-center justify-center"
+              className="h-12 w-12 items-center justify-center"
               accessibilityRole="button"
               accessibilityLabel={item.pinned ? "Unpin conversation" : "Pin conversation"}
             >
@@ -121,7 +121,7 @@ export function SessionList({
                 setRenaming(item);
                 setDraft(item.title);
               }}
-              className="h-11 w-11 items-center justify-center"
+              className="h-12 w-12 items-center justify-center"
               accessibilityRole="button"
               accessibilityLabel="Rename conversation"
             >
@@ -129,7 +129,7 @@ export function SessionList({
             </Pressable>
             <Pressable
               onPress={() => onDelete(item.id)}
-              className="h-11 w-11 items-center justify-center"
+              className="h-12 w-12 items-center justify-center"
               accessibilityRole="button"
               accessibilityLabel="Delete conversation"
             >

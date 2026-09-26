@@ -37,6 +37,12 @@ function presetFor(modelId: string, presets: PresetModel[]): PresetModel {
   return preset;
 }
 
+/** Min gap between transient progress pushes to the store (~4 fps). The bar
+ *  animates smoothly at this rate; the native tick can fire far faster. */
+const PROGRESS_PUSH_MS = 250;
+/** Last push time per model id, so throttle is per-download not global. */
+const progressPushedAt = new Map<string, number>();
+
 export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSlice> = (
   set,
   get,
@@ -159,13 +165,24 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
           error: downloadJob.error,
         });
       }
-      get().setModelProgress(downloadJob.modelId, {
-        downloadProgress: downloadJob.progress,
-        downloadedBytes: downloadJob.downloadedBytes,
-        totalBytes: downloadJob.totalBytes,
-        speedBytesPerSec: downloadJob.speedBytesPerSec,
-      });
-      get().syncDownloadStatus();
+      // Throttle the transient push so the bar animates smoothly (~4 fps)
+      // instead of re-rendering every preset card on every native tick.
+      // pocketpal ships the unthrottled version; that is the hotspot.
+      const now = Date.now();
+      const last = progressPushedAt.get(downloadJob.modelId) ?? 0;
+      if (now - last >= PROGRESS_PUSH_MS) {
+        progressPushedAt.set(downloadJob.modelId, now);
+        get().setModelProgress(downloadJob.modelId, {
+          downloadProgress: downloadJob.progress,
+          downloadedBytes: downloadJob.downloadedBytes,
+          totalBytes: downloadJob.totalBytes,
+          speedBytesPerSec: downloadJob.speedBytesPerSec,
+        });
+        // syncDownloadStatus builds a fresh Map and notifies subscribers, so
+        // it rides the same throttle — running it every tick was the last
+        // per-tick store notification.
+        get().syncDownloadStatus();
+      }
     });
 
     downloadService.setCompleteCallback((downloadJob, success) => {

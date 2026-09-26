@@ -40,6 +40,11 @@ export function ReadyModels({
   );
   // Remote providers are not HuggingFace models: hidden by the hf filter.
   const remotes = hfOnly ? [] : remoteApis;
+  // A "Ready to use (0)" header with nothing under it is dead UI, so an
+  // empty group is not rendered at all — the same rule pocketpal uses
+  // (`.filter(group => group.items.length > 0)`). This covers the filtered
+  // case too: hfOnly/downloadedOnly can empty a group that has models.
+  if (downloaded.length === 0 && remotes.length === 0) return null;
 
   return (
     <ModelAccordion

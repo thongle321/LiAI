@@ -1,6 +1,6 @@
 /** "Available to download" group: preset cards with their quantization files. */
 
-import { useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 
@@ -24,7 +24,7 @@ import {
   isProgressVisible,
 } from "./ModelBits.tsx";
 
-export function PresetModelCard({
+function PresetModelCardInner({
   preset,
   onDownload,
 }: {
@@ -131,6 +131,11 @@ export function PresetModelCard({
   );
 }
 
+/** memo so a parent re-render (accordion open/close, search) skips cards
+ * whose props are unchanged; each card still re-renders on its own store
+ * progress (via useModelStore below). */
+export const PresetModelCard = memo(PresetModelCardInner);
+
 export function AvailableModels({
   open,
   onToggle,
@@ -151,9 +156,12 @@ export function AvailableModels({
   const guard = useLoadGuard();
   const tiers = TIERS;
 
-  function onGuardedDownload(modelId: string, file: PresetModelFile): void {
-    guard(file.size, () => onDownload(modelId, file));
-  }
+  const onGuardedDownload = useCallback(
+    (modelId: string, file: PresetModelFile) => {
+      guard(file.size, () => onDownload(modelId, file));
+    },
+    [guard, onDownload],
+  );
 
   const cards = (items: PresetModel[]) =>
     items.map((item) => (

@@ -37,11 +37,22 @@ export function ModelCard({
   const fileBytes = item.files.reduce((sum, f) => sum + f.size, 0);
 
   return (
-    <View className="mb-3 bg-surface-1 border border-border rounded-lg">
+    <View className="mb-3 overflow-hidden rounded-lg border border-border bg-surface-1">
       <View className="p-5">
         <View className="flex-row items-center gap-2">
           <ModelTypeIcon type={item.type} />
-          <Text className="font-sans-semibold text-body-md text-primary-text">{title}</Text>
+          {/* flex-1/shrink so a long name truncates instead of pushing the
+              green dot past the card edge. middle-ellipsis keeps the
+              informative end of an "org/model" repo name (pocketpal's
+              ModelCard uses flex:1/minWidth:0 + numberOfLines +
+              ellipsizeMode="middle"). */}
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="middle"
+            className="shrink font-sans-semibold text-body-md text-primary-text"
+          >
+            {title}
+          </Text>
           {/* Loaded reads as a green dot alone — no "Active" word, no tint
               chip. The paired "Unload" button below is the word that keeps
               this from being a colour-only signal; the label keeps it

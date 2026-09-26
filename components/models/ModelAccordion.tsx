@@ -39,14 +39,25 @@ export function ModelAccordion({
 }) {
   return (
     <View className="mb-6">
-      <Host matchContents={{ vertical: true }} style={{ width: "100%" }}>
+      {/* No `matchContents`. That prop tells the Host to size itself to the
+          native content's measured layout (max-content), and the Collapsible
+          body — a native container hosting React Native children — then lays
+          the preset cards out at their intrinsic width. `flex-1` inside that
+          unbounded width never shrinks, so the right-hand chips ("1 file",
+          size) get pushed off the right edge. Letting the Host stay at
+          width:100% gives the native body a bounded frame, and the cards
+          lay out like normal React Native. Body is also stretched + w-full
+          so the card rows are bounded even if the body is a little loose. */}
+      <Host style={{ width: "100%", alignSelf: "stretch" }}>
         <Collapsible
           isOpen={open}
           onOpenChange={onToggle}
           label={`${title} (${count})`}
           labelStyle={HEADER_LABEL}
         >
-          <View className="mt-3">{children}</View>
+          <View className="mt-3 w-full" style={{ alignSelf: "stretch" }}>
+            {children}
+          </View>
         </Collapsible>
       </Host>
     </View>

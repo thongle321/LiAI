@@ -57,7 +57,12 @@ export function SessionList({
 
   return (
     <>
-      <Pressable onPress={onNew} className="flex-row items-center px-5 py-3">
+      <Pressable
+        onPress={onNew}
+        className="menu-row"
+        accessibilityRole="button"
+        accessibilityLabel="New conversation"
+      >
         <MessageSquarePlus size={20} color={colors.primary} />
         <Text className="ml-3 font-sans text-body-md text-primary-text">
           New conversation
@@ -87,9 +92,12 @@ export function SessionList({
         renderItem={({ item }) => (
           <Pressable
             onPress={() => void openSession(item)}
-            className={`flex-row items-center px-5 py-2 ${
+            className={`menu-row ${
               item.id === sessionId ? "bg-surface-2" : ""
             }`}
+            accessibilityRole="button"
+            accessibilityLabel={item.title}
+            accessibilityState={{ selected: item.id === sessionId }}
           >
             <View className="flex-1">
               <Text

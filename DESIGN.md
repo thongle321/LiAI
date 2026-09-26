@@ -262,7 +262,7 @@ The spatial model is a 4px scale — 4, 8, 12, 16, 20, 24, 32, 40, 48 — with *
 
 **Density.** Fixed-format rows (settings, model lists, session history) are 48–56px tall — the accessibility floor is **48×48dp** for every touch target (Android's Material minimum; iOS's 44pt is the lower bar and the shared target must clear the higher one), and a denser row is not worth the tradeoff. Prose surfaces (chat, empty states) are looser and centred. Where a control's *visual* is smaller than the floor, pad the hit area rather than the circle — never the reverse.
 
-**Responsive behaviour.** Portrait is the design target (`orientation: portrait` in app config). On tablets the layout must not stretch: cap the content column at `CONTENT_MAX_WIDTH` (see `lib/layout.ts`) and centre it in the viewport rather than letting cards span full width. Chat bubbles stay edge-anchored and are exempt — they are a conversation, not a column. Safe-area insets are applied exactly once per edge by whichever component owns that edge.
+**Responsive behaviour.** Portrait is the design target (`orientation: portrait` in app config). On tablets the layout must not stretch: cap the content column at a 640pt reading measure (`CONTENT_MAX_WIDTH` in `components/ContentColumn.tsx`) and centre it in the viewport rather than letting cards span full width. The cap is a `maxWidth`, never an explicit `width` — an explicit width equal to the window overflows the moment any parent insets horizontally. Chat bubbles stay edge-anchored and are exempt — they are a conversation, not a column. Safe-area insets are applied exactly once per edge by whichever component owns that edge.
 
 ## Elevation & Depth
 

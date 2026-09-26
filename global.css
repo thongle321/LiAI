@@ -104,7 +104,7 @@
   padding-right: 20px;
   padding-top: 10px;
   padding-bottom: 10px;
-  min-height: 44px;
+  min-height: 48px;
 }
 .btn--primary {
   background-color: #3882f6;
@@ -178,6 +178,9 @@
   padding-right: 16px;
   padding-top: 12px;
   padding-bottom: 12px;
+  /* Floor lives in the BEM block, not at each call site. */
+  min-height: 48px;
+  justify-content: center;
   border-bottom-width: 1px;
   border-bottom-style: solid;
   border-bottom-color: #e2e8f0;
@@ -190,6 +193,9 @@
 .seg {
   flex: 1;
   align-items: center;
+  justify-content: center;
+  /* 8+8 padding over a 14px label is ~33px — under the 48dp floor. */
+  min-height: 48px;
   border-width: 1px;
   border-style: solid;
   border-color: #e2e8f0;
@@ -197,6 +203,19 @@
   padding-top: 8px;
   padding-bottom: 8px;
 }
+/* Menu rows: .menu-row — the 48dp row used by the models filter menu,
+   the session list and the remote-provider picker. */
+.menu-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding-left: 20px;
+  padding-right: 20px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
 .seg--active {
   background-color: #eff6ff;
   border-color: #3882f6;

@@ -52,7 +52,7 @@ export function ModelCard({
             <Text className="font-sans text-body-sm text-secondary-text/70 mt-0.5">
               by {item.author}
             </Text>
-            <View className="flex-row flex-wrap items-center gap-2 mt-1.5">
+            <View className="flex-row flex-wrap items-center gap-2 mt-2">
               <Chip label={typeLabel(item.type)} />
               {params > 0 ? <Chip label={formatParams(params)} /> : null}
               <Chip label={formatBytes(item.files[0]?.size || 0)} />
@@ -62,11 +62,13 @@ export function ModelCard({
           </View>
         </View>
         {isActive && (
-          <Text className="font-sans text-caption text-secondary-text mt-1.5">
+          <Text className="font-sans text-caption text-secondary-text mt-2">
             Active on this device
           </Text>
         )}
-        <View className="mt-3 flex-row items-center gap-2">
+        {/* Wraps so a long model name + three actions reflow instead of
+            clipping at 320pt. */}
+        <View className="mt-3 flex-row flex-wrap items-center gap-2">
             {!isActive && (
               <Pressable
                 onPress={onActivate}
@@ -126,7 +128,7 @@ export function RemoteProviderCard({
           <Text className="font-sans text-body-sm text-secondary-text/70 mt-0.5">
             {item.baseUrl} • {item.modelName}
           </Text>
-          <View className="flex-row items-center gap-2 mt-1.5">
+          <View className="flex-row items-center gap-2 mt-2">
             <Chip label={item.providerType === "openrouter" ? "OpenRouter" : "Remote API"} />
             {isActive && <ActiveBadge />}
             {!isActive && reachable === false && <Chip label="Unreachable" />}

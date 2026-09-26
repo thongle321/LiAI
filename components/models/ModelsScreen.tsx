@@ -11,7 +11,7 @@ import { useLocalModelImport } from "../../hooks/useLocalModelImport.ts";
 import { useModelStore } from "../../store/modelStore";
 import { useModelsUi } from "../../store/modelsUi.ts";
 import { ModelsHeaderRight } from "./ModelsHeaderRight.tsx";
-import { FABGroup } from "./FABGroup.tsx";
+import { FABGroup, FAB_STACK_HEIGHT } from "./FABGroup.tsx";
 import { ReadyModels } from "./ReadyModels.tsx";
 import { AvailableModels } from "./AvailableModels.tsx";
 import { HFModelSearch } from "./HFModelSearch.tsx";
@@ -69,7 +69,10 @@ export function ModelsScreen() {
       />
       <View className="flex-1">
         <ScrollView className="flex-1" contentContainerClassName="w-full">
-          <ContentColumn className="p-5 pb-[240px]">
+          {/* paddingBottom is an inline style, not a class: it is derived from
+              FAB_STACK_HEIGHT, and a dynamically-composed Uniwind class has
+              failed to resolve on device before (see ModelsHeaderRight). */}
+          <ContentColumn className="p-5" style={{ paddingBottom: FAB_STACK_HEIGHT }}>
             {readyVisible && (
               <ReadyModels
                 open={readyOpen}

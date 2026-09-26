@@ -17,9 +17,14 @@ function FabAction({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} className="flex-row items-center gap-2 mb-3">
-      <View
-      className="px-3 py-2 bg-surface-1 border border-border rounded">
+    <Pressable
+      onPress={onPress}
+      className="min-h-12 flex-row items-center gap-2 mb-3"
+      hitSlop={4}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <View className="px-3 py-2 bg-surface-1 border border-border rounded">
         <Text className="font-sans text-body-sm text-primary-text">{label}</Text>
       </View>
       <View className="h-10 w-10 rounded-full bg-surface-3 items-center justify-center">
@@ -28,6 +33,14 @@ function FabAction({
     </Pressable>
   );
 }
+
+/** Height the expanded FAB stack occupies above the bottom of the screen.
+ *
+ * Three FabActions (48px target + 12px margin each) plus the 56px trigger,
+ * plus the 20px bottom anchor. The models scroll reserves exactly this so
+ * the last card is never trapped under the stack.
+ */
+export const FAB_STACK_HEIGHT = 20 + 56 + 3 * (48 + 12);
 
 export function FABGroup({
   onAddHFModel,

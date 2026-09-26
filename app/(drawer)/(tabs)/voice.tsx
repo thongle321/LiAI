@@ -114,7 +114,7 @@ export default function VoiceScreen() {
               </Text>
               <Pressable
                 onPress={bargeIn}
-                className="btn btn--ghost min-h-11 px-5 py-2"
+                className="btn btn--ghost px-5 py-2"
                 accessibilityRole="button"
                 accessibilityLabel="Stop playback"
               >
@@ -145,7 +145,7 @@ export default function VoiceScreen() {
             )}
             <Pressable
               onPress={() => void retry()}
-              className="btn btn--ghost mt-1 min-h-11 px-5 py-2"
+              className="btn btn--ghost mt-1 px-5 py-2"
               accessibilityRole="button"
               accessibilityLabel="Try again"
             >

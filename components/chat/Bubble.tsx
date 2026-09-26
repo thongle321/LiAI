@@ -91,7 +91,7 @@ export function Bubble({
         accessibilityLabel={`${APP_NAME} avatar`}
       />
       <View className="flex-1">
-        <View className="mb-1 flex-row items-center gap-1.5">
+        <View className="mb-1 flex-row items-center gap-2">
           <Text className="font-sans text-caption text-secondary-text">{APP_NAME}</Text>
           <Text className="font-sans text-caption text-secondary-text">
             {formatTime(message.at)}
@@ -101,7 +101,7 @@ export function Bubble({
           <MarkdownView text={message.text} />
           {settled && <LinkPreviewCard text={message.text} />}
           {message.steps !== undefined && message.steps.length > 0 && (
-            <View className="mt-2 flex-row flex-wrap items-center gap-1.5">
+            <View className="mt-2 flex-row flex-wrap items-center gap-2">
               {message.steps.map((step, index) => (
                 <View
                   key={step.id ?? `${step.tool}-${index}`}

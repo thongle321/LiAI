@@ -44,12 +44,18 @@ function ToggleRow({
   icon?: ReactNode;
 }) {
   return (
-    <Pressable onPress={onPress} className="flex-row items-center px-5 py-3">
+    <Pressable
+      onPress={onPress}
+      className="menu-row"
+      accessibilityRole="checkbox"
+      accessibilityLabel={label}
+      accessibilityState={{ checked: on }}
+    >
       {/* Fixed icon slot + explicit menu width (PocketPal Menu.Item geometry).
           The width stays an inline style: the w-60 class failed to resolve
           on device, collapsing the menu into vertical text. Rows use
           classes; only the proven width fix keeps a style. */}
-      <View className="mr-2.5 w-7 items-center justify-center">{icon}</View>
+      <View className="mr-3 w-7 items-center justify-center">{icon}</View>
       <Text
         numberOfLines={1}
         className="mr-2 flex-1 font-sans text-body-md text-primary-text"
@@ -127,9 +133,12 @@ export function ModelsHeaderRight({
     <View ref={btnRef}>
       <Pressable
         onPress={toggle}
-        className={`p-2 rounded-lg border ${
+        className={`h-12 w-12 items-center justify-center rounded-lg border ${
           open ? "border-primary bg-primary/20" : "border-transparent"
         }`}
+        accessibilityRole="button"
+        accessibilityLabel="Filter models"
+        accessibilityState={{ expanded: open }}
       >
         <SlidersHorizontal size={18} color={colors.primary} />
       </Pressable>
@@ -175,7 +184,9 @@ export function ModelsHeaderRight({
             <View className="h-px bg-border mx-4" />
             <Pressable
               onPress={() => run(onExpandAll)}
-              className="flex-row items-center px-5 py-3"
+              className="menu-row"
+              accessibilityRole="button"
+              accessibilityLabel="Expand all sections"
             >
               <Text
                 numberOfLines={1}
@@ -189,7 +200,9 @@ export function ModelsHeaderRight({
             </Pressable>
             <Pressable
               onPress={() => run(onCollapseAll)}
-              className="flex-row items-center px-5 py-3"
+              className="menu-row"
+              accessibilityRole="button"
+              accessibilityLabel="Collapse all sections"
             >
               <Text
                 numberOfLines={1}

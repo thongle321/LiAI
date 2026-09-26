@@ -117,6 +117,7 @@ export function ChatScreen() {
               setQuery("");
             }}
             className="h-12 w-12 items-center justify-center"
+            hitSlop={4}
             accessibilityRole="button"
             accessibilityLabel={searchOpen ? "Close search" : "Search this conversation"}
           >
@@ -132,6 +133,7 @@ export function ChatScreen() {
               copy(buildTranscript(messages, title));
             }}
             className="h-12 w-12 items-center justify-center"
+            hitSlop={4}
             accessibilityRole="button"
             accessibilityLabel={copied ? "Copied" : "Copy transcript"}
           >

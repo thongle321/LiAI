@@ -9,7 +9,7 @@
 
 import { Drawer } from "expo-router/drawer";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors, scrim } from "../../themes/tokens.ts";
 import { AppDrawerContent } from "../../components/AppDrawer.tsx";
 
 export default function DrawerLayout() {
@@ -18,7 +18,7 @@ export default function DrawerLayout() {
       screenOptions={{
         headerShown: false,
         drawerStyle: { width: 280, backgroundColor: colors.surface1 },
-        overlayColor: "rgba(0, 0, 0, 0.6)",
+        overlayColor: scrim,
       }}
       drawerContent={(props) => (
         <AppDrawerContent onClose={() => props.navigation.closeDrawer()} />

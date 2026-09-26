@@ -90,7 +90,13 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
       <View className="flex-row items-center justify-between mb-3">
         <Text className="font-sans-semibold text-h4 text-primary-text">Search Hugging Face</Text>
         {onClose && (
-          <Pressable onPress={onClose} className="p-1">
+          <Pressable
+            onPress={onClose}
+            className="h-12 w-12 items-center justify-center"
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel="Close Hugging Face search"
+          >
             <X size={22} color={colors.secondaryText} />
           </Pressable>
         )}
@@ -110,7 +116,9 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
             setDraft("");
             setTokenOpen(true);
           }}
-          className="flex-row items-center gap-1.5 px-3 py-3 bg-primary/20 border border-primary/50 rounded-lg"
+          className="min-h-12 flex-row items-center gap-2 px-3 py-3 bg-primary/20 border border-primary/50 rounded-lg"
+          accessibilityRole="button"
+          accessibilityLabel={hfToken ? "Hugging Face token saved" : "Add Hugging Face token"}
         >
           {hfToken ? <Check size={14} color={colors.primary} /> : null}
           <Text className="font-sans text-body-sm text-primary">
@@ -145,14 +153,14 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
                   />
                   <Text className="font-sans-semibold text-body-md text-primary-text">{item.name}</Text>
                 </View>
-                <Text className="font-sans text-body-sm text-secondary-text/70 mt-0.5">by {item.author}</Text>
+                <Text className="font-sans text-body-sm text-secondary-text/70 mt-1">by {item.author}</Text>
               </View>
               <ChevronDown size={20} color={colors.secondaryText} />
             </View>
-            <View className="flex-row items-center gap-2 mt-2.5">
+            <View className="flex-row flex-wrap items-center gap-2 mt-2">
               <Chip label="GGUF" />
               {item.private && (
-                <View className="flex-row items-center gap-1 px-1.5 py-0.5 bg-surface-2 border border-border rounded">
+                <View className="flex-row items-center gap-1 px-2 py-1 bg-surface-2 border border-border rounded">
                   <Lock size={10} color={colors.secondaryText} />
                   <Text className="font-sans text-xs text-secondary-text">Gated</Text>
                 </View>
@@ -186,7 +194,7 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
                       <View className="flex-row items-center justify-between">
                         <View className="flex-1">
                           <Text className="font-sans text-body-md text-primary-text">{file.name}</Text>
-                          <View className="flex-row items-center gap-2 mt-1.5">
+                          <View className="flex-row flex-wrap items-center gap-2 mt-2">
                             <Chip label="GGUF" />
                             <Text className="font-sans text-body-sm text-secondary-text/70">{formatBytes(file.size)}</Text>
                           </View>

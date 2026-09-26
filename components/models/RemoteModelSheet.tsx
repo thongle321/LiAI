@@ -102,11 +102,14 @@ export function RemoteModelSheet({
               <View className="flex-row gap-2">
                 <Pressable
                   onPress={() => setProviderType("openrouter")}
-                  className={`flex-1 py-2 px-3 rounded-lg border ${
+                  className={`menu-row flex-1 rounded-lg border items-center justify-center ${
                     providerType === "openrouter" ? "border-primary bg-primary/20" : "border-border"
                   }`}
+                  accessibilityRole="radio"
+                  accessibilityLabel="OpenRouter"
+                  accessibilityState={{ selected: providerType === "openrouter" }}
                 >
-                  <View className="flex-row items-center justify-center gap-1.5">
+                  <View className="flex-row items-center justify-center gap-2">
                     {providerType === "openrouter" ? (
                       <CheckCircle2 size={14} color={colors.primary} />
                     ) : (
@@ -117,11 +120,14 @@ export function RemoteModelSheet({
                 </Pressable>
                 <Pressable
                   onPress={() => setProviderType("custom_openai")}
-                  className={`flex-1 py-2 px-3 rounded-lg border ${
+                  className={`menu-row flex-1 rounded-lg border items-center justify-center ${
                     providerType === "custom_openai" ? "border-primary bg-primary/20" : "border-border"
                   }`}
+                  accessibilityRole="radio"
+                  accessibilityLabel="Custom OpenAI-compatible endpoint"
+                  accessibilityState={{ selected: providerType === "custom_openai" }}
                 >
-                  <View className="flex-row items-center justify-center gap-1.5">
+                  <View className="flex-row items-center justify-center gap-2">
                     {providerType === "custom_openai" ? (
                       <CheckCircle2 size={14} color={colors.primary} />
                     ) : (

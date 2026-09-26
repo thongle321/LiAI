@@ -40,7 +40,7 @@ function Segmented<T extends string>({
   onPick: (v: T) => void;
 }) {
   return (
-    <View className="py-2.5">
+    <View className="py-2">
       <Text className="font-sans text-body-md text-primary-text">{label}</Text>
       {hint && (
         <Text className="font-sans text-body-sm text-secondary-text mt-0.5">{hint}</Text>
@@ -51,6 +51,9 @@ function Segmented<T extends string>({
             key={o}
             onPress={() => onPick(o)}
             className={o === value ? "seg seg--active" : "seg"}
+            accessibilityRole="radio"
+            accessibilityLabel={o}
+            accessibilityState={{ selected: o === value }}
           >
             <Text className={o === value ? "seg-label seg-label--active" : "seg-label"}>
               {o}

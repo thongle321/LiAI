@@ -100,7 +100,7 @@ export function PresetModelCard({
                 <View className="flex-row items-center justify-between">
                   <View className="flex-1">
                     <Text className="font-sans text-body-md text-primary-text">{item.name}</Text>
-                    <View className="flex-row items-center gap-2 mt-1.5">
+                    <View className="flex-row items-center gap-2 mt-2">
                   <View className="rounded bg-surface-2 px-2 py-0.5">
                         <Text className="font-sans text-caption text-secondary-text">{item.quantization}</Text>
                       </View>

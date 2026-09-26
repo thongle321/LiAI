@@ -136,7 +136,7 @@ export function DownloadButton({
     : "Download";
 
   // Completed is a state, not an action: Mist fill with a Jade check, and
-  // the row is inert. Every other state is a real button — 44px tall, 8px
+  // the row is inert. Every other state is a real button — 48dp tall, 8px
   // radius, 1px Hairline, Ink label.
   if (isCompleted) {
     return (
@@ -151,7 +151,7 @@ export function DownloadButton({
     <Pressable
       onPress={isDownloading ? onPause ?? onPress : isPaused ? onResume ?? onPress : onPress}
       disabled={disabled}
-      className="min-h-11 flex-row items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
+      className="min-h-12 flex-row items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
       accessibilityRole="button"
       accessibilityLabel={
         isDownloading

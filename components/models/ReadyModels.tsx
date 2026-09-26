@@ -12,7 +12,8 @@ export function ReadyModels({
   hfOnly = false,
 }: {
   open: boolean;
-  onToggle: () => void;
+  /** Receives the Collapsible's next state, not a bare toggle. */
+  onToggle: (next: boolean) => void;
   onOpenSettings: (modelId: string) => void;
   /** PocketPal `hf` filter: HuggingFace-origin downloads only, no remotes. */
   hfOnly?: boolean;

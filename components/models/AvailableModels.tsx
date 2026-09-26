@@ -46,36 +46,36 @@ export function PresetModelCard({
   const params = preset.params ?? 0;
 
   return (
-    <View className="mb-4 bg-surface-1 border border-border rounded-xl overflow-hidden">
-      <Pressable onPress={() => setExpanded(!expanded)} className="p-4">
+    <View className="mb-4 bg-surface-1 border border-border rounded-lg overflow-hidden">
+      <Pressable onPress={() => setExpanded(!expanded)} className="p-5">
         <View className="flex-row items-center justify-between">
           <View className="flex-1">
             <View className="flex-row items-center gap-2 mb-1">
               <ModelTypeIcon type={preset.type} />
               <Text className="font-sans-semibold text-h4 text-primary-text">{preset.name}</Text>
               {preset.recommended && (
-                <View className="px-1.5 py-0.5 bg-primary/20 border border-primary/50 rounded">
-                  <Text className="font-sans text-xs text-primary">Recommended</Text>
+                <View className="rounded bg-surface-3 px-2 py-0.5">
+                  <Text className="font-sans text-caption text-primary-text">Recommended</Text>
                 </View>
               )}
             </View>
-            <Text className="font-sans text-body-sm text-secondary-text/70">by {preset.author}</Text>
+            <Text className="font-sans text-body-sm text-secondary-text">by {preset.author}</Text>
           </View>
           {expanded ? <ChevronUp size={20} color={colors.secondaryText} /> : <ChevronDown size={20} color={colors.secondaryText} />}
         </View>
 
-        <View className="flex-row items-center justify-between mt-3">
+        <View className="mt-3 flex-row items-center justify-between">
           <StatusBadge status={cardStatus} />
           <View className="flex-row items-center gap-2">
             {params > 0 ? (
-              <View className="px-1.5 py-0.5 bg-surface-2 border border-border rounded">
-                <Text className="font-sans text-xs text-secondary-text">
+              <View className="rounded bg-surface-2 px-2 py-0.5">
+                <Text className="font-sans text-caption text-secondary-text">
                   {formatParams(params)}
                 </Text>
               </View>
             ) : null}
-            <View className="px-1.5 py-0.5 bg-surface-2 border border-border rounded">
-              <Text className="font-sans text-xs text-secondary-text">
+            <View className="rounded bg-surface-2 px-2 py-0.5">
+              <Text className="font-sans text-caption text-secondary-text">
                 {preset.files.length} file{preset.files.length === 1 ? "" : "s"}
               </Text>
             </View>
@@ -88,7 +88,7 @@ export function PresetModelCard({
       </Pressable>
 
       {expanded && (
-        <View className="border-t border-border px-4 pb-4">
+        <View className="border-t border-border px-5 pb-4">
           <Text className="font-sans text-body-sm text-secondary-text mt-3 mb-1">{preset.description}</Text>
           <View className="mb-3">
             <Text className="font-sans-semibold text-body-sm text-secondary-text mb-2">Available Quantizations</Text>
@@ -100,11 +100,11 @@ export function PresetModelCard({
                 <View className="flex-row items-center justify-between">
                   <View className="flex-1">
                     <Text className="font-sans text-body-md text-primary-text">{item.name}</Text>
-                    <View className="flex-row items-center gap-2 mt-1.5">
-                      <View className="px-1.5 py-0.5 bg-surface-2 border border-border rounded">
-                        <Text className="font-sans text-xs text-secondary-text">{item.quantization}</Text>
+                    <View className="flex-row items-center gap-2 mt-2">
+                  <View className="rounded bg-surface-2 px-2 py-0.5">
+                        <Text className="font-sans text-caption text-secondary-text">{item.quantization}</Text>
                       </View>
-                      <Text className="font-sans text-body-sm text-secondary-text/70">{formatBytes(item.size)}</Text>
+                      <Text className="font-sans text-body-sm text-secondary-text">{formatBytes(item.size)}</Text>
                     </View>
                   </View>
                   <DownloadButton
@@ -135,7 +135,8 @@ export function AvailableModels({
   grouped = true,
 }: {
   open: boolean;
-  onToggle: () => void;
+  /** Receives the Collapsible's next state, not a bare toggle. */
+  onToggle: (next: boolean) => void;
   onDownload: (modelId: string, file: PresetModelFile) => void;
   /** PocketPal `grouped` filter: tier headers on, or one flat preset list. */
   grouped?: boolean;
@@ -150,6 +151,11 @@ export function AvailableModels({
   function onGuardedDownload(modelId: string, file: PresetModelFile): void {
     guard(file.size, () => onDownload(modelId, file));
   }
+
+  const cards = (items: PresetModel[]) =>
+    items.map((item) => (
+      <PresetModelCard key={item.id} preset={item} onDownload={onGuardedDownload} />
+    ));
 
   return (
     <ModelAccordion
@@ -167,26 +173,12 @@ export function AvailableModels({
               <Text className="mb-1 mt-3 font-sans-semibold text-body-sm text-secondary-text">
                 {tier.label} — {tier.blurb}
               </Text>
-              {tierPresets.map((item) => (
-                <PresetModelCard
-                  key={item.id}
-                  preset={item}
-                  onDownload={onGuardedDownload}
-                />
-              ))}
+              {cards(tierPresets)}
             </View>
           );
         })
       ) : (
-        <View className="mt-3">
-          {visible.map((item) => (
-            <PresetModelCard
-              key={item.id}
-              preset={item}
-              onDownload={onGuardedDownload}
-            />
-          ))}
-        </View>
+        <View className="mt-3">{cards(visible)}</View>
       )}
     </ModelAccordion>
   );

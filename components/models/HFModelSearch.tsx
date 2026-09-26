@@ -5,20 +5,24 @@
  */
 
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, Text, TextInput, View } from "react-native";
-import { ChevronDown, Lock, X } from "lucide-react-native";
+import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
+import { BottomSheet } from "@expo/ui";
+import { Check, ChevronDown, Lock, X } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors, scrim } from "../../themes/tokens.ts";
 import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
 import { useModelStore } from "../../store/modelStore";
+import { hfSpecId } from "../../lib/models/huggingface.ts";
 import type { HFModelFile } from "../../types/models";
 import {
   Chip,
   DownloadButton,
+  DownloadProgressBar,
   ModelTypeIcon,
   StatusBadge,
   formatBytes,
   formatCompact,
+  isProgressVisible,
 } from "./ModelBits.tsx";
 
 /** Vision signal without opening the repo (PocketPal DetailsView parity):
@@ -86,7 +90,13 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
       <View className="flex-row items-center justify-between mb-3">
         <Text className="font-sans-semibold text-h4 text-primary-text">Search Hugging Face</Text>
         {onClose && (
-          <Pressable onPress={onClose} className="p-1">
+          <Pressable
+            onPress={onClose}
+            className="h-12 w-12 items-center justify-center"
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel="Close Hugging Face search"
+          >
             <X size={22} color={colors.secondaryText} />
           </Pressable>
         )}
@@ -98,7 +108,7 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
           value={query}
           onChangeText={setQuery}
           autoFocus={onClose !== undefined}
-          className="flex-1 font-sans text-body-md text-primary-text bg-surface-1 border border-border rounded-lg px-4 py-3"
+          className="flex-1 font-sans text-body-md text-primary-text bg-surface-1 border border-border rounded-lg px-5 py-3"
           placeholderTextColor={colors.secondaryText}
         />
         <Pressable
@@ -106,10 +116,13 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
             setDraft("");
             setTokenOpen(true);
           }}
-          className="px-3 py-3 bg-primary/20 border border-primary/50 rounded-lg"
+          className="min-h-12 flex-row items-center gap-2 px-3 py-3 bg-primary/20 border border-primary/50 rounded-lg"
+          accessibilityRole="button"
+          accessibilityLabel={hfToken ? "Hugging Face token saved" : "Add Hugging Face token"}
         >
+          {hfToken ? <Check size={14} color={colors.primary} /> : null}
           <Text className="font-sans text-body-sm text-primary">
-            {hfToken ? "HF Token ✓" : "Add HF Token"}
+            {hfToken ? "HF Token" : "Add HF Token"}
           </Text>
         </Pressable>
       </View>
@@ -129,9 +142,9 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
         <Pressable
           key={item.modelId}
           onPress={() => handleModelPress(item.modelId)}
-          className="mb-3 bg-surface-1 border border-border rounded-xl overflow-hidden"
+          className="mb-3 bg-surface-1 border border-border rounded-lg overflow-hidden"
         >
-          <View className="p-4">
+          <View className="p-5">
             <View className="flex-row items-center justify-between">
               <View className="flex-1">
                 <View className="flex-row items-center gap-2">
@@ -140,14 +153,14 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
                   />
                   <Text className="font-sans-semibold text-body-md text-primary-text">{item.name}</Text>
                 </View>
-                <Text className="font-sans text-body-sm text-secondary-text/70 mt-0.5">by {item.author}</Text>
+                <Text className="font-sans text-body-sm text-secondary-text/70 mt-1">by {item.author}</Text>
               </View>
               <ChevronDown size={20} color={colors.secondaryText} />
             </View>
-            <View className="flex-row items-center gap-2 mt-2.5">
+            <View className="flex-row flex-wrap items-center gap-2 mt-2">
               <Chip label="GGUF" />
               {item.private && (
-                <View className="flex-row items-center gap-1 px-1.5 py-0.5 bg-surface-2 border border-border rounded">
+                <View className="flex-row items-center gap-1 px-2 py-1 bg-surface-2 border border-border rounded">
                   <Lock size={10} color={colors.secondaryText} />
                   <Text className="font-sans text-xs text-secondary-text">Gated</Text>
                 </View>
@@ -160,7 +173,7 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
           </View>
 
           {expandedModel === item.modelId && (
-            <View className="border-t border-border px-4 pb-4">
+            <View className="border-t border-border px-5 pb-4">
               {loadingFiles.has(item.modelId) ? (
                 <View className="flex-row items-center justify-center py-4">
                   <ActivityIndicator size="small" color={colors.primary} />
@@ -172,8 +185,8 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
                     <Text className="font-sans-semibold text-body-sm text-secondary-text mb-2">GGUF Files</Text>
                   </View>
                   {(modelFiles[item.modelId] || []).map((file) => {
-                    // Store spec id mirrors buildHfModelSpec: hf-<modelId>-<file>.
-                    const spec = models.find((m) => m.id === `hf-${item.modelId}-${file.name}`);
+                    // Store spec id mirrors buildHfModelSpec.
+                    const spec = models.find((m) => m.id === hfSpecId(item.modelId, file.name));
                     const st = spec?.downloadStatus ?? "idle";
                     const prog = spec?.downloadProgress ?? 0;
                     return (
@@ -181,7 +194,7 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
                       <View className="flex-row items-center justify-between">
                         <View className="flex-1">
                           <Text className="font-sans text-body-md text-primary-text">{file.name}</Text>
-                          <View className="flex-row items-center gap-2 mt-1.5">
+                          <View className="flex-row flex-wrap items-center gap-2 mt-2">
                             <Chip label="GGUF" />
                             <Text className="font-sans text-body-sm text-secondary-text/70">{formatBytes(file.size)}</Text>
                           </View>
@@ -194,11 +207,17 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
                               startDownload(item.modelId, file, hfToken || undefined),
                             )
                           }
-                          onPause={() => void pauseModelDownload(`hf-${item.modelId}-${file.name}`)}
-                          onResume={() => void resumeModelDownload(`hf-${item.modelId}-${file.name}`)}
+                          onPause={() => void pauseModelDownload(hfSpecId(item.modelId, file.name))}
+                          onResume={() => void resumeModelDownload(hfSpecId(item.modelId, file.name))}
                           disabled={st === "completed"}
                         />
                       </View>
+                      {isProgressVisible(st) && (
+                        <DownloadProgressBar
+                          progress={prog}
+                          speed={spec?.speedBytesPerSec}
+                        />
+                      )}
                     </View>
                     );
                   })}
@@ -213,61 +232,68 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
           No models found. Try a different search term.
         </Text>
       )}
-      <Modal
-        visible={tokenOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setTokenOpen(false)}
+      <BottomSheet
+        isPresented={tokenOpen}
+        onDismiss={() => setTokenOpen(false)}
+        containerColor={colors.surface1}
+        scrimColor={scrim}
+        contentPadding={20}
+        testID="hf-token-sheet"
       >
-        <View className="flex-1 bg-black/60 items-center justify-center p-4">
-          <View className="bg-surface-1 border border-border rounded-2xl w-full p-6">
-            <Text className="font-sans-semibold text-h4 text-primary-text mb-2">
-              Hugging Face token
-            </Text>
-            <Text className="font-sans text-body-sm text-secondary-text mb-4">
-              Needed only for gated repos. Stored on this device, sent per request.
-            </Text>
-            <TextInput
-              value={draft}
-              onChangeText={setDraft}
-              placeholder="hf_..."
-              secureTextEntry
-              autoFocus
-              className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-4 py-3"
-              placeholderTextColor={colors.secondaryText}
-            />
-            <View className="flex-row gap-2 pt-4">
-              {hfToken ? (
-                <Pressable
-                  onPress={() => {
-                    void setHfToken(null);
-                    setTokenOpen(false);
-                  }}
-                  className="flex-1 py-3 px-4 bg-surface-2 border border-border rounded-lg items-center"
-                >
-                  <Text className="font-sans text-body-md text-secondary-text">Remove</Text>
-                </Pressable>
-              ) : null}
-              <Pressable
-                onPress={() => setTokenOpen(false)}
-                className="flex-1 py-3 px-4 bg-surface-2 border border-border rounded-lg items-center"
-              >
-                <Text className="font-sans text-body-md text-secondary-text">Cancel</Text>
-              </Pressable>
+        <View>
+          <Text className="font-sans-semibold text-h3 text-primary-text mb-2">
+            Hugging Face token
+          </Text>
+          <Text className="font-sans text-body-sm text-secondary-text mb-4">
+            Needed only for gated repos. Stored on this device, sent per request.
+          </Text>
+          <TextInput
+            value={draft}
+            onChangeText={setDraft}
+            placeholder="hf_..."
+            secureTextEntry
+            autoFocus
+            className="input font-sans text-body-md"
+            placeholderTextColor={colors.secondaryText}
+            accessibilityLabel="Hugging Face token"
+          />
+          <View className="flex-row gap-2 pt-4">
+            {hfToken ? (
               <Pressable
                 onPress={() => {
-                  if (draft.trim() === "") return;
-                  void setHfToken(draft.trim());
+                  void setHfToken(null);
                   setTokenOpen(false);
                 }}
-                className="flex-1 py-3 px-4 bg-primary border border-primary/50 rounded-lg items-center"
+                className="btn btn--ghost flex-1"
+                accessibilityRole="button"
+                accessibilityLabel="Remove token"
               >
-                <Text className="font-sans-semibold text-body-md text-base">Save</Text>
+                <Text className="font-sans text-body-md text-primary">Remove</Text>
               </Pressable>
-            </View>
+            ) : null}
+            <Pressable
+              onPress={() => setTokenOpen(false)}
+              className="btn btn--secondary flex-1"
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+            >
+              <Text className="font-sans text-body-md text-primary">Cancel</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                if (draft.trim() === "") return;
+                void setHfToken(draft.trim());
+                setTokenOpen(false);
+              }}
+              className="btn btn--primary flex-1"
+              accessibilityRole="button"
+              accessibilityLabel="Save token"
+            >
+              <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
+            </Pressable>
           </View>
         </View>
-      </Modal>
+      </BottomSheet>
     </View>
   );
 }

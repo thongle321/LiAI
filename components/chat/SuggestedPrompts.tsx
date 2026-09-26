@@ -18,12 +18,14 @@ export function SuggestedPrompts({
   onPick: (prompt: string) => void;
 }) {
   return (
-    <View className="flex-row flex-wrap gap-2 px-4 pb-2">
+    <View className="flex-row flex-wrap gap-2 px-5 pb-2">
       {PROMPTS.map((prompt) => (
         <Pressable
           key={prompt}
           onPress={() => onPick(prompt)}
-          className="rounded-full border border-border bg-surface-1 px-3 py-1.5"
+          className="min-h-12 justify-center rounded-lg border border-border bg-surface-1 px-4 py-2"
+          accessibilityRole="button"
+          accessibilityLabel={prompt}
         >
           <Text className="font-sans text-body-sm text-primary-text">
             {prompt}

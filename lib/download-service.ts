@@ -11,6 +11,7 @@ import {
   createDownloadResumable,
   makeDirectoryAsync,
   deleteAsync,
+  getInfoAsync,
   documentDirectory,
   type DownloadResumable,
   type DownloadProgressData,
@@ -189,6 +190,24 @@ class ResumableDownloadService {
 
       if (result.status !== 200 && result.status !== 206) {
         fail(`HTTP ${result.status}`);
+      }
+
+      // Trust-but-verify: a short/overlong file must never read completed.
+      // Retry re-stats the partial and resumes (or restarts when useless).
+      if (job.totalBytes > 0) {
+        try {
+          const info = await getInfoAsync(destPath);
+          const actual =
+            info.exists && "size" in info && typeof info.size === "number" ? info.size : -1;
+          if (actual !== job.totalBytes) {
+            fail(
+              `Size mismatch (${actual} of ${job.totalBytes} bytes) — tap Retry to continue`,
+            );
+          }
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith("Size mismatch")) throw error;
+          // Unreadable destination: the next launch re-stats it.
+        }
       }
 
       const completedJob: DownloadJob = {

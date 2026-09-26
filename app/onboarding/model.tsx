@@ -10,6 +10,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
 import { colors } from "../../themes/tokens.ts";
+import { ContentColumn } from "../../components/ContentColumn.tsx";
 import {
   matchTier,
   parseTiers,
@@ -54,13 +55,16 @@ export default function ModelStep() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
-      <ScrollView contentContainerClassName="p-4">
+      <ScrollView contentContainerClassName="w-full">
+        <ContentColumn className="p-5">
         <Text className="font-sans-semibold text-h2 text-primary-text">
           Pick your model
         </Text>
-        <Text className="mt-1 font-sans text-body-sm text-secondary-text">
-          Models run on LiAI's server once downloaded. Bigger is smarter and
-          slower — start with the highlighted tier.
+        {/* On-device is the product's core claim (ADR-0008) — the old copy
+            said models "run on LiAI's server", which is simply not true. */}
+        <Text className="mt-2 font-sans text-body-sm text-secondary-text">
+          Your model runs entirely on this phone. Bigger is smarter and slower —
+          start with the highlighted tier.
         </Text>
         {ramUnknown && (
           <Text className="mt-2 font-sans text-body-sm text-secondary-text">
@@ -88,11 +92,14 @@ export default function ModelStep() {
         <Pressable
           onPress={() => router.push("/onboarding/done")}
           className="btn btn--primary mt-4"
+          accessibilityRole="button"
+          accessibilityLabel="Continue"
         >
-          <Text className="text-center font-sans-semibold text-on-primary">
+          <Text className="text-center font-sans-semibold text-body-md text-on-primary">
             Continue
           </Text>
         </Pressable>
+        </ContentColumn>
       </ScrollView>
     </SafeAreaView>
   );

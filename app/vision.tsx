@@ -77,7 +77,11 @@ export default function VisionScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
+    // edges={[]}: the camera preview is genuinely full-bleed, and the two
+    // overlays own the top and bottom insets themselves (they are measured
+    // at runtime). A default SafeAreaView here would pad the same two edges
+    // a second time and push both overlays off-screen under edge-to-edge.
+    <SafeAreaView edges={[]} style={{ flex: 1, backgroundColor: colors.base }}>
       <View className="flex-1 bg-black">
         <VisionPreview
           hasPermission={hasPermission}
@@ -90,29 +94,33 @@ export default function VisionScreen() {
           onGrant={() => void requestPermission()}
         />
 
-        <VisionTopFloat
-          top={insets.top + 8}
-          onExit={exit}
-          onFlip={flip}
-        />
+        {camLive ? (
+          <>
+            <VisionTopFloat
+              top={insets.top + 8}
+              onExit={exit}
+              onFlip={flip}
+            />
 
-        <VisionBottomPanel
-          bottom={insets.bottom + 12}
-          issue={issue}
-          needsSettings={needsSettings}
-          onOpenSettings={() => void openSettings()}
-          onRetry={() => void retry()}
-          phase={phase}
-          answer={answer}
-          statusLabel={VOICE_STATUS_LABEL[phase]}
-          camProblem={camProblem}
-          inputOpen={inputOpen}
-          draft={draft}
-          onDraftChange={setDraft}
-          onSendDraft={sendDraft}
-          onToggleInput={() => setInputOpen((o) => !o)}
-          onTalk={() => void bargeIn()}
-        />
+            <VisionBottomPanel
+              bottom={insets.bottom + 12}
+              issue={issue}
+              needsSettings={needsSettings}
+              onOpenSettings={() => void openSettings()}
+              onRetry={() => void retry()}
+              phase={phase}
+              answer={answer}
+              statusLabel={VOICE_STATUS_LABEL[phase]}
+              camProblem={camProblem}
+              inputOpen={inputOpen}
+              draft={draft}
+              onDraftChange={setDraft}
+              onSendDraft={sendDraft}
+              onToggleInput={() => setInputOpen((o) => !o)}
+              onTalk={() => void bargeIn()}
+            />
+          </>
+        ) : null}
       </View>
     </SafeAreaView>
   );

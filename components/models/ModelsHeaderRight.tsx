@@ -25,7 +25,7 @@ function GroupLabel({ label }: { label: string }) {
   return (
     <Text
       numberOfLines={1}
-      className="px-4 pt-3 pb-1 font-sans-semibold text-body-sm text-secondary-text opacity-50"
+      className="px-5 pt-3 pb-1 font-sans-semibold text-body-sm text-secondary-text opacity-50"
     >
       {label}
     </Text>
@@ -46,12 +46,16 @@ function ToggleRow({
   return (
     <Pressable
       onPress={onPress}
-      style={{ height: 46, paddingLeft: 16, paddingRight: 16 }}
-      className="flex-row items-center"
+      className="menu-row"
+      accessibilityRole="checkbox"
+      accessibilityLabel={label}
+      accessibilityState={{ checked: on }}
     >
-      {/* Fixed icon slot + fixed menu width (PocketPal Menu.Item geometry:
-          46pt rows, 16pt gutters) so labels can never collapse vertical. */}
-      <View style={{ width: 28, marginRight: 10, alignItems: "center" }}>{icon}</View>
+      {/* Fixed icon slot + explicit menu width (PocketPal Menu.Item geometry).
+          The width stays an inline style: the w-60 class failed to resolve
+          on device, collapsing the menu into vertical text. Rows use
+          classes; only the proven width fix keeps a style. */}
+      <View className="mr-3 w-7 items-center justify-center">{icon}</View>
       <Text
         numberOfLines={1}
         className="mr-2 flex-1 font-sans text-body-md text-primary-text"
@@ -129,9 +133,12 @@ export function ModelsHeaderRight({
     <View ref={btnRef}>
       <Pressable
         onPress={toggle}
-        className={`p-2 rounded-lg border ${
+        className={`h-12 w-12 items-center justify-center rounded-lg border ${
           open ? "border-primary bg-primary/20" : "border-transparent"
         }`}
+        accessibilityRole="button"
+        accessibilityLabel="Filter models"
+        accessibilityState={{ expanded: open }}
       >
         <SlidersHorizontal size={18} color={colors.primary} />
       </Pressable>
@@ -145,7 +152,7 @@ export function ModelsHeaderRight({
               right: anchor?.right ?? 16,
               width: 264,
             }}
-            className="bg-surface-1 border border-border rounded-xl overflow-hidden"
+            className="bg-surface-1 border border-border rounded-lg overflow-hidden"
           >
             <GroupLabel label="Filters" />
             <ToggleRow
@@ -177,8 +184,9 @@ export function ModelsHeaderRight({
             <View className="h-px bg-border mx-4" />
             <Pressable
               onPress={() => run(onExpandAll)}
-              style={{ height: 46, paddingLeft: 16, paddingRight: 16 }}
-              className="flex-row items-center"
+              className="menu-row"
+              accessibilityRole="button"
+              accessibilityLabel="Expand all sections"
             >
               <Text
                 numberOfLines={1}
@@ -186,14 +194,15 @@ export function ModelsHeaderRight({
               >
                 Expand all
               </Text>
-              <View style={{ width: 28, alignItems: "center" }}>
+              <View className="w-7 items-center">
                 <ChevronsUpDown size={16} color={colors.secondaryText} />
               </View>
             </Pressable>
             <Pressable
               onPress={() => run(onCollapseAll)}
-              style={{ height: 46, paddingLeft: 16, paddingRight: 16 }}
-              className="flex-row items-center"
+              className="menu-row"
+              accessibilityRole="button"
+              accessibilityLabel="Collapse all sections"
             >
               <Text
                 numberOfLines={1}
@@ -201,7 +210,7 @@ export function ModelsHeaderRight({
               >
                 Collapse all
               </Text>
-              <View style={{ width: 28, alignItems: "center" }}>
+              <View className="w-7 items-center">
                 <ChevronsDownUp size={16} color={colors.secondaryText} />
               </View>
             </Pressable>

@@ -6,7 +6,6 @@
 
 import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { Check } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 import {
@@ -16,7 +15,7 @@ import {
   type SearchProviderId,
 } from "../lib/search-providers.ts";
 import { useSearch } from "../store/search.ts";
-import { StepperRow, ToggleRow } from "./SettingsRows.tsx";
+import { PickerRow, StepperRow, ToggleRow } from "./SettingsRows.tsx";
 
 function ProviderKeys({ id }: { id: SearchProviderId }) {
   const getProviderKey = useSearch((s) => s.getProviderKey);
@@ -53,15 +52,26 @@ function ProviderKeys({ id }: { id: SearchProviderId }) {
           placeholder={hasKey ? "Key saved — enter to replace" : "Enter API key"}
           secureTextEntry
           autoCapitalize="none"
-          className="flex-1 font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-4 py-3"
+          className="input flex-1 font-sans text-body-md"
           placeholderTextColor={colors.secondaryText}
+          accessibilityLabel={`${id} API key`}
         />
-        <Pressable onPress={save} className="px-4 py-3 bg-primary/20 border border-primary/50 rounded-lg">
-          <Text className="font-sans text-body-sm text-primary">Save</Text>
+        <Pressable
+          onPress={save}
+          className="btn btn--primary min-h-12 px-5 py-2"
+          accessibilityRole="button"
+          accessibilityLabel="Save key"
+        >
+          <Text className="font-sans text-body-sm text-on-primary">Save</Text>
         </Pressable>
         {hasKey && (
-          <Pressable onPress={clear} className="px-4 py-3 bg-surface-2 border border-border rounded-lg">
-            <Text className="font-sans text-body-sm text-secondary-text">Clear</Text>
+          <Pressable
+            onPress={clear}
+            className="btn btn--ghost min-h-12 px-5 py-2"
+            accessibilityRole="button"
+            accessibilityLabel="Clear key"
+          >
+            <Text className="font-sans text-body-sm text-primary">Clear</Text>
           </Pressable>
         )}
       </View>
@@ -84,31 +94,44 @@ export function SearchSettings() {
     void load();
   }, []);
 
+  // The key editor follows the selected provider rather than sitting under
+  // every row, so the picker row stays a single line.
+  const selectedProvider = SEARCH_PROVIDERS.find((p) => p.id === activeProviderId);
+  const providerIds = SEARCH_PROVIDERS.map((p) => p.id);
+
   return (
     <View className="mb-6">
-      <Text className="font-sans-semibold text-h4 text-primary-text mb-1">Web search</Text>
-      <ToggleRow label="Allow web search" on={hasConsented} onPress={() => setConsented(!hasConsented)} />
-      <StepperRow
-        label="Results"
-        display={`${resultCount}`}
-        onMinus={() => setResultCount(resultCount - 1)}
-        onPlus={() => setResultCount(resultCount + 1)}
-        minusDisabled={resultCount <= MIN_RESULT_COUNT}
-        plusDisabled={resultCount >= MAX_RESULT_COUNT}
-      />
-      <Text className="font-sans-semibold text-body-sm text-secondary-text mt-2 mb-1">Provider</Text>
-      {SEARCH_PROVIDERS.map((p) => (
-        <View key={p.id} className="py-1">
-          <Pressable
-            onPress={() => setActiveProvider(p.id)}
-            className="flex-row items-center justify-between py-1.5"
-          >
-            <Text className="font-sans text-body-md text-primary-text">{p.name}</Text>
-            {activeProviderId === p.id && <Check size={16} color={colors.primary} />}
-          </Pressable>
-          {activeProviderId === p.id && <ProviderKeys id={p.id} />}
+      <Text className="mb-2 font-sans-semibold text-h4 text-primary-text">Web search</Text>
+      <View className="rows mb-3">
+        <View className="row">
+          <ToggleRow label="Allow web search" on={hasConsented} onPress={() => setConsented(!hasConsented)} />
         </View>
-      ))}
+        <View className="row">
+          <StepperRow
+            label="Results"
+            display={`${resultCount}`}
+            onMinus={() => setResultCount(resultCount - 1)}
+            onPlus={() => setResultCount(resultCount + 1)}
+            minusDisabled={resultCount <= MIN_RESULT_COUNT}
+            plusDisabled={resultCount >= MAX_RESULT_COUNT}
+          />
+        </View>
+      </View>
+      <Text className="mb-2 mt-1 font-sans-semibold text-body-sm text-secondary-text">Provider</Text>
+      <View className="rows">
+        <View className="row">
+          {/* Three providers is a closed set that does not fit inline, so
+              it is a native menu rather than three radio rows. */}
+          <PickerRow
+            label="Provider"
+            options={providerIds}
+            value={activeProviderId}
+            onChange={(next) => setActiveProvider(next as SearchProviderId)}
+            displayFor={(id) => SEARCH_PROVIDERS.find((p) => p.id === id)?.name ?? id}
+          />
+        </View>
+      </View>
+      {selectedProvider !== undefined && <ProviderKeys id={selectedProvider.id} />}
     </View>
   );
 }

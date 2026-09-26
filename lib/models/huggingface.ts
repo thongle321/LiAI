@@ -19,8 +19,9 @@ const HF_HUB_BASE = "https://huggingface.co";
 const HF_API_BASE = "https://huggingface.co/api";
 
 /** Our attribution for outbound Hugging Face requests (PocketPal parity:
- * they send PocketPal/<v>; HF's CDN refuses anonymous clients). */
-export const HF_USER_AGENT = "LiAI";
+ * they send PocketPal/<v>; HF's CDN refuses anonymous clients).
+ * Version mirrors app.json — bump together. */
+export const HF_USER_AGENT = "LiAI/1.0.0";
 
 /** Wire shape of the HF browse proxy (verbatim HF rows we actually read). */
 interface HFSearchItem {
@@ -514,9 +515,14 @@ export function presetSpecId(presetId: string, fileName: string): string {
   return `preset-${presetId}-${fileName}`;
 }
 
+/** Stable spec id for a search-result file (mirrors buildHfModelSpec). */
+export function hfSpecId(modelId: string, fileName: string): string {
+  return `hf-${modelId}-${fileName}`;
+}
+
 export function buildHfModelSpec(ref: HFModelRef, file: HFModelFile): ModelSpec {
   return {
-    id: `hf-${ref.modelId}-${file.name}`,
+    id: hfSpecId(ref.modelId, file.name),
     name: `${ref.name} (${file.name})`,
     author: ref.author,
     description: ref.description,

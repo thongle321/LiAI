@@ -19,9 +19,15 @@ export function CodeBlock({
 
   return (
     <View className="mt-2 overflow-hidden rounded-card border border-border bg-surface-2">
-      <View className="flex-row items-center justify-between border-b border-border px-3 py-1.5">
+      <View className="flex-row items-center justify-between border-b border-border px-3 py-2">
         <Text className="font-sans text-caption text-secondary-text">{language}</Text>
-        <Pressable onPress={() => copy(text)} className="p-1">
+        <Pressable
+          onPress={() => copy(text)}
+          className="h-12 w-12 items-center justify-center"
+          hitSlop={4}
+          accessibilityRole="button"
+          accessibilityLabel={copied ? "Copied" : "Copy code"}
+        >
           {copied ? (
             <Check size={14} color={colors.success} />
           ) : (

@@ -1,4 +1,18 @@
-/** Collapsible model group (Ready to use / Available to download). */
+/** Collapsible model group (Ready to use / Available to download).
+ *
+ * Pure React Native + Uniwind — deliberately NOT @expo/ui's native
+ * `Collapsible`. A disclosure group is pure layout with no native
+ * affordance worth the interop, and hosting React Native card children
+ * inside a native SwiftUI/Compose body is what caused the right-edge
+ * overflow: the native body measured its children at intrinsic
+ * (max-content) width, so `flex-1` rows never shrank and the size/file
+ * chips were pushed off-screen. A native body also forces the count into
+ * the header label string ("Ready to use (0)") because the native header
+ * has no slot for a styled badge. A Uniwind header gets both right.
+ *
+ * @expo/ui stays in the project for the controls that genuinely benefit
+ * (Switch, Picker, Slider, BottomSheet) — just not for a disclosure.
+ */
 
 import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -16,19 +30,23 @@ export function ModelAccordion({
   title: string;
   count: number;
   open: boolean;
-  onToggle: () => void;
+  /** Receives the next state, matching the sibling expand/collapse-all. */
+  onToggle: (next: boolean) => void;
   children: ReactNode;
 }) {
   return (
     <View className="mb-6">
       <Pressable
-        onPress={onToggle}
-        className="flex-row items-center justify-between mb-3"
+        onPress={() => onToggle(!open)}
+        className="min-h-12 flex-row items-center justify-between mb-3"
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityState={{ expanded: open }}
       >
         <View className="flex-row items-center gap-2">
           <Text className="font-sans-semibold text-h4 text-primary-text">{title}</Text>
-          <View className="px-1.5 py-0.5 bg-surface-2 border border-border rounded">
-            <Text className="font-sans text-xs text-secondary-text">{count}</Text>
+          <View className="rounded bg-surface-2 px-2 py-0.5">
+            <Text className="font-sans text-caption text-secondary-text">{count}</Text>
           </View>
         </View>
         {open ? (

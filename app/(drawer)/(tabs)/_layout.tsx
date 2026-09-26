@@ -37,7 +37,7 @@ function TabBar({ state }: { state: { index: number; routeNames: string[] } }) {
   const active: ChatTab = focused === "voice" ? "voice" : "chat";
 
   return (
-    <View style={{ paddingBottom: insets.bottom, backgroundColor: colors.base }}>
+    <View style={{ paddingBottom: insets.bottom, backgroundColor: colors.surface1 }}>
       <BottomNav
         active={active}
         onSelect={(t) => {

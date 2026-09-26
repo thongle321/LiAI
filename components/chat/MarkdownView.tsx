@@ -34,7 +34,7 @@ const baseText = {
 
 // Every text-bearing key gets the family: the library's internals set
 // sizes and weights but no fontFamily, so any key missed here falls
-// back to Roboto and sits visibly off-baseline next to Raleway body.
+// back to Roboto and sits visibly off-baseline next to Inter body.
 const headingText = {
   fontFamily: font.sansSemiBold,
   color: colors.primaryText,
@@ -42,7 +42,9 @@ const headingText = {
 
 export function MarkdownView({ text }: { text: string }) {
   const elements = useMarkdown(text === "" ? " " : text, {
-    colorScheme: "dark",
+    // The app is light-locked; leaving this on "dark" made the library
+    // inject its dark-scheme defaults into a light conversation.
+    colorScheme: "light",
     renderer,
     styles: {
       text: baseText,

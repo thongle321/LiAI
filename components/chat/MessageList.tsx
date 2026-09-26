@@ -32,7 +32,7 @@ export function MessageList({
       data={messages}
       keyExtractor={(m) => m.id}
       renderItem={({ item }) => renderBubble(item)}
-      contentContainerClassName="p-4"
+      contentContainerClassName="p-5"
       className="flex-1"
     />
   );

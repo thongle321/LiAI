@@ -26,9 +26,12 @@ export function TierCard({
   return (
     <Pressable
       onPress={onSelect}
-      className={`mb-3 rounded-card border bg-surface-1 p-4 ${
-        selected ? "border-primary" : "border-border"
+      className={`mb-3 rounded-lg border p-5 ${
+        selected ? "border-primary bg-surface-3" : "border-border bg-surface-1"
       }`}
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={tier.label}
     >
       <View className="flex-row items-center gap-2">
         {selected ? (
@@ -40,8 +43,8 @@ export function TierCard({
           {tier.label}
         </Text>
         {recommended && (
-          <View className="rounded border border-primary/50 bg-primary/20 px-1.5 py-0.5">
-            <Text className="font-sans text-xs text-primary">For this phone</Text>
+          <View className="rounded bg-surface-1 px-2 py-0.5">
+            <Text className="font-sans text-caption text-primary-text">For this phone</Text>
           </View>
         )}
       </View>

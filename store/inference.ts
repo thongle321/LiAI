@@ -78,6 +78,11 @@ export const DEFAULT_INFERENCE: InferenceParams = {
   thinkingEnabled: true,
 };
 
+/** Single clamp every numeric param flows through (persist/restore + setters). */
+function clampInt(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
 function asParams(value: unknown): InferenceParams {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return { ...DEFAULT_INFERENCE };
@@ -88,23 +93,17 @@ function asParams(value: unknown): InferenceParams {
   const flag = (k: string, fallback: boolean) =>
     typeof v[k] === "boolean" ? (v[k] as boolean) : fallback;
   const clampBatch = (k: string, fallback: number) =>
-    Math.min(MAX_BATCH, Math.max(1, Math.round(num(k, fallback))));
+    clampInt(num(k, fallback), 1, MAX_BATCH);
   const cache = (k: string, fallback: CacheType): CacheType =>
     CACHE_TYPES.includes(v[k] as CacheType) ? (v[k] as CacheType) : fallback;
   return {
-    nCtx: Math.max(MIN_CONTEXT, Math.round(num("nCtx", DEFAULT_INFERENCE.nCtx))),
-    nGpuLayers: Math.min(
-      MAX_GPU_LAYERS,
-      Math.max(0, Math.round(num("nGpuLayers", DEFAULT_INFERENCE.nGpuLayers))),
-    ),
+    nCtx: clampInt(num("nCtx", DEFAULT_INFERENCE.nCtx), MIN_CONTEXT, Number.MAX_SAFE_INTEGER),
+    nGpuLayers: clampInt(num("nGpuLayers", DEFAULT_INFERENCE.nGpuLayers), 0, MAX_GPU_LAYERS),
     useMlock: flag("useMlock", DEFAULT_INFERENCE.useMlock),
     useMmap: flag("useMmap", DEFAULT_INFERENCE.useMmap),
     nBatch: clampBatch("nBatch", DEFAULT_INFERENCE.nBatch),
     nUbatch: clampBatch("nUbatch", DEFAULT_INFERENCE.nUbatch),
-    nThreads: Math.min(
-      MAX_THREADS,
-      Math.max(1, Math.round(num("nThreads", DEFAULT_INFERENCE.nThreads))),
-    ),
+    nThreads: clampInt(num("nThreads", DEFAULT_INFERENCE.nThreads), 1, MAX_THREADS),
     flashAttn:
       v.flashAttn === "auto" || v.flashAttn === "on" || v.flashAttn === "off"
         ? v.flashAttn
@@ -112,9 +111,10 @@ function asParams(value: unknown): InferenceParams {
     cacheK: cache("cacheK", DEFAULT_INFERENCE.cacheK),
     cacheV: cache("cacheV", DEFAULT_INFERENCE.cacheV),
     speculativeEnabled: flag("speculativeEnabled", DEFAULT_INFERENCE.speculativeEnabled),
-    specDraftGpuLayers: Math.min(
+    specDraftGpuLayers: clampInt(
+      num("specDraftGpuLayers", DEFAULT_INFERENCE.specDraftGpuLayers),
+      0,
       MAX_GPU_LAYERS,
-      Math.max(0, Math.round(num("specDraftGpuLayers", DEFAULT_INFERENCE.specDraftGpuLayers))),
     ),
     specDraftCacheK: cache("specDraftCacheK", DEFAULT_INFERENCE.specDraftCacheK),
     specDraftCacheV: cache("specDraftCacheV", DEFAULT_INFERENCE.specDraftCacheV),
@@ -184,11 +184,11 @@ export function createInferenceStore(storage: KeyValueStorage) {
         set({ ...parseInferenceParams(await storage.getItem(INFERENCE_KEY)), loaded: true });
       },
       setNCtx: (n) => {
-        set({ nCtx: Math.max(MIN_CONTEXT, Math.round(n)) });
+        set({ nCtx: clampInt(n, MIN_CONTEXT, Number.MAX_SAFE_INTEGER) });
         void persist();
       },
       setNGpuLayers: (n) => {
-        set({ nGpuLayers: Math.min(MAX_GPU_LAYERS, Math.max(0, Math.round(n))) });
+        set({ nGpuLayers: clampInt(n, 0, MAX_GPU_LAYERS) });
         void persist();
       },
       setUseMlock: (on) => {
@@ -200,15 +200,15 @@ export function createInferenceStore(storage: KeyValueStorage) {
         void persist();
       },
       setNBatch: (n) => {
-        set({ nBatch: Math.min(MAX_BATCH, Math.max(1, Math.round(n))) });
+        set({ nBatch: clampInt(n, 1, MAX_BATCH) });
         void persist();
       },
       setNUbatch: (n) => {
-        set({ nUbatch: Math.min(MAX_BATCH, Math.max(1, Math.round(n))) });
+        set({ nUbatch: clampInt(n, 1, MAX_BATCH) });
         void persist();
       },
       setNThreads: (n) => {
-        set({ nThreads: Math.min(MAX_THREADS, Math.max(1, Math.round(n))) });
+        set({ nThreads: clampInt(n, 1, MAX_THREADS) });
         void persist();
       },
       setFlashAttn: (v) => {
@@ -228,7 +228,7 @@ export function createInferenceStore(storage: KeyValueStorage) {
         void persist();
       },
       setSpecDraftGpuLayers: (n) => {
-        set({ specDraftGpuLayers: Math.min(MAX_GPU_LAYERS, Math.max(0, Math.round(n))) });
+        set({ specDraftGpuLayers: clampInt(n, 0, MAX_GPU_LAYERS) });
         void persist();
       },
       setSpecDraftCacheK: (v) => {

@@ -54,7 +54,7 @@ describe("hub search", () => {
     assert.ok(seen.url.includes("search=qwen"));
     assert.ok(seen.url.includes("filter=gguf"));
     assert.equal(seen.headers["Authorization"], "Bearer tok");
-    assert.equal(seen.headers["User-Agent"], "LiAI");
+    assert.equal(seen.headers["User-Agent"], "LiAI/1.0.0");
     // No visibility filter: the Hub scopes results to what the token may
     // see, and gated rows stay downloadable via the tokened fetch.
     assert.deepEqual(

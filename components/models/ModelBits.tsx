@@ -1,7 +1,7 @@
 /** Shared models bits: formats, chips, status, progress, download button. */
 
 import { Pressable, Text, View } from "react-native";
-import { Download, Eye, MessageSquare, Pause, Play } from "lucide-react-native";
+import { CheckCircle2, Download, Eye, MessageSquare, Pause, Play } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
 import type { ModelDownloadStatus, ModelType } from "../../types/models";
@@ -43,10 +43,12 @@ export function isProgressVisible(status: ModelDownloadStatus): boolean {
   return status === "downloading" || status === "paused";
 }
 
+/** Inactive chip: Mist fill (the recessed plane), Small radius, no border.
+ * A chip sits inside a card, so it is recessed, never raised. */
 export function Chip({ label }: { label: string }) {
   return (
-    <View className="px-1.5 py-0.5 bg-surface-2 border border-border rounded">
-      <Text className="font-sans text-xs text-secondary-text">{label}</Text>
+    <View className="rounded bg-surface-2 px-2 py-0.5">
+      <Text className="font-sans text-caption text-secondary-text">{label}</Text>
     </View>
   );
 }
@@ -70,7 +72,7 @@ export function ModelTypeIcon({ type }: { type: ModelType }) {
 
 export function StatusBadge({ status }: { status: ModelDownloadStatus }) {
   return (
-    <View className="flex-row items-center gap-1.5">
+    <View className="flex-row items-center gap-2">
       <StatusDot color={STATUS_DOT_COLOR[status]} />
       <Text className="font-sans text-body-sm text-secondary-text">
         {STATUS_LABEL[status]}
@@ -87,17 +89,17 @@ export function DownloadProgressBar({
   /** Live bytes/sec; shown PocketPal-style when known. */
   speed?: number;
 }) {
-  // PocketPal ModelCard geometry: 8pt bar, 6/12 vertical margins,
-  // right-aligned 12pt status line (percent + live speed).
+  // Mist track, Signal Blue fill, Micro radius on both. The status line is
+  // Caption Slate, right-aligned: it counts bytes, so it is metadata.
   return (
-    <View className="mt-1.5 mb-3 mx-0.5">
-      <View className="h-2 bg-surface-2 rounded-full overflow-hidden">
+    <View className="mx-0.5 mb-3 mt-1">
+      <View className="h-1 overflow-hidden rounded-full bg-surface-2">
         <View
-          className="h-full bg-primary rounded-full"
+          className="h-full rounded-full bg-primary"
           style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
         />
       </View>
-      <Text className="font-sans text-xs text-secondary-text mt-1 text-right">
+      <Text className="mt-1 text-right font-sans text-caption text-secondary-text">
         {speed !== undefined && speed > 0
           ? `${Math.round(progress)}% · ${formatBytes(speed)}/s`
           : `${Math.round(progress)}%`}
@@ -125,16 +127,23 @@ export function DownloadButton({
   const isDownloading = status === "downloading";
   const isPaused = status === "paused";
   const isCompleted = status === "completed";
+  const label = isDownloading
+    ? `${Math.round(progress)}%`
+    : isPaused
+    ? "Paused"
+    : status === "failed"
+    ? "Retry"
+    : "Download";
 
+  // Completed is a state, not an action: Mist fill with a Jade check, and
+  // the row is inert. Every other state is a real button — 48dp tall, 8px
+  // radius, 1px Hairline, Ink label.
   if (isCompleted) {
     return (
-      <Pressable
-        onPress={onPress}
-        className="flex-row items-center px-3 py-2 bg-green-500/20 border border-green-500/50 rounded-lg"
-      >
-        <Download size={16} color={colors.primary} />
-        <Text className="ml-2 font-sans text-body-sm text-green-500">Downloaded</Text>
-      </Pressable>
+      <View className="flex-row items-center rounded-lg bg-surface-2 px-3 py-2">
+        <CheckCircle2 size={16} color={colors.success} />
+        <Text className="ml-2 font-sans text-body-sm text-secondary-text">Downloaded</Text>
+      </View>
     );
   }
 
@@ -142,7 +151,17 @@ export function DownloadButton({
     <Pressable
       onPress={isDownloading ? onPause ?? onPress : isPaused ? onResume ?? onPress : onPress}
       disabled={disabled}
-      className="flex-row items-center px-3 py-2 bg-surface-2 border border-border rounded-lg"
+      className="min-h-12 flex-row items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
+      accessibilityRole="button"
+      accessibilityLabel={
+        isDownloading
+          ? `Pause download, ${Math.round(progress)} percent`
+          : isPaused
+          ? "Resume download"
+          : status === "failed"
+          ? "Retry download"
+          : "Download model"
+      }
     >
       {isDownloading ? (
         <Pause size={16} color={colors.primary} />
@@ -151,15 +170,7 @@ export function DownloadButton({
       ) : (
         <Download size={16} color={colors.primary} />
       )}
-      <Text className="ml-2 font-sans text-body-sm text-primary-text">
-        {isDownloading
-          ? `${Math.round(progress)}%`
-          : isPaused
-          ? "Paused"
-          : status === "failed"
-          ? "Retry"
-          : "Download"}
-      </Text>
+      <Text className="ml-2 font-sans text-body-sm text-primary-text">{label}</Text>
     </Pressable>
   );
 }

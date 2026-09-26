@@ -15,6 +15,7 @@ import {
   Settings,
   X,
   Download,
+  Mic,
   type LucideIcon,
 } from "lucide-react-native";
 
@@ -34,7 +35,7 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
   const renameSession = useChatStore((s) => s.renameSession);
   const setPinned = useChatStore((s) => s.setPinned);
 
-  function go(path: "/settings" | "/about" | "/models"): void {
+  function go(path: "/settings" | "/about" | "/models" | "/voice-settings"): void {
     onClose();
     router.push(path);
   }
@@ -53,11 +54,17 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface1 }}>
       <View className="flex-1">
-        <View className="flex-row items-center border-b border-border px-4 py-3">
-          <Text className="flex-1 font-sans-semibold text-h3 text-primary">
+        <View className="h-16 flex-row items-center border-b border-border px-5">
+          <Text className="flex-1 font-sans-semibold text-h2 text-primary-text">
             {APP_NAME}
           </Text>
-          <Pressable onPress={onClose} className="px-1 py-1">
+          <Pressable
+            onPress={onClose}
+            className="h-12 w-12 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Close menu"
+            hitSlop={4}
+          >
             <X size={20} color={colors.secondaryText} />
           </Pressable>
         </View>
@@ -79,11 +86,12 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
 
         <View className="border-t border-border">
           <DrawerItem Icon={Download} label="Models" onPress={() => go("/models")} />
+          <DrawerItem Icon={Mic} label="Voice" onPress={() => go("/voice-settings")} />
           <DrawerItem Icon={Settings} label="Settings" onPress={() => go("/settings")} />
           <DrawerItem Icon={CircleHelp} label="About" onPress={() => go("/about")} />
         </View>
 
-        <Text className="border-t border-border px-4 py-3 font-sans text-body-sm text-secondary-text">
+        <Text className="border-t border-border px-5 py-3 font-sans text-caption text-secondary-text">
           v{VERSION}
         </Text>
       </View>
@@ -101,9 +109,14 @@ function DrawerItem({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} className="flex-row items-center px-4 py-3">
-      <Icon size={20} color={colors.primary} />
-      <Text className="ml-3 font-sans text-body-md text-primary-text">{label}</Text>
+    <Pressable
+      onPress={onPress}
+      className="min-h-12 flex-row items-center px-5 py-3"
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Icon size={20} color={colors.secondaryText} />
+      <Text className="ml-3 flex-1 font-sans text-body-md text-primary-text">{label}</Text>
     </Pressable>
   );
 }

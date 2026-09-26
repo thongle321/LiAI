@@ -6,11 +6,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { colors } from "../../themes/tokens.ts";
 import { ScreenHeader } from "../ScreenHeader.tsx";
+import { ContentColumn } from "../ContentColumn.tsx";
 import { useLocalModelImport } from "../../hooks/useLocalModelImport.ts";
 import { useModelStore } from "../../store/modelStore";
 import { useModelsUi } from "../../store/modelsUi.ts";
 import { ModelsHeaderRight } from "./ModelsHeaderRight.tsx";
-import { FABGroup } from "./FABGroup.tsx";
+import { FABGroup, FAB_STACK_HEIGHT } from "./FABGroup.tsx";
 import { ReadyModels } from "./ReadyModels.tsx";
 import { AvailableModels } from "./AvailableModels.tsx";
 import { HFModelSearch } from "./HFModelSearch.tsx";
@@ -67,24 +68,29 @@ export function ModelsScreen() {
         }
       />
       <View className="flex-1">
-        <ScrollView className="flex-1" contentContainerClassName="p-4 pb-[120px]">
-          {readyVisible && (
-            <ReadyModels
-              open={readyOpen}
-              onToggle={() => setOpen("ready", !readyOpen)}
-              onOpenSettings={setSettingsModelId}
-              hfOnly={hfOnly}
-            />
-          )}
-          {/* downloadedOnly (PocketPal `downloaded`): only Ready renders. */}
-          {availableVisible && !downloadedOnly && (
-            <AvailableModels
-              open={availableOpen}
-              onToggle={() => setOpen("available", !availableOpen)}
-              onDownload={(modelId, file) => startDownload(modelId, file)}
-              grouped={grouped}
-            />
-          )}
+        <ScrollView className="flex-1" contentContainerClassName="w-full">
+          {/* paddingBottom is an inline style, not a class: it is derived from
+              FAB_STACK_HEIGHT, and a dynamically-composed Uniwind class has
+              failed to resolve on device before (see ModelsHeaderRight). */}
+          <ContentColumn className="p-5" style={{ paddingBottom: FAB_STACK_HEIGHT }}>
+            {readyVisible && (
+              <ReadyModels
+                open={readyOpen}
+                onToggle={(next) => setOpen("ready", next)}
+                onOpenSettings={setSettingsModelId}
+                hfOnly={hfOnly}
+              />
+            )}
+            {/* downloadedOnly (PocketPal `downloaded`): only Ready renders. */}
+            {availableVisible && !downloadedOnly && (
+              <AvailableModels
+                open={availableOpen}
+                onToggle={(next) => setOpen("available", next)}
+                onDownload={(modelId, file) => startDownload(modelId, file)}
+                grouped={grouped}
+              />
+            )}
+          </ContentColumn>
         </ScrollView>
 
         <FABGroup
@@ -98,10 +104,12 @@ export function ModelsScreen() {
         <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
           <ScrollView
             className="flex-1"
-            contentContainerClassName="p-4"
+            contentContainerClassName="w-full"
             keyboardShouldPersistTaps="handled"
           >
-            <HFModelSearch onClose={() => setHfOpen(false)} />
+            <ContentColumn className="p-5">
+              <HFModelSearch onClose={() => setHfOpen(false)} />
+            </ContentColumn>
           </ScrollView>
         </SafeAreaView>
       </Modal>

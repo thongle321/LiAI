@@ -28,30 +28,11 @@ import { APP_NAME } from "../../constants/app.ts";
 import { useChatStore } from "../../store/chat.ts";
 import { useModelStore } from "../../store/modelStore";
 import { Bubble } from "./Bubble.tsx";
+import { ChatEmptyPlaceholder } from "./ChatEmptyPlaceholder.tsx";
 import { ChatInput } from "./ChatInput.tsx";
 import { UsageStats } from "./UsageStats.tsx";
 import { SuggestedPrompts } from "./SuggestedPrompts.tsx";
 import { MessageList } from "./MessageList.tsx";
-
-/** Bottom go-to-models bar (PocketPal ModelNotLoadedMessage parity):
- * visible only while no model is loaded, gone the moment one is —
- * no Retry tap needed. */
-function ModelNotLoadedBar() {
-  const router = useRouter();
-  return (
-    <View className="mx-4 mb-2 flex-row items-center justify-between rounded-xl border border-border bg-surface-1 px-4 py-3">
-      <Text className="flex-1 font-sans text-body-md text-primary-text">
-        No model active
-      </Text>
-      <Pressable
-        onPress={() => router.push("/models")}
-        className="ml-3 rounded-lg border border-primary/50 bg-primary/20 px-3 py-1.5"
-      >
-        <Text className="font-sans text-body-sm text-primary">Go to Models</Text>
-      </Pressable>
-    </View>
-  );
-}
 
 export function ChatScreen() {
   const messages = useChatStore((s) => s.messages);
@@ -94,41 +75,51 @@ export function ChatScreen() {
   const contentFade = useTabContentFade();
   const navigation = useNavigation<{ openDrawer: () => void }>();
   const router = useRouter();
-  // Header shows the loaded model (PocketPal header-title parity);
-  // tapping it opens Models to switch. Falls back to the app name.
-  const headerTitle =
-    useModelStore((s) => {
-      const local = s.models.find((m) => m.id === s.activeModelId);
-      if (local) return s.modelSettings[local.id]?.displayName || local.name;
-      return s.remoteApis.find((p) => p.id === s.activeModelId)?.name ?? APP_NAME;
-    });
 
   return (
     <SafeAreaView
       edges={["top", "left", "right"]}
       style={{ flex: 1, backgroundColor: colors.base }}
     >
-      <View className="flex-row items-center border-b border-border bg-base px-4 py-3">
-        <View className="w-16 flex-row items-center">
-          <Pressable onPress={() => navigation.openDrawer()} className="px-1 py-1">
-            <Menu size={22} color={colors.primary} />
+      {/* 56px header on Clean White with a 1px Hairline bottom. Both slots
+          are w-24 (96px): the trailing group is two 48px targets, so equal
+          slots must be sized to the WIDER group or its overflow eats the
+          wordmark's flex space and shifts it off-centre. */}
+      <View className="h-14 flex-row items-center border-b border-border bg-surface-1 px-5">
+        <View className="w-24 flex-row items-center">
+          <Pressable
+            onPress={() => navigation.openDrawer()}
+            className="h-12 w-12 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Open menu"
+            hitSlop={4}
+          >
+            <Menu size={20} color={colors.primaryText} />
           </Pressable>
         </View>
-        <Pressable onPress={() => router.push("/models")} className="flex-1">
+        <Pressable
+          onPress={() => router.push("/models")}
+          className="flex-1"
+          accessibilityRole="button"
+          accessibilityLabel="Open models"
+        >
           <Text
             numberOfLines={1}
-            className="text-center font-sans-semibold text-h3 text-primary"
+            className="text-center font-sans-semibold text-h2 text-primary-text"
           >
-            {headerTitle}
+            {APP_NAME}
           </Text>
         </Pressable>
-        <View className="w-16 flex-row items-center justify-end">
+        <View className="w-24 flex-row items-center justify-end">
           <Pressable
             onPress={() => {
               setSearchOpen((o) => !o);
               setQuery("");
             }}
-            className="px-1.5 py-1"
+            className="h-12 w-12 items-center justify-center"
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel={searchOpen ? "Close search" : "Search this conversation"}
           >
             {searchOpen ? (
               <X size={20} color={colors.primary} />
@@ -141,7 +132,10 @@ export function ChatScreen() {
               const title = sessions.find((s) => s.id === sessionId)?.title;
               copy(buildTranscript(messages, title));
             }}
-            className="px-1.5 py-1"
+            className="h-12 w-12 items-center justify-center"
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel={copied ? "Copied" : "Copy transcript"}
           >
             {copied ? (
               <Check size={20} color={colors.success} />
@@ -152,7 +146,7 @@ export function ChatScreen() {
         </View>
       </View>
       {searchOpen && (
-        <View className="flex-row items-center gap-2 border-b border-border bg-base px-4 py-2">
+        <View className="flex-row items-center gap-2 border-b border-border bg-base px-5 py-2">
           <TextInput
             value={query}
             onChangeText={setQuery}
@@ -195,7 +189,7 @@ export function ChatScreen() {
           <Animated.Text
             entering={fadeEntering(motionDuration)}
             exiting={fadeExiting(motionDuration)}
-            className="px-4 pb-1 font-sans text-body-sm text-secondary-text"
+            className="px-5 pb-1 font-sans text-body-sm text-secondary-text"
           >
             LiAI…
           </Animated.Text>
@@ -203,8 +197,10 @@ export function ChatScreen() {
         {ready && messages.length === 0 && query.trim() === "" && (
           <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
         )}
+        {!ready && messages.length === 0 && query.trim() === "" && (
+          <ChatEmptyPlaceholder />
+        )}
         <UsageStats messages={messages} />
-        {!ready && connection === "down" && <ModelNotLoadedBar />}
         <ChatInput
           sending={sending}
           ready={ready}

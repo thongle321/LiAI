@@ -31,15 +31,6 @@ export function speakReply(text: string, cbs: SpeakCallbacks = {}): void {
   }
 }
 
-/** System voices for the picker; [] when the module can't list them. */
-export async function listVoices(): Promise<Speech.Voice[]> {
-  try {
-    return await Speech.getAvailableVoicesAsync();
-  } catch {
-    return [];
-  }
-}
-
 /** ponytail: the native module is absent when the dev build predates
  * the dep — stop() then throws, so never let it take down the caller. */
 export function stopSpeaking(): void {

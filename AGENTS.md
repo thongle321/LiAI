@@ -193,33 +193,41 @@ Match the replaced glyph's size and color (colors from `themes/tokens.ts`).
 
 ### Style Exception List
 
-Use StyleSheet or inline styles for:
+Style with Uniwind `className` by default. Use inline styles (never
+`StyleSheet.create` — it is banned outright) only for:
 
-- SafeAreaView (className not supported)
+- Runtime-computed values that no static class can carry: safe-area insets,
+  Reanimated/animated values, `Dimensions`-measured anchor positions, and
+  percentage widths derived from a prop (e.g. download progress).
 
-- KeyboardAvoidingView (behavior props)
+- Platform primitives that take no `className`: `SafeAreaView`,
+  `KeyboardAvoidingView` (behavior props), `Modal` (visible/transparent).
 
-- Modal (visible, transparent props)
+- `@expo/ui` native components — `Host`, `Switch`, `Picker`, `Slider`,
+  `BottomSheet`. These are real SwiftUI/Compose views; they take
+  `UniversalStyle` (padding/background/border/width/height/opacity), not
+  `className`. Uniwind styles the screen around them.
 
-- Animated.View (animated style values)
+- Third-party native components with no `className`: vision-camera
+  `Camera`, `react-native-code-highlighter` `CodeHighlighter` — verify on
+  device before swapping.
 
-- Dynamic styles calculated at runtime
+- The runtime-anchored models FAB (`FABGroup`), whose `right`/`bottom` are
+  inline because className offsets have failed to resolve on device.
 
-- Platform specific styles
+- Navigator props with no `className` equivalent (e.g. Stack
+  `screenOptions` `contentStyle`).
 
-- Pressable or TouchableOpacity pressed states
+- Pressable pressed states, platform-specific styles, shadows.
 
-- Shadows (different per platform)
+ScrollView/FlatList content: use Uniwind `contentContainerClassName`
+(supported by the installed Uniwind), not `contentContainerStyle`.
 
-- Navigator props with no className equivalent (e.g. Stack
-  screenOptions contentStyle)
-
-- Third-party native components that do not accept className
-  (e.g. vision-camera Camera) — verify on device before swapping
-
-- ScrollView/FlatList content: use Uniwind `contentContainerClassName`
-  (supported by the installed Uniwind), not `contentContainerStyle`
-  Everywhere else, use Uniwind.
+Two Uniwind rules this project depends on: never build a className
+dynamically (`bg-${x}` will not compile — use whole string literals or a
+ternary), and when a BEM class (`.btn`, `.row`, `.seg`) overlaps a
+Tailwind utility, wrap with `cn()` so the two do not both apply.
+Everywhere else, use Uniwind.
 
 ---
 

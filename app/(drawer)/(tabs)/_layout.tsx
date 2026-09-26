@@ -10,7 +10,6 @@ import { router, Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BottomNav, type ChatTab } from "../../../components/BottomNav.tsx";
-import { colors } from "../../../themes/tokens.ts";
 
 export default function TabLayout() {
   return (
@@ -37,7 +36,7 @@ function TabBar({ state }: { state: { index: number; routeNames: string[] } }) {
   const active: ChatTab = focused === "voice" ? "voice" : "chat";
 
   return (
-    <View style={{ paddingBottom: insets.bottom, backgroundColor: colors.surface1 }}>
+    <View className="bg-surface-1" style={{ paddingBottom: insets.bottom }}>
       <BottomNav
         active={active}
         onSelect={(t) => {

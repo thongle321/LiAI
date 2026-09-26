@@ -18,6 +18,10 @@ import type {
 const HF_HUB_BASE = "https://huggingface.co";
 const HF_API_BASE = "https://huggingface.co/api";
 
+/** Ceiling on any single Hub request, so a stalled socket cannot leave the
+ * search spinner up forever. */
+const HUB_TIMEOUT_MS = 15000;
+
 /** Our attribution for outbound Hugging Face requests (PocketPal parity:
  * they send PocketPal/<v>; HF's CDN refuses anonymous clients).
  * Version mirrors app.json — bump together. */
@@ -382,11 +386,23 @@ export async function getPresets(): Promise<PresetModel[]> {
   return PRESETS;
 }
 
+/** Caller abort plus our own ceiling. AbortSignal.any keeps both; where it
+ * is missing (older Hermes) we keep the caller's signal alone, because
+ * dropping the 15s timeout is survivable while ignoring a supersede is not. */
+function hubSignal(external?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(HUB_TIMEOUT_MS);
+  if (!external) return timeout;
+  return typeof AbortSignal.any === "function"
+    ? AbortSignal.any([external, timeout])
+    : external;
+}
+
 /** Direct Hub GET: Bearer token header, verbatim JSON list, Error surfacing. */
 async function hubGet<T>(
   url: string,
   token: string | undefined,
   fallback: string,
+  externalSignal?: AbortSignal,
 ): Promise<T[]> {
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -398,10 +414,14 @@ async function hubGet<T>(
     resp = await fetch(url, {
       method: "GET",
       headers,
-      signal: AbortSignal.timeout(15000),
+      signal: hubSignal(externalSignal),
     });
   } catch (error) {
-    throw new Error(error instanceof Error && error.message ? error.message : fallback);
+    // The UI renders this message verbatim, so the raw fetch text
+    // ("Network request failed", "The operation was aborted") must not
+    // escape. Keep it in the log, hand the screen the clean fallback.
+    console.warn(`[huggingface] ${fallback}:`, error);
+    throw new Error(fallback);
   }
   if (resp.status === 401 || resp.status === 403) {
     throw new Error("check your Hugging Face token");
@@ -422,6 +442,7 @@ async function hubGet<T>(
 export async function searchModels(
   query: string,
   token?: string,
+  signal?: AbortSignal,
 ): Promise<HFModelSearchResult[]> {
   if (query.trim() === "") return [];
   const params = new URLSearchParams({
@@ -434,6 +455,7 @@ export async function searchModels(
     `${HF_API_BASE}/models?${params}`,
     token,
     "Search failed",
+    signal,
   );
   // No visibility filter: HF scopes results to what the token may see,
   // and gated rows are downloadable now that downloads carry the token.

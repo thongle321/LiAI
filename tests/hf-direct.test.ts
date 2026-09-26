@@ -92,6 +92,32 @@ describe("hub search", () => {
     assert.deepEqual(await searchModels("   "), []);
     assert.equal(calls, 0);
   });
+
+  it("surfaces the fallback, never the raw network error", async () => {
+    // The UI renders searchError verbatim, so a raw fetch message here
+    // leaks "Network request failed" to the screen.
+    mockFetch(async () => {
+      throw new Error("Network request failed");
+    });
+    await assert.rejects(searchModels("qwen"), (error: Error) => {
+      assert.equal(error.message, "Search failed");
+      assert.doesNotMatch(error.message, /Network request failed/);
+      return true;
+    });
+  });
+
+  it("forwards the caller's abort signal to fetch", async () => {
+    const controller = new AbortController();
+    let seen: AbortSignal | null = null;
+    mockFetch(async (_url, init) => {
+      seen = (init?.signal as AbortSignal | undefined) ?? null;
+      return jsonResponse([]);
+    });
+    await searchModels("qwen", undefined, controller.signal);
+    assert.equal(seen?.aborted, false);
+    controller.abort();
+    assert.equal(seen?.aborted, true, "aborting the caller must abort the request");
+  });
 });
 
 describe("hub files", () => {
@@ -117,10 +143,15 @@ describe("hub files", () => {
     );
   });
 
-  it("wraps network failures as Errors", async () => {
+it("wraps network failures as the fallback, never the raw text", async () => {
+    // The UI renders this message, so the raw fetch text must not escape.
     mockFetch(async () => {
       throw new TypeError("fetch failed");
     });
-    await assert.rejects(getModelFiles("Qwen/x"), /fetch failed/);
-  });
+    await assert.rejects(getModelFiles("Qwen/x"), (error: Error) => {
+      assert.equal(error.message, "Failed to fetch model files");
+      assert.doesNotMatch(error.message, /fetch failed/);
+      return true;
+    });
+});
 });

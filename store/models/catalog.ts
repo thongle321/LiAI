@@ -1,16 +1,27 @@
 /** Catalog slice: the model list, presets, HF search, and local import. */
 
 import type { StateCreator } from "zustand";
-import * as LegacyFileSystem from "expo-file-system/legacy";
 
 import type { CatalogSlice, ModelStore } from "./types";
-import { buildLocalModelSpec } from "../../lib/local-model";
+import { buildLocalModelSpec } from "../../lib/local-model.ts";
 import {
   getModelFiles as hfGetModelFiles,
   getPresets as hfGetPresets,
   searchModels as hfSearchModels,
-} from "../../lib/models/huggingface";
-import { asyncStorage, STORAGE_KEY, generateId } from "./storage";
+} from "../../lib/models/huggingface.ts";
+import { asyncStorage, STORAGE_KEY, generateId } from "./storage.ts";
+
+/** The legacy FS module, loaded on demand like storage.ts's rnStorage().
+ * A top-level import of a native module makes this whole slice unloadable
+ * in node, which costs the search-race regression test; only the two file
+ * operations below ever need it. */
+const legacyFs = () => import("expo-file-system/legacy");
+
+/** The search currently on the wire. A newer search aborts the older one,
+ * and the older one is ignored even if it still resolves: Hub latency
+ * varies seconds, so without this a slow reply for "qwen" lands after the
+ * reply for "qwen2" and the user sees results for a query they replaced. */
+let inflightSearch: AbortController | null = null;
 
 export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> = (
   set,
@@ -27,20 +38,36 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
   },
 
   searchModels: async (query) => {
+    // Clearing the box supersedes whatever is in flight.
+    inflightSearch?.abort();
+    inflightSearch = null;
+
     if (!query.trim()) {
-      set({ searchResults: [], searchError: null });
+      set({ searchResults: [], searchError: null, searchLoading: false });
       return;
     }
 
+    const controller = new AbortController();
+    inflightSearch = controller;
     set({ searchLoading: true, searchError: null });
     try {
-      const results = await hfSearchModels(query, get().hfToken ?? undefined);
+      const results = await hfSearchModels(
+        query,
+        get().hfToken ?? undefined,
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
       set({ searchResults: results, searchLoading: false });
     } catch (error) {
+      // An abort is our own doing, not a failure: reporting it would flash
+      // "Search failed" over perfectly good results.
+      if (controller.signal.aborted) return;
       set({
         searchError: error instanceof Error ? error.message : "Search failed",
         searchLoading: false,
       });
+    } finally {
+      if (inflightSearch === controller) inflightSearch = null;
     }
   },
 
@@ -57,11 +84,12 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
   removeModel: async (modelId) => {
     const model = get().getModel(modelId);
     if (model && model.origin !== "remote_api" && model.files[0]) {
+      const fs = await legacyFs();
       // Delete local file if exists (downloads in models/, imports in models/local/)
       for (const dir of ["models/", "models/local/"]) {
-        const filePath = `${LegacyFileSystem.documentDirectory}${dir}${model.files[0].name}`;
+        const filePath = `${fs.documentDirectory}${dir}${model.files[0].name}`;
         try {
-          await LegacyFileSystem.deleteAsync(filePath, { idempotent: true });
+          await fs.deleteAsync(filePath, { idempotent: true });
         } catch {
           // Ignore
         }
@@ -100,14 +128,15 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
   getModel: (modelId) => get().models.find((m) => m.id === modelId),
 
   addLocalModel: async (sourceUri, fileName, size) => {
-    const base = LegacyFileSystem.documentDirectory ?? "";
+    const fs = await legacyFs();
+    const base = fs.documentDirectory ?? "";
     const dir = `${base}models/local/`;
     try {
-      const info = await LegacyFileSystem.getInfoAsync(dir);
+      const info = await fs.getInfoAsync(dir);
       if (!info.exists) {
-        await LegacyFileSystem.makeDirectoryAsync(dir, { intermediates: true });
+        await fs.makeDirectoryAsync(dir, { intermediates: true });
       }
-      await LegacyFileSystem.copyAsync({ from: sourceUri, to: `${dir}${fileName}` });
+      await fs.copyAsync({ from: sourceUri, to: `${dir}${fileName}` });
     } catch (e) {
       console.warn("Failed to copy local model file:", e);
       throw e instanceof Error ? e : new Error("Copy failed");

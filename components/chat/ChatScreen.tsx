@@ -27,6 +27,7 @@ import { fadeEntering, fadeExiting, useMotionDuration, useTabContentFade } from 
 import { APP_NAME } from "../../constants/app.ts";
 import { useChatStore } from "../../store/chat.ts";
 import { useModelStore } from "../../store/modelStore";
+import { useModelReady } from "../../hooks/useModelReady.ts";
 import { Bubble } from "./Bubble.tsx";
 import { ChatEmptyPlaceholder } from "./ChatEmptyPlaceholder.tsx";
 import { ChatInput } from "./ChatInput.tsx";
@@ -70,6 +71,13 @@ export function ChatScreen() {
   // send button disables, the placeholder names it, and the bar below
   // routes to Models — it dismisses itself the moment one loads.
   const ready = connection === "up";
+  // The engine-accurate gate for the composer's mic/attach and the centered
+  // warning below, so they can never light up for a model the engine would
+  // reject. The empty-conversation placeholder is NOT gated on this: it owns
+  // the whole screen when the thread is empty (it has its own centered copy
+  // and button), so the warning line is shown only when there ARE messages
+  // — otherwise both would render at once, with two "load a model" buttons.
+  const modelReady = useModelReady();
 
   const motionDuration = useMotionDuration();
   const contentFade = useTabContentFade();
@@ -201,6 +209,27 @@ export function ChatScreen() {
           <ChatEmptyPlaceholder />
         )}
         <UsageStats messages={messages} />
+        {!modelReady && messages.length > 0 && (
+          // Centered above the composer so the no-model state is visible on
+          // every chat screen WITH a conversation, not just the empty one.
+          // The empty conversation is owned by ChatEmptyPlaceholder, so this
+          // is suppressed there to keep one signal and one button.
+          <View className="mb-1 items-center px-5">
+            <Text className="text-center font-sans text-body-md text-secondary-text">
+              Load a model to keep chatting
+            </Text>
+            <Pressable
+              onPress={() => router.push("/models")}
+              className="btn btn--primary mt-3"
+              accessibilityRole="button"
+              accessibilityLabel="Go to models"
+            >
+              <Text className="text-center font-sans-semibold text-body-md text-on-primary">
+                Go to Models
+              </Text>
+            </Pressable>
+          </View>
+        )}
         <ChatInput
           sending={sending}
           ready={ready}

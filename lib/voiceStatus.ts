@@ -47,7 +47,8 @@ export function isThrottlingError(code: string): boolean {
 export type VoiceErrorAction = { fatal: boolean; message: string };
 export type BargeAction = "begin" | "stop" | "interrupt" | "ignore";
 
-/** Nudge-and-retry, or give up naming the recognizer's error code. */
+/** Nudge-and-retry, or give up with clean copy (the raw code stays in the
+ * console, per the Q3 decision — never surface it in the UI). */
 export function voiceErrorAction(streak: number, code: string): VoiceErrorAction {
   if (code === "not-allowed") {
     return { fatal: true, message: "Microphone access is needed." };
@@ -57,7 +58,8 @@ export function voiceErrorAction(streak: number, code: string): VoiceErrorAction
     return { fatal: true, message: "Too many voice requests — wait a bit and try again." };
   }
   if (streak + 1 >= MAX_VOICE_ERROR_STREAK) {
-    return { fatal: true, message: `Having trouble hearing you (${code}).` };
+    // No raw code in the message; the caller logs the code already.
+    return { fatal: true, message: "Having trouble hearing you — try again." };
   }
   return { fatal: false, message: "" };
 }

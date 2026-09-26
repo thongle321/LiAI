@@ -38,10 +38,12 @@ describe("voiceErrorAction", () => {
     const a = voiceErrorAction(0, "no-speech");
     assert.equal(a.fatal, false);
   });
-  it("a long failure run gives up naming the error code", () => {
+  it("a long failure run gives up with clean copy (no raw code)", () => {
     const a = voiceErrorAction(99, "network");
     assert.equal(a.fatal, true);
-    assert.match(a.message, /network/);
+    assert.match(a.message, /trouble hearing you/i);
+    // The raw recognizer code must never reach the UI (Q3).
+    assert.doesNotMatch(a.message, /network/);
   });
   it("throttling fails at once — retrying extends the ban", () => {
     const a = voiceErrorAction(0, "too-many-requests");

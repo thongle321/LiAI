@@ -1,0 +1,23 @@
+[
+  {
+    "id": "light",
+    "label": "Light",
+    "minRamMb": 0,
+    "blurb": "Small and fast — runs on any phone.",
+    "presetIds": ["gemma-3-1b", "bonsai-1.7b", "qwen3-0.6b", "lfm2.5-350m"]
+  },
+  {
+    "id": "balanced",
+    "label": "Balanced",
+    "minRamMb": 4096,
+    "blurb": "Best balance of quality and speed.",
+    "presetIds": ["smollm3-3b", "lfm2-2.6b", "qwen3-1.7b", "lfm2.5-1.2b", "lfm2-vl-1.6b", "bonsai-8b"]
+  },
+  {
+    "id": "capable",
+    "label": "Capable",
+    "minRamMb": 8192,
+    "blurb": "Largest models — needs a recent phone.",
+    "presetIds": ["gemma-3-4b", "gemma-4-e2b", "phi-4-mini", "bonsai-4b", "gemma-4-e4b", "lfm2.5-8b-a1b", "ministral-3-3b", "qwen3.5-4b"]
+  }
+]

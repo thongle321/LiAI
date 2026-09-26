@@ -27,34 +27,41 @@ export function HfTokenSettings() {
 
   return (
     <View className="mb-6">
-      <Text className="font-sans-semibold text-h4 text-primary-text mb-1">Hugging Face</Text>
-      <Text className="font-sans text-body-sm text-secondary-text mb-2">
+      <Text className="mb-2 font-sans-semibold text-h4 text-primary-text">Hugging Face</Text>
+      <Text className="mb-3 font-sans text-body-sm text-secondary-text">
         {hfToken ? "Token saved on this device." : "Needed only for gated repos."}
       </Text>
-      <View className="flex-row items-center gap-2">
-        <TextInput
-          value={draft}
-          onChangeText={setDraft}
-          placeholder={hfToken ? "Token saved — enter to replace" : "hf_..."}
-          secureTextEntry
-          autoCapitalize="none"
-          className="flex-1 font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-4 py-3"
-          placeholderTextColor={colors.secondaryText}
-        />
-        <Pressable
-          onPress={() => void save()}
-          className="px-4 py-3 bg-primary/20 border border-primary/50 rounded-lg"
-        >
-          <Text className="font-sans text-body-sm text-primary">Save</Text>
-        </Pressable>
-        {hfToken && (
+      <View className="rows">
+        <View className="row flex-row items-center gap-2">
+          <TextInput
+            value={draft}
+            onChangeText={setDraft}
+            placeholder={hfToken ? "Token saved — enter to replace" : "hf_..."}
+            secureTextEntry
+            autoCapitalize="none"
+            className="input flex-1 font-sans text-body-md"
+            placeholderTextColor={colors.secondaryText}
+            accessibilityLabel="Hugging Face token"
+          />
           <Pressable
-            onPress={() => void setHfToken(null)}
-            className="px-4 py-3 bg-surface-2 border border-border rounded-lg"
+            onPress={() => void save()}
+            className="btn btn--primary min-h-11 px-5 py-2"
+            accessibilityRole="button"
+            accessibilityLabel="Save token"
           >
-            <Text className="font-sans text-body-sm text-secondary-text">Clear</Text>
+            <Text className="font-sans text-body-sm text-on-primary">Save</Text>
           </Pressable>
-        )}
+          {hfToken && (
+            <Pressable
+              onPress={() => void setHfToken(null)}
+              className="btn btn--ghost min-h-11 px-5 py-2"
+              accessibilityRole="button"
+              accessibilityLabel="Clear token"
+            >
+              <Text className="font-sans text-body-sm text-primary">Clear</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
     </View>
   );

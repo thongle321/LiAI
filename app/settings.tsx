@@ -1,9 +1,11 @@
-/** Settings: search, on-device inference, HF token; voice has its own screen. */
+/** Settings: search and on-device inference.
+ *
+ * Voice lives on its own screen (app/voice-settings.tsx) and is reached
+ * from the drawer, so there is no Voice row here.
+ */
 
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
-import { ChevronRight, Mic } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 import { ScreenHeader } from "../components/ScreenHeader.tsx";
@@ -15,20 +17,7 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
       <ScreenHeader title="Settings" />
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="p-4"
-      >
-        <Pressable
-          onPress={() => router.push("/voice-settings")}
-          className="mb-6 flex-row items-center justify-between py-2.5"
-        >
-          <View className="flex-row items-center gap-2.5">
-            <Mic size={18} color={colors.primary} />
-            <Text className="font-sans text-body-md text-primary-text">Voice</Text>
-          </View>
-          <ChevronRight size={18} color={colors.secondaryText} />
-        </Pressable>
+      <ScrollView className="flex-1" contentContainerClassName="p-5">
         <SearchSettings />
         <InferenceSettings />
         <HfTokenSettings />

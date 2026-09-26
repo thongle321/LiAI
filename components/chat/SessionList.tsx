@@ -10,7 +10,7 @@ import { FlatList, Modal, Pressable, Text, TextInput, View } from "react-native"
 import { useDrawerStatus } from "expo-router/drawer";
 import { History, MessageSquarePlus, Pencil, Pin, PinOff, X } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors, scrim } from "../../themes/tokens.ts";
 import { formatTime } from "../../lib/format.ts";
 import type { ChatSession } from "../../types/chat.ts";
 
@@ -57,20 +57,20 @@ export function SessionList({
 
   return (
     <>
-      <Pressable onPress={onNew} className="flex-row items-center px-4 py-3">
+      <Pressable onPress={onNew} className="flex-row items-center px-5 py-3">
         <MessageSquarePlus size={20} color={colors.primary} />
         <Text className="ml-3 font-sans text-body-md text-primary-text">
           New conversation
         </Text>
       </Pressable>
-      <View className="flex-row items-center px-4 pb-1 pt-3">
+      <View className="flex-row items-center px-5 pb-1 pt-3">
         <History size={20} color={colors.secondaryText} />
         <Text className="ml-3 font-sans text-body-sm text-secondary-text">
           History
         </Text>
       </View>
       {switchError !== null && (
-        <Text className="px-4 py-1 font-sans text-body-sm text-secondary-text">
+        <Text className="px-5 py-1 font-sans text-body-sm text-secondary-text">
           {switchError}
         </Text>
       )}
@@ -80,14 +80,14 @@ export function SessionList({
         extraData={sessionId}
         scrollEnabled={false}
         ListEmptyComponent={
-          <Text className="px-4 py-2 font-sans text-body-sm text-secondary-text">
+          <Text className="px-5 py-2 font-sans text-body-sm text-secondary-text">
             No conversations yet.
           </Text>
         }
         renderItem={({ item }) => (
           <Pressable
             onPress={() => void openSession(item)}
-            className={`flex-row items-center px-4 py-2 ${
+            className={`flex-row items-center px-5 py-2 ${
               item.id === sessionId ? "bg-surface-2" : ""
             }`}
           >
@@ -106,7 +106,9 @@ export function SessionList({
             </View>
             <Pressable
               onPress={() => void onTogglePin(item.id, !item.pinned)}
-              className="px-2 py-1"
+              className="h-11 w-11 items-center justify-center"
+              accessibilityRole="button"
+              accessibilityLabel={item.pinned ? "Unpin conversation" : "Pin conversation"}
             >
               {item.pinned ? (
                 <PinOff size={16} color={colors.primary} />
@@ -119,11 +121,18 @@ export function SessionList({
                 setRenaming(item);
                 setDraft(item.title);
               }}
-              className="px-2 py-1"
+              className="h-11 w-11 items-center justify-center"
+              accessibilityRole="button"
+              accessibilityLabel="Rename conversation"
             >
               <Pencil size={16} color={colors.secondaryText} />
             </Pressable>
-            <Pressable onPress={() => onDelete(item.id)} className="px-2 py-1">
+            <Pressable
+              onPress={() => onDelete(item.id)}
+              className="h-11 w-11 items-center justify-center"
+              accessibilityRole="button"
+              accessibilityLabel="Delete conversation"
+            >
               <X size={16} color={colors.secondaryText} />
             </Pressable>
           </Pressable>
@@ -135,9 +144,9 @@ export function SessionList({
         animationType="fade"
         onRequestClose={() => setRenaming(null)}
       >
-        <View className="flex-1 bg-black/60 items-center justify-center p-4">
-          <View className="bg-surface-1 border border-border rounded-2xl w-full p-6">
-            <Text className="font-sans-semibold text-h4 text-primary-text mb-4">
+        <View className="flex-1 items-center justify-center p-5" style={{ backgroundColor: scrim }}>
+          <View className="w-full rounded-2xl border border-border bg-surface-1 p-5">
+            <Text className="mb-4 font-sans-semibold text-h3 text-primary-text">
               Rename conversation
             </Text>
             <TextInput
@@ -145,22 +154,27 @@ export function SessionList({
               onChangeText={setDraft}
               placeholder="Conversation title"
               autoFocus
-              className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-4 py-3"
+              className="input font-sans text-body-md"
               placeholderTextColor={colors.secondaryText}
+              accessibilityLabel="Conversation title"
             />
             <View className="flex-row gap-2 pt-4">
               <Pressable
                 onPress={() => setRenaming(null)}
-                className="flex-1 py-3 px-4 bg-surface-2 border border-border rounded-lg items-center"
+                className="btn btn--secondary flex-1"
+                accessibilityRole="button"
+                accessibilityLabel="Cancel rename"
               >
-                <Text className="font-sans text-body-md text-secondary-text">Cancel</Text>
+                <Text className="font-sans text-body-md text-primary">Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={() => void saveRename()}
                 disabled={draft.trim() === ""}
-                className="flex-1 py-3 px-4 bg-primary border border-primary/50 rounded-lg items-center"
+                className="btn btn--primary flex-1"
+                accessibilityRole="button"
+                accessibilityLabel="Save name"
               >
-                <Text className="font-sans-semibold text-body-md text-base">Save</Text>
+                <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
               </Pressable>
             </View>
           </View>

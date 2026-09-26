@@ -4,7 +4,7 @@
  * (hook + callbacks) while this file owns the large JSX blocks.
  */
 
-import type { ComponentProps, RefObject } from "react";
+import type { RefObject } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { Keyboard, Mic, Send, SwitchCamera, X } from "lucide-react-native";
@@ -14,7 +14,7 @@ import {
   type Camera as VisionCameraView,
 } from "react-native-vision-camera";
 
-import { colors } from "../themes/tokens.ts";
+import { colors, scrim } from "../themes/tokens.ts";
 import type { useTabContentFade } from "../lib/motion.ts";
 import type { VoicePhase } from "../lib/voiceStatus.ts";
 
@@ -74,6 +74,48 @@ export function VisionPreview({
   );
 }
 
+/** Four Signal Blue corner brackets (DESIGN.md AI States).
+ *
+ * "Vision Active" is a HUD element, so the frame is drawn as four L-marks
+ * rather than a border — a bordered frame would read as a container.
+ */
+export function VisionActiveFrame({
+  side = 28,
+  color = colors.primary,
+}: {
+  /** Length of each bracket arm, in px. */
+  side?: number;
+  color?: string;
+}) {
+  const CORNERS = [
+    { key: "topLeft", top: true, left: true },
+    { key: "topRight", top: true, left: false },
+    { key: "bottomLeft", top: false, left: true },
+    { key: "bottomRight", top: false, left: false },
+  ] as const;
+  return (
+    <View pointerEvents="none" className="absolute inset-0">
+      {CORNERS.map(({ key, top, left }) => (
+        <View
+          key={key}
+          style={{
+            position: "absolute",
+            ...(top ? { top: 0 } : { bottom: 0 }),
+            ...(left ? { left: 0 } : { right: 0 }),
+            width: side,
+            height: side,
+            borderColor: color,
+            borderTopWidth: top ? 2 : 0,
+            borderBottomWidth: top ? 0 : 2,
+            borderLeftWidth: left ? 2 : 0,
+            borderRightWidth: left ? 0 : 2,
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
 export function VisionTopFloat({
   top,
   onExit,
@@ -85,14 +127,24 @@ export function VisionTopFloat({
 }) {
   return (
     <View
-      className="absolute left-0 right-0 flex-row items-center px-4"
+      className="absolute left-0 right-0 flex-row items-center px-5"
       style={{ top }}
     >
-      <Pressable onPress={onExit} className="p-2" accessibilityLabel="Stop vision">
+      <Pressable
+        onPress={onExit}
+        className="h-11 w-11 items-center justify-center"
+        accessibilityRole="button"
+        accessibilityLabel="Stop vision"
+      >
         <X size={24} color={colors.inverseText} />
       </Pressable>
       <View className="flex-1" />
-      <Pressable onPress={onFlip} className="p-2" accessibilityLabel="Switch camera">
+      <Pressable
+        onPress={onFlip}
+        className="h-11 w-11 items-center justify-center"
+        accessibilityRole="button"
+        accessibilityLabel="Switch camera"
+      >
         <SwitchCamera size={22} color={colors.inverseText} />
       </Pressable>
       <Text className="ml-1 font-sans-semibold text-caption tracking-widest text-white">
@@ -140,7 +192,7 @@ export function VisionBottomPanel({
       className="absolute left-0 right-0 px-5"
       style={{ bottom }}
     >
-      <View className="rounded-card bg-black/60 px-4 py-3">
+      <View className="rounded-lg px-5 py-3" style={{ backgroundColor: scrim }}>
         {issue !== null ? (
           needsSettings ? (
             <Pressable onPress={onOpenSettings}>
@@ -153,7 +205,7 @@ export function VisionBottomPanel({
               <Text className="text-center font-sans text-body-md text-white">
                 {issue}
               </Text>
-              <Pressable onPress={onRetry} className="mt-1 px-4 py-1">
+              <Pressable onPress={onRetry} className="mt-1 px-5 py-1">
                 <Text className="font-sans text-body-md text-primary">Try again</Text>
               </Pressable>
             </View>
@@ -181,7 +233,7 @@ export function VisionBottomPanel({
       </View>
 
       {inputOpen && (
-        <View className="mt-2 flex-row items-center rounded-full bg-black/60 px-2 py-1">
+        <View className="mt-2 flex-row items-center rounded-lg px-2 py-1" style={{ backgroundColor: scrim }}>
           <TextInput
             value={draft}
             onChangeText={onDraftChange}
@@ -199,22 +251,31 @@ export function VisionBottomPanel({
       )}
 
       <View className="mt-3 flex-row items-center justify-center">
-        <View className="w-12 items-center">
-          <Pressable
-            onPress={onToggleInput}
-            className="h-12 w-12 items-center justify-center rounded-full bg-black/60"
-            accessibilityLabel="Type a question"
-          >
-            <Keyboard size={22} color={colors.inverseText} />
-          </Pressable>
-        </View>
-        <Pressable onPress={onTalk} accessibilityLabel="Talk">
+        <Pressable
+          onPress={onToggleInput}
+          className="h-12 w-12 items-center justify-center rounded-full"
+          style={{ backgroundColor: scrim }}
+          accessibilityRole="button"
+          accessibilityLabel="Type a question"
+        >
+          <Keyboard size={22} color={colors.inverseText} />
+        </Pressable>
+        <Pressable
+          onPress={onTalk}
+          className="h-20 w-20 items-center justify-center"
+          accessibilityRole="button"
+          accessibilityLabel={phase === "idle" ? "Talk" : "Stop talking"}
+        >
+          {/* Listening is a Surface Tint circle with rings; the brackets are
+              the Vision Active HUD mark and are drawn, never bordered. */}
           <View
-            className={`mx-4 h-20 w-20 items-center justify-center rounded-full border-2 ${
-              phase === "idle" ? "border-primary" : "border-white"
-            } bg-black/60`}
+            className={`h-20 w-20 items-center justify-center rounded-full ${
+              phase === "idle" ? "border border-primary" : "bg-surface-3"
+            }`}
+            {...(phase === "idle" ? { style: { backgroundColor: scrim } } : {})}
           >
-            <Mic size={30} color={phase === "idle" ? colors.primary : colors.inverseText} />
+            {phase !== "idle" && <VisionActiveFrame side={22} />}
+            <Mic size={30} color={colors.primary} />
           </View>
         </Pressable>
         <View className="w-12" />

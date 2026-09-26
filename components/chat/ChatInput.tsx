@@ -183,7 +183,7 @@ export function ChatInput({
   }
 
   return (
-    <View className="border-t border-border bg-base">
+    <View className="border-t border-border bg-base px-5 pt-2">
       {voiceIssue !== null &&
         (voiceSettings ? (
           <Pressable onPress={() => void openSettings()}>
@@ -202,26 +202,37 @@ export function ChatInput({
         </Text>
       )}
       {attached !== null && (
-        <View className="mx-4 mb-2 flex-row items-center gap-2 rounded-card border border-border bg-surface-1 p-2">
-          <RNImage source={{ uri: attached }} className="h-14 w-14 rounded-lg" />
+        <View className="mx-5 mb-2 flex-row items-center gap-2 rounded-lg border border-border bg-surface-1 p-2">
+          <RNImage source={{ uri: attached }} className="h-14 w-14 rounded" />
           <Text className="flex-1 font-sans text-body-sm text-secondary-text">
             Attached — sent with your message
           </Text>
-          <Pressable onPress={() => setAttached(null)} className="p-2">
+          <Pressable
+            onPress={() => setAttached(null)}
+            className="h-11 w-11 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Remove attachment"
+          >
             <X size={18} color={colors.secondaryText} />
           </Pressable>
         </View>
       )}
-      <View className="mx-4 mb-2 flex-row items-center rounded-full border border-border bg-surface-1 px-2 py-1">
+      {/* The composer is an input, not a custom control (DESIGN.md): the
+          field spec — Clean White, 1px Hairline, 8px radius, 12/16 padding —
+          with a leading attach control and a trailing send icon button in
+          its Primary state. Disabled send is Secondary, never dimmed. */}
+      <View className="mx-5 mb-3 flex-row items-end gap-2 rounded-lg border border-border bg-surface-1 px-4 py-3">
         <View>
           <Pressable
             onPress={() => setPlusOpen((o) => !o)}
-            className="h-9 w-9 items-center justify-center rounded-full border border-border"
+            className="h-10 w-10 items-center justify-center rounded-full bg-surface-3"
+            accessibilityRole="button"
+            accessibilityLabel="Attach a photo"
           >
-            <Plus size={22} color={colors.primary} />
+            <Plus size={20} color={colors.primary} />
           </Pressable>
           {plusOpen && (
-            <View className="absolute bottom-11 left-0 w-48 rounded-card border border-border bg-surface-1 py-1">
+            <View className="absolute bottom-12 left-0 w-48 rounded-lg border border-border bg-surface-1 py-1">
               <PlusItem
                 Icon={Camera}
                 label="Take photo"
@@ -243,23 +254,54 @@ export function ChatInput({
           multiline
           editable={!sending}
           onSubmitEditing={() => void handleSend()}
-          className="flex-1 px-3 font-sans text-body-md text-primary-text"
+          className="flex-1 pt-2 font-sans text-body-md text-primary-text"
+          accessibilityLabel="Message"
         />
-        <Pressable onPress={() => void toggleDictation()} className="px-1 py-1">
-          <Mic size={22} color={listening ? colors.primary : colors.secondaryText} />
-        </Pressable>
-        {isLocal && (
-          <Pressable onPress={() => setThinkingEnabled(!thinkingEnabled)} className="px-1 py-1">
-            <Brain size={22} color={thinkingEnabled ? colors.primary : colors.secondaryText} />
+        <View className="flex-row items-center gap-1">
+          <Pressable
+            onPress={() => void toggleDictation()}
+            className="h-10 w-10 items-center justify-center rounded-full bg-surface-2"
+            accessibilityRole="button"
+            accessibilityLabel={listening ? "Stop dictation" : "Dictate a message"}
+          >
+            <Mic size={20} color={listening ? colors.primary : colors.secondaryText} />
           </Pressable>
-        )}
+          {isLocal && (
+            <Pressable
+              onPress={() => setThinkingEnabled(!thinkingEnabled)}
+              className="h-10 w-10 items-center justify-center rounded-full bg-surface-2"
+              accessibilityRole="switch"
+              accessibilityState={{ checked: thinkingEnabled }}
+              accessibilityLabel="Thinking"
+            >
+              <Brain size={20} color={thinkingEnabled ? colors.primary : colors.secondaryText} />
+            </Pressable>
+          )}
+        </View>
+        {/* Send and Stop are siblings, never nested: two nested pressables
+            would be two hit targets and two a11y roles on one control.
+            Send: Primary (Signal Blue fill) when armed, Disabled (Mist) when
+            not — a disabled send is a fill change, not an opacity drop. */}
         {sending ? (
-          <Pressable onPress={stop} className="px-2 py-1">
-            <Square size={22} color={colors.error} />
+          <Pressable
+            onPress={stop}
+            className="h-10 w-10 items-center justify-center rounded-full bg-primary"
+            accessibilityRole="button"
+            accessibilityLabel="Stop generating"
+          >
+            <Square size={18} color={colors.onPrimary} />
           </Pressable>
         ) : (
-          <Pressable disabled={!canSend} onPress={() => void handleSend()} className="px-2 py-1">
-            <Send size={22} color={canSend ? colors.primary : colors.secondaryText} />
+          <Pressable
+            disabled={!canSend}
+            onPress={() => void handleSend()}
+            className={`h-10 w-10 items-center justify-center rounded-full ${
+              canSend ? "bg-primary" : "bg-surface-2"
+            }`}
+            accessibilityRole="button"
+            accessibilityLabel="Send message"
+          >
+            <Send size={20} color={canSend ? colors.onPrimary : colors.secondaryText} />
           </Pressable>
         )}
       </View>
@@ -277,7 +319,7 @@ function PlusItem({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} className="flex-row items-center gap-2.5 px-4 py-2.5">
+    <Pressable onPress={onPress} className="flex-row items-center gap-3 px-5 py-2">
       <Icon size={18} color={colors.primary} />
       <Text className="font-sans text-body-md text-primary-text">{label}</Text>
     </Pressable>

@@ -16,7 +16,7 @@ export default function DoneStep() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
       <View className="flex-1 justify-center px-8">
-        <Text className="text-center font-sans-semibold text-h1 text-primary">
+        <Text className="text-center font-sans-semibold text-h1 text-primary-text">
           You're set
         </Text>
         <Text className="mt-2 text-center font-sans text-body-lg text-secondary-text">
@@ -25,12 +25,19 @@ export default function DoneStep() {
         <Pressable
           onPress={() => void finish("/chat")}
           className="btn btn--primary mt-8"
+          accessibilityRole="button"
+          accessibilityLabel="Start chatting"
         >
           <Text className="text-center font-sans-semibold text-on-primary">
             Start chatting
           </Text>
         </Pressable>
-        <Pressable onPress={() => void finish("/models")} className="mt-3 py-2">
+        <Pressable
+          onPress={() => void finish("/models")}
+          className="btn btn--ghost mt-3"
+          accessibilityRole="button"
+          accessibilityLabel="Browse all models"
+        >
           <Text className="text-center font-sans text-body-md text-primary">
             Browse all models
           </Text>

@@ -10,7 +10,6 @@ import { useEffect, useState } from "react";
 import { Image as RNImage, Pressable, Text, View } from "react-native";
 import { openURL } from "expo-linking";
 
-import { colors } from "../../themes/tokens.ts";
 import { fetchPreview, firstUrl, type LinkPreview } from "../../lib/chat/link-preview.ts";
 
 export function LinkPreviewCard({ text }: { text: string }) {
@@ -40,15 +39,17 @@ export function LinkPreviewCard({ text }: { text: string }) {
   return (
     <Pressable
       onPress={() => void openURL(preview.url).catch(() => undefined)}
-      className="mt-2 flex-row items-center gap-2 overflow-hidden rounded-card border border-border bg-surface-2 p-2"
+      className="mt-2 flex-row items-center gap-3 overflow-hidden rounded-lg border border-border bg-surface-2 p-2"
+      accessibilityRole="link"
+      accessibilityLabel={preview.title ?? preview.url}
     >
       {preview.image !== undefined && (
-        <RNImage source={{ uri: preview.image }} className="h-12 w-12 rounded-lg" />
+        <RNImage source={{ uri: preview.image }} className="h-12 w-12 rounded" />
       )}
       <View className="flex-1">
         <Text
           numberOfLines={2}
-          className="font-sans text-body-sm font-semibold text-primary-text"
+          className="font-sans-medium text-body-sm text-primary-text"
         >
           {preview.title ?? preview.url}
         </Text>
@@ -57,7 +58,7 @@ export function LinkPreviewCard({ text }: { text: string }) {
             {preview.description}
           </Text>
         )}
-        <Text className="font-sans text-caption" style={{ color: colors.primary }}>
+        <Text className="font-sans text-caption text-primary" numberOfLines={1}>
           {domain}
         </Text>
       </View>

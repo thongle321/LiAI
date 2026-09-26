@@ -81,27 +81,43 @@ export function ChatScreen() {
       edges={["top", "left", "right"]}
       style={{ flex: 1, backgroundColor: colors.base }}
     >
-      <View className="flex-row items-center border-b border-border bg-base px-4 py-3">
-        <View className="w-16 flex-row items-center">
-          <Pressable onPress={() => navigation.openDrawer()} className="px-1 py-1">
-            <Menu size={22} color={colors.primary} />
+      {/* 56px header on Clean White with a 1px Hairline bottom. Leading and
+          trailing slots are equal width so the wordmark stays optically
+          centred regardless of how many trailing icons are present. */}
+      <View className="h-14 flex-row items-center border-b border-border bg-surface-1 px-5">
+        <View className="w-12 flex-row items-center">
+          <Pressable
+            onPress={() => navigation.openDrawer()}
+            className="h-11 w-11 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Open menu"
+            hitSlop={4}
+          >
+            <Menu size={20} color={colors.primaryText} />
           </Pressable>
         </View>
-        <Pressable onPress={() => router.push("/models")} className="flex-1">
+        <Pressable
+          onPress={() => router.push("/models")}
+          className="flex-1"
+          accessibilityRole="button"
+          accessibilityLabel="Open models"
+        >
           <Text
             numberOfLines={1}
-            className="text-center font-sans-semibold text-h3 text-primary"
+            className="text-center font-sans-semibold text-h2 text-primary-text"
           >
             {APP_NAME}
           </Text>
         </Pressable>
-        <View className="w-16 flex-row items-center justify-end">
+        <View className="w-12 flex-row items-center justify-end">
           <Pressable
             onPress={() => {
               setSearchOpen((o) => !o);
               setQuery("");
             }}
-            className="px-1.5 py-1"
+            className="h-11 w-11 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel={searchOpen ? "Close search" : "Search this conversation"}
           >
             {searchOpen ? (
               <X size={20} color={colors.primary} />
@@ -114,7 +130,9 @@ export function ChatScreen() {
               const title = sessions.find((s) => s.id === sessionId)?.title;
               copy(buildTranscript(messages, title));
             }}
-            className="px-1.5 py-1"
+            className="h-11 w-11 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel={copied ? "Copied" : "Copy transcript"}
           >
             {copied ? (
               <Check size={20} color={colors.success} />
@@ -125,7 +143,7 @@ export function ChatScreen() {
         </View>
       </View>
       {searchOpen && (
-        <View className="flex-row items-center gap-2 border-b border-border bg-base px-4 py-2">
+        <View className="flex-row items-center gap-2 border-b border-border bg-base px-5 py-2">
           <TextInput
             value={query}
             onChangeText={setQuery}
@@ -168,7 +186,7 @@ export function ChatScreen() {
           <Animated.Text
             entering={fadeEntering(motionDuration)}
             exiting={fadeExiting(motionDuration)}
-            className="px-4 pb-1 font-sans text-body-sm text-secondary-text"
+            className="px-5 pb-1 font-sans text-body-sm text-secondary-text"
           >
             LiAI…
           </Animated.Text>

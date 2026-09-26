@@ -55,18 +55,33 @@ export default function VoiceScreen() {
       edges={["top", "left", "right"]}
       style={{ flex: 1, backgroundColor: colors.base }}
     >
-      <Text className="px-4 py-3 text-center font-sans-semibold text-h3 text-primary">
-        Voice
-      </Text>
+      {/* Voice screen title: Ink, matching the header geometry of every
+          other screen. Blue is reserved for the one live control. */}
+      <View className="h-14 items-center justify-center border-b border-border bg-surface-1 px-5">
+        <Text className="font-sans-semibold text-h2 text-primary-text">Voice</Text>
+      </View>
 
       <Animated.ScrollView style={contentFade} contentContainerClassName="flex-1 items-center justify-center px-8">
-        <Pressable onPress={bargeIn}>
+        <Pressable
+          onPress={bargeIn}
+          className="h-11 w-11"
+          accessibilityRole="button"
+          accessibilityLabel={micLive ? "Stop listening" : "Tap to speak"}
+        >
+          {/* Listening is a machine-in-the-loop state: a Surface Tint circle
+              with concentric Signal Blue rings. */}
           <View
-            className={`h-40 w-40 items-center justify-center rounded-full border bg-surface-1 ${
-              micLive ? "border-primary" : "border-border"
+            className={`h-40 w-40 items-center justify-center rounded-full ${
+              micLive ? "bg-surface-3" : "bg-surface-2"
             }`}
           >
-            <Mic size={72} color={micLive ? colors.primary : colors.secondaryText} />
+            <View
+              className={`h-32 w-32 items-center justify-center rounded-full border ${
+                micLive ? "border-primary" : "border-border"
+              }`}
+            >
+              <Mic size={56} color={micLive ? colors.primary : colors.secondaryText} />
+            </View>
           </View>
         </Pressable>
 
@@ -87,16 +102,21 @@ export default function VoiceScreen() {
           pointerEvents={replyVisible ? "auto" : "none"}
           className="mt-6 w-full"
         >
-          <View className="w-full rounded-card border border-border bg-surface-1 p-4">
+          <View className="w-full rounded-lg border border-border bg-surface-1 p-5">
             <View className="flex-row items-center">
-              <ActivityIndicator size="small" color={colors.primary} />
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-surface-3">
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
               <Text className="ml-3 flex-1 font-sans text-body-md text-primary-text">
                 Playing audio…
               </Text>
-              <Pressable onPress={bargeIn} className="rounded-full border border-error px-4 py-1">
-                <Text className="font-sans-semibold text-body-md text-secondary-text">
-                  Stop
-                </Text>
+              <Pressable
+                onPress={bargeIn}
+                className="btn btn--ghost min-h-11 px-5 py-2"
+                accessibilityRole="button"
+                accessibilityLabel="Stop playback"
+              >
+                <Text className="font-sans-semibold text-body-md text-primary">Stop</Text>
               </Pressable>
             </View>
           </View>
@@ -121,14 +141,19 @@ export default function VoiceScreen() {
                 {issue}
               </Text>
             )}
-            <Pressable onPress={() => void retry()} className="mt-1 px-4 py-1">
+            <Pressable
+              onPress={() => void retry()}
+              className="btn btn--ghost mt-1 min-h-11 px-5 py-2"
+              accessibilityRole="button"
+              accessibilityLabel="Try again"
+            >
               <Text className="font-sans text-body-md text-primary">Try again</Text>
             </Pressable>
           </View>
         )}
       </Animated.ScrollView>
 
-      <Text className="pb-2 text-center font-sans text-body-sm text-secondary-text">
+      <Text className="pb-2 text-center font-sans text-caption text-secondary-text">
         Tap the mic to talk
       </Text>
     </SafeAreaView>

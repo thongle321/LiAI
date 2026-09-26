@@ -1,39 +1,51 @@
 @import "tailwindcss";
 @import "uniwind";
 
-/* LiAI design system — dystopian dark (see prompt_material/design_system.png).
- * TS mirror: themes/tokens.ts (keep in sync). Families below must match
- * the expo-font names loaded in app/_layout.tsx exactly (no fallbacks
- * on native). */
+/* LiAI design system — "The Quiet Instrument" (see DESIGN.md, authority;
+   board: prompt_material/minimal_design_system.png v1.0).
+   TS mirror: themes/tokens.ts (keep in sync). Families below must match
+   the expo-font names loaded in app/_layout.tsx exactly (no fallbacks
+   on native). Light-locked: one theme, no switcher. */
 
 @theme {
-  --color-primary: #dce87d;
-  --color-primary-hover: #b7d866;
-  --color-primary-pressed: #a7af4a;
-  --color-on-primary: #0b0c0c;
-  --color-success: #22c55e;
-  --color-warning: #f6c945;
+  /* One signal. Signal Blue marks the single live/selected/primary element. */
+  --color-primary: #3882f6;
+  --color-primary-hover: #2563eb;
+  --color-primary-pressed: #2563eb;
+  --color-on-primary: #ffffff;
+  /* Coolant cyan is reserved for machine-in-the-loop states (thinking, vision, streaming). */
+  --color-info: #06b6d4;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
   --color-error: #ef4444;
-  --color-info: #3b82f6;
-  --color-base: #0b0c0c;
-  --color-surface-1: #141515;
-  --color-surface-2: #202122;
-  --color-surface-3: #2a2a2e;
-  --color-border: #3f3f46;
-  --color-secondary-text: #a1a1aa;
-  --color-primary-text: #e5e7eb;
-  --color-inverse-text: #f7f7f8;
 
-  --font-sans: 'Raleway_400Regular';
-  --font-sans-medium: 'Raleway_500Medium';
-  --font-sans-semibold: 'Raleway_600SemiBold';
+  /* The three-plane depth model: paper is the page, white is raised,
+     mist is recessed. No shadows, no glow, no gradients. */
+  --color-base: #f8fafc;
+  --color-surface-1: #ffffff;
+  --color-surface-2: #f1f5f9;
+  /* Surface tint — a ground for selected elements only, never a border. */
+  --color-surface-3: #eff6ff;
+  --color-border: #e2e8f0;
 
+  /* Ink for anything read, Slate for anything merely counted. */
+  --color-secondary-text: #64748b;
+  --color-primary-text: #0f172a;
+  --color-inverse-text: #ffffff;
+
+  --font-sans: 'Inter_400Regular';
+  --font-sans-medium: 'Inter_500Medium';
+  --font-sans-semibold: 'Inter_600SemiBold';
+
+  /* Inter only, six sizes. Class names are stable aliases onto that scale:
+     h1 display · h2 headline · h3 title · h4 body · body-lg body ·
+     body-md body-small · body-sm caption · caption caption. */
   --text-h1: 32px;
   --text-h1--line-height: 40px;
   --text-h2: 24px;
   --text-h2--line-height: 32px;
-  --text-h3: 18px;
-  --text-h3--line-height: 26px;
+  --text-h3: 20px;
+  --text-h3--line-height: 28px;
   --text-h4: 16px;
   --text-h4--line-height: 24px;
   --text-body-lg: 16px;
@@ -42,110 +54,136 @@
   --text-body-md--line-height: 20px;
   --text-body-sm: 12px;
   --text-body-sm--line-height: 16px;
-  --text-caption: 11px;
-  --text-caption--line-height: 14px;
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
 
-  --radius-btn: 12px;
-  --radius-card: 16px;
-  --radius-input: 12px;
+  /* Radius by role: micro 2 · small 4 · default 8 · large 12 · x-large 16.
+     Default (8px) is the workhorse — buttons, inputs, cards, menus. */
+  --radius-card: 8px;
 }
 
-/* Dark-only app: light + dark carry the same tokens (Uniwind requires
- * identical variable sets per variant). */
+/* Light-locked app: one theme, and it is the light one. Device dark mode
+   must not invent a second world. */
 @layer theme {
   :root {
     @variant light {
-      --color-background: #0b0c0c;
-      --color-foreground: #e5e7eb;
-      --color-card: #141515;
-      --color-border: #3f3f46;
-      --color-muted: #a1a1aa;
-      --color-primary: #dce87d;
+      --color-background: #f8fafc;
+      --color-foreground: #0f172a;
+      --color-card: #ffffff;
+      --color-border: #e2e8f0;
+      --color-muted: #64748b;
+      --color-primary: #3882f6;
       --color-danger: #ef4444;
-      --color-success: #22c55e;
+      --color-success: #10b981;
     }
     @variant dark {
-      --color-background: #0b0c0c;
-      --color-foreground: #e5e7eb;
-      --color-card: #141515;
-      --color-border: #3f3f46;
-      --color-muted: #a1a1aa;
-      --color-primary: #dce87d;
+      --color-background: #f8fafc;
+      --color-foreground: #0f172a;
+      --color-card: #ffffff;
+      --color-border: #e2e8f0;
+      --color-muted: #64748b;
+      --color-primary: #3882f6;
       --color-danger: #ef4444;
-      --color-success: #22c55e;
+      --color-success: #10b981;
     }
   }
 }
 
 /* BEM bundles — multi-property patterns reused across screens.
  * Flat selectors only. For property conflicts with Tailwind
- * utilities, wrap usage with cn(). */
+ * utilities, wrap usage with cn(). No box-shadow anywhere: depth is a
+ * 1px hairline or one step between the three surfaces. */
 
-/* Buttons: .btn + .btn--primary | .btn--secondary | .btn--destructive */
+/* Buttons: .btn + .btn--primary | --secondary | --destructive | --ghost */
 .btn {
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  padding-left: 24px;
-  padding-right: 24px;
-  padding-top: 12px;
-  padding-bottom: 12px;
+  border-radius: 8px;
+  padding-left: 20px;
+  padding-right: 20px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  min-height: 44px;
 }
 .btn--primary {
-  background-color: #dce87d;
-  color: #0b0c0c;
+  background-color: #3882f6;
+  color: #ffffff;
 }
 .btn--secondary {
-  background-color: transparent;
+  background-color: #ffffff;
   border-width: 1px;
   border-style: solid;
-  border-color: #3f3f46;
-  color: #e5e7eb;
+  border-color: #3882f6;
+  color: #3882f6;
 }
 .btn--destructive {
   background-color: #ef4444;
-  color: #f7f7f8;
+  color: #ffffff;
+}
+.btn--ghost {
+  background-color: transparent;
+  color: #3882f6;
 }
 .btn--circle {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   border-radius: 999px;
   align-items: center;
   justify-content: center;
 }
 
-/* Inputs: .input + optional .input--error (focused border is lime by default) */
+/* Inputs: .input + optional .input--error (focused border is signal blue) */
 .input {
-  background-color: #2a2a2e;
+  background-color: #ffffff;
   border-width: 1px;
   border-style: solid;
-  border-color: #3f3f46;
-  border-radius: 12px;
+  border-color: #e2e8f0;
+  border-radius: 8px;
   padding-left: 16px;
   padding-right: 16px;
   padding-top: 12px;
   padding-bottom: 12px;
-  color: #e5e7eb;
+  color: #0f172a;
 }
 .input--error {
   border-color: #ef4444;
 }
 
-/* Cards: .card + optional .card--highlighted (hover/focus ring) */
+/* Cards: .card + optional .card--error. Never a shadow. */
 .card {
-  background-color: #141515;
+  background-color: #ffffff;
   border-width: 1px;
   border-style: solid;
-  border-color: #3f3f46;
-  border-radius: 16px;
-  padding: 16px;
-}
-.card--highlighted {
-  border-color: #dce87d;
+  border-color: #e2e8f0;
+  border-radius: 8px;
+  padding: 20px;
 }
 .card--error {
   border-color: #ef4444;
+}
+
+/* Grouped rows: .rows is a row card (0 internal padding so the dividers run
+   edge to edge); .row is one row inside it. */
+.rows {
+  background-color: #ffffff;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.row {
+  padding-left: 16px;
+  padding-right: 16px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+  border-bottom-color: #e2e8f0;
+}
+.row:last-child {
+  border-bottom-width: 0;
 }
 
 /* Segmented pickers: .seg + .seg--active | .seg-label + .seg-label--active */
@@ -154,22 +192,22 @@
   align-items: center;
   border-width: 1px;
   border-style: solid;
-  border-color: #3f3f46;
-  border-radius: 12px;
+  border-color: #e2e8f0;
+  border-radius: 8px;
   padding-top: 8px;
   padding-bottom: 8px;
 }
 .seg--active {
-  background-color: rgba(220, 232, 125, 0.2);
-  border-color: rgba(220, 232, 125, 0.5);
+  background-color: #eff6ff;
+  border-color: #3882f6;
 }
 .seg-label {
-  font-family: 'Raleway_400Regular';
+  font-family: 'Inter_400Regular';
   font-size: 14px;
-  color: #a1a1aa;
+  color: #64748b;
 }
 .seg-label--active {
-  color: #dce87d;
+  color: #3882f6;
 }
 
 /* Status dots: .status-dot + .status-dot--online | --warning | --error | --info | --offline */
@@ -179,17 +217,17 @@
   border-radius: 999px;
 }
 .status-dot--online {
-  background-color: #22c55e;
+  background-color: #10b981;
 }
 .status-dot--warning {
-  background-color: #f6c945;
+  background-color: #f59e0b;
 }
 .status-dot--error {
   background-color: #ef4444;
 }
 .status-dot--info {
-  background-color: #3b82f6;
+  background-color: #06b6d4;
 }
 .status-dot--offline {
-  background-color: #a1a1aa;
+  background-color: #64748b;
 }

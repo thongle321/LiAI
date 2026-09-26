@@ -30,6 +30,8 @@ prompt_material/
 /models/
 /pocketpal-ai/
 .agents/
+/.pi/
+/.impeccable/
 skills-lock.json
 
 # Logs / OS / editors

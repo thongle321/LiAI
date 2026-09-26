@@ -17,8 +17,9 @@ function typeLabel(type: ModelSpec["type"]): string {
 
 function ActiveBadge() {
   return (
-    <View className="px-1.5 py-0.5 bg-green-500/20 border border-green-500/50 rounded">
-      <Text className="font-sans text-xs text-green-500">Active</Text>
+    <View className="flex-row items-center gap-1 rounded bg-success/10 px-2 py-0.5">
+      <View className="h-2 w-2 rounded-full bg-success" />
+      <Text className="font-sans text-caption text-secondary-text">Active</Text>
     </View>
   );
 }
@@ -40,8 +41,8 @@ export function ModelCard({
   const params = item.params ?? 0;
 
   return (
-    <View className="mb-3 bg-surface-1 border border-border rounded-xl overflow-hidden">
-      <View className="p-4">
+    <View className="mb-3 bg-surface-1 border border-border rounded-lg overflow-hidden">
+    <View className="p-5">
         <View className="flex-row items-center justify-between">
           <View className="flex-1">
             <View className="flex-row items-center gap-2">
@@ -65,26 +66,35 @@ export function ModelCard({
             Active on this device
           </Text>
         )}
-        <View className="flex-row items-center gap-2 mt-3">
+        <View className="mt-3 flex-row items-center gap-2">
             {!isActive && (
               <Pressable
                 onPress={onActivate}
-                className="px-3 py-1.5 bg-primary/20 border border-primary/50 rounded-lg"
+                className="btn btn--primary min-h-11 px-5 py-2"
+                accessibilityRole="button"
+                accessibilityLabel={`Activate ${title}`}
               >
-                <Text className="font-sans text-body-sm text-primary">Activate</Text>
+                <Text className="font-sans text-body-sm text-on-primary">Activate</Text>
               </Pressable>
             )}
             <Pressable
               onPress={onSettings}
-              className="px-3 py-1.5 bg-surface-2 border border-border rounded-lg"
+              className="h-11 w-11 items-center justify-center rounded-full border border-border bg-surface-1"
+              accessibilityRole="button"
+              accessibilityLabel={`Settings for ${title}`}
             >
-              <Settings size={16} color={colors.primary} />
+              <Settings size={16} color={colors.secondaryText} />
             </Pressable>
+            {/* Destructive: Alert Tint fill, Alert Red icon, 40px circle. */}
             <Pressable
               onPress={() => removeModel(item.id)}
-              className="px-3 py-1.5 bg-red-500/20 border border-red-500/50 rounded-lg"
+              className="h-11 w-11 items-center justify-center rounded-full"
+              accessibilityRole="button"
+              accessibilityLabel={`Delete ${title}`}
             >
-              <Trash2 size={16} color={colors.error} />
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-error/10">
+                <Trash2 size={16} color={colors.error} />
+              </View>
             </Pressable>
           </View>
       </View>
@@ -106,8 +116,8 @@ export function RemoteProviderCard({
   onRemove: () => void;
 }) {
   return (
-    <View className="mb-3 bg-surface-1 border border-border rounded-xl overflow-hidden">
-      <View className="p-4 flex-row items-center justify-between">
+    <View className="mb-3 bg-surface-1 border border-border rounded-lg overflow-hidden">
+    <View className="p-5 flex-row items-center justify-between">
         <View className="flex-1">
           <View className="flex-row items-center gap-2">
             <StatusDot color={isActive ? colors.success : colors.secondaryText} />
@@ -125,16 +135,22 @@ export function RemoteProviderCard({
         {!isActive && (
           <Pressable
             onPress={onActivate}
-            className="px-3 py-1.5 bg-primary/20 border border-primary/50 rounded-lg"
+            className="btn btn--primary min-h-11 px-5 py-2"
+            accessibilityRole="button"
+            accessibilityLabel={`Activate ${item.name}`}
           >
-            <Text className="font-sans text-body-sm text-primary">Activate</Text>
+            <Text className="font-sans text-body-sm text-on-primary">Activate</Text>
           </Pressable>
         )}
         <Pressable
           onPress={onRemove}
-          className="px-3 py-1.5 bg-red-500/20 border border-red-500/50 rounded-lg"
+          className="h-11 w-11 items-center justify-center rounded-full"
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${item.name}`}
         >
-          <Trash2 size={16} color={colors.error} />
+          <View className="h-10 w-10 items-center justify-center rounded-full bg-error/10">
+            <Trash2 size={16} color={colors.error} />
+          </View>
         </Pressable>
       </View>
     </View>

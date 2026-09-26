@@ -4,15 +4,16 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { BottomSheet } from "@expo/ui";
 import { CheckCircle2, Circle, X } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors, scrim } from "../../themes/tokens.ts";
 import { useModelStore } from "../../store/modelStore";
 import type { RemoteApiProvider } from "../../types/models";
 
@@ -67,15 +68,27 @@ export function RemoteModelSheet({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View className="flex-1 bg-black/60 items-center justify-center p-4">
-        <View className="bg-surface-1 border border-border rounded-2xl w-full p-6">
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="font-sans-semibold text-h4 text-primary-text">Add API Provider</Text>
-            <Pressable onPress={onClose}>
-              <X size={24} color={colors.secondaryText} />
-            </Pressable>
-          </View>
+    <BottomSheet
+      isPresented={visible}
+      onDismiss={onClose}
+      containerColor={colors.surface1}
+      scrimColor={scrim}
+      contentPadding={20}
+      snapPoints={['full']}
+      testID="remote-model-sheet"
+    >
+      <ScrollView>
+        <View className="mb-4 flex-row items-center justify-between">
+          <Text className="font-sans-semibold text-h3 text-primary-text">Add API Provider</Text>
+          <Pressable
+            onPress={onClose}
+            className="h-11 w-11 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+          >
+            <X size={20} color={colors.secondaryText} />
+          </Pressable>
+        </View>
 
           <View className="flex-col gap-4">
             {!privacyAcknowledged && (
@@ -126,7 +139,7 @@ export function RemoteModelSheet({
                 value={name}
                 onChangeText={setName}
                 placeholder="My OpenRouter"
-                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-4 py-3"
+                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
               />
             </View>
 
@@ -140,7 +153,7 @@ export function RemoteModelSheet({
                     ? "https://openrouter.ai/api"
                     : "http://localhost:11434"
                 }
-                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-4 py-3"
+                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
               />
             </View>
 
@@ -153,7 +166,7 @@ export function RemoteModelSheet({
                 onChangeText={setApiKey}
                 placeholder="sk-... or leave empty for local"
                 secureTextEntry={true}
-                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-4 py-3"
+                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
               />
             </View>
 
@@ -163,32 +176,35 @@ export function RemoteModelSheet({
                 value={modelName}
                 onChangeText={setModelName}
                 placeholder="gpt-4o-mini / llama3.2 / qwen2.5"
-                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-4 py-3"
+                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
               />
             </View>
 
             <View className="flex-row gap-2 pt-2">
               <Pressable
                 onPress={onClose}
-                className="flex-1 py-3 px-4 bg-surface-2 border border-border rounded-lg items-center"
+                className="btn btn--secondary flex-1"
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
               >
-                <Text className="font-sans text-body-md text-secondary-text">Cancel</Text>
+                <Text className="font-sans text-body-md text-primary">Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={handleSubmit}
                 disabled={validating}
-                className="flex-1 py-3 px-4 bg-primary border border-primary/50 rounded-lg items-center"
+                className="btn btn--primary flex-1"
+                accessibilityRole="button"
+                accessibilityLabel="Add provider"
               >
                 {validating ? (
-                  <ActivityIndicator size="small" color={colors.base} />
+                  <ActivityIndicator size="small" color={colors.onPrimary} />
                 ) : (
-                  <Text className="font-sans-semibold text-body-md text-base">Add</Text>
+                  <Text className="font-sans-semibold text-body-md text-on-primary">Add</Text>
                 )}
               </Pressable>
             </View>
           </View>
-        </View>
-      </View>
-    </Modal>
+        </ScrollView>
+    </BottomSheet>
   );
 }

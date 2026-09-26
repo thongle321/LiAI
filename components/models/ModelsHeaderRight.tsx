@@ -25,7 +25,7 @@ function GroupLabel({ label }: { label: string }) {
   return (
     <Text
       numberOfLines={1}
-      className="px-4 pt-3 pb-1 font-sans-semibold text-body-sm text-secondary-text opacity-50"
+      className="px-5 pt-3 pb-1 font-sans-semibold text-body-sm text-secondary-text opacity-50"
     >
       {label}
     </Text>
@@ -44,7 +44,7 @@ function ToggleRow({
   icon?: ReactNode;
 }) {
   return (
-    <Pressable onPress={onPress} className="flex-row items-center px-4 py-3">
+    <Pressable onPress={onPress} className="flex-row items-center px-5 py-3">
       {/* Fixed icon slot + explicit menu width (PocketPal Menu.Item geometry).
           The width stays an inline style: the w-60 class failed to resolve
           on device, collapsing the menu into vertical text. Rows use
@@ -143,7 +143,7 @@ export function ModelsHeaderRight({
               right: anchor?.right ?? 16,
               width: 264,
             }}
-            className="bg-surface-1 border border-border rounded-xl overflow-hidden"
+            className="bg-surface-1 border border-border rounded-lg overflow-hidden"
           >
             <GroupLabel label="Filters" />
             <ToggleRow
@@ -175,7 +175,7 @@ export function ModelsHeaderRight({
             <View className="h-px bg-border mx-4" />
             <Pressable
               onPress={() => run(onExpandAll)}
-              className="flex-row items-center px-4 py-3"
+              className="flex-row items-center px-5 py-3"
             >
               <Text
                 numberOfLines={1}
@@ -189,7 +189,7 @@ export function ModelsHeaderRight({
             </Pressable>
             <Pressable
               onPress={() => run(onCollapseAll)}
-              className="flex-row items-center px-4 py-3"
+              className="flex-row items-center px-5 py-3"
             >
               <Text
                 numberOfLines={1}

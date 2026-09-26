@@ -19,7 +19,7 @@ import {
   type CacheType,
   type FlashAttn,
 } from "../store/inference.ts";
-import { StepperRow, ToggleRow } from "./SettingsRows.tsx";
+import { SliderRow, StepperRow, ToggleRow } from "./SettingsRows.tsx";
 
 const CTX_STEP = 1024;
 const CTX_MAX = 131072;
@@ -101,102 +101,138 @@ export function InferenceSettings() {
 
   return (
     <View className="mb-6">
-      <Text className="font-sans-semibold text-h4 text-primary-text mb-1">On-device model</Text>
-      <Text className="font-sans text-body-sm text-secondary-text mb-2">
+      <Text className="mb-2 font-sans-semibold text-h4 text-primary-text">On-device model</Text>
+      <Text className="mb-3 font-sans text-body-sm text-secondary-text">
         Takes effect on the next reply — the model reloads automatically.
       </Text>
-      <StepperRow
-        label="Context size"
-        display={`${nCtx}`}
-        onMinus={() => setNCtx(nCtx - CTX_STEP)}
-        onPlus={() => setNCtx(nCtx + CTX_STEP)}
-        minusDisabled={nCtx <= MIN_CONTEXT}
-        plusDisabled={nCtx >= CTX_MAX}
-      />
-      <StepperRow
-        label="GPU layers"
-        display={`${nGpuLayers}`}
-        onMinus={() => setNGpuLayers(nGpuLayers - 1)}
-        onPlus={() => setNGpuLayers(nGpuLayers + 1)}
-        minusDisabled={nGpuLayers <= 0}
-        plusDisabled={nGpuLayers >= MAX_GPU_LAYERS}
-      />
-      <StepperRow
-        label="Batch size"
-        display={`${nBatch}`}
-        onMinus={() => setNBatch(nBatch - BATCH_STEP)}
-        onPlus={() => setNBatch(nBatch + BATCH_STEP)}
-        minusDisabled={nBatch <= 1}
-        plusDisabled={nBatch >= MAX_BATCH}
-      />
-      <StepperRow
-        label="Physical batch size"
-        display={`${nUbatch}`}
-        onMinus={() => setNUbatch(nUbatch - BATCH_STEP)}
-        onPlus={() => setNUbatch(nUbatch + BATCH_STEP)}
-        minusDisabled={nUbatch <= 1}
-        plusDisabled={nUbatch >= MAX_BATCH}
-      />
-      <StepperRow
-        label="CPU threads"
-        display={`${nThreads}`}
-        onMinus={() => setNThreads(nThreads - 1)}
-        onPlus={() => setNThreads(nThreads + 1)}
-        minusDisabled={nThreads <= 1}
-        plusDisabled={nThreads >= MAX_THREADS}
-      />
-      <Segmented
-        label="Flash attention"
-        value={flashAttn}
-        options={FLASH_OPTIONS}
-        onPick={setFlashAttn}
-      />
-      <Segmented<CacheType>
-        label="Key cache type"
-        value={cacheK}
-        options={CACHE_TYPES}
-        onPick={setCacheK}
-      />
-      <Segmented<CacheType>
-        label="Value cache type"
-        value={cacheV}
-        options={CACHE_TYPES}
-        onPick={setCacheV}
-      />
-      <ToggleRow
-        label="Speculative decoding (MTP)"
-        on={speculativeEnabled}
-        onPress={() => setSpeculativeEnabled(!speculativeEnabled)}
-      />
+      <View className="rows mb-3">
+        <View className="row">
+          <StepperRow
+            label="Context size"
+            display={`${nCtx}`}
+            onMinus={() => setNCtx(nCtx - CTX_STEP)}
+            onPlus={() => setNCtx(nCtx + CTX_STEP)}
+            minusDisabled={nCtx <= MIN_CONTEXT}
+            plusDisabled={nCtx >= CTX_MAX}
+          />
+        </View>
+        <View className="row">
+          <SliderRow
+            label="GPU layers"
+            display={`${nGpuLayers}`}
+            value={nGpuLayers}
+            min={0}
+            max={MAX_GPU_LAYERS}
+            onChange={setNGpuLayers}
+          />
+        </View>
+        <View className="row">
+          <StepperRow
+            label="Batch size"
+            display={`${nBatch}`}
+            onMinus={() => setNBatch(nBatch - BATCH_STEP)}
+            onPlus={() => setNBatch(nBatch + BATCH_STEP)}
+            minusDisabled={nBatch <= 1}
+            plusDisabled={nBatch >= MAX_BATCH}
+          />
+        </View>
+        <View className="row">
+          <StepperRow
+            label="Physical batch size"
+            display={`${nUbatch}`}
+            onMinus={() => setNUbatch(nUbatch - BATCH_STEP)}
+            onPlus={() => setNUbatch(nUbatch + BATCH_STEP)}
+            minusDisabled={nUbatch <= 1}
+            plusDisabled={nUbatch >= MAX_BATCH}
+          />
+        </View>
+        <View className="row">
+          <SliderRow
+            label="CPU threads"
+            display={`${nThreads}`}
+            value={nThreads}
+            min={1}
+            max={MAX_THREADS}
+            onChange={setNThreads}
+          />
+        </View>
+      </View>
+      <View className="rows">
+        <View className="row">
+          <Segmented
+            label="Flash attention"
+            value={flashAttn}
+            options={FLASH_OPTIONS}
+            onPick={setFlashAttn}
+          />
+        </View>
+        <View className="row">
+          <Segmented<CacheType>
+            label="Key cache type"
+            value={cacheK}
+            options={CACHE_TYPES}
+            onPick={setCacheK}
+          />
+        </View>
+        <View className="row">
+          <Segmented<CacheType>
+            label="Value cache type"
+            value={cacheV}
+            options={CACHE_TYPES}
+            onPick={setCacheV}
+          />
+        </View>
+        <View className="row">
+          <ToggleRow
+            label="Speculative decoding (MTP)"
+            on={speculativeEnabled}
+            onPress={() => setSpeculativeEnabled(!speculativeEnabled)}
+          />
+        </View>
+      </View>
       {speculativeEnabled && (
         <>
-          <Text className="font-sans text-body-sm text-secondary-text mb-1">
+          <Text className="mt-2 mb-1 font-sans text-body-sm text-secondary-text">
             Uses the loaded model's embedded draft layers — no separate draft model needed.
           </Text>
-          <StepperRow
-            label="Draft GPU layers"
-            display={`${specDraftGpuLayers}`}
-            onMinus={() => setSpecDraftGpuLayers(specDraftGpuLayers - 1)}
-            onPlus={() => setSpecDraftGpuLayers(specDraftGpuLayers + 1)}
-            minusDisabled={specDraftGpuLayers <= 0}
-            plusDisabled={specDraftGpuLayers >= MAX_GPU_LAYERS}
-          />
-          <Segmented<CacheType>
-            label="Draft key cache type"
-            value={specDraftCacheK}
-            options={CACHE_TYPES}
-            onPick={setSpecDraftCacheK}
-          />
-          <Segmented<CacheType>
-            label="Draft value cache type"
-            value={specDraftCacheV}
-            options={CACHE_TYPES}
-            onPick={setSpecDraftCacheV}
-          />
+          <View className="rows mb-3">
+            <View className="row">
+              <SliderRow
+                label="Draft GPU layers"
+                display={`${specDraftGpuLayers}`}
+                value={specDraftGpuLayers}
+                min={0}
+                max={MAX_GPU_LAYERS}
+                onChange={setSpecDraftGpuLayers}
+              />
+            </View>
+            <View className="row">
+              <Segmented<CacheType>
+                label="Draft key cache type"
+                value={specDraftCacheK}
+                options={CACHE_TYPES}
+                onPick={setSpecDraftCacheK}
+              />
+            </View>
+            <View className="row">
+              <Segmented<CacheType>
+                label="Draft value cache type"
+                value={specDraftCacheV}
+                options={CACHE_TYPES}
+                onPick={setSpecDraftCacheV}
+              />
+            </View>
+          </View>
         </>
       )}
-      <ToggleRow label="Lock memory (mlock)" on={useMlock} onPress={() => setUseMlock(!useMlock)} />
-      <ToggleRow label="Memory-map model (mmap)" on={useMmap} onPress={() => setUseMmap(!useMmap)} />
+      <View className="rows">
+        <View className="row">
+          <ToggleRow label="Lock memory (mlock)" on={useMlock} onPress={() => setUseMlock(!useMlock)} />
+        </View>
+        <View className="row">
+          <ToggleRow label="Memory-map model (mmap)" on={useMmap} onPress={() => setUseMmap(!useMmap)} />
+        </View>
+      </View>
     </View>
   );
 }

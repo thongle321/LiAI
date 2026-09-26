@@ -14,7 +14,7 @@ export default function VoiceSettingsScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
       <ScreenHeader title="Voice" />
-      <ScrollView className="flex-1" contentContainerClassName="p-4">
+      <ScrollView className="flex-1" contentContainerClassName="p-5">
         <VoiceSettings />
       </ScrollView>
     </SafeAreaView>

@@ -18,17 +18,21 @@ export default function WelcomeStep() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
       <View className="flex-1 justify-center px-8">
-        <Text className="text-center font-sans-semibold text-h1 text-primary">
+        {/* The wordmark is Ink, never blue: a heading is text, and text is
+            Ink or Slate. Blue is reserved for the one live control. */}
+        <Text className="text-center font-sans-semibold text-h1 text-primary-text">
           {APP_NAME}
         </Text>
         <Text className="mt-2 text-center font-sans text-body-lg text-secondary-text">
-          Your AI companion.{"\n"}The world is more interesting when you can ask.
+          A calm mind.{"\n"}A smarter everyday.
         </Text>
         <View className="mt-8">
           {ROWS.map((r) => (
-            <View key={r.title} className="mb-3 flex-row items-center rounded-card border border-border bg-surface-1 p-4">
-              <r.Icon size={22} color={colors.primary} />
-              <View className="ml-3">
+            <View key={r.title} className="card mb-3 flex-row items-center">
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-surface-3">
+                <r.Icon size={20} color={colors.primary} />
+              </View>
+              <View className="ml-3 flex-1">
                 <Text className="font-sans-semibold text-body-md text-primary-text">
                   {r.title}
                 </Text>
@@ -42,6 +46,8 @@ export default function WelcomeStep() {
         <Pressable
           onPress={() => router.push("/onboarding/model")}
           className="btn btn--primary mt-8"
+          accessibilityRole="button"
+          accessibilityLabel="Continue to model setup"
         >
           <Text className="text-center font-sans-semibold text-on-primary">
             Continue

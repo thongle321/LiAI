@@ -4,10 +4,11 @@
  */
 
 import { useEffect, useState } from "react";
-import { Modal, Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { BottomSheet } from "@expo/ui";
 import { X } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors, scrim } from "../../themes/tokens.ts";
 import { useModelStore } from "../../store/modelStore";
 
 function parseStopWords(text: string): string[] {
@@ -48,16 +49,29 @@ export function ModelSettingsSheet({
     onClose();
   }
 
+  // Native sheet (SwiftUI / Compose), themed to the app by the root Host:
+  // Clean White container, the Scrim backdrop, seed Signal Blue.
   return (
-    <Modal visible={modelId !== null} transparent animationType="fade" onRequestClose={onClose}>
-      <View className="flex-1 bg-black/60 items-center justify-center p-4">
-        <View className="bg-surface-1 border border-border rounded-2xl w-full p-6">
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="font-sans-semibold text-h4 text-primary-text">Model Settings</Text>
-            <Pressable onPress={onClose}>
-              <X size={24} color={colors.secondaryText} />
-            </Pressable>
-          </View>
+    <BottomSheet
+      isPresented={modelId !== null}
+      onDismiss={onClose}
+      containerColor={colors.surface1}
+      scrimColor={scrim}
+      contentPadding={20}
+      testID="model-settings-sheet"
+    >
+      <ScrollView className="flex-col">
+        <View className="mb-4 flex-row items-center justify-between">
+          <Text className="font-sans-semibold text-h3 text-primary-text">Model Settings</Text>
+          <Pressable
+            onPress={onClose}
+            className="h-11 w-11 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Close model settings"
+          >
+            <X size={20} color={colors.secondaryText} />
+          </Pressable>
+        </View>
 
           <View className="flex-col gap-4">
             <View>
@@ -66,7 +80,7 @@ export function ModelSettingsSheet({
                 value={displayName}
                 onChangeText={setDisplayName}
                 placeholder="Optional rename shown in lists"
-                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-4 py-3"
+                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
                 placeholderTextColor={colors.secondaryText}
               />
             </View>
@@ -80,7 +94,7 @@ export function ModelSettingsSheet({
                 multiline
                 numberOfLines={3}
                 textAlignVertical="top"
-                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-4 py-3"
+                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
                 placeholderTextColor={colors.secondaryText}
               />
             </View>
@@ -97,7 +111,7 @@ export function ModelSettingsSheet({
                 numberOfLines={3}
                 textAlignVertical="top"
                 autoCapitalize="none"
-                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-4 py-3"
+                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
                 placeholderTextColor={colors.secondaryText}
               />
             </View>
@@ -105,20 +119,23 @@ export function ModelSettingsSheet({
             <View className="flex-row gap-2 pt-2">
               <Pressable
                 onPress={onClose}
-                className="flex-1 py-3 px-4 bg-surface-2 border border-border rounded-lg items-center"
+                className="btn btn--secondary flex-1"
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
               >
-                <Text className="font-sans text-body-md text-secondary-text">Cancel</Text>
+                <Text className="font-sans text-body-md text-primary">Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={handleSave}
-                className="flex-1 py-3 px-4 bg-primary border border-primary/50 rounded-lg items-center"
+                className="btn btn--primary flex-1"
+                accessibilityRole="button"
+                accessibilityLabel="Save model settings"
               >
-                <Text className="font-sans-semibold text-body-md text-base">Save</Text>
+                <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
               </Pressable>
             </View>
           </View>
-        </View>
-      </View>
-    </Modal>
+        </ScrollView>
+    </BottomSheet>
   );
 }

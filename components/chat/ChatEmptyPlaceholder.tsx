@@ -1,9 +1,8 @@
-/** Empty-chat prompt (PocketPal ChatEmptyPlaceholder parity, LiAI skin).
+/** Empty-chat prompt (DESIGN.md Feedback States, LiAI skin).
  *
- * Centered logo + title + description + one wide button, shown only while
- * no model is active — it unmounts itself the moment one loads. Three
- * states, same as PocketPal: downloading ("getting ready", no button),
- * nothing downloaded yet (go download), downloads exist but none active.
+ * A soft glyph on Mist, a Title naming the situation, one Body Small Slate
+ * line naming the next move, and one primary button. Shown only while no
+ * model is active — it unmounts the moment one loads.
  */
 
 import { Image, Pressable, Text, View } from "react-native";
@@ -37,32 +36,31 @@ export function ChatEmptyPlaceholder() {
     buttonText = "Download Model";
   } else {
     title = "Activate Model To Get Started";
-    description =
-      "Download a model to get started. It activates automatically once ready.";
+    description = "Pick a model and it activates the moment it finishes downloading.";
     buttonText = "Select Model";
   }
 
   return (
     <View className="flex-1 items-center justify-center px-8">
-      <Image
-        source={images.icon}
-        className="h-28 w-28"
-        style={{ borderRadius: 30 }}
-      />
-      <View className="mt-4">
-        <Text className="text-center font-sans-semibold text-h4 text-primary-text">
+      <View className="h-24 w-24 items-center justify-center rounded-full bg-surface-2">
+        <Image source={images.icon} className="h-16 w-16" />
+      </View>
+      <View className="mt-6">
+        <Text className="text-center font-sans-medium text-h3 text-primary-text">
           {title}
         </Text>
-        <Text className="mt-2 text-center font-sans text-body-md text-secondary-text">
+        <Text className="mt-2 text-center font-sans text-body-sm text-secondary-text">
           {description}
         </Text>
       </View>
       {buttonText !== null && (
         <Pressable
           onPress={() => router.push("/models")}
-          className="btn btn--primary mt-4 min-w-50"
+          className="btn btn--primary mt-6 min-w-48"
+          accessibilityRole="button"
+          accessibilityLabel={buttonText}
         >
-          <Text className="text-center font-sans-semibold text-on-primary">
+          <Text className="text-center font-sans-semibold text-body-md text-on-primary">
             {buttonText}
           </Text>
         </Pressable>

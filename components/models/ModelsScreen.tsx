@@ -67,11 +67,11 @@ export function ModelsScreen() {
         }
       />
       <View className="flex-1">
-        <ScrollView className="flex-1" contentContainerClassName="p-4 pb-[120px]">
+        <ScrollView className="flex-1" contentContainerClassName="p-5 pb-[120px]">
           {readyVisible && (
             <ReadyModels
               open={readyOpen}
-              onToggle={() => setOpen("ready", !readyOpen)}
+              onToggle={(next) => setOpen("ready", next)}
               onOpenSettings={setSettingsModelId}
               hfOnly={hfOnly}
             />
@@ -80,7 +80,7 @@ export function ModelsScreen() {
           {availableVisible && !downloadedOnly && (
             <AvailableModels
               open={availableOpen}
-              onToggle={() => setOpen("available", !availableOpen)}
+              onToggle={(next) => setOpen("available", next)}
               onDownload={(modelId, file) => startDownload(modelId, file)}
               grouped={grouped}
             />
@@ -98,7 +98,7 @@ export function ModelsScreen() {
         <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
           <ScrollView
             className="flex-1"
-            contentContainerClassName="p-4"
+            contentContainerClassName="p-5"
             keyboardShouldPersistTaps="handled"
           >
             <HFModelSearch onClose={() => setHfOpen(false)} />

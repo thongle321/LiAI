@@ -112,17 +112,10 @@ export function DownloadProgressBar({
  * (48dp, 8px radius, 1px Hairline) so the pair reads as one control
  * cluster. Labelled rather than an icon alone: it deletes the partial
  * file, and a bare X does not say that. */
-export function CancelDownloadButton({
-  onPress,
-  disabled = false,
-}: {
-  onPress: () => void;
-  disabled?: boolean;
-}) {
+export function CancelDownloadButton({ onPress }: { onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled}
       className="min-h-12 flex-row items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
       accessibilityRole="button"
       accessibilityLabel="Cancel download and delete downloaded data"

@@ -78,6 +78,14 @@ export function ChatScreen() {
   // and button), so the warning line is shown only when there ARE messages
   // — otherwise both would render at once, with two "load a model" buttons.
   const modelReady = useModelReady();
+  // The centered empty placeholder ("Activate Model To Get Started" / "No
+  // Models Available") owns the whole message area when there is no model
+  // and no conversation. Without this, the always-rendered empty MessageList
+  // (also flex-1) would split the column, squeezing the placeholder into the
+  // bottom half so its button overlapped the composer — the bug seen after
+  // load → unload. With the list hidden, the placeholder centers cleanly.
+  const emptyState = messages.length === 0 && query.trim() === "";
+  const showPlaceholder = !ready && emptyState;
 
   const motionDuration = useMotionDuration();
   const contentFade = useTabContentFade();
@@ -177,22 +185,26 @@ export function ChatScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
       >
-        <Animated.View style={contentFade} className="flex-1">
-          <MessageList
-            messages={visible}
-            renderBubble={(item) => (
-              <Bubble
-                message={item}
-                onRetry={() => void retry(item.id)}
-                onRegenerate={
-                  item.role === "assistant"
-                    ? () => void regenerate(item.id)
-                    : null
-                }
-              />
-            )}
-          />
-        </Animated.View>
+        {/* Hide the (empty) list while the centered no-model placeholder owns
+            the space, so the two flex-1 siblings never split the column. */}
+        {!showPlaceholder && (
+          <Animated.View style={contentFade} className="flex-1">
+            <MessageList
+              messages={visible}
+              renderBubble={(item) => (
+                <Bubble
+                  message={item}
+                  onRetry={() => void retry(item.id)}
+                  onRegenerate={
+                    item.role === "assistant"
+                      ? () => void regenerate(item.id)
+                      : null
+                  }
+                />
+              )}
+            />
+          </Animated.View>
+        )}
         {sending && (
           <Animated.Text
             entering={fadeEntering(motionDuration)}
@@ -202,12 +214,8 @@ export function ChatScreen() {
             LiAI…
           </Animated.Text>
         )}
-        {ready && messages.length === 0 && query.trim() === "" && (
-          <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
-        )}
-        {!ready && messages.length === 0 && query.trim() === "" && (
-          <ChatEmptyPlaceholder />
-        )}
+        {ready && emptyState && <SuggestedPrompts onPick={(prompt) => void send(prompt)} />}
+        {showPlaceholder && <ChatEmptyPlaceholder />}
         <UsageStats messages={messages} />
         {!modelReady && messages.length > 0 && (
           // Centered above the composer so the no-model state is visible on

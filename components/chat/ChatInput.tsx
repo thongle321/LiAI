@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { Image as RNImage, Pressable, Text, TextInput, View } from "react-native";
 import { useIsFocused } from "expo-router";
 import { openSettings } from "expo-linking";
-import { Brain, Camera, Image as ImageIcon, Mic, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
+import { Camera, Image as ImageIcon, Mic, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -19,7 +19,6 @@ import {
 import { colors } from "../../themes/tokens.ts";
 import { useChatStore } from "../../store/chat.ts";
 import { useInference } from "../../store/inference.ts";
-import { useModelStore } from "../../store/modelStore";
 import { mergeDictation, VOICE_LISTEN_OPTS } from "../../lib/voiceListen.ts";
 import { ensureMicAccess } from "../../lib/micAccess.ts";
 import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../../lib/voiceStatus.ts";
@@ -40,10 +39,6 @@ export function ChatInput({
   const draft = useChatStore((s) => s.draft);
   const setDraft = useChatStore((s) => s.setDraft);
   const stop = useChatStore((s) => s.stop);
-  // Thinking pill: local-only (remote endpoints ignore enable_thinking).
-  const thinkingEnabled = useInference((s) => s.thinkingEnabled);
-  const setThinkingEnabled = useInference((s) => s.setThinkingEnabled);
-  const isLocal = useModelStore((s) => s.activeProviderType === "local");
   const [plusOpen, setPlusOpen] = useState(false);
   // One attached photo per turn (the local turn takes a single data-uri);
   // text stays required — blank messages are rejected before the run.
@@ -271,17 +266,6 @@ export function ChatInput({
           >
             <Mic size={20} color={listening ? colors.primary : colors.secondaryText} />
           </Pressable>
-          {isLocal && (
-            <Pressable
-              onPress={() => setThinkingEnabled(!thinkingEnabled)}
-              className="h-12 w-12 items-center justify-center rounded-full bg-surface-2"
-              accessibilityRole="switch"
-              accessibilityState={{ checked: thinkingEnabled }}
-              accessibilityLabel="Thinking"
-            >
-              <Brain size={20} color={thinkingEnabled ? colors.primary : colors.secondaryText} />
-            </Pressable>
-          )}
         </View>
         {/* Send and Stop are siblings, never nested: two nested pressables
             would be two hit targets and two a11y roles on one control.

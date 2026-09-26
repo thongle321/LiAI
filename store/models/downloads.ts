@@ -147,13 +147,23 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
     // The service's callbacks are global (last registered wins); keying each
     // update off the job's own modelId makes re-registration harmless.
     downloadService.setProgressCallback((downloadJob) => {
-      get().updateModel(downloadJob.modelId, {
-        downloadStatus: downloadJob.status,
+      // Persist only on a real status transition (idle->downloading,
+      // ->paused, ->failed). Progress bytes go through the transient path so
+      // a many-per-second tick never hits AsyncStorage (the models screen
+      // went unresponsive). Resume reads the partial file on disk, so a
+      // slightly-stale in-memory bar never costs a byte.
+      const prevStatus = get().getModel(downloadJob.modelId)?.downloadStatus;
+      if (prevStatus !== downloadJob.status) {
+        get().updateModel(downloadJob.modelId, {
+          downloadStatus: downloadJob.status,
+          error: downloadJob.error,
+        });
+      }
+      get().setModelProgress(downloadJob.modelId, {
         downloadProgress: downloadJob.progress,
         downloadedBytes: downloadJob.downloadedBytes,
         totalBytes: downloadJob.totalBytes,
         speedBytesPerSec: downloadJob.speedBytesPerSec,
-        error: downloadJob.error,
       });
       get().syncDownloadStatus();
     });

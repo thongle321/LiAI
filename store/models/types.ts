@@ -30,6 +30,10 @@ export interface CatalogSlice {
   addModel: (model: ModelSpec) => void;
   removeModel: (modelId: string) => Promise<void>;
   updateModel: (modelId: string, updates: Partial<ModelSpec>) => void;
+  /** Transient progress update: state only, NO disk write. For the
+   *  high-frequency download tick, where persisting every byte thrashes
+   *  AsyncStorage. Real status changes go through updateModel. */
+  setModelProgress: (modelId: string, progress: Partial<ModelSpec>) => void;
   getModel: (modelId: string) => ModelSpec | undefined;
   addLocalModel: (sourceUri: string, fileName: string, size: number) => Promise<void>;
   saveModels: () => Promise<void>;

@@ -84,6 +84,19 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
     get().saveModels();
   },
 
+  // Download ticks fire many times a second; persisting each one
+  // JSON-stringifies the whole catalog to AsyncStorage on every tick and
+  // tanks the models screen. Progress is ephemeral UI state (resume reads
+  // the partial file on disk, not this field), so update memory only. Real
+  // transitions (complete/pause/fail) still go through updateModel.
+  setModelProgress: (modelId, progress) => {
+    set((state) => ({
+      models: state.models.map((m) =>
+        m.id === modelId ? { ...m, ...progress } : m,
+      ),
+    }));
+  },
+
   getModel: (modelId) => get().models.find((m) => m.id === modelId),
 
   addLocalModel: async (sourceUri, fileName, size) => {

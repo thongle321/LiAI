@@ -8,6 +8,7 @@
 import { View } from "react-native";
 import { router, Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useKeyboardState } from "react-native-keyboard-controller";
 
 import { BottomNav, type ChatTab } from "../../../components/BottomNav.tsx";
 
@@ -32,6 +33,13 @@ export default function TabLayout() {
  */
 function TabBar({ state }: { state: { index: number; routeNames: string[] } }) {
   const insets = useSafeAreaInsets();
+  // The bar is chrome, not input: while the keyboard is up it would sit
+  // directly on top of it and steal height from the composer. Hidden here
+  // rather than via screenOptions.tabBarHideOnKeyboard because this app
+  // supplies a custom tabBar, and React Navigation only applies that
+  // option inside its own BottomTabBar.
+  const keyboardVisible = useKeyboardState((s) => s.isVisible);
+  if (keyboardVisible) return null;
   const focused = state.routeNames[state.index] ?? "chat";
   const active: ChatTab = focused === "voice" ? "voice" : "chat";
 

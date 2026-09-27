@@ -15,6 +15,7 @@ import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
+import Animated from "react-native-reanimated";
 
 import { colors } from "../../themes/tokens.ts";
 import { useChatStore } from "../../store/chat.ts";
@@ -24,6 +25,7 @@ import { mergeDictation, VOICE_LISTEN_OPTS } from "../../lib/voiceListen.ts";
 import { ensureMicAccess } from "../../lib/micAccess.ts";
 import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../../lib/voiceStatus.ts";
 import { pickImage, type ImageSource } from "../../lib/chat/attachments.ts";
+import { usePressFeedback } from "../../lib/motion.ts";
 
 export function ChatInput({
   sending,
@@ -161,6 +163,10 @@ export function ChatInput({
   }, []);
 
   const canSend = ready && !sending && draft.trim() !== "";
+  const sendPress = usePressFeedback();
+  const stopPress = usePressFeedback();
+  const micPress = usePressFeedback();
+  const plusPress = usePressFeedback();
 
   async function handleAttach(source: ImageSource): Promise<void> {
     setPlusOpen(false);
@@ -209,14 +215,18 @@ export function ChatInput({
           <Text className="flex-1 font-sans text-body-sm text-secondary-text">
             Attached — sent with your message
           </Text>
-          <Pressable
-            onPress={() => setAttached(null)}
-            className="h-12 w-12 items-center justify-center"
-            accessibilityRole="button"
-            accessibilityLabel="Remove attachment"
-          >
-            <X size={18} color={colors.secondaryText} />
-          </Pressable>
+          <Animated.View style={plusPress.animatedStyle}>
+            <Pressable
+              onPress={() => setAttached(null)}
+              onPressIn={plusPress.onPressIn}
+              onPressOut={plusPress.onPressOut}
+              className="h-12 w-12 items-center justify-center"
+              accessibilityRole="button"
+              accessibilityLabel="Remove attachment"
+            >
+              <X size={18} color={colors.secondaryText} />
+            </Pressable>
+          </Animated.View>
         </View>
       )}
       {/* The composer is an input, not a custom control (DESIGN.md): the
@@ -225,16 +235,20 @@ export function ChatInput({
           its Primary state. Disabled send is Secondary, never dimmed. */}
       <View className="mb-3 flex-row items-end gap-2 rounded-lg border border-border bg-surface-1 px-4 py-3">
         <View>
-          <Pressable
-            onPress={modelReady ? () => setPlusOpen((o) => !o) : undefined}
-            disabled={!modelReady}
-            className="h-12 w-12 items-center justify-center rounded-full bg-surface-3"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !modelReady }}
-            accessibilityLabel={modelReady ? "Attach a photo" : "Load a model to attach a photo"}
-          >
-            <Plus size={20} color={modelReady ? colors.primary : colors.secondaryText} />
-          </Pressable>
+          <Animated.View style={plusPress.animatedStyle}>
+            <Pressable
+              onPress={modelReady ? () => setPlusOpen((o) => !o) : undefined}
+              onPressIn={plusPress.onPressIn}
+              onPressOut={plusPress.onPressOut}
+              disabled={!modelReady}
+              className="h-12 w-12 items-center justify-center rounded-full bg-surface-3"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !modelReady }}
+              accessibilityLabel={modelReady ? "Attach a photo" : "Load a model to attach a photo"}
+            >
+              <Plus size={20} color={modelReady ? colors.primary : colors.secondaryText} />
+            </Pressable>
+          </Animated.View>
           {plusOpen && (
             // Anchored to the plus button's wrapper and extending right into
             // the empty composer space — the plus is leftmost, so w-48 fits
@@ -260,49 +274,60 @@ export function ChatInput({
           placeholderTextColor={colors.secondaryText}
           multiline
           editable={!sending}
-          onSubmitEditing={() => void handleSend()}
           className="flex-1 pt-2 font-sans text-body-md text-primary-text"
           accessibilityLabel="Message"
         />
         <View className="flex-row items-center gap-1">
-          <Pressable
-            onPress={modelReady ? () => void toggleDictation() : undefined}
-            disabled={!modelReady}
-            className="h-12 w-12 items-center justify-center rounded-full bg-surface-2"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !modelReady }}
-            accessibilityLabel={
-              !modelReady ? "Load a model to dictate" : listening ? "Stop dictation" : "Dictate a message"
-            }
-          >
-            <Mic size={20} color={modelReady ? (listening ? colors.primary : colors.secondaryText) : colors.secondaryText} />
-          </Pressable>
+          <Animated.View style={micPress.animatedStyle}>
+            <Pressable
+              onPress={modelReady ? () => void toggleDictation() : undefined}
+              onPressIn={micPress.onPressIn}
+              onPressOut={micPress.onPressOut}
+              disabled={!modelReady}
+              className="h-12 w-12 items-center justify-center rounded-full bg-surface-2"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !modelReady }}
+              accessibilityLabel={
+                !modelReady ? "Load a model to dictate" : listening ? "Stop dictation" : "Dictate a message"
+              }
+            >
+              <Mic size={20} color={modelReady ? (listening ? colors.primary : colors.secondaryText) : colors.secondaryText} />
+            </Pressable>
+          </Animated.View>
         </View>
         {/* Send and Stop are siblings, never nested: two nested pressables
             would be two hit targets and two a11y roles on one control.
             Send: Primary (Signal Blue fill) when armed, Disabled (Mist) when
             not — a disabled send is a fill change, not an opacity drop. */}
         {sending ? (
-          <Pressable
-            onPress={stop}
-            className="h-12 w-12 items-center justify-center rounded-full bg-primary"
-            accessibilityRole="button"
-            accessibilityLabel="Stop generating"
-          >
-            <Square size={18} color={colors.onPrimary} />
-          </Pressable>
+          <Animated.View style={stopPress.animatedStyle}>
+            <Pressable
+              onPress={stop}
+              onPressIn={stopPress.onPressIn}
+              onPressOut={stopPress.onPressOut}
+              className="h-12 w-12 items-center justify-center rounded-full bg-primary"
+              accessibilityRole="button"
+              accessibilityLabel="Stop generating"
+            >
+              <Square size={18} color={colors.onPrimary} />
+            </Pressable>
+          </Animated.View>
         ) : (
-          <Pressable
-            disabled={!canSend}
-            onPress={() => void handleSend()}
-            className={`h-12 w-12 items-center justify-center rounded-full ${
-              canSend ? "bg-primary" : "bg-surface-2"
-            }`}
-            accessibilityRole="button"
-            accessibilityLabel="Send message"
-          >
-            <Send size={20} color={canSend ? colors.onPrimary : colors.secondaryText} />
-          </Pressable>
+          <Animated.View style={sendPress.animatedStyle}>
+            <Pressable
+              disabled={!canSend}
+              onPress={() => void handleSend()}
+              onPressIn={sendPress.onPressIn}
+              onPressOut={sendPress.onPressOut}
+              className={`h-12 w-12 items-center justify-center rounded-full ${
+                canSend ? "bg-primary" : "bg-surface-2"
+              }`}
+              accessibilityRole="button"
+              accessibilityLabel="Send message"
+            >
+              <Send size={20} color={canSend ? colors.onPrimary : colors.secondaryText} />
+            </Pressable>
+          </Animated.View>
         )}
       </View>
     </View>

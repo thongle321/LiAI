@@ -4,8 +4,11 @@
  */
 
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
 import { BottomSheet } from "@expo/ui";
+// KeyboardAwareScrollView, not ScrollView: three fields in a sheet, and the
+// keyboard covers the lower ones otherwise.
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { X } from "lucide-react-native";
 
 import { colors, scrim } from "../../themes/tokens.ts";
@@ -60,7 +63,10 @@ export function ModelSettingsSheet({
       contentPadding={20}
       testID="model-settings-sheet"
     >
-      <ScrollView className="flex-col">
+      <KeyboardAwareScrollView
+        className="flex-col"
+        keyboardShouldPersistTaps="handled"
+      >
         <View className="mb-4 flex-row items-center justify-between">
           <Text className="font-sans-semibold text-h3 text-primary-text">Model Settings</Text>
           <Pressable
@@ -135,7 +141,7 @@ export function ModelSettingsSheet({
               </Pressable>
             </View>
           </View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
     </BottomSheet>
   );
 }

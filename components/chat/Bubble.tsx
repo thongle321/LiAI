@@ -18,7 +18,12 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 import { colors } from "../../themes/tokens.ts";
 import { formatTime } from "../../lib/format.ts";
-import { bubbleEntering, useMotionDuration } from "../../lib/motion.ts";
+import {
+  bubbleEntering,
+  fadeExiting,
+  useMotionDuration,
+  usePressFeedback,
+} from "../../lib/motion.ts";
 import type { ChatMessage } from "../../types/chat.ts";
 import { MarkdownView } from "./MarkdownView.tsx";
 import { MessageActions } from "./MessageActions.tsx";
@@ -36,6 +41,8 @@ export function Bubble({
 }) {
   const duration = useMotionDuration();
   const entering = bubbleEntering(duration);
+  const exiting = fadeExiting(duration);
+  const press = usePressFeedback();
   // Previews and actions target settled turns: a half-streamed URL would
   // trigger a garbage preview fetch, and actions need final text.
   const settled = message.streaming !== true;
@@ -43,7 +50,11 @@ export function Bubble({
     return (
       <AnimatedPressable
         entering={entering}
+        exiting={exiting}
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
         onPress={onRetry}
+        style={press.animatedStyle}
         className="card card--error self-start max-w-[80%] my-1"
       >
         <Text className="font-sans text-body-md text-primary-text">
@@ -57,7 +68,7 @@ export function Bubble({
   }
   if (message.role === "user") {
     return (
-      <Animated.View entering={entering} className="my-1 max-w-[80%] self-end items-end">
+      <Animated.View entering={entering} exiting={exiting} className="my-1 max-w-[80%] self-end items-end">
         {message.image !== undefined && (
           <RNImage
             source={{ uri: message.image }}
@@ -82,7 +93,7 @@ export function Bubble({
     );
   }
   return (
-    <Animated.View entering={entering} className="my-1 max-w-[75%] flex-row self-start">
+    <Animated.View entering={entering} exiting={exiting} className="my-1 max-w-[75%] flex-row self-start">
       {/* Portrait avatar, not a glyph: LiAI's identity is a character, so
           a robot icon would replace the brand with a category. */}
       <RNImage

@@ -252,7 +252,6 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
             onChangeText={setDraft}
             placeholder="hf_..."
             secureTextEntry
-            autoFocus
             className="input font-sans text-body-md"
             placeholderTextColor={colors.secondaryText}
             accessibilityLabel="Hugging Face token"

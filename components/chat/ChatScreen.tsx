@@ -7,7 +7,6 @@
 
 import { useEffect, useState } from "react";
 import {
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   Text,
@@ -17,13 +16,23 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRouter } from "expo-router";
 import Animated from "react-native-reanimated";
+// The library's KAV, not React Native's: with KeyboardProvider mounted,
+// React Native's own KAV double-pads on Android (kirillzyusko#584). This is
+// the app's single keyboard-avoidance mechanism.
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Check, Menu, Search, Share, X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
 import { filterMessages } from "../../lib/chat/filter.ts";
 import { buildTranscript } from "../../lib/chat/transcript.ts";
 import { useCopy } from "../../hooks/useCopy.ts";
-import { fadeEntering, fadeExiting, useMotionDuration, useTabContentFade } from "../../lib/motion.ts";
+import {
+  fadeEntering,
+  fadeExiting,
+  useMotionDuration,
+  usePressFeedback,
+  useTabContentFade,
+} from "../../lib/motion.ts";
 import { APP_NAME } from "../../constants/app.ts";
 import { useChatStore } from "../../store/chat.ts";
 import { useModelStore } from "../../store/modelStore";
@@ -91,6 +100,11 @@ export function ChatScreen() {
   const contentFade = useTabContentFade();
   const navigation = useNavigation<{ openDrawer: () => void }>();
   const router = useRouter();
+  const menuPress = usePressFeedback();
+  const searchPress = usePressFeedback();
+  const copyPress = usePressFeedback();
+  const searchBarEntering = fadeEntering(motionDuration);
+  const searchBarExiting = fadeExiting(motionDuration);
 
   return (
     <SafeAreaView
@@ -103,15 +117,19 @@ export function ChatScreen() {
           wordmark's flex space and shifts it off-centre. */}
       <View className="h-14 flex-row items-center border-b border-border bg-surface-1 px-5">
         <View className="w-24 flex-row items-center">
-          <Pressable
-            onPress={() => navigation.openDrawer()}
-            className="h-12 w-12 items-center justify-center"
-            accessibilityRole="button"
-            accessibilityLabel="Open menu"
-            hitSlop={4}
-          >
-            <Menu size={20} color={colors.primaryText} />
-          </Pressable>
+          <Animated.View style={menuPress.animatedStyle}>
+            <Pressable
+              onPress={() => navigation.openDrawer()}
+              onPressIn={menuPress.onPressIn}
+              onPressOut={menuPress.onPressOut}
+              className="h-12 w-12 items-center justify-center"
+              accessibilityRole="button"
+              accessibilityLabel="Open menu"
+              hitSlop={4}
+            >
+              <Menu size={20} color={colors.primaryText} />
+            </Pressable>
+          </Animated.View>
         </View>
         <Pressable
           onPress={() => router.push("/models")}
@@ -127,42 +145,54 @@ export function ChatScreen() {
           </Text>
         </Pressable>
         <View className="w-24 flex-row items-center justify-end">
-          <Pressable
-            onPress={() => {
-              setSearchOpen((o) => !o);
-              setQuery("");
-            }}
-            className="h-12 w-12 items-center justify-center"
-            hitSlop={4}
-            accessibilityRole="button"
-            accessibilityLabel={searchOpen ? "Close search" : "Search this conversation"}
-          >
-            {searchOpen ? (
-              <X size={20} color={colors.primary} />
-            ) : (
-              <Search size={20} color={colors.secondaryText} />
-            )}
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              const title = sessions.find((s) => s.id === sessionId)?.title;
-              copy(buildTranscript(messages, title));
-            }}
-            className="h-12 w-12 items-center justify-center"
-            hitSlop={4}
-            accessibilityRole="button"
-            accessibilityLabel={copied ? "Copied" : "Copy transcript"}
-          >
-            {copied ? (
-              <Check size={20} color={colors.success} />
-            ) : (
-              <Share size={20} color={colors.secondaryText} />
-            )}
-          </Pressable>
+          <Animated.View style={searchPress.animatedStyle}>
+            <Pressable
+              onPress={() => {
+                setSearchOpen((o) => !o);
+                setQuery("");
+              }}
+              onPressIn={searchPress.onPressIn}
+              onPressOut={searchPress.onPressOut}
+              className="h-12 w-12 items-center justify-center"
+              hitSlop={4}
+              accessibilityRole="button"
+              accessibilityLabel={searchOpen ? "Close search" : "Search this conversation"}
+            >
+              {searchOpen ? (
+                <X size={20} color={colors.primary} />
+              ) : (
+                <Search size={20} color={colors.secondaryText} />
+              )}
+            </Pressable>
+          </Animated.View>
+          <Animated.View style={copyPress.animatedStyle}>
+            <Pressable
+              onPress={() => {
+                const title = sessions.find((s) => s.id === sessionId)?.title;
+                copy(buildTranscript(messages, title));
+              }}
+              onPressIn={copyPress.onPressIn}
+              onPressOut={copyPress.onPressOut}
+              className="h-12 w-12 items-center justify-center"
+              hitSlop={4}
+              accessibilityRole="button"
+              accessibilityLabel={copied ? "Copied" : "Copy transcript"}
+            >
+              {copied ? (
+                <Check size={20} color={colors.success} />
+              ) : (
+                <Share size={20} color={colors.secondaryText} />
+              )}
+            </Pressable>
+          </Animated.View>
         </View>
       </View>
       {searchOpen && (
-        <View className="flex-row items-center gap-2 border-b border-border bg-base px-5 py-2">
+        <Animated.View
+          entering={searchBarEntering}
+          exiting={searchBarExiting}
+          className="flex-row items-center gap-2 border-b border-border bg-base px-5 py-2"
+        >
           <TextInput
             value={query}
             onChangeText={setQuery}
@@ -176,7 +206,7 @@ export function ChatScreen() {
               {matchLabel}
             </Text>
           )}
-        </View>
+        </Animated.View>
       )}
 
       {/* Composer always mounted (PocketPal ChatView parity): the

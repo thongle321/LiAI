@@ -5,8 +5,9 @@
  */
 
 import type { RefObject } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import Animated from "react-native-reanimated";
+import { Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { Keyboard, Mic, Send, SwitchCamera, X } from "lucide-react-native";
 import {
   Camera,
@@ -15,7 +16,7 @@ import {
 } from "react-native-vision-camera";
 
 import { colors, scrim } from "../themes/tokens.ts";
-import type { useTabContentFade } from "../lib/motion.ts";
+import { usePressFeedback, type useTabContentFade } from "../lib/motion.ts";
 import type { VoicePhase } from "../lib/voiceStatus.ts";
 
 export function VisionPreview({
@@ -125,28 +126,38 @@ export function VisionTopFloat({
   onExit: () => void;
   onFlip: () => void;
 }) {
+  const exitPress = usePressFeedback();
+  const flipPress = usePressFeedback();
   return (
     <View
       className="absolute left-0 right-0 flex-row items-center px-5"
       style={{ top }}
     >
-      <Pressable
-        onPress={onExit}
-        className="h-12 w-12 items-center justify-center"
-        accessibilityRole="button"
-        accessibilityLabel="Stop vision"
-      >
-        <X size={24} color={colors.inverseText} />
-      </Pressable>
+      <Animated.View style={exitPress.animatedStyle}>
+        <Pressable
+          onPress={onExit}
+          onPressIn={exitPress.onPressIn}
+          onPressOut={exitPress.onPressOut}
+          className="h-12 w-12 items-center justify-center"
+          accessibilityRole="button"
+          accessibilityLabel="Stop vision"
+        >
+          <X size={24} color={colors.inverseText} />
+        </Pressable>
+      </Animated.View>
       <View className="flex-1" />
-      <Pressable
-        onPress={onFlip}
-        className="h-12 w-12 items-center justify-center"
-        accessibilityRole="button"
-        accessibilityLabel="Switch camera"
-      >
-        <SwitchCamera size={22} color={colors.inverseText} />
-      </Pressable>
+      <Animated.View style={flipPress.animatedStyle}>
+        <Pressable
+          onPress={onFlip}
+          onPressIn={flipPress.onPressIn}
+          onPressOut={flipPress.onPressOut}
+          className="h-12 w-12 items-center justify-center"
+          accessibilityRole="button"
+          accessibilityLabel="Switch camera"
+        >
+          <SwitchCamera size={22} color={colors.inverseText} />
+        </Pressable>
+      </Animated.View>
       <Text className="ml-1 font-sans-semibold text-caption tracking-widest text-white">
         VISION
       </Text>
@@ -190,19 +201,39 @@ export function VisionBottomPanel({
   /** No active model: talk + type are disabled and greyed. */
   modelReady: boolean;
 }) {
+  const retryPress = usePressFeedback();
+  const settingsPress = usePressFeedback();
+  const sendPress = usePressFeedback();
+  const toggleInputPress = usePressFeedback();
+  const talkPress = usePressFeedback();
+  // The panel lifts by the keyboard height so the draft input clears it,
+  // leaving the camera preview full-bleed (the screen's documented rule).
+  // iOS only: app.json sets softwareKeyboardLayoutMode "resize", so on
+  // Android the window already shrinks and translating here would lift the
+  // panel twice.
+  const { height } = useReanimatedKeyboardAnimation();
+  const liftStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: Platform.OS === "ios" ? -height.value : 0 }],
+  }));
   return (
-    <View
+    <Animated.View
       className="absolute left-0 right-0 px-5"
-      style={{ bottom }}
+      style={[{ bottom }, liftStyle]}
     >
       <View className="rounded-lg px-5 py-3" style={{ backgroundColor: scrim }}>
         {issue !== null ? (
           needsSettings ? (
-            <Pressable onPress={onOpenSettings}>
-              <Text className="text-center font-sans text-body-md text-primary">
-                {issue}
-              </Text>
-            </Pressable>
+            <Animated.View style={settingsPress.animatedStyle}>
+              <Pressable
+                onPress={onOpenSettings}
+                onPressIn={settingsPress.onPressIn}
+                onPressOut={settingsPress.onPressOut}
+              >
+                <Text className="text-center font-sans text-body-md text-primary">
+                  {issue}
+                </Text>
+              </Pressable>
+            </Animated.View>
           ) : (
             <View className="items-center">
               <Text className="text-center font-sans text-body-md text-white">
@@ -210,14 +241,18 @@ export function VisionBottomPanel({
               </Text>
               {/* A labelled text action is a button, not a circular control:
                   Default radius per the button spec, and a real 48px target. */}
-              <Pressable
-                onPress={onRetry}
-                className="btn btn--ghost mt-2 min-h-12 min-w-24"
-                accessibilityRole="button"
-                accessibilityLabel="Try again"
-              >
-                <Text className="font-sans text-body-md text-primary">Try again</Text>
-              </Pressable>
+              <Animated.View style={retryPress.animatedStyle}>
+                <Pressable
+                  onPress={onRetry}
+                  onPressIn={retryPress.onPressIn}
+                  onPressOut={retryPress.onPressOut}
+                  className="btn btn--ghost mt-2 min-h-12 min-w-24"
+                  accessibilityRole="button"
+                  accessibilityLabel="Try again"
+                >
+                  <Text className="font-sans text-body-md text-primary">Try again</Text>
+                </Pressable>
+              </Animated.View>
             </View>
           )
         ) : phase === "thinking" ? (
@@ -252,42 +287,52 @@ export function VisionBottomPanel({
             placeholderTextColor={colors.secondaryText}
             multiline
             autoFocus={modelReady}
-            onSubmitEditing={onSendDraft}
             className="flex-1 px-3 font-sans text-body-md text-white"
           />
-          <Pressable
-            onPress={onSendDraft}
-            disabled={!modelReady}
-            className="h-12 w-12 items-center justify-center"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !modelReady }}
-            accessibilityLabel="Send question"
-          >
-            <Send size={22} color={modelReady ? colors.primary : colors.secondaryText} />
-          </Pressable>
+          <Animated.View style={sendPress.animatedStyle}>
+            <Pressable
+              onPress={onSendDraft}
+              onPressIn={sendPress.onPressIn}
+              onPressOut={sendPress.onPressOut}
+              disabled={!modelReady}
+              className="h-12 w-12 items-center justify-center"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !modelReady }}
+              accessibilityLabel="Send question"
+            >
+              <Send size={22} color={modelReady ? colors.primary : colors.secondaryText} />
+            </Pressable>
+          </Animated.View>
         </View>
       )}
 
       <View className="mt-3 flex-row items-center justify-center">
-        <Pressable
-          onPress={modelReady ? onToggleInput : undefined}
-          disabled={!modelReady}
-          className="h-12 w-12 items-center justify-center rounded-full"
-          style={{ backgroundColor: scrim }}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !modelReady }}
-          accessibilityLabel="Type a question"
-        >
-          <Keyboard size={22} color={modelReady ? colors.inverseText : colors.secondaryText} />
-        </Pressable>
-        <Pressable
-          onPress={modelReady ? onTalk : undefined}
-          disabled={!modelReady}
-          className="h-20 w-20 items-center justify-center"
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !modelReady }}
-          accessibilityLabel={phase === "idle" ? "Talk" : "Stop talking"}
-        >
+        <Animated.View style={toggleInputPress.animatedStyle}>
+          <Pressable
+            onPress={modelReady ? onToggleInput : undefined}
+            onPressIn={toggleInputPress.onPressIn}
+            onPressOut={toggleInputPress.onPressOut}
+            disabled={!modelReady}
+            className="h-12 w-12 items-center justify-center rounded-full"
+            style={{ backgroundColor: scrim }}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !modelReady }}
+            accessibilityLabel="Type a question"
+          >
+            <Keyboard size={22} color={modelReady ? colors.inverseText : colors.secondaryText} />
+          </Pressable>
+        </Animated.View>
+        <Animated.View style={talkPress.animatedStyle}>
+          <Pressable
+            onPress={modelReady ? onTalk : undefined}
+            onPressIn={talkPress.onPressIn}
+            onPressOut={talkPress.onPressOut}
+            disabled={!modelReady}
+            className="h-20 w-20 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !modelReady }}
+            accessibilityLabel={phase === "idle" ? "Talk" : "Stop talking"}
+          >
           {/* Disabled on the camera ground: the scrim disc is the fill
               (Mist would be a light disc on a dark frame) and DESIGN's
               "disabled has no border" holds, so the primary ring is dropped
@@ -303,9 +348,10 @@ export function VisionBottomPanel({
             {phase !== "idle" && modelReady && <VisionActiveFrame side={22} />}
             <Mic size={30} color={modelReady ? colors.primary : colors.secondaryText} />
           </View>
-        </Pressable>
+          </Pressable>
+        </Animated.View>
         <View className="w-12" />
       </View>
-    </View>
+    </Animated.View>
   );
 }

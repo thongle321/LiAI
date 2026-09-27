@@ -58,3 +58,26 @@ export function useTabContentFade() {
   }, [focused, duration, opacity]);
   return useAnimatedStyle(() => ({ opacity: opacity.value }));
 }
+
+/** Press feedback: scale 0.97 on press-in, spring back on press-out.
+ * Runs entirely on the UI thread — no setState, no re-render.
+ * Full-width list rows should highlight their background instead. */
+export function usePressFeedback() {
+  const scale = useSharedValue(1);
+  const reduced = useReducedMotion();
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const onPressIn = () => {
+    if (reduced) return;
+    scale.value = withTiming(0.97, { duration: 100, easing: motionEasing });
+  };
+  const onPressOut = () => {
+    if (reduced) return;
+    scale.value = withTiming(1, { duration: 150, easing: motionEasing });
+  };
+
+  return { animatedStyle, onPressIn, onPressOut };
+}

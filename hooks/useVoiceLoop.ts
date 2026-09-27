@@ -10,6 +10,7 @@ import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
+import * as Haptics from "expo-haptics";
 
 import type { VoicePhase } from "../lib/voiceStatus.ts";
 import { bargeActionFor, isThrottlingError, isVoiceThrottled, setVoiceThrottled, voiceErrorAction } from "../lib/voiceStatus.ts";
@@ -92,6 +93,7 @@ export function useVoiceLoop() {
       setHeard("");
       setIssue(null);
       setBoth("listening");
+      void Haptics.selectionAsync();
       ExpoSpeechRecognitionModule.start({
         ...VOICE_LISTEN_OPTS,
       });
@@ -156,10 +158,12 @@ export function useVoiceLoop() {
     const ok = await send(said);
     if (!aliveRef.current) return;
     if (!ok) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setIssue("Couldn't send that. Try again.");
       setBoth("idle");
       return;
     }
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const replyMsg = useChatStore
       .getState()
       .messages.slice(before)

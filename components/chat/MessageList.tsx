@@ -10,6 +10,17 @@
  * with translate-with-padding, double-scroll on interactive dismissal,
  * and animation when none is needed), and ships this component for chat
  * instead. All of the keyboard behaviour below is that component's job.
+ *
+ * The no-model empty state is deliberately NOT this list's ListEmptyComponent,
+ * even though pocketpal-ai uses one. KeyboardChatScrollView adds the keyboard
+ * height to the scroll viewport as a dynamic contentInset
+ * (ScrollViewWithBottomPadding: `dynamic.bottom = bottomPadding.value`), and
+ * on Android that is applied on every keyboard open regardless of
+ * keyboardLiftBehavior. A centred flex-1 child inside that inset re-centres in
+ * the shrunken box, so the empty state visibly MOVED as the keyboard rose.
+ * pocketpal-ai gets away with it because their list is a plain FlatList that
+ * adds no keyboard inset. ChatScreen renders the empty state as an overlay
+ * beside this list instead, where no inset can move it.
  */
 
 import { useCallback, useEffect, useRef, type ReactElement, type RefObject } from "react";
@@ -35,10 +46,6 @@ export function MessageList({
   extraContentPadding,
   /** Minimum bottom inset reserved while a reply streams. */
   blankSpace,
-  /** The no-model empty state, as the list's ListEmptyComponent — pocketpal
-   *  parity (ChatView.tsx:990). Being content is the point: it is covered by
-   *  the keyboard rather than the screen re-centring around it. */
-  emptyComponent,
   onEndVisibleChange,
 }: {
   listRef: RefObject<FlatList<ChatMessage> | null>;
@@ -47,7 +54,6 @@ export function MessageList({
   offset: number;
   extraContentPadding: SharedValue<number>;
   blankSpace: SharedValue<number>;
-  emptyComponent?: ReactElement | null;
   /** Fires in BOTH directions (unlike FlatList's onEndReached, which only
    *  fires on entry), which is the state a jump-to-latest button needs. */
   onEndVisibleChange: (visible: boolean) => void;
@@ -101,11 +107,7 @@ export function MessageList({
       keyExtractor={(m) => m.id}
       renderItem={({ item }) => renderBubble(item)}
       renderScrollComponent={renderScrollComponent}
-      ListEmptyComponent={emptyComponent}
-      // flexGrow-1 is what lets ListEmptyComponent fill the viewport and
-      // centre itself. Without it a short list's content box is content-
-      // height and the empty state would sit at the top.
-      contentContainerClassName="grow p-5"
+      contentContainerClassName="p-5"
       className="flex-1"
     />
   );

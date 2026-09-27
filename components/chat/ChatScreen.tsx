@@ -90,10 +90,13 @@ export function ChatScreen() {
   // — otherwise both would render at once, with two "load a model" buttons.
   const modelReady = useModelReady();
   // The empty placeholder ("Activate Model To Get Started" / "No Models
-  // Available") is the LIST's ListEmptyComponent, pocketpal-ai style
-  // (ChatView.tsx:990): it is content, so the keyboard covers it like any
-  // other content instead of the screen re-centring around it. It renders
-  // only with no model and no conversation — the empty thread is otherwise
+  // Available") is NOT scroll content, despite pocketpal-ai putting it in
+  // ListEmptyComponent (ChatView.tsx:990). KeyboardChatScrollView adds the
+  // keyboard height to the scroll viewport as a contentInset, and a centred
+  // child inside a shrinking box re-centres — which is exactly the "no models
+  // available section moves when the keyboard shows up" symptom. So it is an
+  // overlay beside the list, where the keyboard simply covers it. It renders
+  // only with no model and no conversation; the empty thread with a model is
   // SuggestedPrompts' job.
   const emptyState = messages.length === 0 && query.trim() === "";
   const showPlaceholder = !ready && emptyState;
@@ -294,20 +297,6 @@ export function ChatScreen() {
             extraContentPadding={extraContentPadding}
             blankSpace={blankSpace}
             onEndVisibleChange={setAtEnd}
-            emptyComponent={
-              showPlaceholder ? (
-                // Lift clear of the FLOATING composer so its button is never
-                // behind it. From the measured height, not a hard-coded
-                // margin (pocketpal's bottomComponentHeight + 100 is a magic
-                // number — see docs/specs/2026-09-27-pocketpal-keyboard-ui-parity.md).
-                <View
-                  className="flexGrow-1"
-                  style={{ paddingBottom: composerHeight }}
-                >
-                  <ChatEmptyPlaceholder />
-                </View>
-              ) : null
-            }
             renderBubble={(item) => (
               <Bubble
                 message={item}
@@ -321,6 +310,21 @@ export function ChatScreen() {
             )}
           />
         </Animated.View>
+        {/* The no-model empty state, as an overlay rather than scroll content.
+            MessageList's header explains why: a ListEmptyComponent would sit
+            inside the keyboard's contentInset and visibly re-centre as the
+            keyboard rose. The bottom padding lifts it clear of the floating
+            composer, from the measured height rather than pocketpal's
+            hard-coded bottomComponentHeight + 100. */}
+        {showPlaceholder && (
+          <View
+            className="absolute inset-0"
+            style={{ paddingBottom: composerHeight }}
+            pointerEvents="box-none"
+          >
+            <ChatEmptyPlaceholder />
+          </View>
+        )}
         {/* Jump to latest: an overlay pinned to the content column's
             bottom-right, above the floating composer — pocketpal's FAB
             placement. It lifts on the same hook as the composer so the two

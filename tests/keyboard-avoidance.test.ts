@@ -115,9 +115,22 @@ describe("keyboard avoidance", () => {
       "the list clears the composer",
     );
 
-    // The empty state is CONTENT, so the keyboard covers it like anything
-    // else instead of the screen re-centring behind the keyboard.
-    assert.match(list, /ListEmptyComponent=\{emptyComponent\}/);
+    // The empty state must NOT be scroll content. KeyboardChatScrollView adds
+    // the keyboard height to the scroll viewport as a dynamic contentInset
+    // (ScrollViewWithBottomPadding: `dynamic.bottom = bottomPadding.value`),
+    // applied on Android on every keyboard open regardless of
+    // keyboardLiftBehavior. A centred flex-1 ListEmptyComponent inside that
+    // inset re-centres in the shrunken box, which is the reported "no models
+    // available section moves when the keyboard shows up". So it is an
+    // overlay beside the list, lifted clear of the floating composer by the
+    // measured height.
+    assert.doesNotMatch(
+      list,
+      /ListEmptyComponent/,
+      "the empty state must not be scroll content: the keyboard inset moves it",
+    );
+    assert.match(chat, /showPlaceholder && \(/);
+    assert.match(chat, /className="absolute inset-0"/);
     assert.match(chat, /paddingBottom: composerHeight/);
   });
 

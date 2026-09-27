@@ -108,15 +108,36 @@ describe("keyboard avoidance", () => {
     assert.match(chat, /keyboardOcclusion\(keyboard\.height\.value/);
     assert.match(chat, /translateY: -occlusion\.value/);
     assert.doesNotMatch(chat, /translateY: -height\.value/);
-    // The empty placeholder must take the PADDED path. Translating a stack
-    // that holds a centred flex-1 child pushes the icon out of its own box
-    // and under the header as the keyboard rises; padding shrinks the box so
-    // the child centres in the visible area.
+    // The composer is OUT OF FLOW and translates; the content behind it does
+    // not move at all. There must be exactly one mechanism here. c79acfd
+    // added a second (pad the container while the empty state owned the
+    // screen) to stop the centred icon sliding under the header, and it
+    // silently killed the composer lift in exactly that case, because
+    // padding shrinks the content box but leaves the container in flow. The
+    // reason for the split is gone now that the empty state is the list's
+    // ListEmptyComponent, so the split must not come back.
+    assert.doesNotMatch(
+      chat,
+      /paddedStackStyle|liftedStackStyle/,
+      "the translate/pad split must stay deleted",
+    );
+    assert.doesNotMatch(
+      chat,
+      /paddingBottom: occlusion/,
+      "the composer container is translated, never padded",
+    );
     assert.match(
       chat,
-      /showPlaceholder \? paddedStackStyle : liftedStackStyle/,
-      "the centred empty state must be padded, not translated",
+      /className="absolute inset-x-0 bottom-0"/,
+      "the composer must be out of flow, or the list cannot sit behind it",
     );
+    // The empty state is content (pocketpal parity), not a sibling of the
+    // composer: that is what stops the screen re-centring as the keyboard
+    // opens. It is lifted clear of the floating composer by the measured
+    // height instead.
+    assert.match(chat, /emptyComponent=/);
+    assert.match(chat, /paddingBottom: composerHeight/);
+    assert.match(list, /ListEmptyComponent=\{emptyComponent\}/);
     // Both offsets are what keep content off the composer and the tab bar.
     assert.match(list, /offset=\{offset\}/);
     assert.match(list, /extraContentPadding=\{extraContentPadding\}/);
@@ -156,28 +177,30 @@ describe("keyboard avoidance", () => {
     assert.deepEqual(offenders, []);
   });
 
-  it("the composer is measured on its wrapper, not on the field row", () => {
-    // extraContentPadding is how the list reserves room for the composer.
-    // Measuring only the field row under-reserves by the wrapper's border-t
-    // and pt-2, the field's mb-3, and the attach preview and issue rows - the
-    // last message can then sit behind them. pocketpal-ai measures the whole
-    // input container for the same reason (ChatView.tsx:1139).
-    const source = stripComments(
-      readFileSync("components/chat/ChatInput.tsx", "utf8"),
-    );
-    const measured = source
-      .split("<View")
-      .find((tag) => tag.includes("onLayout={onHeightChange}"));
-    assert.ok(measured, "onHeightChange must still be wired somewhere");
-    assert.match(
-      measured,
-      /border-t/,
-      "measure the composer WRAPPER, which holds the banners and attach preview",
-    );
+  it("the composer is measured on the container, not inside it", () => {
+    // extraContentPadding is how the list reserves room for the composer, and
+    // because the container is absolutely positioned the padding is the ONLY
+    // thing reserving it. So the measurement must be the whole container,
+    // which also holds the sending indicator, suggested prompts, usage stats
+    // and the no-model banner - measuring the input alone under-reserves by
+    // all of those and the newest message sits behind them. pocketpal-ai
+    // measures the whole input container for the same reason
+    // (ChatView.tsx:1139).
+    const chat = stripComments(readFileSync("components/chat/ChatScreen.tsx", "utf8"));
+    const container = chat
+      .split("<Animated.View")
+      .find((tag) => tag.includes("onLayout={handleComposerHeight}"));
+    assert.ok(container, "the composer container must still be measured");
+    assert.match(container, /composerStackStyle/, "measure the container that floats");
+    assert.match(container, /absolute/, "the measured container is the floating one");
+
+    // ChatInput reports nothing: a measurement at that level would exclude
+    // everything stacked above the input inside the same container.
+    const input = stripComments(readFileSync("components/chat/ChatInput.tsx", "utf8"));
     assert.doesNotMatch(
-      measured,
-      /px-4 py-3/,
-      "the field row is not the composer: it excludes the wrapper and banners",
+      input,
+      /onLayout|onHeightChange/,
+      "ChatInput must not measure itself; the container above it does",
     );
   });
 

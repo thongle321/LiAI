@@ -35,6 +35,10 @@ export function MessageList({
   extraContentPadding,
   /** Minimum bottom inset reserved while a reply streams. */
   blankSpace,
+  /** The no-model empty state, as the list's ListEmptyComponent — pocketpal
+   *  parity (ChatView.tsx:990). Being content is the point: it is covered by
+   *  the keyboard rather than the screen re-centring around it. */
+  emptyComponent,
   onEndVisibleChange,
 }: {
   listRef: RefObject<FlatList<ChatMessage> | null>;
@@ -43,6 +47,7 @@ export function MessageList({
   offset: number;
   extraContentPadding: SharedValue<number>;
   blankSpace: SharedValue<number>;
+  emptyComponent?: ReactElement | null;
   /** Fires in BOTH directions (unlike FlatList's onEndReached, which only
    *  fires on entry), which is the state a jump-to-latest button needs. */
   onEndVisibleChange: (visible: boolean) => void;
@@ -96,7 +101,11 @@ export function MessageList({
       keyExtractor={(m) => m.id}
       renderItem={({ item }) => renderBubble(item)}
       renderScrollComponent={renderScrollComponent}
-      contentContainerClassName="p-5"
+      ListEmptyComponent={emptyComponent}
+      // flexGrow-1 is what lets ListEmptyComponent fill the viewport and
+      // centre itself. Without it a short list's content box is content-
+      // height and the empty state would sit at the top.
+      contentContainerClassName="grow p-5"
       className="flex-1"
     />
   );

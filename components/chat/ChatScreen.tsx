@@ -104,12 +104,12 @@ export function ChatScreen() {
   // and button), so the warning line is shown only when there ARE messages
   // — otherwise both would render at once, with two "load a model" buttons.
   const modelReady = useModelReady();
-  // The centered empty placeholder ("Activate Model To Get Started" / "No
-  // Models Available") owns the whole message area when there is no model
-  // and no conversation. Without this, the always-rendered empty MessageList
-  // (also flex-1) would split the column, squeezing the placeholder into the
-  // bottom half so its button overlapped the composer — the bug seen after
-  // load → unload. With the list hidden, the placeholder centers cleanly.
+  // The empty placeholder ("Activate Model To Get Started" / "No Models
+  // Available") is the LIST's ListEmptyComponent, pocketpal-ai style
+  // (ChatView.tsx:990): it is content, so the keyboard covers it like any
+  // other content instead of the screen re-centring around it. It renders
+  // only with no model and no conversation — the empty thread is otherwise
+  // SuggestedPrompts' job.
   const emptyState = messages.length === 0 && query.trim() === "";
   const showPlaceholder = !ready && emptyState;
 
@@ -123,11 +123,13 @@ export function ChatScreen() {
   const [listHeight, setListHeight] = useState(0);
   // What the list must clear: the tab bar and the safe-area inset below it.
   const keyboardOffset = insets.bottom + TAB_BAR_HEIGHT;
-  // The composer's own height. NOT a delta from a baseline, unlike the
-  // library's example: the composer lives in a KeyboardStickyView, which
-  // moves over the list rather than sitting in flow, so the resting height
-  // is not already accounted for and the last message would sit behind it.
+  // Height of the whole floating composer container, banners included. NOT
+  // a delta from a baseline, unlike the library's example: the container is
+  // out of flow, so nothing else accounts for it and the newest message would
+  // sit behind it. ONE measurement, three consumers: this padding, the empty
+  // state's lift, and the jump-to-latest anchor.
   const extraContentPadding = useSharedValue(0);
+  const [composerHeight, setComposerHeight] = useState(0);
   // Minimum bottom inset while a reply streams, so the sent message is
   // pushed up and the response has somewhere to appear.
   const blankSpace = useSharedValue(0);
@@ -140,35 +142,34 @@ export function ChatScreen() {
   const occlusion = useDerivedValue(() =>
     keyboardOcclusion(keyboard.height.value, insets.bottom),
   );
-  // Two mechanisms, because this stack holds two kinds of content.
-  // - Footer items (sending, usage, no-model hint, composer) are short and sit
-  //   at the bottom: TRANSLATE the stack. That is `liftedStackStyle`.
-  // - The empty placeholder is a flex-1 child CENTRED inside the stack.
-  //   Translating moves centred content up and out of its own box, so the icon
-  //   slid under the header. It must be PADDED instead, which shrinks the
-  //   content box so a flex-1 child centres in the visible area. That is
-  //   `paddedStackStyle`. Do not collapse these into one.
+  // ONE mechanism, one direction: the composer container is absolutely
+  // positioned at the bottom of the column and TRANSLATES up by the occlusion
+  // (pocketpal-ai ChatView.tsx:1130). Everything behind it — the list, the
+  // empty state, the jump-to-latest overlay — carries no transform at all, so
+  // the keyboard covers whatever it covers and nothing re-centres behind it.
   //
-  // NOTE: neither style applies insets.bottom. The tab bar owns the bottom
-  // inset (app/(drawer)/(tabs)/_layout.tsx applies paddingBottom:
-  // insets.bottom to itself, and the screens use edges=[top,left,right] so it
-  // is counted once, there). Adding it here too was the dead space under the
-  // composer. When the keyboard is up the bar is hidden and occlusion already
-  // has insets.bottom subtracted, so nothing is owed to it.
-  const liftedStackStyle = useAnimatedStyle(() => ({
+  // Do NOT reintroduce a padding branch here. c79acfd padded the container
+  // while the empty state owned the screen, to stop its centred icon sliding
+  // under the header. That fixed the icon and silently killed the composer
+  // lift in exactly the empty-thread case, because padding shrinks the
+  // content box but leaves the container in flow. Making the empty state
+  // ListEmptyComponent (above) removed the reason for the split.
+  //
+  // NOTE: no insets.bottom here. The tab bar owns the bottom inset
+  // (app/(drawer)/(tabs)/_layout.tsx applies paddingBottom: insets.bottom to
+  // itself, and the screens use edges=[top,left,right] so it is counted once,
+  // there). Adding it here too was the dead space under the composer. When
+  // the keyboard is up the bar is hidden and occlusion already has
+  // insets.bottom subtracted, so nothing is owed to it.
+  const composerStackStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -occlusion.value }],
-  }));
-  // occlusion is already 0 while the keyboard is closed
-  // (keyboardOcclusion(0, inset) === 0), so this needs no extra branch.
-  const paddedStackStyle = useAnimatedStyle(() => ({
-    paddingBottom: occlusion.value,
   }));
 
   const handleComposerHeight = useCallback(
     (event: LayoutChangeEvent) => {
-      extraContentPadding.value = withTiming(event.nativeEvent.layout.height, {
-        duration: motionDuration,
-      });
+      const height = event.nativeEvent.layout.height;
+      setComposerHeight(height);
+      extraContentPadding.value = withTiming(height, { duration: motionDuration });
     },
     [extraContentPadding, motionDuration],
   );
@@ -293,53 +294,94 @@ export function ChatScreen() {
       {/* Composer always mounted (PocketPal ChatView parity): the
           no-model bar auto-dismisses on activation, no Retry needed. */}
       {/* The chat keyboard architecture (react-native-keyboard-controller).
+          Two surfaces, and only two:
+            - the content column (list + empty state + jump-to-latest), which
+              never moves — the keyboard covers what it covers;
+            - the composer container, absolutely positioned at the bottom and
+              translated up by the single reconciled occlusion value.
           The list (KeyboardChatScrollView, see MessageList) owns content
-          repositioning, and ONE container below carries the composer plus
-          everything that floats above it, all sharing a single reconciled
-          occlusion value. PocketPal ChatView parity: it comments on the
-          same failure - two parts handling the keyboard separately is what
-          makes a screen read as "drifting" when the keyboard opens. The
-          library's guide is also explicit that KeyboardAvoidingView is the
-          wrong tool for chat, so there is no KAV on this screen. */}
+          repositioning inside the first. PocketPal ChatView parity: their own
+          comments call out the same failure — two parts handling the keyboard
+          separately is what makes a screen read as "drifting" when the
+          keyboard opens. The library's guide is also explicit that
+          KeyboardAvoidingView is the wrong tool for chat, so there is no KAV
+          on this screen. */}
       <View style={{ flex: 1 }}>
-        {/* Hide the (empty) list while the centered no-model placeholder owns
-            the space, so the two flex-1 siblings never split the column. */}
-        {!showPlaceholder && (
+        <Animated.View
+          style={contentFade}
+          className="flex-1"
+          onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
+        >
+          <MessageList
+            listRef={listRef}
+            messages={visible}
+            offset={keyboardOffset}
+            extraContentPadding={extraContentPadding}
+            blankSpace={blankSpace}
+            onEndVisibleChange={setAtEnd}
+            emptyComponent={
+              showPlaceholder ? (
+                // Lift clear of the FLOATING composer so its button is never
+                // behind it. From the measured height, not a hard-coded
+                // margin (pocketpal's bottomComponentHeight + 100 is a magic
+                // number — see docs/specs/2026-09-27-pocketpal-keyboard-ui-parity.md).
+                <View
+                  className="flexGrow-1"
+                  style={{ paddingBottom: composerHeight }}
+                >
+                  <ChatEmptyPlaceholder />
+                </View>
+              ) : null
+            }
+            renderBubble={(item) => (
+              <Bubble
+                message={item}
+                onRetry={() => void retry(item.id)}
+                onRegenerate={
+                  item.role === "assistant"
+                    ? () => void regenerate(item.id)
+                    : null
+                }
+              />
+            )}
+          />
+        </Animated.View>
+        {/* Jump to latest: an overlay pinned to the content column's
+            bottom-right, above the floating composer — pocketpal's FAB
+            placement. It wears the same transform as the composer so it
+            rises welded to it, and only appears when the reader has actually
+            scrolled away from the end, which is the only time the list stopped
+            following along. */}
+        {!atEnd && messages.length > 0 && (
           <Animated.View
-            style={contentFade}
-            className="flex-1"
-            onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
+            style={[composerStackStyle, { bottom: composerHeight }]}
+            className="absolute right-5"
+            pointerEvents="box-none"
           >
-            <MessageList
-              listRef={listRef}
-              messages={visible}
-              offset={keyboardOffset}
-              extraContentPadding={extraContentPadding}
-              blankSpace={blankSpace}
-              onEndVisibleChange={setAtEnd}
-              renderBubble={(item) => (
-                <Bubble
-                  message={item}
-                  onRetry={() => void retry(item.id)}
-                  onRegenerate={
-                    item.role === "assistant"
-                      ? () => void regenerate(item.id)
-                      : null
-                  }
-                />
-              )}
-            />
+            <Pressable
+              onPress={() => listRef.current?.scrollToEnd({ animated: true })}
+              className="btn btn--secondary min-h-12 px-4"
+              accessibilityRole="button"
+              accessibilityLabel="Jump to latest message"
+            >
+              <Text className="font-sans text-body-sm text-primary">
+                Jump to latest
+              </Text>
+            </Pressable>
           </Animated.View>
         )}
-        {/* The composer stack. Everything from here down translates by the
-            SAME occlusion value, so the centred empty state rises with the
-            composer instead of being left behind by it. flex-1 only while
-            the empty placeholder owns the screen, which is what keeps that
-            placeholder centred above the composer. */}
-        <Animated.View
-          style={showPlaceholder ? paddedStackStyle : liftedStackStyle}
-          className={showPlaceholder ? "flex-1" : undefined}
-        >
+      </View>
+
+      {/* The composer container: absolutely positioned, so it is out of the
+          column's flow and the content behind it needs no knowledge of it
+          beyond the measured height in extraContentPadding. onLayout is HERE,
+          on the whole container, not on the input — the banners above the
+          input are inside it and the list must clear all of them. */}
+      <Animated.View
+        style={composerStackStyle}
+        onLayout={handleComposerHeight}
+        className="absolute inset-x-0 bottom-0"
+      >
         {sending && (
           <Animated.Text
             entering={fadeEntering(motionDuration)}
@@ -349,8 +391,9 @@ export function ChatScreen() {
             LiAI…
           </Animated.Text>
         )}
-        {ready && emptyState && <SuggestedPrompts onPick={(prompt) => void send(prompt)} />}
-        {showPlaceholder && <ChatEmptyPlaceholder />}
+        {ready && emptyState && (
+          <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
+        )}
         <UsageStats messages={messages} />
         {!modelReady && messages.length > 0 && (
           // Centered above the composer so the no-model state is visible on
@@ -373,30 +416,12 @@ export function ChatScreen() {
             </Pressable>
           </View>
         )}
-        {/* Jump to latest: only when the reader has scrolled away from the
-            end, which is exactly when the list stopped following along. */}
-        {!atEnd && messages.length > 0 && (
-          <View className="mb-2 items-center">
-            <Pressable
-              onPress={() => listRef.current?.scrollToEnd({ animated: true })}
-              className="btn btn--secondary min-h-12 px-4"
-              accessibilityRole="button"
-              accessibilityLabel="Jump to latest message"
-            >
-              <Text className="font-sans text-body-sm text-primary">Jump to latest</Text>
-            </Pressable>
-          </View>
-        )}
-        {/* Moves with the keyboard via composerStackStyle above; the list
-            carries the offsets that keep content clear of it. */}
         <ChatInput
           sending={sending}
           ready={ready}
           onSend={(text, image) => send(text, image)}
-          onHeightChange={handleComposerHeight}
         />
-        </Animated.View>
-      </View>
+      </Animated.View>
     </SafeAreaView>
   );
 }

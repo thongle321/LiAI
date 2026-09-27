@@ -13,7 +13,6 @@ import {
   Text,
   TextInput,
   View,
-  type LayoutChangeEvent,
 } from "react-native";
 import { useIsFocused } from "expo-router";
 import { openSettings } from "expo-linking";
@@ -38,16 +37,11 @@ export function ChatInput({
   sending,
   ready,
   onSend,
-  onHeightChange,
 }: {
   sending: boolean;
   /** False with no loaded model: send disables (PocketPal parity). */
   ready: boolean;
   onSend: (text: string, image?: string) => Promise<boolean>;
-  /** Reports the composer's height so the message list can pad clear of it
-   *  (KeyboardChatScrollView.extraContentPadding). Measured on the outer
-   *  wrapper so banners and the attach preview are included. */
-  onHeightChange?: (event: LayoutChangeEvent) => void;
 }) {
   // Composer text lives in the chat store (per-session drafts survive
   // switches); dictation mechanics stay local below.
@@ -204,16 +198,10 @@ export function ChatInput({
     // One owner for the gutter: the wrapper. Children stack no inset of
     // their own (DESIGN.md "Gutters are owned by one layer").
     //
-    // onLayout lives HERE, on the whole composer, not on the field row.
-    // extraContentPadding is how the list reserves room for the composer, so
-    // measuring only the field under-reserved by this wrapper's border-t and
-    // pt-2, the field's mb-3, and the attach preview and issue rows above it.
-    // pocketpal-ai measures the whole input container for the same reason
-    // (ChatView.tsx:1139).
-    <View
-      className="border-t border-border bg-base px-5 pt-2"
-      onLayout={onHeightChange}
-    >
+    // No onLayout here: ChatScreen measures the composer CONTAINER that wraps
+    // this, which also contains the banners above the input, so a measurement
+    // at this level would under-count what the list has to clear.
+    <View className="border-t border-border bg-base px-5 pt-2">
       {voiceIssue !== null &&
         (voiceSettings ? (
           <Pressable onPress={() => void openSettings()}>

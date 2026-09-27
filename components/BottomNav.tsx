@@ -1,7 +1,7 @@
 /** Bottom tab bar (DESIGN.md Navigation).
  *
- * 64px plus the device's bottom safe-area inset, on Clean White with a
- * 1px Hairline top border. Items are icon over Caption label; inactive is
+ * 75px (see TAB_BAR_HEIGHT) plus the device's bottom safe-area inset, on
+ * Clean White with a 1px Hairline top border. Items are icon over Caption label; inactive is
  * Slate, active is Signal Blue sitting on a Surface Tint pill with a 2px
  * indicator above the label. The pill and indicator are always mounted —
  * mounting on selection changes the row's height and the bar jumps under
@@ -19,6 +19,22 @@ import {
 import { colors } from "../themes/tokens.ts";
 
 export type ChatTab = "chat" | "voice" | "vision";
+
+/** Rendered height of the bar ITSELF, excluding the safe-area inset that
+ * (tabs)/_layout.tsx adds below it. The class sum, one term per line:
+ *   border-t            1
+ *   pt-2                8
+ *   icon box h-10      40
+ *   caption label      16  (text-caption line-height, global.css)
+ *   mt-1 indicator      6  (4 gap + h-0.5)
+ *   pb-1                4
+ * Single definition by decree: ChatScreen's keyboard compensation and the
+ * message list's offset both import this, because three separate copies
+ * (60 here, 64 in prose, 75 real) is exactly how the no-model card came to
+ * drift when the keyboard opened. The SUM above is the spec — if the bar's
+ * classes change, change this with them; the value itself is verified on
+ * device, not by test. */
+export const TAB_BAR_HEIGHT = 75;
 
 const TABS: { id: ChatTab; label: string; Icon: LucideIcon }[] = [
   { id: "chat", label: "Chat", Icon: MessageCircle },

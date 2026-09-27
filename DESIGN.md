@@ -136,7 +136,7 @@ components:
   tab-bar:
     backgroundColor: "{colors.clean-white}"
     textColor: "{colors.slate}"
-    height: "64px"
+    height: "75px"
   tab-active:
     backgroundColor: "{colors.surface-tint}"
     textColor: "{colors.signal-blue}"
@@ -258,7 +258,7 @@ The spatial model is a 4px scale — 4, 8, 12, 16, 20, 24, 32, 40, 48 — with *
 
 **Containers.** Surfaces are full-bleed or inset by the gutter; there is no centred max-width column. Chat is the one exception to horizontal rhythm — message bubbles are edge-anchored (user right, assistant left) and capped at roughly 75% of viewport width, because a chat reads as a column of alternating edges, not a stack of equal cards.
 
-**Navigation geometry.** The header is 56px tall, sits on Clean White with a 1px Hairline bottom border, and holds a leading control, the wordmark, and trailing controls in slots of **equal width, sized to hold the wider of the two groups** — equal slots alone do not centre the wordmark if one group overflows its slot. The tab bar is 64px plus the device's bottom safe-area inset, with a 1px Hairline top border; the inset is applied once, at the bar, and screens opt out of it rather than double-applying it.
+**Navigation geometry.** The header is 56px tall, sits on Clean White with a 1px Hairline bottom border, and holds a leading control, the wordmark, and trailing controls in slots of **equal width, sized to hold the wider of the two groups** — equal slots alone do not centre the wordmark if one group overflows its slot. The tab bar is 75px plus the device's bottom safe-area inset, with a 1px Hairline top border; the inset is applied once, at the bar, and screens opt out of it rather than double-applying it.
 
 **Gutters are owned by one layer.** A screen gutter is applied once, at the outermost container of a column. A child that also insets itself stacks the gutter; that is the defect, not a style choice.
 
@@ -354,7 +354,7 @@ Confident and flat. Buttons never lift, never glow, and never animate their own 
 ### Navigation
 
 - **Header (56px, Clean White, 1px Hairline bottom):** a leading control (menu or back), the wordmark in Headline (600, 24/32) Ink, and trailing controls. Leading and trailing slots are **fixed width and equal** so the wordmark stays optically centred no matter how many trailing icons appear. Icons are 2px stroke at 20px in Ink; a header control that opens something live takes Signal Blue.
-- **Tab bar (64px + safe-area inset, Clean White, 1px Hairline top):** items are icon-over-label, 2px stroke icon at 24px, Caption label. Inactive is Slate. Active is Signal Blue on both icon and label, sitting on a Surface Tint pill (Large radius) with a 2px Signal Blue indicator bar above the label. Exactly one tab is active.
+- **Tab bar (75px + safe-area inset, Clean White, 1px Hairline top):** items are icon-over-label, 2px stroke icon at 24px, Caption label. Inactive is Slate. Active is Signal Blue on both icon and label, sitting on a Surface Tint pill (Large radius) with a 2px Signal Blue indicator bar above the label. Exactly one tab is active.
 - **The active pill is always mounted.** Swap its fill and its indicator's opacity; do not mount and unmount it. Mounting on selection changes the row's height and makes the whole bar jump.
 - **Predictive Back and transitions.** Predictive Back is enabled so the system gesture animates the pop. The "transitions do not animate" rule governs the app's own JS navigator — tab and screen switches cut, and shared chrome (tab bar, composer) never moves. The OS back gesture is a platform affordance, not an app transition.
 - **Nav chrome is static.** No fade, no slide, no scale on the bar itself — only the content behind it may transition.

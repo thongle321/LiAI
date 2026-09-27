@@ -5,12 +5,11 @@
  * through MarkdownView; streaming replies re-parse per token chunk.
  */
 
-import { Image as RNImage, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Image as RNImage, Pressable, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { CheckCheck, Wrench } from "lucide-react-native";
 
 import { APP_NAME } from "../../constants/app.ts";
-import { images } from "../../constants/images.ts";
 
 // Reanimated v4 ships View/Text/Image/ScrollView only — Pressable
 // goes through the builtin factory instead of a hand-rolled wrapper.
@@ -24,21 +23,24 @@ import {
   useMotionDuration,
   usePressFeedback,
 } from "../../lib/motion.ts";
-import type { ChatMessage } from "../../types/chat.ts";
+import type { MessageRow } from "../../lib/chat/rows.ts";
+import { AssistantAvatar } from "./AssistantAvatar.tsx";
 import { MarkdownView } from "./MarkdownView.tsx";
 import { MessageActions } from "./MessageActions.tsx";
 import { LinkPreviewCard } from "./LinkPreview.tsx";
 
 export function Bubble({
-  message,
+  row,
   onRetry,
   onRegenerate,
 }: {
-  message: ChatMessage;
+  /** One adapter row: message plus its group/avatar/status flags. */
+  row: MessageRow;
   onRetry: () => void;
   /** Null for user bubbles (nothing to regenerate). */
   onRegenerate: (() => void) | null;
 }) {
+  const { message, grouped, showAvatar, status } = row;
   const duration = useMotionDuration();
   const entering = bubbleEntering(duration);
   const exiting = fadeExiting(duration);
@@ -75,7 +77,7 @@ export function Bubble({
             className="w-40 h-[120px] rounded-xl mb-1"
           />
         )}
-        <View className="rounded-xl rounded-br-sm bg-surface-3 px-5 py-3">
+        <View className={`px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-br-sm"} bg-surface-3`}>
           <Text className="font-sans text-body-md text-primary-text">
             {message.text}
           </Text>
@@ -83,32 +85,36 @@ export function Bubble({
         <View className="w-full">
           <LinkPreviewCard text={message.text} />
         </View>
-        <View className="mt-1 flex-row items-center">
-          <Text className="font-sans text-caption text-secondary-text">
-            {formatTime(message.at)}
-          </Text>
-          <CheckCheck size={12} color={colors.secondaryText} />
-        </View>
+        {/* Time + status once per group, like the assistant name row:
+            repeating them on every grouped turn is visual noise. */}
+        {!grouped && (
+          <View className="mt-1 flex-row items-center">
+            <Text className="font-sans text-caption text-secondary-text">
+              {formatTime(message.at)}
+            </Text>
+            {status === "sending" ? (
+              <ActivityIndicator size="small" color={colors.secondaryText} />
+            ) : (
+              <CheckCheck size={12} color={colors.secondaryText} />
+            )}
+          </View>
+        )}
       </Animated.View>
     );
   }
   return (
     <Animated.View entering={entering} exiting={exiting} className="my-1 max-w-[75%] flex-row self-start">
-      {/* Portrait avatar, not a glyph: LiAI's identity is a character, so
-          a robot icon would replace the brand with a category. */}
-      <RNImage
-        source={images.icon}
-        className="mr-2 mt-1 h-8 w-8 rounded-full"
-        accessibilityLabel={`${APP_NAME} avatar`}
-      />
+      <AssistantAvatar shown={showAvatar} />
       <View className="flex-1">
-        <View className="mb-1 flex-row items-center gap-2">
-          <Text className="font-sans text-caption text-secondary-text">{APP_NAME}</Text>
-          <Text className="font-sans text-caption text-secondary-text">
-            {formatTime(message.at)}
-          </Text>
-        </View>
-        <View className="rounded-xl rounded-tl-sm border border-border bg-surface-1 px-5 py-3">
+        {!grouped && (
+          <View className="mb-1 flex-row items-center gap-2">
+            <Text className="font-sans text-caption text-secondary-text">{APP_NAME}</Text>
+            <Text className="font-sans text-caption text-secondary-text">
+              {formatTime(message.at)}
+            </Text>
+          </View>
+        )}
+        <View className={`border border-border bg-surface-1 px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-tl-sm"}`}>
           <MarkdownView text={message.text} />
           {settled && <LinkPreviewCard text={message.text} />}
           {message.steps !== undefined && message.steps.length > 0 && (

@@ -5,7 +5,7 @@
  * pending bubble; completed assistant bubbles offer copy + regenerate.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Pressable,
@@ -21,6 +21,7 @@ import { Check, Menu, Search, Share, X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
 import { filterMessages } from "../../lib/chat/filter.ts";
+import { buildRows, type ChatRow } from "../../lib/chat/rows.ts";
 import { buildTranscript } from "../../lib/chat/transcript.ts";
 import { useCopy } from "../../hooks/useCopy.ts";
 import {
@@ -31,20 +32,22 @@ import {
   useTabContentFade,
 } from "../../lib/motion.ts";
 import { APP_NAME } from "../../constants/app.ts";
-import type { ChatMessage } from "../../types/chat.ts";
+import { TAB_BAR_HEIGHT } from "../BottomNav.tsx";
 import { useChatStore } from "../../store/chat.ts";
 import { useModelStore } from "../../store/modelStore";
 import { useKeyboardLift } from "../../hooks/useKeyboardLift.ts";
 import { useKeyboardState } from "react-native-keyboard-controller";
 import { Bubble } from "./Bubble.tsx";
 import { ChatEmptyPlaceholder } from "./ChatEmptyPlaceholder.tsx";
+import { DateHeader } from "./DateHeader.tsx";
+import { PendingIndicator } from "./PendingIndicator.tsx";
 import { ChatInput } from "./ChatInput.tsx";
 import { UsageStats } from "./UsageStats.tsx";
 import { SuggestedPrompts } from "./SuggestedPrompts.tsx";
 import { MessageList } from "./MessageList.tsx";
 
-/** BottomNav is pt-2 + min-h-12 + pb-1 (see components/BottomNav.tsx). */
-const TAB_BAR_HEIGHT = 60;
+/** What the list must clear: the tab bar (BottomNav's own rendered height,
+ * imported — one definition) and the safe-area inset below it. */
 
 export function ChatScreen() {
   const messages = useChatStore((s) => s.messages);
@@ -62,6 +65,10 @@ export function ChatScreen() {
   const { copied, copy } = useCopy();
 
   const visible = searchOpen ? filterMessages(messages, query) : messages;
+  // Adapter rows for the list: date headers + group/avatar/status flags.
+  // Memoized so the list's row-count follow effect can't retrigger on
+  // identity churn — a re-render alone must never move the list.
+  const rows = useMemo(() => buildRows(visible, { sending }), [visible, sending]);
   const matchLabel =
     searchOpen && query.trim() !== ""
       ? `${visible.length} of ${messages.length}`
@@ -104,7 +111,7 @@ export function ChatScreen() {
   const navigation = useNavigation<{ openDrawer: () => void }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const listRef = useRef<FlatList<ChatMessage>>(null);
+  const listRef = useRef<FlatList<ChatRow>>(null);
   const [atEnd, setAtEnd] = useState(true);
   const [listHeight, setListHeight] = useState(0);
   // What the list must clear: the tab bar and the safe-area inset below it.
@@ -305,22 +312,29 @@ export function ChatScreen() {
         >
           <MessageList
             listRef={listRef}
-            messages={visible}
+            rows={rows}
             offset={keyboardOffset}
             extraContentPadding={extraContentPadding}
             blankSpace={blankSpace}
             onEndVisibleChange={setAtEnd}
-            renderBubble={(item) => (
-              <Bubble
-                message={item}
-                onRetry={() => void retry(item.id)}
-                onRegenerate={
-                  item.role === "assistant"
-                    ? () => void regenerate(item.id)
-                    : null
-                }
-              />
-            )}
+            streaming={streaming}
+            renderRow={(row) =>
+              row.kind === "date" ? (
+                <DateHeader label={row.label} />
+              ) : row.kind === "pending" ? (
+                <PendingIndicator />
+              ) : (
+                <Bubble
+                  row={row}
+                  onRetry={() => void retry(row.message.id)}
+                  onRegenerate={
+                    row.message.role === "assistant"
+                      ? () => void regenerate(row.message.id)
+                      : null
+                  }
+                />
+              )
+            }
           />
         </Animated.View>
         {/* The no-model empty state, as an overlay rather than scroll content.
@@ -390,15 +404,11 @@ export function ChatScreen() {
         className="absolute inset-x-0 px-4"
         pointerEvents="box-none"
       >
-        {sending && (
-          <Animated.Text
-            entering={fadeEntering(motionDuration)}
-            exiting={fadeExiting(motionDuration)}
-            className="mb-1 self-start rounded-lg border border-border bg-surface-1 px-3 py-1 font-sans text-body-sm text-secondary-text"
-          >
-            LiAI…
-          </Animated.Text>
-        )}
+        {/* No active-run chip: the pending row inside the list owns that
+            state (PocketPal PendingIndicator). sending and the pending row
+            coincide — send/retry/regenerate mint the streaming stub in the
+            same set() — so a chip would be a second indicator for one
+            state, overlapping the list instead of scrolling with it. */}
         {ready && emptyState && (
           <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
         )}

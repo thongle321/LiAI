@@ -164,6 +164,40 @@ describe("keyboard avoidance", () => {
     );
   });
 
+  it("the tab bar height has one definition, imported by its consumers", () => {
+    // Root cause of the no-model card drifting ~7.5px when the keyboard
+    // opened: three numbers for one bar (constant 60, prose 64, real 75).
+    // The compensation subtracted 60+inset while the column grew by
+    // 75+inset, so the centring box ended up 15px taller — half of which
+    // the centred card absorbed as drift. The VALUE is device-verified
+    // (it is the sum of BottomNav's classes, listed on the constant); what
+    // a scan CAN lock is that there is exactly one definition and the
+    // consumers import it instead of restating it.
+    const defs = allSources().filter(({ source }) =>
+      /(?:export )?const TAB_BAR_HEIGHT\s*=/.test(stripComments(source)),
+    );
+    assert.deepEqual(
+      defs.map(({ file }) => file),
+      ["components/BottomNav.tsx"],
+    );
+    const chat = read("components/chat/ChatScreen.tsx");
+    assert.match(
+      chat,
+      /import \{ TAB_BAR_HEIGHT \} from "\.\.\/BottomNav\.tsx"/,
+      "ChatScreen must import the height, not invent its own number",
+    );
+    assert.doesNotMatch(
+      chat,
+      /const TAB_BAR_HEIGHT/,
+      "a second definition is how the three numbers diverged",
+    );
+    // The stale prose that caused it: the comment claimed pt-2 + min-h-12
+    // + pb-1 (60), a class BottomNav never had. Keep the docs honest.
+    const nav = read("components/BottomNav.tsx");
+    assert.doesNotMatch(nav, /min-h-12/, "the bar has no min-h-12; do not re-derive a wrong sum");
+    assert.doesNotMatch(nav, /64px/, "the old prose number must stay dead");
+  });
+
   it("the composer is the floating box, with no wrapper between it and the screen", () => {
     // A wrapper that only re-exports a transform is a second box that can
     // disagree with the one it wraps. That is not hypothetical: the previous

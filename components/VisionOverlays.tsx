@@ -5,7 +5,7 @@
  */
 
 import type { RefObject } from "react";
-import { Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { Keyboard, Mic, Send, SwitchCamera, X } from "lucide-react-native";
@@ -208,12 +208,13 @@ export function VisionBottomPanel({
   const talkPress = usePressFeedback();
   // The panel lifts by the keyboard height so the draft input clears it,
   // leaving the camera preview full-bleed (the screen's documented rule).
-  // iOS only: app.json sets softwareKeyboardLayoutMode "resize", so on
-  // Android the window already shrinks and translating here would lift the
-  // panel twice.
+  // Both platforms: the app is edge-to-edge, so the window does NOT resize
+  // for the keyboard on Android either. This was briefly gated to iOS on
+  // the assumption that Android's adjustResize already handled it, which
+  // left the draft input under the keyboard on Android.
   const { height } = useReanimatedKeyboardAnimation();
   const liftStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: Platform.OS === "ios" ? -height.value : 0 }],
+    transform: [{ translateY: -height.value }],
   }));
   return (
     <Animated.View

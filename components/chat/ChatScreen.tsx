@@ -7,7 +7,6 @@
 
 import { useEffect, useState } from "react";
 import {
-  Platform,
   Pressable,
   Text,
   TextInput,
@@ -211,10 +210,15 @@ export function ChatScreen() {
 
       {/* Composer always mounted (PocketPal ChatView parity): the
           no-model bar auto-dismisses on activation, no Retry needed. */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={{ flex: 1 }}
-      >
+      {/* padding on BOTH platforms, deliberately. This used to be
+          iOS-only, copied from React Native's KAV docs, where
+          behavior=undefined on Android was safe because adjustResize
+          shrank the window. It no longer does: the app is edge-to-edge
+          (targetSdk 36), so on Android the window keeps its size, the app
+          draws behind the keyboard, and behavior=undefined leaves the
+          composer underneath it. react-native-keyboard-controller is
+          exactly the library that makes padding correct on Android too. */}
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         {/* Hide the (empty) list while the centered no-model placeholder owns
             the space, so the two flex-1 siblings never split the column. */}
         {!showPlaceholder && (

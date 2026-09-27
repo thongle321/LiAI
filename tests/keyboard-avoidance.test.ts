@@ -168,11 +168,43 @@ describe("keyboard avoidance", () => {
     // The floating box is the one that lifts and the one that measures.
     assert.match(input, /style=\{lift\}/, "ChatInput carries its own lift");
     assert.match(input, /onLayout=\{onHeightChange\}/, "measured at the outermost level");
+
+    // The field IS the composer: the docked full-bleed variant of the field
+    // spec (DESIGN.md) — Clean White, radius 0, a 1px Hairline top border only,
+    // no outer gutter. There is no bar behind it and no container around it,
+    // which is the whole point of the change.
     assert.match(
       input,
-      /px-5 pt-2\$\{className/,
-      "the caller's classes merge onto the gutter-owning root",
+      /className=\{`border-t border-border bg-surface-1\$\{className/,
+      "the composer root is the full-bleed field: Clean White, hairline top",
     );
+    assert.doesNotMatch(
+      input,
+      /bg-base/,
+      "the Cool Paper bar is deleted, not merged into the field",
+    );
+    // Radius 0 is the documented exception for a full-bleed element. Scoped
+    // to the root's own opening tag: the className is a template literal with
+    // nested backticks, so a file-wide pattern would escape the tag and match
+    // the rounded chips further down.
+    const rootTag = input.slice(
+      input.indexOf("<Animated.View"),
+      input.indexOf(">", input.indexOf("<Animated.View")) + 1,
+    );
+    assert.doesNotMatch(
+      rootTag,
+      /rounded/,
+      "radius 0 is the documented exception for a full-bleed element",
+    );
+    assert.doesNotMatch(
+      input,
+      /mb-3 flex-row items-end/,
+      "the control row is flush with the bottom edge; the bar's padding is gone",
+    );
+    // The screen gutter is deliberately absent, so the field's own 16px
+    // padding is the whole inset (DESIGN.md, "The gutter does not apply to a
+    // full-bleed field"). A px-5 here would be a stacked gutter.
+    assert.doesNotMatch(input, /className=\{`[^`]*\bpx-5\b/);
   });
 
   it("the composer rises by the FULL keyboard height, not height minus the inset", () => {
@@ -245,32 +277,115 @@ describe("keyboard avoidance", () => {
     assert.deepEqual(offenders, []);
   });
 
-  it("the composer's banners do not stack a second gutter", () => {
-    // The banners moved inside the composer's box, which owns the px-5. If
-    // they keep their own, they sit at 40px against the field's 20px and the
-    // misalignment is visible on every screen. DESIGN.md: "gutters are owned
-    // by one layer". Scoped to the aboveField slot on purpose: the header and
-    // the search bar sit outside the composer and own their own inset.
+  it("the composer's overlays inset once, at the group", () => {
+    // The overlays sit over message content now, not over a bar, so each
+    // carries its own fill — but the horizontal inset is owned ONCE, by the
+    // group. A child that also insets itself would sit 20px out from the
+    // field's 16px content, and that misalignment is visible on every screen.
+    // DESIGN.md: "gutters are owned by one layer".
     const offenders: string[] = [];
+    // Only the ROOT of each overlay is checked. A chip or a pill padding
+    // ITSELF (px-3 on the usage pill, px-4 on a prompt chip) is internal
+    // padding and perfectly legal; what must not come back is a container
+    // adding a screen inset on top of the group's.
     for (const file of [
       "components/chat/SuggestedPrompts.tsx",
       "components/chat/UsageStats.tsx",
     ]) {
-      if (/px-5/.test(read(file))) offenders.push(`${file}: carries its own px-5`);
+      const root = read(file).match(/className="[^"]*"/)?.[0] ?? "";
+      if (/\bpx-[45]\b/.test(root)) {
+        offenders.push(`${file}: its root carries a screen inset: ${root}`);
+      }
     }
 
+    // The group MUST be the element that owns the inset, asserted positively
+    // rather than by counting: an earlier version counted occurrences of the
+    // group string starting at that string's own index, so the count could
+    // never be 0 and the assertion could only fire on an exact duplicate.
     const chat = read("components/chat/ChatScreen.tsx");
-    const start = chat.indexOf("aboveField={");
-    assert.notEqual(start, -1, "the banners must arrive through the slot");
-    const end = chat.indexOf("\n      />", start);
-    // Without this the slice below runs to end-of-file on any reformat and
-    // the whole test passes while checking nothing.
-    assert.notEqual(end, -1, "could not find the end of the aboveField slot");
-    const banners = chat.slice(start, end);
-    for (const m of banners.matchAll(/className="[^"]*\bpx-5\b[^"]*"/g)) {
-      offenders.push(`components/chat/ChatScreen.tsx banner: ${m[0]}`);
-    }
+    assert.match(
+      chat,
+      /className="absolute inset-x-0 px-4"/,
+      "the overlay group owns the screen inset",
+    );
     assert.deepEqual(offenders, []);
+  });
+
+  it("no persistent bar sits over the newest message", () => {
+    // The "Load a model to keep chatting" banner with a Go to Models button
+    // was removed deliberately. It was the one overlay that PERSISTED for a
+    // whole conversation (unload a model mid-thread and it appeared over live
+    // content), so it covered the newest message permanently, and it was the
+    // only thing asking the list to reserve space for something over it. The
+    // in-conversation no-model signal is now the field's placeholder, which
+    // costs no layout, plus a tappable chip on focus.
+    const chat = read("components/chat/ChatScreen.tsx");
+    const input = read("components/chat/ChatInput.tsx");
+
+    // Asserted POSITIVELY: the affordance is the chip, and it is gated on
+    // focus + the engine-accurate gate. Checking only for the absence of one
+    // label would pass if the banner came back under a different name.
+    assert.match(chat, /composerFocused && !modelReady/);
+    assert.match(chat, /accessibilityLabel="Load a model"/);
+    assert.doesNotMatch(chat, /Go to Models/);
+    // No auto-hide: a timer on the only route to models would usually expire
+    // before it could be reached, which is what the removed banner's job was.
+    assert.doesNotMatch(chat, /setTimeout\((?!.*CHIP_BLUR_GRACE_MS)/);
+    // The placeholder carries the state, on the engine-accurate gate rather
+    // than the stale-able `connection` check.
+    assert.match(input, /Model not loaded\. Please initialize the model\./);
+    assert.match(input, /Loading model \.\.\./);
+    assert.match(input, /const composerPlaceholder = modelReady/);
+  });
+
+  it("the rows the field owns are inside the measured field", () => {
+    // The attach preview is the one row that must NEVER be an overlay: as one
+    // it would sit over the newest message for as long as an image is
+    // attached, and extraContentPadding (fed from the field's onLayout) would
+    // not know about it. That is the 6f8d572 bug. So it lives inside the
+    // outermost field box, ahead of the control row.
+    const input = read("components/chat/ChatInput.tsx");
+    const root = input.indexOf("<Animated.View");
+    const close = input.indexOf("</Animated.View>", root);
+    assert.notEqual(root, -1, "the field root must exist");
+    assert.notEqual(close, -1, "the field root must close");
+    const field = input.slice(root, close);
+
+    assert.match(
+      field,
+      /mx-4 mb-2 flex-row items-center gap-2 rounded-lg bg-surface-2/,
+      "the attach preview is a row inside the field, and Mist on white",
+    );
+    // Being *written* inside the field is not enough: an `absolute` preview
+    // would still be out of flow, still overlay the newest message, and still
+    // be missing from the field's measured height. Proved by mutation — the
+    // first version of this guard passed with `absolute` prepended.
+    assert.doesNotMatch(
+      field,
+      /absolute[^"]*mx-4 mb-2|mx-4 mb-2[^"]*absolute/,
+      "the attach preview must stay in flow, or the measured height lies",
+    );
+    // The issue lines live here too, for the same reason.
+    assert.match(field, /px-4 pb-1 font-sans text-body-sm text-secondary-text/);
+    // ...and the banners must NOT, or they are overlays again.
+    assert.doesNotMatch(field, /SuggestedPrompts|UsageStats/, "the banners are overlays");
+  });
+
+  it("the docked field keeps the tokens the amended design system requires", () => {
+    // Full-bleed Clean White, square, 1px Hairline top only, 16px value inset.
+    // Asserted positively so an empty or truncated file cannot pass it.
+    const input = read("components/chat/ChatInput.tsx");
+    assert.match(input, /className=\{`border-t border-border bg-surface-1\$\{className/);
+    // Top border ONLY: an all-round `border` here would draw two 1px lines
+    // straight onto the screen edges.
+    assert.doesNotMatch(input, /className=\{`border /);
+    assert.doesNotMatch(input, /\bborder-(l|r|b)\b/);
+    assert.doesNotMatch(input, /\bbg-base\b/, "the Cool Paper bar is deleted, not merged");
+    // The value sits 16px from the edge, so the control row carries px-4 and
+    // the root carries no horizontal inset at all.
+    assert.match(input, /flex-row items-end gap-2 px-4 py-3/);
+    assert.doesNotMatch(input, /className=\{`[^`]*\bpx-5\b/);
+    assert.doesNotMatch(input, /mb-3 flex-row items-end/, "flush with the bottom edge");
   });
 
   it("the shared helper is callable from the UI runtime", () => {

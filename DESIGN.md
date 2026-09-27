@@ -252,6 +252,8 @@ The spatial model is a 4px scale — 4, 8, 12, 16, 20, 24, 32, 40, 48 — with *
 
 **Gutters and padding.** The screen gutter is one `5` step (20px) on every edge, including horizontal insets for cards, list rows, and form fields. Cards carry 20px (`5`) internal padding — generous, because a card is a small plane, not a dense module. Fields sit at 12px/16px (`3`/`4`) vertical/horizontal. Message bubbles sit at 12px/16px (`3`/`4`).
 
+**The gutter does not apply to a full-bleed field.** A field docked to a screen edge takes no horizontal inset at all: its own 12px/16px padding *is* the whole inset, so its value sits 16px from the edge. This is not a stacked gutter — it is the gutter deliberately absent, which is what lets the element be the edge. The chat composer is the only such field today.
+
 **Vertical rhythm.** Between a section heading and its first row: 8px (`2`). Between a heading block and the section below it: 24px (`6`). Icon-to-label inside a row: 8px (`2`) for icon buttons, 10–12px for the larger row icons. Never let a gap be a value you cannot name on the scale.
 
 **Containers.** Surfaces are full-bleed or inset by the gutter; there is no centred max-width column. Chat is the one exception to horizontal rhythm — message bubbles are edge-anchored (user right, assistant left) and capped at roughly 75% of viewport width, because a chat reads as a column of alternating edges, not a stack of equal cards.
@@ -290,6 +292,8 @@ Corners are soft but never round. The radius scale has five named steps and they
 - **Default** (8px): the workhorse. Buttons, inputs, cards, dropdown menus, list containers. Most of the system sits here.
 - **Large** (12px): message bubbles, segmented controls, sheets, prominent icon-button wells.
 - **X-Large** (16px): modal cards and the largest single surfaces. Reserve it — if everything is x-large, nothing is.
+
+**Among rectangular elements, radius 0 is the one value outside the scale, and only on a full-bleed element.** An element that bleeds to a screen edge takes square corners, because a rounded corner there notches the surface away and exposes whatever is behind it — a visible defect, not a preference. Every inset rectangle uses one of the five steps above. (The 999px circle form below is a separate form language and is not a rectangle; this exception is about corners on a rectangle.) The chat composer is the only full-bleed element today.
 
 **Fully circular controls (999px) are a separate form language, not a sixth step.** They are permitted for exactly two things: things you press (icon buttons, avatars, the FAB) and things that listen (the mic control). Rectangular controls are never fully circular.
 
@@ -331,18 +335,19 @@ Confident and flat. Buttons never lift, never glow, and never animate their own 
 ### Inputs / Fields
 
 - **Style:** Clean White fill, 1px Hairline border, Default radius (8px), 12px/16px (`3`/`4`) padding, Body (16/24) value in Ink. Placeholder text is Slate.
+- **Docked to a screen edge:** a field pinned to the bottom of the screen is full-bleed — Clean White fill, radius 0, a 1px Hairline **top** border only (none on left, right or bottom), and no outer gutter, per *Layout*. Its value therefore sits 16px from the screen edge rather than 36px. See *Chat Messages* for the composer, the only such field.
 - **Hover:** border steps to Hairline Strong.
 - **Focus:** border steps to Signal Blue — 1px, not 2px, and no outer ring. The colour *is* the focus indicator; there is no glow and no halo. On native, pair the border change with the platform focus behaviour so keyboard and switch-control users get a visible state too.
 - **Error:** 1px Alert Red border, Alert Red helper text directly beneath the field (`8px` gap, Body Small). The field keeps its Clean White fill — it does not go red.
 - **Labels:** field labels are Body Small in Slate, sitting `8px` above the field. Placeholder text is a *hint*, never a label substitute.
-- **The composer is an input, not a custom control.** It is a multiline field with a trailing send icon button, using this same spec. It does not get its own visual language.
+- **The composer is an input, not a custom control.** It is a multiline field with a leading attach control and a trailing send icon button, using this same spec. It does not get its own visual language — with exactly one documented exception, the docked full-bleed variant above, which changes its fill, radius, border and inset but not its anatomy.
 
 ### Cards / Containers
 
 - **Corner style:** Default radius (8px). X-Large (16px) only for modal cards.
 - **Background:** Clean White on Cool Paper. Use Mist for a card that is *inside* another surface, never as a top-level card.
 - **Shadow strategy:** none — see *Elevation & Depth*. Separation is the 1px Hairline border, always present on a card.
-- **Border:** 1px Hairline, on all four sides. A card without a border is a mistake unless it is Mist-on-Mist.
+- **Border:** 1px Hairline, on all four sides — except a full-bleed element, whose left and right edges coincide with the screen edge and so take a top divider only (the composer is the only such element today). A card without a border is a mistake unless it is Mist-on-Mist.
 - **Internal padding:** 20px (`5`) on all sides. 16px for a card that contains a list of rows rather than prose.
 - **Row cards** (settings, model list, session history) drop the internal padding to 0 and let a 16px horizontal / 12px vertical row padding define the rhythm, so the divider lines run edge to edge.
 
@@ -368,7 +373,11 @@ The product's centre of gravity, and the one place the system is allowed to feel
   - **Thinking** — a Slate dot trail with the word "Thinking" in Caption.
   - **Error** — an Alert Red exclamation on an Alert Tint ground, with a retry affordance and the reason in Body Small.
 - **Link previews** are Mist-filled cards at Default radius with a 1px Hairline border, a 48px square image at Small radius, a Body Small title, and the domain in Caption Slate. The domain is the only link-blue text permitted.
-- **The composer** sits pinned to the bottom on Cool Paper with a 1px Hairline top border: a multiline input per the *Inputs / Fields* spec, a leading attach control, and a trailing send icon button in its Primary state. It is disabled — Secondary, not dimmed — when the input is empty.
+- **The composer is the field.** It sits pinned to the bottom edge to edge — full-bleed, Clean White, radius 0, a 1px Hairline top border — with **no Cool Paper bar behind it and no surrounding container**. It is a multiline input per the *Inputs / Fields* spec with a leading attach control and a trailing send icon button in its Primary state, disabled — Secondary, not dimmed — when the input is empty.
+  - **Rows the field owns stack inside it** — the attach preview, the voice and attach issue lines — so the field's measured height is exactly what the message list reserves, and the newest message can never sit behind them.
+  - **Chrome that is not part of the field floats above it** as overlays with their own fill — the sending indicator, the suggested-prompt chips, the usage line. Overlays are opaque, because they sit over message content rather than over a bar. They move with the field so the keyboard cannot strand them.
+  - **With no model loaded** the field's placeholder says so, and a tappable **Load a model** chip appears above it on field focus — the only in-composer route to the models screen. It is left-anchored, reserving no space, and persists until the field blurs or a model activates. It is a **neutral** button — Clean White, 1px Hairline border, Ink label — *not* a Primary or Secondary solid button, because the jump-to-latest pill is already Signal Blue and can be on screen at the same time.
+  - The composer and the tab bar are both Clean White, so with the keyboard down they read as one white plane split by a hairline. That is intended, not a missing surface.
 
 ### AI States
 
@@ -393,7 +402,7 @@ Machine-in-the-loop feedback. These are the only places Coolant Cyan is allowed.
 
 - **Do** let Signal Blue mark exactly one thing per screen. Scan any screen and count the blue elements; if the count exceeds one live/selected/actionable element, something is competing.
 - **Do** separate with a 1px Hairline border or one step between Cool Paper, Clean White, and Mist. That is the whole depth model.
-- **Do** keep every value on the 4px spacing scale and every radius on the five-step scale. If a number is not on a scale, it does not ship.
+- **Do** keep every value on the 4px spacing scale and every radius on the five-step scale — the sole exception being radius 0 on a full-bleed rectangle (the 999px circle form is a separate language, not a scale step). If a number is not on a scale, it does not ship.
 - **Do** meet the accessibility floor on every screen: 4.5:1 text contrast, 48×48dp touch targets, 16px minimum body text, dynamic type support, and reduced-motion honoured.
 - **Do** pair every status colour with a glyph and a word — check, exclamation, dot trail, word. Colour is never the only indicator.
 - **Do** use Coolant Cyan only for machine-in-the-loop states (thinking, vision, streaming) and Signal Blue everywhere else.

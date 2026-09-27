@@ -34,8 +34,8 @@ import { APP_NAME } from "../../constants/app.ts";
 import type { ChatMessage } from "../../types/chat.ts";
 import { useChatStore } from "../../store/chat.ts";
 import { useModelStore } from "../../store/modelStore";
-import { useModelReady } from "../../hooks/useModelReady.ts";
 import { useKeyboardLift } from "../../hooks/useKeyboardLift.ts";
+import { useModelReady } from "../../hooks/useModelReady.ts";
 import { Bubble } from "./Bubble.tsx";
 import { ChatEmptyPlaceholder } from "./ChatEmptyPlaceholder.tsx";
 import { ChatInput } from "./ChatInput.tsx";
@@ -45,6 +45,10 @@ import { MessageList } from "./MessageList.tsx";
 
 /** BottomNav is pt-2 + min-h-12 + pb-1 (see components/BottomNav.tsx). */
 const TAB_BAR_HEIGHT = 60;
+
+/** How long the "Load a model" chip survives a blur, so a touch that caused
+ *  that blur can still resolve into a press. Comfortably longer than a tap. */
+const CHIP_BLUR_GRACE_MS = 250;
 
 export function ChatScreen() {
   const messages = useChatStore((s) => s.messages);
@@ -72,22 +76,25 @@ export function ChatScreen() {
   }, [loadSession, checkHealth]);
 
   // Activation happens on the Models screen while chat stays mounted:
-  // re-resolve readiness so the bar and prompts vanish on their own.
+  // re-resolve readiness so the prompt chips and the no-model affordance
+  // appear and vanish on their own.
   const activeModelId = useModelStore((s) => s.activeModelId);
   useEffect(() => {
     void checkHealth();
   }, [activeModelId, checkHealth]);
 
-  // PocketPal parity: the composer is always visible. With no model the
-  // send button disables, the placeholder names it, and the bar below
-  // routes to Models — it dismisses itself the moment one loads.
+  // PocketPal parity: the composer is always visible. With no model the send
+  // button disables, the field's placeholder names it, and a tappable "Load a
+  // model" chip appears on focus — it dismisses itself the moment one loads.
   const ready = connection === "up";
-  // The engine-accurate gate for the composer's mic/attach and the centered
-  // warning below, so they can never light up for a model the engine would
-  // reject. The empty-conversation placeholder is NOT gated on this: it owns
-  // the whole screen when the thread is empty (it has its own centered copy
-  // and button), so the warning line is shown only when there ARE messages
-  // — otherwise both would render at once, with two "load a model" buttons.
+  // The engine-accurate gate, and the one the composer's affordances key off.
+  // NOT the `ready` prop above: that is a transport health check refreshed by
+  // checkHealth() and it can be stale, so it reports "up" while the engine has
+  // no model source. In that divergence the placeholder would say "Type a
+  // message…", the mic and attach would disable with labels promising to load a
+  // model, and there would be no way to get there. `canSend` inside ChatInput
+  // still uses the `ready` prop; that is pre-existing and out of this change's
+  // scope, but the two must not be confused when editing either side.
   const modelReady = useModelReady();
   // The empty placeholder ("Activate Model To Get Started" / "No Models
   // Available") is NOT scroll content, despite pocketpal-ai putting it in
@@ -108,13 +115,47 @@ export function ChatScreen() {
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const [atEnd, setAtEnd] = useState(true);
+  const [composerFocused, setComposerFocused] = useState(false);
+  // The chip's dismissal is DEFERRED, and that is not decoration. The chip
+  // floats above the field, so touching it blurs the TextInput; a Pressable
+  // that unmounts on blur never receives its press, and on Android the blur
+  // lands on touch-down, before the press resolves - so /models would simply
+  // never open. Wait a beat so the press can land, then dismiss.
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearChip = useCallback(() => {
+    if (blurTimer.current) {
+      clearTimeout(blurTimer.current);
+      blurTimer.current = null;
+    }
+    setComposerFocused(false);
+  }, []);
+  const handleComposerFocus = useCallback((focused: boolean) => {
+    if (blurTimer.current) {
+      clearTimeout(blurTimer.current);
+      blurTimer.current = null;
+    }
+    if (focused) {
+      setComposerFocused(true);
+      return;
+    }
+    blurTimer.current = setTimeout(clearChip, CHIP_BLUR_GRACE_MS);
+  }, [clearChip]);
+  useEffect(() => clearChip, [clearChip]);
+  // A model activating is the other end of the chip's life, and that one is
+  // immediate: there is no press to protect.
+  useEffect(() => {
+    if (modelReady) clearChip();
+  }, [modelReady, clearChip]);
   const [listHeight, setListHeight] = useState(0);
   // What the list must clear: the tab bar and the safe-area inset below it.
   const keyboardOffset = insets.bottom + TAB_BAR_HEIGHT;
-  // Height of the whole floating composer box, banners included. NOT a delta
-  // from a baseline, unlike the library's example: the box is out of flow, so
-  // nothing else accounts for it and the newest message would sit behind it.
-  // ONE measurement, three consumers: this padding, the empty state's lift,
+  // Height of the field, which IS the composer. NOT a delta from a baseline,
+  // unlike the library's example: the field is out of flow, so nothing else
+  // accounts for it and the newest message would sit behind it. The banners
+  // above it are deliberately NOT in this number — they are overlays over the
+  // list, and reserving for them would make the list reflow every time a chip
+  // appeared. One measurement, three consumers: this padding, the empty
+  // state's lift, and the jump-to-latest anchor.
   // and the jump-to-latest anchor.
   const extraContentPadding = useSharedValue(0);
   const [composerHeight, setComposerHeight] = useState(0);
@@ -135,7 +176,10 @@ export function ChatScreen() {
   // the accessory follows the drag, but it is not exported in 1.21.9 (the docs
   // are on main/1.22). Interactive dismissal still works via keyboardDismissMode
   // on the scroll view; only the composer tracking the finger needs 1.22+.
-  const jumpLift = useKeyboardLift();
+  // The jump-to-latest pill and the composer overlays both ride the same
+  // lift, so they rise welded to the field rather than tracking the keyboard
+  // independently and drifting apart.
+  const composerLift = useKeyboardLift();
 
   const handleComposerHeight = useCallback(
     (event: LayoutChangeEvent) => {
@@ -263,8 +307,8 @@ export function ChatScreen() {
         </Animated.View>
       )}
 
-      {/* Composer always mounted (PocketPal ChatView parity): the
-          no-model bar auto-dismisses on activation, no Retry needed. */}
+      {/* Composer always mounted (PocketPal ChatView parity): the no-model
+          affordance auto-dismisses on activation, no Retry needed. */}
       {/* The chat keyboard architecture (react-native-keyboard-controller).
           Three surfaces, and what each one does:
             - the content column (list + empty state): never moves. The
@@ -333,7 +377,7 @@ export function ChatScreen() {
             list stopped following along. */}
         {!atEnd && messages.length > 0 && (
           <Animated.View
-            style={[jumpLift, { bottom: composerHeight }]}
+            style={[composerLift, { bottom: composerHeight }]}
             className="absolute right-5"
             pointerEvents="box-none"
           >
@@ -357,56 +401,67 @@ export function ChatScreen() {
           because a wrapper that only re-exports a transform is a second box
           that can disagree with the one it wraps — which is exactly how the
           empty state came to look like it was sinking while the composer sat
-          still, and how the earlier padding/translation split broke the lift.
-
-          Everything that belongs to the composer arrives through aboveField
-          and carries NO horizontal padding of its own: this box owns the
-          gutter (DESIGN.md, "gutters are owned by one layer"). */}
+          still, and how the earlier padding/translation split broke the lift. */}
       <ChatInput
         className="absolute inset-x-0 bottom-0"
         sending={sending}
         ready={ready}
         onSend={(text, image) => send(text, image)}
         onHeightChange={handleComposerHeight}
-        aboveField={
-          <>
-            {sending && (
-              <Animated.Text
-                entering={fadeEntering(motionDuration)}
-                exiting={fadeExiting(motionDuration)}
-                className="pb-1 font-sans text-body-sm text-secondary-text"
-              >
-                LiAI…
-              </Animated.Text>
-            )}
-            {ready && emptyState && (
-              <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
-            )}
-            <UsageStats messages={messages} />
-            {!modelReady && messages.length > 0 && (
-              // Centered above the field so the no-model state is visible on
-              // every chat screen WITH a conversation, not just the empty one.
-              // The empty conversation is owned by ChatEmptyPlaceholder, so
-              // this is suppressed there to keep one signal and one button.
-              <View className="mb-1 items-center">
-                <Text className="text-center font-sans text-body-md text-secondary-text">
-                  Load a model to keep chatting
-                </Text>
-                <Pressable
-                  onPress={() => router.push("/models")}
-                  className="btn btn--primary mt-3"
-                  accessibilityRole="button"
-                  accessibilityLabel="Go to models"
-                >
-                  <Text className="text-center font-sans-semibold text-body-md text-on-primary">
-                    Go to Models
-                  </Text>
-                </Pressable>
-              </View>
-            )}
-          </>
-        }
+        onFocusChange={handleComposerFocus}
       />
+      {/* Composer overlays: the chrome that is NOT part of the field and so
+          cannot live inside it. Anchored directly above the field and lifted
+          by the same hook, so the keyboard can never strand them; positioned
+          over the list rather than in the field's flow, so they reserve
+          nothing and the field never resizes when one appears.
+          Each carries its own fill because it now sits over message content
+          instead of over a bar. */}
+      <Animated.View
+        style={[composerLift, { bottom: composerHeight }]}
+        className="absolute inset-x-0 px-4"
+        pointerEvents="box-none"
+      >
+        {sending && (
+          <Animated.Text
+            entering={fadeEntering(motionDuration)}
+            exiting={fadeExiting(motionDuration)}
+            className="mb-1 self-start rounded-lg border border-border bg-surface-1 px-3 py-1 font-sans text-body-sm text-secondary-text"
+          >
+            LiAI…
+          </Animated.Text>
+        )}
+        {ready && emptyState && (
+          <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
+        )}
+        <UsageStats messages={messages} />
+        {/* The only in-composer route to the models screen, since the
+            persistent "Go to Models" banner was removed. Left-anchored so it
+            cannot collide with the jump-to-latest pill, which owns the
+            bottom-right. Secondary, not Primary: Signal Blue marks one thing
+            per screen and the send button already has it (DESIGN.md). */}
+        {composerFocused && !modelReady && (
+          <Pressable
+            onPress={() => {
+              clearChip();
+              router.push("/models");
+            }}
+            // Neutral, NOT btn--secondary: that class is white on a Signal
+            // Blue border (global.css), and the jump-to-latest pill is already
+            // btn--secondary and can be on screen at the same time as this
+            // chip — scrolled back through history, with no model, focused.
+            // Two Signal Blue elements would break "Signal Blue marks exactly
+            // one thing per screen" (DESIGN.md).
+            className="mb-1 min-h-12 self-start items-center justify-center rounded-lg border border-border bg-surface-1 px-4"
+            accessibilityRole="button"
+            accessibilityLabel="Load a model"
+          >
+            <Text className="font-sans-semibold text-body-sm text-primary-text">
+              Load a model
+            </Text>
+          </Pressable>
+        )}
+      </Animated.View>
     </SafeAreaView>
   );
 }

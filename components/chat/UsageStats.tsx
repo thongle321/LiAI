@@ -9,9 +9,10 @@ export function UsageStats({ messages }: { messages: ChatMessage[] }) {
   const { turns, promptTokens, completionTokens } = sumUsage(messages);
   if (turns === 0) return null;
   return (
-    // No px-5: this renders inside the composer's box via ChatInput's
-    // aboveField slot, and that box owns the gutter.
-    <Text className="pb-1 text-center font-sans text-caption text-secondary-text">
+    // An opaque pill, not bare text: this is an overlay sitting over message
+    // content, so it needs its own fill. A track inside the page is Mist on
+    // white, so the pill is Clean White on Cool Paper with a Hairline.
+    <Text className="mb-1 self-center rounded-lg border border-border bg-surface-1 px-3 py-1 text-center font-sans text-caption text-secondary-text">
       {turns} turn{turns === 1 ? "" : "s"} · {formatTokens(promptTokens)} in ·{" "}
       {formatTokens(completionTokens)} out
     </Text>

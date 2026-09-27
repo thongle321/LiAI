@@ -6,7 +6,7 @@
  * entry opens the standalone /vision camera screen.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Image as RNImage,
   Pressable,
@@ -28,6 +28,7 @@ import { colors } from "../../themes/tokens.ts";
 import { useChatStore } from "../../store/chat.ts";
 import { useInference } from "../../store/inference.ts";
 import { useModelReady } from "../../hooks/useModelReady.ts";
+import { useModelStore } from "../../store/modelStore";
 import { mergeDictation, VOICE_LISTEN_OPTS } from "../../lib/voiceListen.ts";
 import { ensureMicAccess } from "../../lib/micAccess.ts";
 import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../../lib/voiceStatus.ts";
@@ -40,7 +41,7 @@ export function ChatInput({
   ready,
   onSend,
   className,
-  aboveField,
+  onFocusChange,
   onHeightChange,
 }: {
   sending: boolean;
@@ -54,15 +55,13 @@ export function ChatInput({
    *  would be dragged up by the keyboard whether it wanted that or not. It
    *  has one caller today; making that conditional is the price of reusing it. */
   className?: string;
-  /** Rendered above the field, inside this box: the sending indicator,
-   *  suggested prompts, usage line and no-model banner. They are part of the
-   *  composer's chrome, so they must rise with it and be counted in its
-   *  measured height — which is also pocketpal's arrangement (BannerRow sits
-   *  inside the input container, ChatView.tsx:1130). */
-  aboveField?: ReactNode;
-  /** Reports this box's height, banners included. It is the only thing
-   *  reserving room for a composer that is out of flow, so it must be
-   *  measured here at the outermost level and nowhere shallower. */
+  /** Reports focus so the screen can surface the "Load a model" chip, which
+   *  is an overlay above the field rather than a row inside it — an in-field
+   *  row would resize the field on every focus. */
+  onFocusChange?: (focused: boolean) => void;
+  /** Reports this box's height. It is the only thing reserving room for a
+   *  composer that is out of flow, so it must be measured here at the
+   *  outermost level and nowhere shallower. */
   onHeightChange?: (event: LayoutChangeEvent) => void;
 }) {
   // This box is the bottom-anchored surface, so it carries the keyboard lift
@@ -196,6 +195,24 @@ export function ChatInput({
   }, []);
 
   const canSend = ready && !sending && draft.trim() !== "";
+  // The placeholder carries the no-model state at all times, because it is the
+  // one part of that message which costs no layout: DESIGN.md says placeholder
+  // text is "a hint, never a label substitute", and here the hint IS the
+  // status. Both strings are pocketpal-ai's, taken verbatim from its locale
+  // file (en.json: "modelNotLoaded", "loadingModel") so the two ports do not
+  // drift.
+  //
+  // Gated on `modelReady`, the engine's own selectEngineSource, and NOT on the
+  // `ready` prop — see the same note in ChatScreen. `canSend` below still uses
+  // `ready`; that split predates this change, but the two must not be confused.
+  const downloading = useModelStore((s) =>
+    s.models.some((m) => m.downloadStatus === "downloading"),
+  );
+  const composerPlaceholder = modelReady
+    ? "Type a message…"
+    : downloading
+      ? "Loading model ..."
+      : "Model not loaded. Please initialize the model.";
   const sendPress = usePressFeedback();
   const stopPress = usePressFeedback();
   const micPress = usePressFeedback();
@@ -222,40 +239,54 @@ export function ChatInput({
   }
 
   return (
-    // The floating composer box, and the ONLY gutter owner inside it: no
-    // child stacks an inset of its own (DESIGN.md "Gutters are owned by one
-    // layer"). That is why aboveField's banners must arrive without their own
-    // px-5 — they live inside this px-5 now.
+    // THE COMPOSER IS THE FIELD. There is no bar behind it and no container
+    // around it: this element is the full-bleed docked variant of the field
+    // spec (DESIGN.md, "Docked to a screen edge" — Clean White, radius 0, a
+    // 1px Hairline top border only, no outer gutter). Nothing wraps it, so
+    // there is no second box that can disagree with this one about where the
+    // bottom of the screen is.
     //
-    // onLayout is HERE, on the outermost box, because this is the whole
-    // composer as far as the message list is concerned: the banners, the issue
-    // rows, the attach preview and the field. Measuring the field alone is
-    // what let the newest message sit behind them.
+    // Everything stacked above the control row is a row the FIELD owns — the
+    // issue lines and the attach preview — so this box's measured height is
+    // exactly what the message list reserves, and the newest message can never
+    // sit behind one. Chrome that is not part of the field (the banners, the
+    // "Load a model" chip) is an overlay in ChatScreen instead, and needs no
+    // reservation because it is positioned over the list, not in this flow.
     <Animated.View
-      className={`border-t border-border bg-base px-5 pt-2${className ? ` ${className}` : ""}`}
+      className={`border-t border-border bg-surface-1${className ? ` ${className}` : ""}`}
       style={lift}
       onLayout={onHeightChange}
     >
-      {aboveField}
       {voiceIssue !== null &&
         (voiceSettings ? (
-          <Pressable onPress={() => void openSettings()}>
-            <Text className="pb-1 font-sans text-body-sm text-primary">
+          // A whole row is the target, not the 16px of text: DESIGN.md's
+          // floor is 48×48dp, and the padding goes on the hit area, never on
+          // the text.
+          <Pressable
+            onPress={() => void openSettings()}
+            className="min-h-12 justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Open voice settings"
+          >
+            <Text className="px-4 font-sans text-body-sm text-primary">
               {voiceIssue}
             </Text>
           </Pressable>
         ) : (
-          <Text className="pb-1 font-sans text-body-sm text-secondary-text">
+          <Text className="px-4 pb-1 font-sans text-body-sm text-secondary-text">
             {voiceIssue}
           </Text>
         ))}
       {attachIssue !== null && (
-        <Text className="pb-1 font-sans text-body-sm text-secondary-text">
+        <Text className="px-4 pb-1 font-sans text-body-sm text-secondary-text">
           {attachIssue}
         </Text>
       )}
       {attached !== null && (
-        <View className="mb-2 flex-row items-center gap-2 rounded-lg border border-border bg-surface-1 p-2">
+        // Mist, not Clean White: this row sits INSIDE the white field now, and
+        // the three-plane rule is "a track inside a card is mist on white". It
+        // was a white card on the Cool Paper bar before the collapse.
+        <View className="mx-4 mb-2 flex-row items-center gap-2 rounded-lg bg-surface-2 p-2">
           <RNImage source={{ uri: attached }} className="h-14 w-14 rounded" />
           <Text className="flex-1 font-sans text-body-sm text-secondary-text">
             Attached — sent with your message
@@ -274,11 +305,11 @@ export function ChatInput({
           </Animated.View>
         </View>
       )}
-      {/* The composer is an input, not a custom control (DESIGN.md): the
-          field spec — Clean White, 1px Hairline, 8px radius, 12/16 padding —
-          with a leading attach control and a trailing send icon button in
-          its Primary state. Disabled send is Secondary, never dimmed. */}
-      <View className="mb-3 flex-row items-end gap-2 rounded-lg border border-border bg-surface-1 px-4 py-3">
+      {/* The control row. The field's own spec supplies the fill, the top
+          hairline and the square corners, so this row is padding and
+          controls only: no radius, no border, no background, and no bottom
+          margin — it is flush with the bottom of the screen. */}
+      <View className="flex-row items-end gap-2 px-4 py-3">
         <View>
           <Animated.View style={plusPress.animatedStyle}>
             <Pressable
@@ -315,12 +346,19 @@ export function ChatInput({
         <TextInput
           value={draft}
           onChangeText={setDraft}
-          placeholder="Type a message…"
+          placeholder={composerPlaceholder}
           placeholderTextColor={colors.secondaryText}
           multiline
           editable={!sending}
+          onFocus={() => onFocusChange?.(true)}
+          onBlur={() => onFocusChange?.(false)}
           className="flex-1 pt-2 font-sans text-body-md text-primary-text"
           accessibilityLabel="Message"
+        // The no-model state must not be visual-only: the chip that routes to
+        // Models is focus-gated, and a screen reader announces a field's label
+        // rather than its placeholder, so a fixed "Message" label would hide
+        // the only always-present statement that the composer is blocked.
+        accessibilityHint={modelReady ? undefined : composerPlaceholder}
         />
         <View className="flex-row items-center gap-1">
           <Animated.View style={micPress.animatedStyle}>

@@ -36,7 +36,6 @@ import { useChatStore } from "../../store/chat.ts";
 import { useModelStore } from "../../store/modelStore";
 import { useKeyboardLift } from "../../hooks/useKeyboardLift.ts";
 import { useKeyboardState } from "react-native-keyboard-controller";
-import { useModelReady } from "../../hooks/useModelReady.ts";
 import { Bubble } from "./Bubble.tsx";
 import { ChatEmptyPlaceholder } from "./ChatEmptyPlaceholder.tsx";
 import { ChatInput } from "./ChatInput.tsx";
@@ -46,10 +45,6 @@ import { MessageList } from "./MessageList.tsx";
 
 /** BottomNav is pt-2 + min-h-12 + pb-1 (see components/BottomNav.tsx). */
 const TAB_BAR_HEIGHT = 60;
-
-/** How long the "Load a model" chip survives a blur, so a touch that caused
- *  that blur can still resolve into a press. Comfortably longer than a tap. */
-const CHIP_BLUR_GRACE_MS = 250;
 
 export function ChatScreen() {
   const messages = useChatStore((s) => s.messages);
@@ -85,18 +80,13 @@ export function ChatScreen() {
   }, [activeModelId, checkHealth]);
 
   // PocketPal parity: the composer is always visible. With no model the send
-  // button disables, the field's placeholder names it, and a tappable "Load a
-  // model" chip appears on focus — it dismisses itself the moment one loads.
+  // button disables and the field's placeholder names it. There is
+  // deliberately NO in-composer prompt or button: the models screen is reached
+  // from the header wordmark, and the empty thread has its own card with a
+  // button. `ready` is only the transport health check; the engine-accurate
+  // gate (useModelReady) is what the composer's own affordances key off, inside
+  // ChatInput. Do not confuse the two when editing either side.
   const ready = connection === "up";
-  // The engine-accurate gate, and the one the composer's affordances key off.
-  // NOT the `ready` prop above: that is a transport health check refreshed by
-  // checkHealth() and it can be stale, so it reports "up" while the engine has
-  // no model source. In that divergence the placeholder would say "Type a
-  // message…", the mic and attach would disable with labels promising to load a
-  // model, and there would be no way to get there. `canSend` inside ChatInput
-  // still uses the `ready` prop; that is pre-existing and out of this change's
-  // scope, but the two must not be confused when editing either side.
-  const modelReady = useModelReady();
   // The empty placeholder ("Activate Model To Get Started" / "No Models
   // Available") is NOT scroll content, despite pocketpal-ai putting it in
   // ListEmptyComponent (ChatView.tsx:990). KeyboardChatScrollView adds the
@@ -116,37 +106,6 @@ export function ChatScreen() {
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const [atEnd, setAtEnd] = useState(true);
-  const [composerFocused, setComposerFocused] = useState(false);
-  // The chip's dismissal is DEFERRED, and that is not decoration. The chip
-  // floats above the field, so touching it blurs the TextInput; a Pressable
-  // that unmounts on blur never receives its press, and on Android the blur
-  // lands on touch-down, before the press resolves - so /models would simply
-  // never open. Wait a beat so the press can land, then dismiss.
-  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clearChip = useCallback(() => {
-    if (blurTimer.current) {
-      clearTimeout(blurTimer.current);
-      blurTimer.current = null;
-    }
-    setComposerFocused(false);
-  }, []);
-  const handleComposerFocus = useCallback((focused: boolean) => {
-    if (blurTimer.current) {
-      clearTimeout(blurTimer.current);
-      blurTimer.current = null;
-    }
-    if (focused) {
-      setComposerFocused(true);
-      return;
-    }
-    blurTimer.current = setTimeout(clearChip, CHIP_BLUR_GRACE_MS);
-  }, [clearChip]);
-  useEffect(() => clearChip, [clearChip]);
-  // A model activating is the other end of the chip's life, and that one is
-  // immediate: there is no press to protect.
-  useEffect(() => {
-    if (modelReady) clearChip();
-  }, [modelReady, clearChip]);
   const [listHeight, setListHeight] = useState(0);
   // What the list must clear: the tab bar and the safe-area inset below it.
   const keyboardOffset = insets.bottom + TAB_BAR_HEIGHT;
@@ -418,7 +377,6 @@ export function ChatScreen() {
         ready={ready}
         onSend={(text, image) => send(text, image)}
         onHeightChange={handleComposerHeight}
-        onFocusChange={handleComposerFocus}
       />
       {/* Composer overlays: the chrome that is NOT part of the field and so
           cannot live inside it. Anchored directly above the field and lifted
@@ -445,32 +403,6 @@ export function ChatScreen() {
           <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
         )}
         <UsageStats messages={messages} />
-        {/* The only in-composer route to the models screen, since the
-            persistent "Go to Models" banner was removed. Left-anchored so it
-            cannot collide with the jump-to-latest pill, which owns the
-            bottom-right. Secondary, not Primary: Signal Blue marks one thing
-            per screen and the send button already has it (DESIGN.md). */}
-        {composerFocused && !modelReady && (
-          <Pressable
-            onPress={() => {
-              clearChip();
-              router.push("/models");
-            }}
-            // Neutral, NOT btn--secondary: that class is white on a Signal
-            // Blue border (global.css), and the jump-to-latest pill is already
-            // btn--secondary and can be on screen at the same time as this
-            // chip — scrolled back through history, with no model, focused.
-            // Two Signal Blue elements would break "Signal Blue marks exactly
-            // one thing per screen" (DESIGN.md).
-            className="mb-1 min-h-12 self-start items-center justify-center rounded-lg border border-border bg-surface-1 px-4"
-            accessibilityRole="button"
-            accessibilityLabel="Load a model"
-          >
-            <Text className="font-sans-semibold text-body-sm text-primary-text">
-              Load a model
-            </Text>
-          </Pressable>
-        )}
       </Animated.View>
     </SafeAreaView>
   );

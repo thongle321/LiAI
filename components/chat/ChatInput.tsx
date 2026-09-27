@@ -41,7 +41,6 @@ export function ChatInput({
   ready,
   onSend,
   className,
-  onFocusChange,
   onHeightChange,
 }: {
   sending: boolean;
@@ -55,10 +54,6 @@ export function ChatInput({
    *  would be dragged up by the keyboard whether it wanted that or not. It
    *  has one caller today; making that conditional is the price of reusing it. */
   className?: string;
-  /** Reports focus so the screen can surface the "Load a model" chip, which
-   *  is an overlay above the field rather than a row inside it — an in-field
-   *  row would resize the field on every focus. */
-  onFocusChange?: (focused: boolean) => void;
   /** Reports this box's height. It is the only thing reserving room for a
    *  composer that is out of flow, so it must be measured here at the
    *  outermost level and nowhere shallower. */
@@ -249,9 +244,10 @@ export function ChatInput({
     // Everything stacked above the control row is a row the FIELD owns — the
     // issue lines and the attach preview — so this box's measured height is
     // exactly what the message list reserves, and the newest message can never
-    // sit behind one. Chrome that is not part of the field (the banners, the
-    // "Load a model" chip) is an overlay in ChatScreen instead, and needs no
-    // reservation because it is positioned over the list, not in this flow.
+    // sit behind one. Chrome that is not part of the field (the sending
+    // indicator, the prompt chips, the usage line) is an overlay in ChatScreen
+    // instead, and needs no reservation because it is positioned over the list,
+    // not in this flow.
     <Animated.View
       className={`border-t border-border bg-surface-1${className ? ` ${className}` : ""}`}
       style={lift}
@@ -350,8 +346,6 @@ export function ChatInput({
           placeholderTextColor={colors.secondaryText}
           multiline
           editable={!sending}
-          onFocus={() => onFocusChange?.(true)}
-          onBlur={() => onFocusChange?.(false)}
           className="flex-1 pt-2 font-sans text-body-md text-primary-text"
           accessibilityLabel="Message"
         // The no-model state must not be visual-only: the chip that routes to

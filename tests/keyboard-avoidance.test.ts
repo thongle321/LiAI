@@ -352,15 +352,15 @@ describe("keyboard avoidance", () => {
     const chat = read("components/chat/ChatScreen.tsx");
     const input = read("components/chat/ChatInput.tsx");
 
-    // Asserted POSITIVELY: the affordance is the chip, and it is gated on
-    // focus + the engine-accurate gate. Checking only for the absence of one
-    // label would pass if the banner came back under a different name.
-    assert.match(chat, /composerFocused && !modelReady/);
-    assert.match(chat, /accessibilityLabel="Load a model"/);
+    // Asserted POSITIVELY: there is no in-composer prompt for the no-model
+    // state at all. The field's placeholder is the whole signal, and the
+    // models screen is reached from the header wordmark or the empty thread's
+    // own card. Checking only for one label's absence would pass if a prompt
+    // came back under a different name.
+    assert.doesNotMatch(chat, /Load a model/);
     assert.doesNotMatch(chat, /Go to Models/);
-    // No auto-hide: a timer on the only route to models would usually expire
-    // before it could be reached, which is what the removed banner's job was.
-    assert.doesNotMatch(chat, /setTimeout\((?!.*CHIP_BLUR_GRACE_MS)/);
+    // (The header wordmark still routes to /models - that is the intended way
+    // there, so a bare router.push assertion would be wrong here.)
     // The placeholder carries the state, on the engine-accurate gate rather
     // than the stale-able `connection` check.
     assert.match(input, /Model not loaded\. Please initialize the model\./);

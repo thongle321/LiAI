@@ -142,26 +142,28 @@ export function ChatScreen() {
   const occlusion = useDerivedValue(() =>
     keyboardOcclusion(keyboard.height.value, insets.bottom),
   );
-  const isKeyboardUp = useDerivedValue(() => Math.abs(keyboard.height.value) > 0);
-  // Two mechanisms, because this stack holds two different kinds of content.
+  // Two mechanisms, because this stack holds two kinds of content.
+  // - Footer items (sending, usage, no-model hint, composer) are short and sit
+  //   at the bottom: TRANSLATE the stack. That is `liftedStackStyle`.
+  // - The empty placeholder is a flex-1 child CENTRED inside the stack.
+  //   Translating moves centred content up and out of its own box, so the icon
+  //   slid under the header. It must be PADDED instead, which shrinks the
+  //   content box so a flex-1 child centres in the visible area. That is
+  //   `paddedStackStyle`. Do not collapse these into one.
   //
-  // Footer items (sending, usage, no-model hint, composer) are short and sit
-  // at the bottom, so TRANSLATING the stack up by the occlusion is right.
-  //
-  // The empty placeholder is flex-1 with its content CENTRED inside the stack.
-  // Translating that moves the centred content up and out of its own box, so
-  // the icon slid under the header as the keyboard rose. It has to be PADDED
-  // instead: padding shrinks the content box, and a flex-1 child then centres
-  // in the genuinely visible area - centred AND clear of the header, which
-  // translation cannot give.
+  // NOTE: neither style applies insets.bottom. The tab bar owns the bottom
+  // inset (app/(drawer)/(tabs)/_layout.tsx applies paddingBottom:
+  // insets.bottom to itself, and the screens use edges=[top,left,right] so it
+  // is counted once, there). Adding it here too was the dead space under the
+  // composer. When the keyboard is up the bar is hidden and occlusion already
+  // has insets.bottom subtracted, so nothing is owed to it.
   const liftedStackStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -occlusion.value }],
-    // The safe-area inset only applies while the keyboard is closed;
-    // keeping it on while the keyboard is up opens a gap under the composer.
-    paddingBottom: isKeyboardUp.value ? 0 : insets.bottom,
   }));
+  // occlusion is already 0 while the keyboard is closed
+  // (keyboardOcclusion(0, inset) === 0), so this needs no extra branch.
   const paddedStackStyle = useAnimatedStyle(() => ({
-    paddingBottom: isKeyboardUp.value ? occlusion.value : insets.bottom,
+    paddingBottom: occlusion.value,
   }));
 
   const handleComposerHeight = useCallback(

@@ -138,6 +138,24 @@ describe("keyboard avoidance", () => {
     assert.deepEqual(offenders, []);
   });
 
+  it("the composer does not re-apply the bottom inset the tab bar owns", () => {
+    // app/(drawer)/(tabs)/_layout.tsx applies paddingBottom: insets.bottom
+    // to the bar itself, and the screens deliberately use
+    // edges=[top,left,right] so the inset is applied ONCE, there. A second
+    // application inside the composer stack is dead space under the input.
+    const offenders: string[] = [];
+    for (const file of [
+      "components/chat/ChatScreen.tsx",
+      "app/(drawer)/(tabs)/voice.tsx",
+    ]) {
+      const code = stripComments(readFileSync(file, "utf8"));
+      for (const m of code.matchAll(/paddingBottom:[^,}]*insets\.bottom/g)) {
+        offenders.push(`${file}: ${m[0]}`);
+      }
+    }
+    assert.deepEqual(offenders, []);
+  });
+
   it("the shared helper is callable from the UI runtime", () => {
     // keyboardOcclusion is called INSIDE useDerivedValue, which runs on the
     // UI runtime. A plain JS function there throws at runtime:

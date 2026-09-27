@@ -130,8 +130,38 @@ describe("keyboard avoidance", () => {
       "the empty state must not be scroll content: the keyboard inset moves it",
     );
     assert.match(chat, /showPlaceholder && \(/);
-    assert.match(chat, /className="absolute inset-0"/);
-    assert.match(chat, /paddingBottom: composerHeight/);
+    assert.match(chat, /className="absolute inset-x-0 top-0"/);
+    assert.match(
+      chat,
+      /bottom: composerHeight \+ tabBarCompensation/,
+      "the column-anchored overlays must compensate for the tab bar hiding",
+    );
+  });
+
+  it("column-anchored overlays compensate for the tab bar hiding", () => {
+    // The custom tab bar returns null while the keyboard is up
+    // (app/(drawer)/(tabs)/_layout.tsx:42), so the screen and this column grow
+    // by the tab bar's height. A vertically centred child then slides DOWN by
+    // half of it — which is what made the empty-state card look like it moved
+    // when the keyboard opened, and it has nothing to do with the keyboard
+    // height. Both overlays anchored to the COLUMN must give that height back,
+    // or their centring box differs between the two states.
+    const chat = read("components/chat/ChatScreen.tsx");
+    assert.match(chat, /const tabBarCompensation = keyboardVisible \? keyboardOffset : 0/);
+    // The empty state and the jump-to-latest pill are the two column-anchored
+    // ones; the composer overlays are screen-anchored and must NOT compensate,
+    // or they would be pushed off the keyboard.
+    const compensated = [...chat.matchAll(/bottom: composerHeight \+ tabBarCompensation/g)];
+    assert.equal(
+      compensated.length,
+      2,
+      "exactly the two column-anchored overlays compensate",
+    );
+    assert.doesNotMatch(
+      chat,
+      /\[composerLift, \{ bottom: composerHeight \+ tabBarCompensation \}\][\s\S]{0,80}Composer overlays/,
+      "the screen-anchored overlay group must stay uncompensated",
+    );
   });
 
   it("the composer is the floating box, with no wrapper between it and the screen", () => {

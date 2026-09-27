@@ -35,6 +35,7 @@ import type { ChatMessage } from "../../types/chat.ts";
 import { useChatStore } from "../../store/chat.ts";
 import { useModelStore } from "../../store/modelStore";
 import { useKeyboardLift } from "../../hooks/useKeyboardLift.ts";
+import { useKeyboardState } from "react-native-keyboard-controller";
 import { useModelReady } from "../../hooks/useModelReady.ts";
 import { Bubble } from "./Bubble.tsx";
 import { ChatEmptyPlaceholder } from "./ChatEmptyPlaceholder.tsx";
@@ -149,6 +150,15 @@ export function ChatScreen() {
   const [listHeight, setListHeight] = useState(0);
   // What the list must clear: the tab bar and the safe-area inset below it.
   const keyboardOffset = insets.bottom + TAB_BAR_HEIGHT;
+  // The tab bar renders null while the keyboard is up ((tabs)/_layout.tsx:42),
+  // so the screen — and this column with it — GROWS by exactly that much. A
+  // vertically centred child would then slide down by half of it, which is
+  // what made the "No Models Available" card look like it moved when the
+  // keyboard opened. The keyboard height is not the cause; this is. Give the
+  // two column-anchored overlays the same bottom back so their centring box is
+  // identical in both states. The screen-anchored ones need nothing.
+  const keyboardVisible = useKeyboardState((s) => s.isVisible);
+  const tabBarCompensation = keyboardVisible ? keyboardOffset : 0;
   // Height of the field, which IS the composer. NOT a delta from a baseline,
   // unlike the library's example: the field is out of flow, so nothing else
   // accounts for it and the newest message would sit behind it. The banners
@@ -362,8 +372,8 @@ export function ChatScreen() {
             hard-coded bottomComponentHeight + 100. */}
         {showPlaceholder && (
           <View
-            className="absolute inset-0"
-            style={{ paddingBottom: composerHeight }}
+            className="absolute inset-x-0 top-0"
+            style={{ bottom: composerHeight + tabBarCompensation }}
             pointerEvents="box-none"
           >
             <ChatEmptyPlaceholder />
@@ -377,7 +387,7 @@ export function ChatScreen() {
             list stopped following along. */}
         {!atEnd && messages.length > 0 && (
           <Animated.View
-            style={[composerLift, { bottom: composerHeight }]}
+            style={[composerLift, { bottom: composerHeight + tabBarCompensation }]}
             className="absolute right-5"
             pointerEvents="box-none"
           >

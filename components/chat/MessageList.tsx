@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useEffect, useRef, type ReactElement, type RefObject } from "react";
-import { FlatList, type ScrollViewProps } from "react-native";
+import { FlatList, Platform, type ScrollViewProps } from "react-native";
 import {
   KeyboardChatScrollView,
 } from "react-native-keyboard-controller";
@@ -66,7 +66,11 @@ export function MessageList({
         // Lift only when the reader is already at the conversation. Scrolling
         // back through history should not be shoved around by the keyboard.
         keyboardLiftBehavior="whenAtEnd"
-        keyboardDismissMode="interactive"
+        // iOS only, deliberately. On Android 'interactive' makes a drag
+        // forcibly dismiss the keyboard as the only outcome, so the reader
+        // can never scroll the list to reveal content the keyboard is
+        // hiding. pocketpal-ai gates this the same way (ChatView.tsx:1014).
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "none"}
         onEndVisible={(visible) => {
           atEndRef.current = visible;
           onEndVisibleChange(visible);

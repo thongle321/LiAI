@@ -58,8 +58,6 @@ import { UsageStats } from "./UsageStats.tsx";
 import { SuggestedPrompts } from "./SuggestedPrompts.tsx";
 import { MessageList } from "./MessageList.tsx";
 
-// Links the gesture area to the composer input for interactive dismissal.
-const CHAT_INPUT_ID = "chat-composer-input";
 /** BottomNav is pt-2 + min-h-12 + pb-1 (see components/BottomNav.tsx). */
 const TAB_BAR_HEIGHT = 60;
 
@@ -295,8 +293,7 @@ export function ChatScreen() {
       {/* Composer always mounted (PocketPal ChatView parity): the
           no-model bar auto-dismisses on activation, no Retry needed. */}
       {/* The chat keyboard architecture (react-native-keyboard-controller).
-          KeyboardGestureArea makes the keyboard interactively dismissable,
-          the list (KeyboardChatScrollView, see MessageList) owns content
+          The list (KeyboardChatScrollView, see MessageList) owns content
           repositioning, and ONE container below carries the composer plus
           everything that floats above it, all sharing a single reconciled
           occlusion value. PocketPal ChatView parity: it comments on the
@@ -396,7 +393,6 @@ export function ChatScreen() {
           sending={sending}
           ready={ready}
           onSend={(text, image) => send(text, image)}
-          nativeID={CHAT_INPUT_ID}
           onHeightChange={handleComposerHeight}
         />
         </Animated.View>

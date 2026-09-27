@@ -38,17 +38,15 @@ export function ChatInput({
   sending,
   ready,
   onSend,
-  nativeID,
   onHeightChange,
 }: {
   sending: boolean;
   /** False with no loaded model: send disables (PocketPal parity). */
   ready: boolean;
   onSend: (text: string, image?: string) => Promise<boolean>;
-  /** Links the input to the keyboard's interactive dismissal. */
-  nativeID?: string;
   /** Reports the composer's height so the message list can pad clear of it
-   *  (KeyboardChatScrollView.extraContentPadding). */
+   *  (KeyboardChatScrollView.extraContentPadding). Measured on the outer
+   *  wrapper so banners and the attach preview are included. */
   onHeightChange?: (event: LayoutChangeEvent) => void;
 }) {
   // Composer text lives in the chat store (per-session drafts survive
@@ -205,7 +203,17 @@ export function ChatInput({
   return (
     // One owner for the gutter: the wrapper. Children stack no inset of
     // their own (DESIGN.md "Gutters are owned by one layer").
-    <View className="border-t border-border bg-base px-5 pt-2">
+    //
+    // onLayout lives HERE, on the whole composer, not on the field row.
+    // extraContentPadding is how the list reserves room for the composer, so
+    // measuring only the field under-reserved by this wrapper's border-t and
+    // pt-2, the field's mb-3, and the attach preview and issue rows above it.
+    // pocketpal-ai measures the whole input container for the same reason
+    // (ChatView.tsx:1139).
+    <View
+      className="border-t border-border bg-base px-5 pt-2"
+      onLayout={onHeightChange}
+    >
       {voiceIssue !== null &&
         (voiceSettings ? (
           <Pressable onPress={() => void openSettings()}>
@@ -247,10 +255,7 @@ export function ChatInput({
           field spec — Clean White, 1px Hairline, 8px radius, 12/16 padding —
           with a leading attach control and a trailing send icon button in
           its Primary state. Disabled send is Secondary, never dimmed. */}
-      <View
-        className="mb-3 flex-row items-end gap-2 rounded-lg border border-border bg-surface-1 px-4 py-3"
-        onLayout={onHeightChange}
-      >
+      <View className="mb-3 flex-row items-end gap-2 rounded-lg border border-border bg-surface-1 px-4 py-3">
         <View>
           <Animated.View style={plusPress.animatedStyle}>
             <Pressable
@@ -291,7 +296,6 @@ export function ChatInput({
           placeholderTextColor={colors.secondaryText}
           multiline
           editable={!sending}
-          nativeID={nativeID}
           className="flex-1 pt-2 font-sans text-body-md text-primary-text"
           accessibilityLabel="Message"
         />

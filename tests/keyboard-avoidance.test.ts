@@ -156,6 +156,31 @@ describe("keyboard avoidance", () => {
     assert.deepEqual(offenders, []);
   });
 
+  it("the composer is measured on its wrapper, not on the field row", () => {
+    // extraContentPadding is how the list reserves room for the composer.
+    // Measuring only the field row under-reserves by the wrapper's border-t
+    // and pt-2, the field's mb-3, and the attach preview and issue rows - the
+    // last message can then sit behind them. pocketpal-ai measures the whole
+    // input container for the same reason (ChatView.tsx:1139).
+    const source = stripComments(
+      readFileSync("components/chat/ChatInput.tsx", "utf8"),
+    );
+    const measured = source
+      .split("<View")
+      .find((tag) => tag.includes("onLayout={onHeightChange}"));
+    assert.ok(measured, "onHeightChange must still be wired somewhere");
+    assert.match(
+      measured,
+      /border-t/,
+      "measure the composer WRAPPER, which holds the banners and attach preview",
+    );
+    assert.doesNotMatch(
+      measured,
+      /px-4 py-3/,
+      "the field row is not the composer: it excludes the wrapper and banners",
+    );
+  });
+
   it("the shared helper is callable from the UI runtime", () => {
     // keyboardOcclusion is called INSIDE useDerivedValue, which runs on the
     // UI runtime. A plain JS function there throws at runtime:

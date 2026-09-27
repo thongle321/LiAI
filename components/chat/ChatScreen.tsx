@@ -16,16 +16,22 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRouter } from "expo-router";
-import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, {
+  useAnimatedStyle,
+  useDerivedValue,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 // No KeyboardAvoidingView on this screen: the library's own guide lists four
-// ways it falls short on chat layouts and ships KeyboardChatScrollView +
-// KeyboardStickyView for the job. MessageList renders the scroll view.
+// ways it falls short on chat layouts and ships KeyboardChatScrollView for
+// the list. MessageList renders that; the composer and everything floating
+// above it share the one occlusion value derived below.
 // KeyboardGestureArea is deliberately absent: the guide pairs it with
 // keyboardDismissMode="interactive" so the ACCESSORY follows the drag, but it
 // is not exported in 1.21.9 (docs are on main/1.22). Interactive dismissal
 // itself still works via keyboardDismissMode on the scroll view; only the
 // composer tracking the finger needs 1.22+.
-import { KeyboardStickyView } from "react-native-keyboard-controller";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { Check, Menu, Search, Share, X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
@@ -40,6 +46,7 @@ import {
   useTabContentFade,
 } from "../../lib/motion.ts";
 import { APP_NAME } from "../../constants/app.ts";
+import { keyboardOcclusion } from "../../lib/keyboard.ts";
 import type { ChatMessage } from "../../types/chat.ts";
 import { useChatStore } from "../../store/chat.ts";
 import { useModelStore } from "../../store/modelStore";
@@ -126,6 +133,22 @@ export function ChatScreen() {
   // Minimum bottom inset while a reply streams, so the sent message is
   // pushed up and the response has somewhere to appear.
   const blankSpace = useSharedValue(0);
+
+  // ONE reconciled occlusion value for everything that floats above the
+  // composer. lib/keyboard.ts explains the abs() and the inset subtraction;
+  // the vision panel consumes the same function so the two screens cannot
+  // drift apart.
+  const keyboard = useReanimatedKeyboardAnimation();
+  const occlusion = useDerivedValue(() =>
+    keyboardOcclusion(keyboard.height.value, insets.bottom),
+  );
+  const isKeyboardUp = useDerivedValue(() => Math.abs(keyboard.height.value) > 0);
+  const composerStackStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -occlusion.value }],
+    // The safe-area inset only applies while the keyboard is closed;
+    // keeping it on while the keyboard is up opens a gap under the composer.
+    paddingBottom: isKeyboardUp.value ? 0 : insets.bottom,
+  }));
 
   const handleComposerHeight = useCallback(
     (event: LayoutChangeEvent) => {
@@ -255,12 +278,16 @@ export function ChatScreen() {
 
       {/* Composer always mounted (PocketPal ChatView parity): the
           no-model bar auto-dismisses on activation, no Retry needed. */}
-      {/* The chat keyboard architecture (react-native-keyboard-controller):
+      {/* The chat keyboard architecture (react-native-keyboard-controller).
           KeyboardGestureArea makes the keyboard interactively dismissable,
           the list (KeyboardChatScrollView, see MessageList) owns content
-          repositioning, and KeyboardStickyView carries the composer. The
-          library's guide is explicit that KeyboardAvoidingView is the wrong
-          tool for chat, so there is no KAV on this screen. */}
+          repositioning, and ONE container below carries the composer plus
+          everything that floats above it, all sharing a single reconciled
+          occlusion value. PocketPal ChatView parity: it comments on the
+          same failure - two parts handling the keyboard separately is what
+          makes a screen read as "drifting" when the keyboard opens. The
+          library's guide is also explicit that KeyboardAvoidingView is the
+          wrong tool for chat, so there is no KAV on this screen. */}
       <View style={{ flex: 1 }}>
         {/* Hide the (empty) list while the centered no-model placeholder owns
             the space, so the two flex-1 siblings never split the column. */}
@@ -291,6 +318,15 @@ export function ChatScreen() {
             />
           </Animated.View>
         )}
+        {/* The composer stack. Everything from here down translates by the
+            SAME occlusion value, so the centred empty state rises with the
+            composer instead of being left behind by it. flex-1 only while
+            the empty placeholder owns the screen, which is what keeps that
+            placeholder centred above the composer. */}
+        <Animated.View
+          style={composerStackStyle}
+          className={showPlaceholder ? "flex-1" : undefined}
+        >
         {sending && (
           <Animated.Text
             entering={fadeEntering(motionDuration)}
@@ -338,17 +374,16 @@ export function ChatScreen() {
             </Pressable>
           </View>
         )}
-        {/* Only the footer moves with the keyboard; the column above it is
-            not resized, which is why the list carries the offsets. */}
-        <KeyboardStickyView>
-          <ChatInput
-            sending={sending}
-            ready={ready}
-            onSend={(text, image) => send(text, image)}
-            nativeID={CHAT_INPUT_ID}
-            onHeightChange={handleComposerHeight}
-          />
-        </KeyboardStickyView>
+        {/* Moves with the keyboard via composerStackStyle above; the list
+            carries the offsets that keep content clear of it. */}
+        <ChatInput
+          sending={sending}
+          ready={ready}
+          onSend={(text, image) => send(text, image)}
+          nativeID={CHAT_INPUT_ID}
+          onHeightChange={handleComposerHeight}
+        />
+        </Animated.View>
       </View>
     </SafeAreaView>
   );

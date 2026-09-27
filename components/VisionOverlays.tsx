@@ -6,7 +6,7 @@
 
 import type { RefObject } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useDerivedValue } from "react-native-reanimated";
 import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { Keyboard, Mic, Send, SwitchCamera, X } from "lucide-react-native";
 import {
@@ -16,6 +16,7 @@ import {
 } from "react-native-vision-camera";
 
 import { colors, scrim } from "../themes/tokens.ts";
+import { keyboardOcclusion } from "../lib/keyboard.ts";
 import { usePressFeedback, type useTabContentFade } from "../lib/motion.ts";
 import type { VoicePhase } from "../lib/voiceStatus.ts";
 
@@ -212,9 +213,17 @@ export function VisionBottomPanel({
   // for the keyboard on Android either. This was briefly gated to iOS on
   // the assumption that Android's adjustResize already handled it, which
   // left the draft input under the keyboard on Android.
-  const { height } = useReanimatedKeyboardAnimation();
+  //
+  // `bottom` IS the runtime bottom inset, which is what the occlusion has to
+  // subtract: the IME inset already spans the navigation bar. Reading
+  // keyboard.height raw here was the bug - the library reports it NEGATIVE
+  // while the keyboard is up, so the panel sank instead of rising.
+  const keyboard = useReanimatedKeyboardAnimation();
+  const occlusion = useDerivedValue(() =>
+    keyboardOcclusion(keyboard.height.value, bottom),
+  );
   const liftStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -height.value }],
+    transform: [{ translateY: -occlusion.value }],
   }));
   return (
     <Animated.View

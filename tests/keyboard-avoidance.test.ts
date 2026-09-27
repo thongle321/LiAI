@@ -92,18 +92,40 @@ describe("keyboard avoidance", () => {
   });
 
   it("the chat composer is carried by the chat architecture, not a KAV", () => {
-    // The invariant is "the composer is never left under the keyboard". The
-    // mechanism is the library's chat components: the guide names four ways
-    // KeyboardAvoidingView falls short on chat layouts, so its presence here
-    // is the regression, not its absence.
+    // The invariant is "the composer is never under the keyboard, and
+    // everything floating above it moves with it". The mechanism is the
+    // library's chat components plus ONE reconciled occlusion value: the
+    // guide names four ways KeyboardAvoidingView falls short on chat, and
+    // two parts translating independently is what made the empty state look
+    // like it was sinking when the keyboard opened.
     const chat = stripComments(readFileSync("components/chat/ChatScreen.tsx", "utf8"));
     const list = stripComments(readFileSync("components/chat/MessageList.tsx", "utf8"));
 
     assert.doesNotMatch(chat, /KeyboardAvoidingView/, "chat must not use a KAV");
-    assert.match(chat, /KeyboardStickyView/, "the composer needs a sticky footer");
     assert.match(list, /KeyboardChatScrollView/, "the list needs the chat scroll view");
+    // One shared value, derived through the tested helper - never a raw read
+    // of keyboard.height, whose sign differs per platform.
+    assert.match(chat, /keyboardOcclusion\(keyboard\.height\.value/);
+    assert.match(chat, /translateY: -occlusion\.value/);
+    assert.doesNotMatch(chat, /translateY: -height\.value/);
     // Both offsets are what keep content off the composer and the tab bar.
     assert.match(list, /offset=\{offset\}/);
     assert.match(list, /extraContentPadding=\{extraContentPadding\}/);
+  });
+
+  it("every screen that reads keyboard height goes through the shared helper", () => {
+    // pocketpal-ai's ChatView states the rule this enforces: one reconciled
+    // value, so the parts "never disagree". Reading keyboard.height raw
+    // reintroduces the per-platform sign bug, and two screens computing it
+    // differently is what made the layout look like it was drifting.
+    const offenders: string[] = [];
+    for (const { file, source } of allSources()) {
+      const code = stripComments(source);
+      if (!/keyboard\.height/.test(code)) continue;
+      if (!/keyboardOcclusion\(/.test(code)) {
+        offenders.push(`${file}: reads keyboard.height without keyboardOcclusion()`);
+      }
+    }
+    assert.deepEqual(offenders, []);
   });
 });

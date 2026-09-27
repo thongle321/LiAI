@@ -108,6 +108,15 @@ describe("keyboard avoidance", () => {
     assert.match(chat, /keyboardOcclusion\(keyboard\.height\.value/);
     assert.match(chat, /translateY: -occlusion\.value/);
     assert.doesNotMatch(chat, /translateY: -height\.value/);
+    // The empty placeholder must take the PADDED path. Translating a stack
+    // that holds a centred flex-1 child pushes the icon out of its own box
+    // and under the header as the keyboard rises; padding shrinks the box so
+    // the child centres in the visible area.
+    assert.match(
+      chat,
+      /showPlaceholder \? paddedStackStyle : liftedStackStyle/,
+      "the centred empty state must be padded, not translated",
+    );
     // Both offsets are what keep content off the composer and the tab bar.
     assert.match(list, /offset=\{offset\}/);
     assert.match(list, /extraContentPadding=\{extraContentPadding\}/);

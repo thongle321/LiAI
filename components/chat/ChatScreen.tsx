@@ -143,11 +143,25 @@ export function ChatScreen() {
     keyboardOcclusion(keyboard.height.value, insets.bottom),
   );
   const isKeyboardUp = useDerivedValue(() => Math.abs(keyboard.height.value) > 0);
-  const composerStackStyle = useAnimatedStyle(() => ({
+  // Two mechanisms, because this stack holds two different kinds of content.
+  //
+  // Footer items (sending, usage, no-model hint, composer) are short and sit
+  // at the bottom, so TRANSLATING the stack up by the occlusion is right.
+  //
+  // The empty placeholder is flex-1 with its content CENTRED inside the stack.
+  // Translating that moves the centred content up and out of its own box, so
+  // the icon slid under the header as the keyboard rose. It has to be PADDED
+  // instead: padding shrinks the content box, and a flex-1 child then centres
+  // in the genuinely visible area - centred AND clear of the header, which
+  // translation cannot give.
+  const liftedStackStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -occlusion.value }],
     // The safe-area inset only applies while the keyboard is closed;
     // keeping it on while the keyboard is up opens a gap under the composer.
     paddingBottom: isKeyboardUp.value ? 0 : insets.bottom,
+  }));
+  const paddedStackStyle = useAnimatedStyle(() => ({
+    paddingBottom: isKeyboardUp.value ? occlusion.value : insets.bottom,
   }));
 
   const handleComposerHeight = useCallback(
@@ -324,7 +338,7 @@ export function ChatScreen() {
             the empty placeholder owns the screen, which is what keeps that
             placeholder centred above the composer. */}
         <Animated.View
-          style={composerStackStyle}
+          style={showPlaceholder ? paddedStackStyle : liftedStackStyle}
           className={showPlaceholder ? "flex-1" : undefined}
         >
         {sending && (

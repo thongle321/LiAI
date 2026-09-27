@@ -39,10 +39,22 @@ function allSources(): { file: string; source: string }[] {
   const files: { file: string; source: string }[] = [];
   for (const root of ROOTS) {
     for (const file of sourceFiles(root)) {
-      files.push({ file: file.replace(/\\/g, "/"), source: readFileSync(file, "utf8") });
+      files.push({
+        file: file.replace(/\\/g, "/"),
+        source: readFileSync(file, "utf8"),
+      });
     }
   }
   return files;
+}
+
+/** Comments quote the anti-patterns on purpose ("this used to be
+ * iOS-only..."), so every assertion below must run against CODE, not prose.
+ * A "//" preceded by ":" is a URL, not a comment. */
+function stripComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
 }
 
 /** Matches a behaviour prop whose value is chosen by platform. */
@@ -53,7 +65,7 @@ describe("keyboard avoidance", () => {
   it("never disables avoidance on Android with a platform-conditional behavior", () => {
     const offenders: string[] = [];
     for (const { file, source } of allSources()) {
-      if (CONDITIONAL_BEHAVIOR.test(source)) {
+      if (CONDITIONAL_BEHAVIOR.test(stripComments(source))) {
         offenders.push(
           `${file}: behavior is chosen by platform, so one platform gets no avoidance`,
         );
@@ -67,7 +79,7 @@ describe("keyboard avoidance", () => {
     // so a lift gated to iOS leaves Android with no avoidance at all.
     const offenders: string[] = [];
     for (const { file, source } of allSources()) {
-      const lines = source.split("\n");
+      const lines = stripComments(source).split("\n");
       lines.forEach((line, i) => {
         if (!/translateY/.test(line)) return;
         const context = lines.slice(Math.max(0, i - 2), i + 2).join("\n");
@@ -79,12 +91,19 @@ describe("keyboard avoidance", () => {
     assert.deepEqual(offenders, []);
   });
 
-  it("the chat composer is wrapped in a keyboard-avoiding view", () => {
-    const chat = readFileSync("components/chat/ChatScreen.tsx", "utf8");
-    assert.match(chat, /KeyboardAvoidingView/);
-    // padding on both platforms, and the offset must be explicit: the view
-    // sits under a 56px header, so the library's default offset math (which
-    // assumes the view starts at the screen top) would under-pad.
-    assert.match(chat, /behavior="padding"/);
+  it("the chat composer is carried by the chat architecture, not a KAV", () => {
+    // The invariant is "the composer is never left under the keyboard". The
+    // mechanism is the library's chat components: the guide names four ways
+    // KeyboardAvoidingView falls short on chat layouts, so its presence here
+    // is the regression, not its absence.
+    const chat = stripComments(readFileSync("components/chat/ChatScreen.tsx", "utf8"));
+    const list = stripComments(readFileSync("components/chat/MessageList.tsx", "utf8"));
+
+    assert.doesNotMatch(chat, /KeyboardAvoidingView/, "chat must not use a KAV");
+    assert.match(chat, /KeyboardStickyView/, "the composer needs a sticky footer");
+    assert.match(list, /KeyboardChatScrollView/, "the list needs the chat scroll view");
+    // Both offsets are what keep content off the composer and the tab bar.
+    assert.match(list, /offset=\{offset\}/);
+    assert.match(list, /extraContentPadding=\{extraContentPadding\}/);
   });
 });

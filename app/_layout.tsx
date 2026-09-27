@@ -34,12 +34,12 @@ export default function RootLayout() {
     // and pickers land in LiAI's world instead of the platform's default.
     <Host colorScheme="light" seedColor={colors.primary} style={{ flex: 1 }}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        {/* One keyboard event source for the whole app. Mixing this with
-            React Native's own KeyboardAvoidingView double-pads on Android,
-            so the one KAV in ChatScreen uses this library's instead.
-            The translucent flags are required because the app is
-            edge-to-edge: without them the keyboard height is measured
-            against a window shortened by the system bars. */}
+        {/* One keyboard event source for the whole app. The library already
+            runs edge-to-edge and applies its own top padding to imitate a
+            standard RN app, so the two flags below only declare that the
+            system bars really are translucent here — they are NOT what makes
+            the keyboard height correct. (An earlier comment here claimed
+            that; it was a guess, not a documented requirement.) */}
         <KeyboardProvider
           statusBarTranslucent
           navigationBarTranslucent

@@ -7,7 +7,14 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Image as RNImage, Pressable, Text, TextInput, View } from "react-native";
+import {
+  Image as RNImage,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+  type LayoutChangeEvent,
+} from "react-native";
 import { useIsFocused } from "expo-router";
 import { openSettings } from "expo-linking";
 import { Camera, Image as ImageIcon, Mic, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
@@ -31,11 +38,18 @@ export function ChatInput({
   sending,
   ready,
   onSend,
+  nativeID,
+  onHeightChange,
 }: {
   sending: boolean;
   /** False with no loaded model: send disables (PocketPal parity). */
   ready: boolean;
   onSend: (text: string, image?: string) => Promise<boolean>;
+  /** Links the input to the keyboard's interactive dismissal. */
+  nativeID?: string;
+  /** Reports the composer's height so the message list can pad clear of it
+   *  (KeyboardChatScrollView.extraContentPadding). */
+  onHeightChange?: (event: LayoutChangeEvent) => void;
 }) {
   // Composer text lives in the chat store (per-session drafts survive
   // switches); dictation mechanics stay local below.
@@ -233,7 +247,10 @@ export function ChatInput({
           field spec — Clean White, 1px Hairline, 8px radius, 12/16 padding —
           with a leading attach control and a trailing send icon button in
           its Primary state. Disabled send is Secondary, never dimmed. */}
-      <View className="mb-3 flex-row items-end gap-2 rounded-lg border border-border bg-surface-1 px-4 py-3">
+      <View
+        className="mb-3 flex-row items-end gap-2 rounded-lg border border-border bg-surface-1 px-4 py-3"
+        onLayout={onHeightChange}
+      >
         <View>
           <Animated.View style={plusPress.animatedStyle}>
             <Pressable
@@ -274,6 +291,7 @@ export function ChatInput({
           placeholderTextColor={colors.secondaryText}
           multiline
           editable={!sending}
+          nativeID={nativeID}
           className="flex-1 pt-2 font-sans text-body-md text-primary-text"
           accessibilityLabel="Message"
         />

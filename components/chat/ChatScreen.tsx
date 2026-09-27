@@ -5,20 +5,27 @@
  * pending bubble; completed assistant bubbles offer copy + regenerate.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  FlatList,
   Pressable,
   Text,
   TextInput,
   View,
+  type LayoutChangeEvent,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRouter } from "expo-router";
-import Animated from "react-native-reanimated";
-// The library's KAV, not React Native's: with KeyboardProvider mounted,
-// React Native's own KAV double-pads on Android (kirillzyusko#584). This is
-// the app's single keyboard-avoidance mechanism.
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
+// No KeyboardAvoidingView on this screen: the library's own guide lists four
+// ways it falls short on chat layouts and ships KeyboardChatScrollView +
+// KeyboardStickyView for the job. MessageList renders the scroll view.
+// KeyboardGestureArea is deliberately absent: the guide pairs it with
+// keyboardDismissMode="interactive" so the ACCESSORY follows the drag, but it
+// is not exported in 1.21.9 (docs are on main/1.22). Interactive dismissal
+// itself still works via keyboardDismissMode on the scroll view; only the
+// composer tracking the finger needs 1.22+.
+import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { Check, Menu, Search, Share, X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
@@ -33,6 +40,7 @@ import {
   useTabContentFade,
 } from "../../lib/motion.ts";
 import { APP_NAME } from "../../constants/app.ts";
+import type { ChatMessage } from "../../types/chat.ts";
 import { useChatStore } from "../../store/chat.ts";
 import { useModelStore } from "../../store/modelStore";
 import { useModelReady } from "../../hooks/useModelReady.ts";
@@ -42,6 +50,11 @@ import { ChatInput } from "./ChatInput.tsx";
 import { UsageStats } from "./UsageStats.tsx";
 import { SuggestedPrompts } from "./SuggestedPrompts.tsx";
 import { MessageList } from "./MessageList.tsx";
+
+// Links the gesture area to the composer input for interactive dismissal.
+const CHAT_INPUT_ID = "chat-composer-input";
+/** BottomNav is pt-2 + min-h-12 + pb-1 (see components/BottomNav.tsx). */
+const TAB_BAR_HEIGHT = 60;
 
 export function ChatScreen() {
   const messages = useChatStore((s) => s.messages);
@@ -99,6 +112,38 @@ export function ChatScreen() {
   const contentFade = useTabContentFade();
   const navigation = useNavigation<{ openDrawer: () => void }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const listRef = useRef<FlatList<ChatMessage>>(null);
+  const [atEnd, setAtEnd] = useState(true);
+  const [listHeight, setListHeight] = useState(0);
+  // What the list must clear: the tab bar and the safe-area inset below it.
+  const keyboardOffset = insets.bottom + TAB_BAR_HEIGHT;
+  // The composer's own height. NOT a delta from a baseline, unlike the
+  // library's example: the composer lives in a KeyboardStickyView, which
+  // moves over the list rather than sitting in flow, so the resting height
+  // is not already accounted for and the last message would sit behind it.
+  const extraContentPadding = useSharedValue(0);
+  // Minimum bottom inset while a reply streams, so the sent message is
+  // pushed up and the response has somewhere to appear.
+  const blankSpace = useSharedValue(0);
+
+  const handleComposerHeight = useCallback(
+    (event: LayoutChangeEvent) => {
+      extraContentPadding.value = withTiming(event.nativeEvent.layout.height, {
+        duration: motionDuration,
+      });
+    },
+    [extraContentPadding, motionDuration],
+  );
+
+  // Derived from the message itself rather than toggled on send, so it
+  // cannot get stuck if a turn is cancelled or the screen is left mid-reply.
+  const streaming = messages[messages.length - 1]?.streaming === true;
+  useEffect(() => {
+    blankSpace.value = withTiming(streaming ? listHeight : 0, {
+      duration: motionDuration,
+    });
+  }, [streaming, listHeight, blankSpace, motionDuration]);
   const menuPress = usePressFeedback();
   const searchPress = usePressFeedback();
   const copyPress = usePressFeedback();
@@ -210,21 +255,28 @@ export function ChatScreen() {
 
       {/* Composer always mounted (PocketPal ChatView parity): the
           no-model bar auto-dismisses on activation, no Retry needed. */}
-      {/* padding on BOTH platforms, deliberately. This used to be
-          iOS-only, copied from React Native's KAV docs, where
-          behavior=undefined on Android was safe because adjustResize
-          shrank the window. It no longer does: the app is edge-to-edge
-          (targetSdk 36), so on Android the window keeps its size, the app
-          draws behind the keyboard, and behavior=undefined leaves the
-          composer underneath it. react-native-keyboard-controller is
-          exactly the library that makes padding correct on Android too. */}
-      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+      {/* The chat keyboard architecture (react-native-keyboard-controller):
+          KeyboardGestureArea makes the keyboard interactively dismissable,
+          the list (KeyboardChatScrollView, see MessageList) owns content
+          repositioning, and KeyboardStickyView carries the composer. The
+          library's guide is explicit that KeyboardAvoidingView is the wrong
+          tool for chat, so there is no KAV on this screen. */}
+      <View style={{ flex: 1 }}>
         {/* Hide the (empty) list while the centered no-model placeholder owns
             the space, so the two flex-1 siblings never split the column. */}
         {!showPlaceholder && (
-          <Animated.View style={contentFade} className="flex-1">
+          <Animated.View
+            style={contentFade}
+            className="flex-1"
+            onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
+          >
             <MessageList
+              listRef={listRef}
               messages={visible}
+              offset={keyboardOffset}
+              extraContentPadding={extraContentPadding}
+              blankSpace={blankSpace}
+              onEndVisibleChange={setAtEnd}
               renderBubble={(item) => (
                 <Bubble
                   message={item}
@@ -272,12 +324,32 @@ export function ChatScreen() {
             </Pressable>
           </View>
         )}
-        <ChatInput
-          sending={sending}
-          ready={ready}
-          onSend={(text, image) => send(text, image)}
-        />
-      </KeyboardAvoidingView>
+        {/* Jump to latest: only when the reader has scrolled away from the
+            end, which is exactly when the list stopped following along. */}
+        {!atEnd && messages.length > 0 && (
+          <View className="mb-2 items-center">
+            <Pressable
+              onPress={() => listRef.current?.scrollToEnd({ animated: true })}
+              className="btn btn--secondary min-h-12 px-4"
+              accessibilityRole="button"
+              accessibilityLabel="Jump to latest message"
+            >
+              <Text className="font-sans text-body-sm text-primary">Jump to latest</Text>
+            </Pressable>
+          </View>
+        )}
+        {/* Only the footer moves with the keyboard; the column above it is
+            not resized, which is why the list carries the offsets. */}
+        <KeyboardStickyView>
+          <ChatInput
+            sending={sending}
+            ready={ready}
+            onSend={(text, image) => send(text, image)}
+            nativeID={CHAT_INPUT_ID}
+            onHeightChange={handleComposerHeight}
+          />
+        </KeyboardStickyView>
+      </View>
     </SafeAreaView>
   );
 }

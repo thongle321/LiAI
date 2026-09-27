@@ -16,22 +16,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRouter } from "expo-router";
-import Animated, {
-  useAnimatedStyle,
-  useDerivedValue,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
-// No KeyboardAvoidingView on this screen: the library's own guide lists four
-// ways it falls short on chat layouts and ships KeyboardChatScrollView for
-// the list. MessageList renders that; the composer and everything floating
-// above it share the one occlusion value derived below.
-// KeyboardGestureArea is deliberately absent: the guide pairs it with
-// keyboardDismissMode="interactive" so the ACCESSORY follows the drag, but it
-// is not exported in 1.21.9 (docs are on main/1.22). Interactive dismissal
-// itself still works via keyboardDismissMode on the scroll view; only the
-// composer tracking the finger needs 1.22+.
-import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
+import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
 import { Check, Menu, Search, Share, X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
@@ -46,11 +31,11 @@ import {
   useTabContentFade,
 } from "../../lib/motion.ts";
 import { APP_NAME } from "../../constants/app.ts";
-import { keyboardOcclusion } from "../../lib/keyboard.ts";
 import type { ChatMessage } from "../../types/chat.ts";
 import { useChatStore } from "../../store/chat.ts";
 import { useModelStore } from "../../store/modelStore";
 import { useModelReady } from "../../hooks/useModelReady.ts";
+import { useKeyboardLift } from "../../hooks/useKeyboardLift.ts";
 import { Bubble } from "./Bubble.tsx";
 import { ChatEmptyPlaceholder } from "./ChatEmptyPlaceholder.tsx";
 import { ChatInput } from "./ChatInput.tsx";
@@ -123,47 +108,31 @@ export function ChatScreen() {
   const [listHeight, setListHeight] = useState(0);
   // What the list must clear: the tab bar and the safe-area inset below it.
   const keyboardOffset = insets.bottom + TAB_BAR_HEIGHT;
-  // Height of the whole floating composer container, banners included. NOT
-  // a delta from a baseline, unlike the library's example: the container is
-  // out of flow, so nothing else accounts for it and the newest message would
-  // sit behind it. ONE measurement, three consumers: this padding, the empty
-  // state's lift, and the jump-to-latest anchor.
+  // Height of the whole floating composer box, banners included. NOT a delta
+  // from a baseline, unlike the library's example: the box is out of flow, so
+  // nothing else accounts for it and the newest message would sit behind it.
+  // ONE measurement, three consumers: this padding, the empty state's lift,
+  // and the jump-to-latest anchor.
   const extraContentPadding = useSharedValue(0);
   const [composerHeight, setComposerHeight] = useState(0);
   // Minimum bottom inset while a reply streams, so the sent message is
   // pushed up and the response has somewhere to appear.
   const blankSpace = useSharedValue(0);
 
-  // ONE reconciled occlusion value for everything that floats above the
-  // composer. lib/keyboard.ts explains the abs() and the inset subtraction;
-  // the vision panel consumes the same function so the two screens cannot
-  // drift apart.
-  const keyboard = useReanimatedKeyboardAnimation();
-  const occlusion = useDerivedValue(() =>
-    keyboardOcclusion(keyboard.height.value, insets.bottom),
-  );
-  // ONE mechanism, one direction: the composer container is absolutely
-  // positioned at the bottom of the column and TRANSLATES up by the occlusion
-  // (pocketpal-ai ChatView.tsx:1130). Everything behind it — the list, the
-  // empty state, the jump-to-latest overlay — carries no transform at all, so
-  // the keyboard covers whatever it covers and nothing re-centres behind it.
+  // The composer floats and lifts ITSELF — ChatInput calls useKeyboardLift, so
+  // there is no wrapper box between this screen and the input. The only thing
+  // left to lift here is the jump-to-latest overlay, and it uses the same hook
+  // so the two rise welded together instead of tracking the keyboard
+  // independently and drifting apart.
   //
-  // Do NOT reintroduce a padding branch here. c79acfd padded the container
-  // while the empty state owned the screen, to stop its centred icon sliding
-  // under the header. That fixed the icon and silently killed the composer
-  // lift in exactly the empty-thread case, because padding shrinks the
-  // content box but leaves the container in flow. Making the empty state
-  // ListEmptyComponent (above) removed the reason for the split.
-  //
-  // NOTE: no insets.bottom here. The tab bar owns the bottom inset
-  // (app/(drawer)/(tabs)/_layout.tsx applies paddingBottom: insets.bottom to
-  // itself, and the screens use edges=[top,left,right] so it is counted once,
-  // there). Adding it here too was the dead space under the composer. When
-  // the keyboard is up the bar is hidden and occlusion already has
-  // insets.bottom subtracted, so nothing is owed to it.
-  const composerStackStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -occlusion.value }],
-  }));
+  // No KeyboardAvoidingView on this screen: the library's own guide lists four
+  // ways it falls short on chat layouts and ships KeyboardChatScrollView for
+  // the list, which MessageList renders. KeyboardGestureArea is deliberately
+  // absent too: the guide pairs it with keyboardDismissMode="interactive" so
+  // the accessory follows the drag, but it is not exported in 1.21.9 (the docs
+  // are on main/1.22). Interactive dismissal still works via keyboardDismissMode
+  // on the scroll view; only the composer tracking the finger needs 1.22+.
+  const jumpLift = useKeyboardLift();
 
   const handleComposerHeight = useCallback(
     (event: LayoutChangeEvent) => {
@@ -294,14 +263,20 @@ export function ChatScreen() {
       {/* Composer always mounted (PocketPal ChatView parity): the
           no-model bar auto-dismisses on activation, no Retry needed. */}
       {/* The chat keyboard architecture (react-native-keyboard-controller).
-          Two surfaces, and only two:
-            - the content column (list + empty state + jump-to-latest), which
-              never moves — the keyboard covers what it covers;
-            - the composer container, absolutely positioned at the bottom and
-              translated up by the single reconciled occlusion value.
+          Three surfaces, and what each one does:
+            - the content column (list + empty state): never moves. The
+              keyboard covers what it covers, and nothing re-centres.
+            - the composer: absolutely positioned at the bottom, lifting
+              ITSELF via useKeyboardLift, and reporting its own height.
+            - the jump-to-latest overlay: an absolute sibling above the
+              composer, lifting on the same hook so the two stay welded.
           The list (KeyboardChatScrollView, see MessageList) owns content
-          repositioning inside the first. PocketPal ChatView parity: their own
-          comments call out the same failure — two parts handling the keyboard
+          repositioning inside the column. There is deliberately no wrapper
+          box around the composer: a wrapper that only re-exports a transform
+          is a second box that can disagree with the one it wraps, which is
+          how the empty state came to look like it was sinking while the
+          composer sat still. PocketPal ChatView parity: their own comments
+          call out the same failure — two parts handling the keyboard
           separately is what makes a screen read as "drifting" when the
           keyboard opens. The library's guide is also explicit that
           KeyboardAvoidingView is the wrong tool for chat, so there is no KAV
@@ -348,13 +323,13 @@ export function ChatScreen() {
         </Animated.View>
         {/* Jump to latest: an overlay pinned to the content column's
             bottom-right, above the floating composer — pocketpal's FAB
-            placement. It wears the same transform as the composer so it
-            rises welded to it, and only appears when the reader has actually
-            scrolled away from the end, which is the only time the list stopped
-            following along. */}
+            placement. It lifts on the same hook as the composer so the two
+            rise welded together, and only appears when the reader has
+            actually scrolled away from the end, which is the only time the
+            list stopped following along. */}
         {!atEnd && messages.length > 0 && (
           <Animated.View
-            style={[composerStackStyle, { bottom: composerHeight }]}
+            style={[jumpLift, { bottom: composerHeight }]}
             className="absolute right-5"
             pointerEvents="box-none"
           >
@@ -372,56 +347,62 @@ export function ChatScreen() {
         )}
       </View>
 
-      {/* The composer container: absolutely positioned, so it is out of the
-          column's flow and the content behind it needs no knowledge of it
-          beyond the measured height in extraContentPadding. onLayout is HERE,
-          on the whole container, not on the input — the banners above the
-          input are inside it and the list must clear all of them. */}
-      <Animated.View
-        style={composerStackStyle}
-        onLayout={handleComposerHeight}
+      {/* The composer. It IS the floating box: absolutely positioned, out of
+          the column's flow, lifting itself, and reporting its own height.
+          There is deliberately no wrapper between this screen and the input,
+          because a wrapper that only re-exports a transform is a second box
+          that can disagree with the one it wraps — which is exactly how the
+          empty state came to look like it was sinking while the composer sat
+          still, and how the earlier padding/translation split broke the lift.
+
+          Everything that belongs to the composer arrives through aboveField
+          and carries NO horizontal padding of its own: this box owns the
+          gutter (DESIGN.md, "gutters are owned by one layer"). */}
+      <ChatInput
         className="absolute inset-x-0 bottom-0"
-      >
-        {sending && (
-          <Animated.Text
-            entering={fadeEntering(motionDuration)}
-            exiting={fadeExiting(motionDuration)}
-            className="px-5 pb-1 font-sans text-body-sm text-secondary-text"
-          >
-            LiAI…
-          </Animated.Text>
-        )}
-        {ready && emptyState && (
-          <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
-        )}
-        <UsageStats messages={messages} />
-        {!modelReady && messages.length > 0 && (
-          // Centered above the composer so the no-model state is visible on
-          // every chat screen WITH a conversation, not just the empty one.
-          // The empty conversation is owned by ChatEmptyPlaceholder, so this
-          // is suppressed there to keep one signal and one button.
-          <View className="mb-1 items-center px-5">
-            <Text className="text-center font-sans text-body-md text-secondary-text">
-              Load a model to keep chatting
-            </Text>
-            <Pressable
-              onPress={() => router.push("/models")}
-              className="btn btn--primary mt-3"
-              accessibilityRole="button"
-              accessibilityLabel="Go to models"
-            >
-              <Text className="text-center font-sans-semibold text-body-md text-on-primary">
-                Go to Models
-              </Text>
-            </Pressable>
-          </View>
-        )}
-        <ChatInput
-          sending={sending}
-          ready={ready}
-          onSend={(text, image) => send(text, image)}
-        />
-      </Animated.View>
+        sending={sending}
+        ready={ready}
+        onSend={(text, image) => send(text, image)}
+        onHeightChange={handleComposerHeight}
+        aboveField={
+          <>
+            {sending && (
+              <Animated.Text
+                entering={fadeEntering(motionDuration)}
+                exiting={fadeExiting(motionDuration)}
+                className="pb-1 font-sans text-body-sm text-secondary-text"
+              >
+                LiAI…
+              </Animated.Text>
+            )}
+            {ready && emptyState && (
+              <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
+            )}
+            <UsageStats messages={messages} />
+            {!modelReady && messages.length > 0 && (
+              // Centered above the field so the no-model state is visible on
+              // every chat screen WITH a conversation, not just the empty one.
+              // The empty conversation is owned by ChatEmptyPlaceholder, so
+              // this is suppressed there to keep one signal and one button.
+              <View className="mb-1 items-center">
+                <Text className="text-center font-sans text-body-md text-secondary-text">
+                  Load a model to keep chatting
+                </Text>
+                <Pressable
+                  onPress={() => router.push("/models")}
+                  className="btn btn--primary mt-3"
+                  accessibilityRole="button"
+                  accessibilityLabel="Go to models"
+                >
+                  <Text className="text-center font-sans-semibold text-body-md text-on-primary">
+                    Go to Models
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+          </>
+        }
+      />
     </SafeAreaView>
   );
 }

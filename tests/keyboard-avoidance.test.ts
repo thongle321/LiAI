@@ -23,14 +23,16 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-const ROOTS = ["app", "components"];
+const ROOTS = ["app", "components", "hooks"];
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) out.push(...sourceFiles(full));
-    else if (entry.name.endsWith(".tsx")) out.push(full);
+    else if (entry.name.endsWith(".tsx") || entry.name.endsWith(".ts")) {
+      out.push(full);
+    }
   }
   return out;
 }
@@ -55,6 +57,10 @@ function stripComments(source: string): string {
   return source
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+}
+
+function read(file: string): string {
+  return stripComments(readFileSync(file, "utf8"));
 }
 
 /** Matches a behaviour prop whose value is chosen by platform. */
@@ -92,30 +98,49 @@ describe("keyboard avoidance", () => {
   });
 
   it("the chat composer is carried by the chat architecture, not a KAV", () => {
-    // The invariant is "the composer is never under the keyboard, and
-    // everything floating above it moves with it". The mechanism is the
-    // library's chat components plus ONE reconciled occlusion value: the
-    // guide names four ways KeyboardAvoidingView falls short on chat, and
-    // two parts translating independently is what made the empty state look
-    // like it was sinking when the keyboard opened.
-    const chat = stripComments(readFileSync("components/chat/ChatScreen.tsx", "utf8"));
-    const list = stripComments(readFileSync("components/chat/MessageList.tsx", "utf8"));
+    // The invariant is "the composer is never under the keyboard, and the
+    // content behind it does not move". The mechanism is the library's chat
+    // components plus ONE reconciled lift: the guide names four ways
+    // KeyboardAvoidingView falls short on chat, and two parts translating
+    // independently is what made the empty state look like it was sinking.
+    const chat = read("components/chat/ChatScreen.tsx");
+    const list = read("components/chat/MessageList.tsx");
 
     assert.doesNotMatch(chat, /KeyboardAvoidingView/, "chat must not use a KAV");
     assert.match(list, /KeyboardChatScrollView/, "the list needs the chat scroll view");
-    // One shared value, derived through the tested helper - never a raw read
-    // of keyboard.height, whose sign differs per platform.
-    assert.match(chat, /keyboardOcclusion\(keyboard\.height\.value/);
-    assert.match(chat, /translateY: -occlusion\.value/);
-    assert.doesNotMatch(chat, /translateY: -height\.value/);
-    // The composer is OUT OF FLOW and translates; the content behind it does
-    // not move at all. There must be exactly one mechanism here. c79acfd
-    // added a second (pad the container while the empty state owned the
-    // screen) to stop the centred icon sliding under the header, and it
-    // silently killed the composer lift in exactly that case, because
-    // padding shrinks the content box but leaves the container in flow. The
-    // reason for the split is gone now that the empty state is the list's
-    // ListEmptyComponent, so the split must not come back.
+    assert.match(list, /offset=\{offset\}/, "the list clears the tab bar");
+    assert.match(
+      list,
+      /extraContentPadding=\{extraContentPadding\}/,
+      "the list clears the composer",
+    );
+
+    // The empty state is CONTENT, so the keyboard covers it like anything
+    // else instead of the screen re-centring behind the keyboard.
+    assert.match(list, /ListEmptyComponent=\{emptyComponent\}/);
+    assert.match(chat, /paddingBottom: composerHeight/);
+  });
+
+  it("the composer is the floating box, with no wrapper between it and the screen", () => {
+    // A wrapper that only re-exports a transform is a second box that can
+    // disagree with the one it wraps. That is not hypothetical: the previous
+    // revision had ChatScreen's container lifting on one path and the centred
+    // empty state padded on another, and the composer stopped rising in
+    // exactly the empty-thread case. ChatInput is the box; ChatScreen only
+    // says where it goes.
+    const chat = read("components/chat/ChatScreen.tsx");
+    const input = read("components/chat/ChatInput.tsx");
+
+    assert.match(
+      chat,
+      /<ChatInput\s+className="absolute inset-x-0 bottom-0"/,
+      "ChatScreen positions the floating composer",
+    );
+    assert.doesNotMatch(
+      chat,
+      /useAnimatedStyle\(/,
+      "ChatScreen must not hand-roll a transform: lifts come from the hook",
+    );
     assert.doesNotMatch(
       chat,
       /paddedStackStyle|liftedStackStyle/,
@@ -124,52 +149,82 @@ describe("keyboard avoidance", () => {
     assert.doesNotMatch(
       chat,
       /paddingBottom: occlusion/,
-      "the composer container is translated, never padded",
+      "the composer is translated, never padded",
     );
+
+    // The floating box is the one that lifts and the one that measures.
+    assert.match(input, /style=\{lift\}/, "ChatInput carries its own lift");
+    assert.match(input, /onLayout=\{onHeightChange\}/, "measured at the outermost level");
     assert.match(
-      chat,
-      /className="absolute inset-x-0 bottom-0"/,
-      "the composer must be out of flow, or the list cannot sit behind it",
+      input,
+      /px-5 pt-2\$\{className/,
+      "the caller's classes merge onto the gutter-owning root",
     );
-    // The empty state is content (pocketpal parity), not a sibling of the
-    // composer: that is what stops the screen re-centring as the keyboard
-    // opens. It is lifted clear of the floating composer by the measured
-    // height instead.
-    assert.match(chat, /emptyComponent=/);
-    assert.match(chat, /paddingBottom: composerHeight/);
-    assert.match(list, /ListEmptyComponent=\{emptyComponent\}/);
-    // Both offsets are what keep content off the composer and the tab bar.
-    assert.match(list, /offset=\{offset\}/);
-    assert.match(list, /extraContentPadding=\{extraContentPadding\}/);
   });
 
-  it("every screen that reads keyboard height goes through the shared helper", () => {
+  it("the composer rises by the FULL keyboard height, not height minus the inset", () => {
+    // The actual bug. The composer is `absolute inset-x-0 bottom-0`, so its
+    // bottom edge IS the bottom of the screen and it has to rise by
+    // everything the keyboard takes. It was being passed insets.bottom while
+    // anchored at 0, which under-lifted it by exactly the navigation bar
+    // height — the reported "the chat input is not above the keyboard".
+    const hook = read("hooks/useKeyboardLift.ts");
+    const input = read("components/chat/ChatInput.tsx");
+
+    assert.match(
+      hook,
+      /export function useKeyboardLift\(insetsBottom = 0\)/,
+      "the anchor defaults to 0 so a bottom-anchored view cannot under-lift",
+    );
+    assert.match(
+      input,
+      /useKeyboardLift\(\)/,
+      "the composer is anchored at the physical bottom, so it passes no inset",
+    );
+    // The lift must NEGATE. The library's height is already negative while
+    // the keyboard is up, so `translateY: height.value` would move the view
+    // DOWN by the keyboard height - the original "the panel sank" bug. The
+    // helper makes that value positive, so the transform subtracts it.
+    // Nothing else asserted this, which meant a regression back to
+    // `translateY: keyboard.height.value` passed the entire suite.
+    assert.match(
+      hook,
+      /translateY: -occlusion\.value/,
+      "the lift must negate: the library's height is negative while up",
+    );
+    assert.doesNotMatch(
+      hook,
+      /translateY: keyboard\.height\.value/,
+      "using the library's already-negative height directly would sink the view",
+    );
+    // The vision panel IS anchored above the nav bar, so it must still
+    // subtract - that asymmetry is the whole point of the parameter.
+    assert.match(read("components/VisionOverlays.tsx"), /useKeyboardLift\(bottom\)/);
+  });
+
+  it("exactly one file reads the keyboard height", () => {
     // pocketpal-ai's ChatView states the rule this enforces: one reconciled
-    // value, so the parts "never disagree". Reading keyboard.height raw
-    // reintroduces the per-platform sign bug, and two screens computing it
-    // differently is what made the layout look like it was drifting.
-    const offenders: string[] = [];
-    for (const { file, source } of allSources()) {
-      const code = stripComments(source);
-      if (!/keyboard\.height/.test(code)) continue;
-      if (!/keyboardOcclusion\(/.test(code)) {
-        offenders.push(`${file}: reads keyboard.height without keyboardOcclusion()`);
-      }
-    }
-    assert.deepEqual(offenders, []);
+    // value, so the parts "never disagree". Two screens computing it
+    // differently is what made the layout look like it was drifting, and a
+    // raw read reintroduces the sign bug.
+    const readers = allSources()
+      .filter(({ source }) => /keyboard\.height/.test(stripComments(source)))
+      .map(({ file }) => file);
+    assert.deepEqual(readers, ["hooks/useKeyboardLift.ts"]);
   });
 
   it("the composer does not re-apply the bottom inset the tab bar owns", () => {
     // app/(drawer)/(tabs)/_layout.tsx applies paddingBottom: insets.bottom
     // to the bar itself, and the screens deliberately use
     // edges=[top,left,right] so the inset is applied ONCE, there. A second
-    // application inside the composer stack is dead space under the input.
+    // application inside the composer is dead space under the input.
     const offenders: string[] = [];
     for (const file of [
       "components/chat/ChatScreen.tsx",
+      "components/chat/ChatInput.tsx",
       "app/(drawer)/(tabs)/voice.tsx",
     ]) {
-      const code = stripComments(readFileSync(file, "utf8"));
+      const code = read(file);
       for (const m of code.matchAll(/paddingBottom:[^,}]*insets\.bottom/g)) {
         offenders.push(`${file}: ${m[0]}`);
       }
@@ -177,31 +232,32 @@ describe("keyboard avoidance", () => {
     assert.deepEqual(offenders, []);
   });
 
-  it("the composer is measured on the container, not inside it", () => {
-    // extraContentPadding is how the list reserves room for the composer, and
-    // because the container is absolutely positioned the padding is the ONLY
-    // thing reserving it. So the measurement must be the whole container,
-    // which also holds the sending indicator, suggested prompts, usage stats
-    // and the no-model banner - measuring the input alone under-reserves by
-    // all of those and the newest message sits behind them. pocketpal-ai
-    // measures the whole input container for the same reason
-    // (ChatView.tsx:1139).
-    const chat = stripComments(readFileSync("components/chat/ChatScreen.tsx", "utf8"));
-    const container = chat
-      .split("<Animated.View")
-      .find((tag) => tag.includes("onLayout={handleComposerHeight}"));
-    assert.ok(container, "the composer container must still be measured");
-    assert.match(container, /composerStackStyle/, "measure the container that floats");
-    assert.match(container, /absolute/, "the measured container is the floating one");
+  it("the composer's banners do not stack a second gutter", () => {
+    // The banners moved inside the composer's box, which owns the px-5. If
+    // they keep their own, they sit at 40px against the field's 20px and the
+    // misalignment is visible on every screen. DESIGN.md: "gutters are owned
+    // by one layer". Scoped to the aboveField slot on purpose: the header and
+    // the search bar sit outside the composer and own their own inset.
+    const offenders: string[] = [];
+    for (const file of [
+      "components/chat/SuggestedPrompts.tsx",
+      "components/chat/UsageStats.tsx",
+    ]) {
+      if (/px-5/.test(read(file))) offenders.push(`${file}: carries its own px-5`);
+    }
 
-    // ChatInput reports nothing: a measurement at that level would exclude
-    // everything stacked above the input inside the same container.
-    const input = stripComments(readFileSync("components/chat/ChatInput.tsx", "utf8"));
-    assert.doesNotMatch(
-      input,
-      /onLayout|onHeightChange/,
-      "ChatInput must not measure itself; the container above it does",
-    );
+    const chat = read("components/chat/ChatScreen.tsx");
+    const start = chat.indexOf("aboveField={");
+    assert.notEqual(start, -1, "the banners must arrive through the slot");
+    const end = chat.indexOf("\n      />", start);
+    // Without this the slice below runs to end-of-file on any reformat and
+    // the whole test passes while checking nothing.
+    assert.notEqual(end, -1, "could not find the end of the aboveField slot");
+    const banners = chat.slice(start, end);
+    for (const m of banners.matchAll(/className="[^"]*\bpx-5\b[^"]*"/g)) {
+      offenders.push(`components/chat/ChatScreen.tsx banner: ${m[0]}`);
+    }
+    assert.deepEqual(offenders, []);
   });
 
   it("the shared helper is callable from the UI runtime", () => {

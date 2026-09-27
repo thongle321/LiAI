@@ -6,13 +6,14 @@
  * entry opens the standalone /vision camera screen.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Image as RNImage,
   Pressable,
   Text,
   TextInput,
   View,
+  type LayoutChangeEvent,
 } from "react-native";
 import { useIsFocused } from "expo-router";
 import { openSettings } from "expo-linking";
@@ -32,17 +33,43 @@ import { ensureMicAccess } from "../../lib/micAccess.ts";
 import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../../lib/voiceStatus.ts";
 import { pickImage, type ImageSource } from "../../lib/chat/attachments.ts";
 import { usePressFeedback } from "../../lib/motion.ts";
+import { useKeyboardLift } from "../../hooks/useKeyboardLift.ts";
 
 export function ChatInput({
   sending,
   ready,
   onSend,
+  className,
+  aboveField,
+  onHeightChange,
 }: {
   sending: boolean;
   /** False with no loaded model: send disables (PocketPal parity). */
   ready: boolean;
   onSend: (text: string, image?: string) => Promise<boolean>;
+  /** Where the caller wants this box to sit. The composer floats above the
+   *  keyboard, so ChatScreen passes `absolute inset-x-0 bottom-0`. Note this
+   *  component is the chat composer and not a generic input: the keyboard
+   *  lift below is unconditional, so a second caller in a sheet or a modal
+   *  would be dragged up by the keyboard whether it wanted that or not. It
+   *  has one caller today; making that conditional is the price of reusing it. */
+  className?: string;
+  /** Rendered above the field, inside this box: the sending indicator,
+   *  suggested prompts, usage line and no-model banner. They are part of the
+   *  composer's chrome, so they must rise with it and be counted in its
+   *  measured height — which is also pocketpal's arrangement (BannerRow sits
+   *  inside the input container, ChatView.tsx:1130). */
+  aboveField?: ReactNode;
+  /** Reports this box's height, banners included. It is the only thing
+   *  reserving room for a composer that is out of flow, so it must be
+   *  measured here at the outermost level and nowhere shallower. */
+  onHeightChange?: (event: LayoutChangeEvent) => void;
 }) {
+  // This box is the bottom-anchored surface, so it carries the keyboard lift
+  // itself rather than being wrapped in something that does. Same mechanism
+  // the library applies internally (`translateY: height.value + offset` in
+  // KeyboardStickyView), minus the extra component.
+  const lift = useKeyboardLift();
   // Composer text lives in the chat store (per-session drafts survive
   // switches); dictation mechanics stay local below.
   const draft = useChatStore((s) => s.draft);
@@ -195,13 +222,21 @@ export function ChatInput({
   }
 
   return (
-    // One owner for the gutter: the wrapper. Children stack no inset of
-    // their own (DESIGN.md "Gutters are owned by one layer").
+    // The floating composer box, and the ONLY gutter owner inside it: no
+    // child stacks an inset of its own (DESIGN.md "Gutters are owned by one
+    // layer"). That is why aboveField's banners must arrive without their own
+    // px-5 — they live inside this px-5 now.
     //
-    // No onLayout here: ChatScreen measures the composer CONTAINER that wraps
-    // this, which also contains the banners above the input, so a measurement
-    // at this level would under-count what the list has to clear.
-    <View className="border-t border-border bg-base px-5 pt-2">
+    // onLayout is HERE, on the outermost box, because this is the whole
+    // composer as far as the message list is concerned: the banners, the issue
+    // rows, the attach preview and the field. Measuring the field alone is
+    // what let the newest message sit behind them.
+    <Animated.View
+      className={`border-t border-border bg-base px-5 pt-2${className ? ` ${className}` : ""}`}
+      style={lift}
+      onLayout={onHeightChange}
+    >
+      {aboveField}
       {voiceIssue !== null &&
         (voiceSettings ? (
           <Pressable onPress={() => void openSettings()}>
@@ -340,7 +375,7 @@ export function ChatInput({
           </Animated.View>
         )}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 

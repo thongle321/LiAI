@@ -18,7 +18,10 @@ export function SuggestedPrompts({
   onPick: (prompt: string) => void;
 }) {
   return (
-    <View className="flex-row flex-wrap gap-2 px-5 pb-2">
+    // No horizontal padding: these chips render inside the composer's box
+    // (ChatInput's aboveField slot), which owns the px-5 gutter. A second
+    // inset here would stack to 40px against the field's 20px.
+    <View className="flex-row flex-wrap gap-2 pb-2">
       {PROMPTS.map((prompt) => (
         <Pressable
           key={prompt}

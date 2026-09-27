@@ -6,8 +6,7 @@
 
 import type { RefObject } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import Animated, { useAnimatedStyle, useDerivedValue } from "react-native-reanimated";
-import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
+import Animated from "react-native-reanimated";
 import { Keyboard, Mic, Send, SwitchCamera, X } from "lucide-react-native";
 import {
   Camera,
@@ -16,7 +15,7 @@ import {
 } from "react-native-vision-camera";
 
 import { colors, scrim } from "../themes/tokens.ts";
-import { keyboardOcclusion } from "../lib/keyboard.ts";
+import { useKeyboardLift } from "../hooks/useKeyboardLift.ts";
 import { usePressFeedback, type useTabContentFade } from "../lib/motion.ts";
 import type { VoicePhase } from "../lib/voiceStatus.ts";
 
@@ -214,17 +213,17 @@ export function VisionBottomPanel({
   // the assumption that Android's adjustResize already handled it, which
   // left the draft input under the keyboard on Android.
   //
-  // `bottom` IS the runtime bottom inset, which is what the occlusion has to
-  // subtract: the IME inset already spans the navigation bar. Reading
-  // keyboard.height raw here was the bug - the library reports it NEGATIVE
-  // while the keyboard is up, so the panel sank instead of rising.
-  const keyboard = useReanimatedKeyboardAnimation();
-  const occlusion = useDerivedValue(() =>
-    keyboardOcclusion(keyboard.height.value, bottom),
-  );
-  const liftStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -occlusion.value }],
-  }));
+  // `bottom` IS the runtime bottom inset, and it is also this panel's anchor:
+  // the panel sits above the navigation bar rather than on it, so it has to
+  // rise by the keyboard height MINUS the inset. That is precisely why the
+  // shared hook takes an anchor — the chat composer is anchored at 0 and
+  // passes nothing. Sharing the hook is what keeps the two screens from
+  // disagreeing about the keyboard.
+  //
+  // Reading keyboard.height raw here was a separate, earlier bug: the library
+  // reports it NEGATIVE while the keyboard is up, so the panel sank instead of
+  // rising.
+  const liftStyle = useKeyboardLift(bottom);
   return (
     <Animated.View
       className="absolute left-0 right-0 px-5"

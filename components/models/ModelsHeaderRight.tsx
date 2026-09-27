@@ -25,7 +25,7 @@ function GroupLabel({ label }: { label: string }) {
   return (
     <Text
       numberOfLines={1}
-      className="px-5 pt-3 pb-1 font-sans-semibold text-body-sm text-secondary-text opacity-50"
+      className="px-5 pt-3 pb-1 font-sans-medium text-caption text-secondary-text"
     >
       {label}
     </Text>
@@ -63,7 +63,7 @@ function ToggleRow({
         {label}
       </Text>
       <View
-        className={`h-5 w-5 items-center justify-center rounded-md border ${
+        className={`h-5 w-5 items-center justify-center rounded-sm border ${
           on ? "bg-primary border-primary" : "border-border"
         }`}
       >
@@ -134,7 +134,7 @@ export function ModelsHeaderRight({
       <Pressable
         onPress={toggle}
         className={`h-12 w-12 items-center justify-center rounded-lg border ${
-          open ? "border-primary bg-primary/20" : "border-transparent"
+          open ? "border-primary bg-surface-3" : "border-transparent"
         }`}
         accessibilityRole="button"
         accessibilityLabel="Filter models"

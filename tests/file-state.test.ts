@@ -168,6 +168,23 @@ describe("presetCardState", () => {
     assert.equal(card.progress, 50);
   });
 
+  it("names the downloading file so a collapsed card can cancel it", () => {
+    const models = [
+      spec({
+        id: "preset-qwen3-0.6b-Qwen3-0.6B-Q4_K_M.gguf",
+        downloadStatus: "downloading",
+      }),
+    ];
+    assert.equal(
+      presetCardState(models, PRESET).specId,
+      "preset-qwen3-0.6b-Qwen3-0.6B-Q4_K_M.gguf",
+    );
+  });
+
+  it("has no specId when nothing is downloading", () => {
+    assert.equal(presetCardState([], PRESET).specId, undefined);
+  });
+
   it("completed only when every file is downloaded", () => {
     const one = [
       spec({

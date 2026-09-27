@@ -1,11 +1,10 @@
 /** "Available to download" group: preset cards with their quantization files. */
 
-import { useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
-import { formatParams } from "../../lib/model-providers.ts";
 import { parseTiers } from "../../lib/models/device-tiers.ts";
 import tiersJson from "../../assets/device-tiers.json";
 
@@ -18,15 +17,15 @@ import { isPresetDownloaded, presetCardState, presetFileState } from "../../lib/
 import type { PresetModel, PresetModelFile } from "../../types/models";
 import { ModelAccordion } from "./ModelAccordion.tsx";
 import {
+  CancelDownloadButton,
   DownloadButton,
   DownloadProgressBar,
   ModelTypeIcon,
-  StatusBadge,
   formatBytes,
   isProgressVisible,
 } from "./ModelBits.tsx";
 
-export function PresetModelCard({
+function PresetModelCardInner({
   preset,
   onDownload,
 }: {
@@ -37,13 +36,19 @@ export function PresetModelCard({
   const models = useModelStore((s) => s.models);
   const pauseModelDownload = useModelStore((s) => s.pauseModelDownload);
   const resumeModelDownload = useModelStore((s) => s.resumeModelDownload);
+  const cancelModelDownload = useModelStore((s) => s.cancelModelDownload);
 
   // Per-file states by exact spec id (one shared status smeared every row).
   const fileState = (file: PresetModelFile) => presetFileState(models, preset.id, file);
   const card = presetCardState(models, preset);
   const cardStatus = card.status;
-  const showCardProgress = isProgressVisible(cardStatus);
-  const params = preset.params ?? 0;
+  // The card bar is the collapsed-state affordance. Once expanded, the
+  // per-quantization rows carry per-file progress, so keeping both showed
+  // the same download twice.
+  const showCardProgress = isProgressVisible(cardStatus) && !expanded;
+  // Hoisted so the closure keeps the narrowing (and needs no cast): cancel
+  // takes the downloading file's spec id, not the preset id.
+  const downloadingSpecId = showCardProgress ? card.specId : undefined;
 
   return (
     <View className="mb-4 bg-surface-1 border border-border rounded-lg overflow-hidden">
@@ -64,22 +69,32 @@ export function PresetModelCard({
           {expanded ? <ChevronUp size={20} color={colors.secondaryText} /> : <ChevronDown size={20} color={colors.secondaryText} />}
         </View>
 
+        {/* No status row here: the section it lives in already means "not
+            downloaded", so a "Not downloaded" label is noise. The Download
+            button below carries the state. */}
         <View className="mt-3 flex-row items-center justify-between">
-          <StatusBadge status={cardStatus} />
           <View className="flex-row items-center gap-2">
-            {params > 0 ? (
-              <View className="rounded bg-surface-2 px-2 py-0.5">
-                <Text className="font-sans text-caption text-secondary-text">
-                  {formatParams(params)}
-                </Text>
-              </View>
-            ) : null}
+            {/* One size, named: the parameter count (0.6B) and the file size
+                (751 MB) are different facts, and showing both unlabelled
+                read as two competing sizes for one model. */}
+            <View className="rounded bg-surface-2 px-2 py-0.5">
+              <Text className="font-sans text-caption text-secondary-text">
+                {formatBytes(preset.files.reduce((sum, f) => sum + f.size, 0))}
+              </Text>
+            </View>
             <View className="rounded bg-surface-2 px-2 py-0.5">
               <Text className="font-sans text-caption text-secondary-text">
                 {preset.files.length} file{preset.files.length === 1 ? "" : "s"}
               </Text>
             </View>
           </View>
+          {/* Collapsed cards carry no action row, so a download started here
+              had no way out. */}
+          {downloadingSpecId && (
+            <CancelDownloadButton
+              onPress={() => void cancelModelDownload(downloadingSpecId)}
+            />
+          )}
         </View>
 
         {showCardProgress && (
@@ -96,7 +111,7 @@ export function PresetModelCard({
           {preset.files.map((item) => {
             const st = fileState(item);
             return (
-              <View key={item.name} className="py-3 border-b border-border/50">
+              <View key={item.name} className="py-3 border-b border-border">
                 <View className="flex-row items-center justify-between">
                   <View className="flex-1">
                     <Text className="font-sans text-body-md text-primary-text">{item.name}</Text>
@@ -107,14 +122,23 @@ export function PresetModelCard({
                       <Text className="font-sans text-body-sm text-secondary-text">{formatBytes(item.size)}</Text>
                     </View>
                   </View>
-                  <DownloadButton
-                    status={st.status}
-                    progress={st.progress}
-                    onPress={() => onDownload(preset.id, item)}
-                    onPause={() => void pauseModelDownload(presetSpecId(preset.id, item.name))}
-                    onResume={() => void resumeModelDownload(presetSpecId(preset.id, item.name))}
-                    disabled={st.status === "completed"}
-                  />
+                  <View className="flex-row items-center gap-2">
+                    {isProgressVisible(st.status) && (
+                      <CancelDownloadButton
+                        onPress={() =>
+                          void cancelModelDownload(presetSpecId(preset.id, item.name))
+                        }
+                      />
+                    )}
+                    <DownloadButton
+                      status={st.status}
+                      progress={st.progress}
+                      onPress={() => onDownload(preset.id, item)}
+                      onPause={() => void pauseModelDownload(presetSpecId(preset.id, item.name))}
+                      onResume={() => void resumeModelDownload(presetSpecId(preset.id, item.name))}
+                      disabled={st.status === "completed"}
+                    />
+                  </View>
                 </View>
                 {isProgressVisible(st.status) && (
                   <DownloadProgressBar progress={st.progress} speed={st.speed} />
@@ -127,6 +151,11 @@ export function PresetModelCard({
     </View>
   );
 }
+
+/** memo so a parent re-render (accordion open/close, search) skips cards
+ * whose props are unchanged; each card still re-renders on its own store
+ * progress (via useModelStore below). */
+export const PresetModelCard = memo(PresetModelCardInner);
 
 export function AvailableModels({
   open,
@@ -148,9 +177,12 @@ export function AvailableModels({
   const guard = useLoadGuard();
   const tiers = TIERS;
 
-  function onGuardedDownload(modelId: string, file: PresetModelFile): void {
-    guard(file.size, () => onDownload(modelId, file));
-  }
+  const onGuardedDownload = useCallback(
+    (modelId: string, file: PresetModelFile) => {
+      guard(file.size, () => onDownload(modelId, file));
+    },
+    [guard, onDownload],
+  );
 
   const cards = (items: PresetModel[]) =>
     items.map((item) => (

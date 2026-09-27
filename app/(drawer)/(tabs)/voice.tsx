@@ -30,6 +30,7 @@ import {
   useTabContentFade,
 } from "../../../lib/motion.ts";
 import { useVoiceLoop } from "../../../hooks/useVoiceLoop.ts";
+import { useModelReady } from "../../../hooks/useModelReady.ts";
 
 export default function VoiceScreen() {
   const { phase, heard, reply, issue, needsSettings, bargeIn, retry } = useVoiceLoop();
@@ -49,6 +50,13 @@ export default function VoiceScreen() {
   }, [replyVisible, fade]);
 
   const micLive = phase === "listening" || phase === "speaking";
+  // No model loaded: the mic would start a turn that can never answer, so
+  // it is disabled. The disabled mic IS the signal (flattened ring + greyed
+  // icon); no warning copy or way-forward button here.
+  const modelReady = useModelReady();
+  // Disabled drops the ring so a flat circle reads "off" next to the ringed
+  // enabled state.
+  const micRing = modelReady ? "border-border" : "border-transparent";
 
   return (
     <SafeAreaView
@@ -65,24 +73,29 @@ export default function VoiceScreen() {
         {/* The hit area IS the visual: a 44px target wrapped around a 160px
             circle would make the outer ring dead to the thumb. */}
         <Pressable
-          onPress={bargeIn}
+          onPress={modelReady ? bargeIn : undefined}
+          disabled={!modelReady}
           className="h-40 w-40 items-center justify-center rounded-full"
           accessibilityRole="button"
+          accessibilityState={{ disabled: !modelReady }}
           accessibilityLabel={micLive ? "Stop listening" : "Tap to speak"}
         >
           {/* Listening is a machine-in-the-loop state: a Surface Tint circle
-              with concentric Signal Blue rings. */}
+              with concentric Signal Blue rings. Disabled is Mist + Slate,
+              kept findable (DESIGN: disabled is a fill/label change, never
+              opacity on a live element). */}
           <View
             className={`h-40 w-40 items-center justify-center rounded-full ${
-              micLive ? "bg-surface-3" : "bg-surface-2"
+              modelReady ? (micLive ? "bg-surface-3" : "bg-surface-2") : "bg-surface-2"
             }`}
           >
             <View
-              className={`h-32 w-32 items-center justify-center rounded-full border ${
-                micLive ? "border-primary" : "border-border"
-              }`}
+              className={`h-32 w-32 items-center justify-center rounded-full border ${micRing}`}
             >
-              <Mic size={56} color={micLive ? colors.primary : colors.secondaryText} />
+              <Mic
+                size={56}
+                color={modelReady ? (micLive ? colors.primary : colors.secondaryText) : colors.secondaryText}
+              />
             </View>
           </View>
         </Pressable>
@@ -155,7 +168,9 @@ export default function VoiceScreen() {
         )}
       </Animated.ScrollView>
 
-      <Text className="pb-2 text-center font-sans text-caption text-secondary-text">
+      {/* The disabled mic carries the no-model state on its own; no warning
+          copy or way-forward button here (the user removed it). */}
+      <Text className="pb-2 text-center font-sans text-body-md text-secondary-text">
         Tap the mic to talk
       </Text>
     </SafeAreaView>

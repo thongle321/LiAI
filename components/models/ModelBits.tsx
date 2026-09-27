@@ -1,7 +1,7 @@
 /** Shared models bits: formats, chips, status, progress, download button. */
 
 import { Pressable, Text, View } from "react-native";
-import { CheckCircle2, Download, Eye, MessageSquare, Pause, Play } from "lucide-react-native";
+import { CheckCircle2, Download, Eye, MessageSquare, Pause, Play, X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
 import type { ModelDownloadStatus, ModelType } from "../../types/models";
@@ -105,6 +105,31 @@ export function DownloadProgressBar({
           : `${Math.round(progress)}%`}
       </Text>
     </View>
+  );
+}
+
+/** Abandon a download. Sits beside DownloadButton and matches its shape
+ * (48dp, 8px radius, 1px Hairline) so the pair reads as one control
+ * cluster. Labelled rather than an icon alone: it deletes the partial
+ * file, and a bare X does not say that. */
+export function CancelDownloadButton({
+  onPress,
+  disabled = false,
+}: {
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      className="min-h-12 flex-row items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
+      accessibilityRole="button"
+      accessibilityLabel="Cancel download and delete downloaded data"
+    >
+      <X size={16} color={colors.error} />
+      <Text className="ml-2 font-sans text-body-sm text-primary-text">Cancel</Text>
+    </Pressable>
   );
 }
 

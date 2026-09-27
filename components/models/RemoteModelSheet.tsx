@@ -103,7 +103,7 @@ export function RemoteModelSheet({
                 <Pressable
                   onPress={() => setProviderType("openrouter")}
                   className={`menu-row flex-1 rounded-lg border items-center justify-center ${
-                    providerType === "openrouter" ? "border-primary bg-primary/20" : "border-border"
+                    providerType === "openrouter" ? "border-primary bg-surface-3" : "border-border"
                   }`}
                   accessibilityRole="radio"
                   accessibilityLabel="OpenRouter"
@@ -121,7 +121,7 @@ export function RemoteModelSheet({
                 <Pressable
                   onPress={() => setProviderType("custom_openai")}
                   className={`menu-row flex-1 rounded-lg border items-center justify-center ${
-                    providerType === "custom_openai" ? "border-primary bg-primary/20" : "border-border"
+                    providerType === "custom_openai" ? "border-primary bg-surface-3" : "border-border"
                   }`}
                   accessibilityRole="radio"
                   accessibilityLabel="Custom OpenAI-compatible endpoint"

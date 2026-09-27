@@ -37,6 +37,12 @@ function presetFor(modelId: string, presets: PresetModel[]): PresetModel {
   return preset;
 }
 
+/** Min gap between transient progress pushes to the store (~4 fps). The bar
+ *  animates smoothly at this rate; the native tick can fire far faster. */
+const PROGRESS_PUSH_MS = 250;
+/** Last push time per model id, so throttle is per-download not global. */
+const progressPushedAt = new Map<string, number>();
+
 export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSlice> = (
   set,
   get,
@@ -147,15 +153,36 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
     // The service's callbacks are global (last registered wins); keying each
     // update off the job's own modelId makes re-registration harmless.
     downloadService.setProgressCallback((downloadJob) => {
-      get().updateModel(downloadJob.modelId, {
-        downloadStatus: downloadJob.status,
-        downloadProgress: downloadJob.progress,
-        downloadedBytes: downloadJob.downloadedBytes,
-        totalBytes: downloadJob.totalBytes,
-        speedBytesPerSec: downloadJob.speedBytesPerSec,
-        error: downloadJob.error,
-      });
-      get().syncDownloadStatus();
+      // Persist only on a real status transition (idle->downloading,
+      // ->paused, ->failed). Progress bytes go through the transient path so
+      // a many-per-second tick never hits AsyncStorage (the models screen
+      // went unresponsive). Resume reads the partial file on disk, so a
+      // slightly-stale in-memory bar never costs a byte.
+      const prevStatus = get().getModel(downloadJob.modelId)?.downloadStatus;
+      if (prevStatus !== downloadJob.status) {
+        get().updateModel(downloadJob.modelId, {
+          downloadStatus: downloadJob.status,
+          error: downloadJob.error,
+        });
+      }
+      // Throttle the transient push so the bar animates smoothly (~4 fps)
+      // instead of re-rendering every preset card on every native tick.
+      // pocketpal ships the unthrottled version; that is the hotspot.
+      const now = Date.now();
+      const last = progressPushedAt.get(downloadJob.modelId) ?? 0;
+      if (now - last >= PROGRESS_PUSH_MS) {
+        progressPushedAt.set(downloadJob.modelId, now);
+        get().setModelProgress(downloadJob.modelId, {
+          downloadProgress: downloadJob.progress,
+          downloadedBytes: downloadJob.downloadedBytes,
+          totalBytes: downloadJob.totalBytes,
+          speedBytesPerSec: downloadJob.speedBytesPerSec,
+        });
+        // syncDownloadStatus builds a fresh Map and notifies subscribers, so
+        // it rides the same throttle — running it every tick was the last
+        // per-tick store notification.
+        get().syncDownloadStatus();
+      }
     });
 
     downloadService.setCompleteCallback((downloadJob, success) => {
@@ -176,7 +203,10 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
           set({ largestSuccessfulBytes: downloadJob.totalBytes });
           void get().saveMemoryGuard();
         }
-      } else {
+      } else if (downloadJob.status !== "cancelled") {
+        // A cancelled job is a user action, not a failure: without this
+        // guard the cancel flow's own callback re-marked the row failed and
+        // the card offered "Retry" instead of a clean "Download".
         get().updateModel(downloadJob.modelId, {
           downloadStatus: "failed",
           error: downloadJob.error,
@@ -228,6 +258,15 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
     await get().resumeInterruptedDownload(specId);
   },
 
+  cancelModelDownload: async (specId) => {
+    // Cancel, not pause: the service deletes the partial file, so this
+    // abandons the download rather than parking it. No fallback resume
+    // path exists on purpose — there is nothing left on disk to resume.
+    const job = latestJobForModel(downloadService.getAllJobs(), specId);
+    if (!job) return;
+    await get().cancelDownload(job.id);
+  },
+
   resumeInterruptedDownload: async (specId) => {
     try {
       const spec = get().getModel(specId);
@@ -277,6 +316,12 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
 
   cancelDownload: async (jobId) => {
     const job = downloadService.getJob(jobId);
+    // Reset AFTER the service resolves, not before: the service's terminal
+    // "cancelled" event carries the last known byte count, so an early reset
+    // was immediately overwritten and left a stale 40% on the row. Awaiting
+    // first also keeps the card on its real state while the abort is in
+    // flight, then it snaps straight to Download.
+    await downloadService.cancelDownload(jobId);
     if (job) {
       get().updateModel(job.modelId, {
         downloadStatus: "idle",
@@ -284,7 +329,6 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
         downloadedBytes: 0,
       });
     }
-    await downloadService.cancelDownload(jobId);
     get().syncDownloadStatus();
   },
 

@@ -219,6 +219,9 @@ export function createChatStore(storage: KeyValueStorage, deps?: ChatDeps) {
     stopEngine: () => {
       void getManager().stopActive();
     },
+    releaseEngine: () => {
+      void getManager().releaseAll();
+    },
     active: { handle: null },
     streamGen: 0,
   };
@@ -238,6 +241,9 @@ export function createChatStore(storage: KeyValueStorage, deps?: ChatDeps) {
       } catch {
         set({ connection: "down" });
       }
+    },
+    releaseEngine: () => {
+      ctx.releaseEngine();
     },
   }));
 }

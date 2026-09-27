@@ -42,6 +42,14 @@ class ResumableDownloadService {
   /** Last progress mark per job: speed is bytes/dt, refreshed ≥500ms apart. */
   private speedMarks = new Map<string, { at: number; bytes: number; speed: number }>();
 
+  /** Jobs the user is actively cancelling. expo's cancelAsync() pauses the
+   * in-flight task, so its downloadAsync() resolves null and would report
+   * "paused" — a card that flashed Paused (with a live Cancel button) for a
+   * frame before flipping to Download. While cancelling, the service knows
+   * better than the native layer, so it stays silent and lets the terminal
+   * "cancelled" event be the only status the UI ever sees. */
+  private cancelling = new Set<string>();
+
   private trackSpeed(jobId: string, totalBytes: number): number {
     const now = Date.now();
     const prev = this.speedMarks.get(jobId);
@@ -114,6 +122,7 @@ class ResumableDownloadService {
       await makeDirectoryAsync(getModelsDirectoryPath(), { intermediates: true });
 
       const handleProgress = (progress: DownloadProgressData) => {
+        if (this.cancelling.has(job.id)) return;
         const totalBytes = progress.totalBytesWritten;
         const expected = progress.totalBytesExpectedToWrite;
         const progressPercent =
@@ -155,6 +164,9 @@ class ResumableDownloadService {
       };
 
       const reportPaused = (): void => {
+        // A cancel in progress resolves this same null path. Reporting
+        // "paused" then would resurrect the card's Cancel button mid-abort.
+        if (this.cancelling.has(job.id)) return;
         // Paused before completion: keep the task so resume works, and
         // report paused instead of sticking at downloading forever.
         const pausedJob: DownloadJob = { ...job, status: "paused" };
@@ -352,17 +364,27 @@ class ResumableDownloadService {
       return;
     }
 
-    if (entry.task) {
-      await entry.task.cancelAsync();
-    }
-
-    // Delete partial file (legacy API expects string)
-    const filePath = getModelsDirectoryPath() + entry.job.fileName;
-
+    // Mark cancelling BEFORE touching the task: cancelAsync() resolves the
+    // in-flight downloadAsync() to null, which lands in reportPaused while
+    // we are still awaiting here. The flag is what suppresses that.
+    this.cancelling.add(jobId);
     try {
-      await deleteAsync(filePath, { idempotent: true });
-    } catch {
-      // Ignore deletion errors
+      if (entry.task) {
+        await entry.task.cancelAsync();
+      }
+
+      // Delete partial file (legacy API expects string)
+      const filePath = getModelsDirectoryPath() + entry.job.fileName;
+
+      try {
+        await deleteAsync(filePath, { idempotent: true });
+      } catch {
+        // Ignore deletion errors
+      }
+    } finally {
+      // Cleared only after the terminal event is published below, so the
+      // "cancelled" status can never be swallowed by the guard.
+      this.cancelling.delete(jobId);
     }
 
     const cancelledJob: DownloadJob = {

@@ -116,7 +116,7 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
             setDraft("");
             setTokenOpen(true);
           }}
-          className="min-h-12 flex-row items-center gap-2 px-3 py-3 bg-primary/20 border border-primary/50 rounded-lg"
+          className="min-h-12 flex-row items-center gap-2 px-3 py-3 bg-surface-1 border border-border rounded-lg"
           accessibilityRole="button"
           accessibilityLabel={hfToken ? "Hugging Face token saved" : "Add Hugging Face token"}
         >
@@ -128,7 +128,7 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
       </View>
 
       {searchError && (
-        <Text className="font-sans text-body-sm text-red-500 mb-3">Error: {searchError}</Text>
+        <Text className="font-sans text-body-sm text-error mb-3">Error: {searchError}</Text>
       )}
 
       {searchLoading && (
@@ -162,7 +162,7 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
               {item.private && (
                 <View className="flex-row items-center gap-1 px-2 py-1 bg-surface-2 border border-border rounded">
                   <Lock size={10} color={colors.secondaryText} />
-                  <Text className="font-sans text-xs text-secondary-text">Gated</Text>
+                  <Text className="font-sans text-caption text-secondary-text">Gated</Text>
                 </View>
               )}
               <Text className="font-sans text-body-sm text-secondary-text/70">
@@ -190,7 +190,7 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
                     const st = spec?.downloadStatus ?? "idle";
                     const prog = spec?.downloadProgress ?? 0;
                     return (
-                    <View key={file.name} className="py-3 border-b border-border/50">
+                    <View key={file.name} className="py-3 border-b border-border">
                       <View className="flex-row items-center justify-between">
                         <View className="flex-1">
                           <Text className="font-sans text-body-md text-primary-text">{file.name}</Text>

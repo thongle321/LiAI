@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { Image as RNImage, Pressable, Text, TextInput, View } from "react-native";
 import { useIsFocused } from "expo-router";
 import { openSettings } from "expo-linking";
-import { Brain, Camera, Image as ImageIcon, Mic, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
+import { Camera, Image as ImageIcon, Mic, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -19,7 +19,7 @@ import {
 import { colors } from "../../themes/tokens.ts";
 import { useChatStore } from "../../store/chat.ts";
 import { useInference } from "../../store/inference.ts";
-import { useModelStore } from "../../store/modelStore";
+import { useModelReady } from "../../hooks/useModelReady.ts";
 import { mergeDictation, VOICE_LISTEN_OPTS } from "../../lib/voiceListen.ts";
 import { ensureMicAccess } from "../../lib/micAccess.ts";
 import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../../lib/voiceStatus.ts";
@@ -39,11 +39,11 @@ export function ChatInput({
   // switches); dictation mechanics stay local below.
   const draft = useChatStore((s) => s.draft);
   const setDraft = useChatStore((s) => s.setDraft);
+  // The engine-accurate gate (matches voice/vision). The mic and the attach
+  // button both start a turn that needs a live model, so they disable when
+  // no model can actually answer.
+  const modelReady = useModelReady();
   const stop = useChatStore((s) => s.stop);
-  // Thinking pill: local-only (remote endpoints ignore enable_thinking).
-  const thinkingEnabled = useInference((s) => s.thinkingEnabled);
-  const setThinkingEnabled = useInference((s) => s.setThinkingEnabled);
-  const isLocal = useModelStore((s) => s.activeProviderType === "local");
   const [plusOpen, setPlusOpen] = useState(false);
   // One attached photo per turn (the local turn takes a single data-uri);
   // text stays required — blank messages are rejected before the run.
@@ -130,12 +130,12 @@ export function ChatInput({
   useSpeechRecognitionEvent("nomatch", () => {
     if (!focusedRef.current) return;
     console.warn("[voice] dictation failure: nomatch");
-    setVoiceIssue("Didn't catch that (nomatch).");
+    setVoiceIssue("I didn't catch that — try again.");
   });
   useSpeechRecognitionEvent("error", (event) => {
     if (event.error === "aborted") return; // our own stop()
     if (!focusedRef.current) return;
-    // Name the code on screen + terminal: the generic line hid the cause.
+    // The raw code goes to the terminal; the user gets clean copy (Q3).
     console.warn(`[voice] dictation failure: ${event.error} ${event.message ?? ""}`);
     if (isThrottlingError(event.error)) {
       setVoiceThrottled();
@@ -145,7 +145,7 @@ export function ChatInput({
     setVoiceIssue(
       event.error === "not-allowed"
         ? "Microphone access is needed."
-        : `Didn't catch that (${event.error}).`,
+        : "I didn't catch that — try again.",
     );
   });
 
@@ -226,12 +226,14 @@ export function ChatInput({
       <View className="mb-3 flex-row items-end gap-2 rounded-lg border border-border bg-surface-1 px-4 py-3">
         <View>
           <Pressable
-            onPress={() => setPlusOpen((o) => !o)}
+            onPress={modelReady ? () => setPlusOpen((o) => !o) : undefined}
+            disabled={!modelReady}
             className="h-12 w-12 items-center justify-center rounded-full bg-surface-3"
             accessibilityRole="button"
-            accessibilityLabel="Attach a photo"
+            accessibilityState={{ disabled: !modelReady }}
+            accessibilityLabel={modelReady ? "Attach a photo" : "Load a model to attach a photo"}
           >
-            <Plus size={20} color={colors.primary} />
+            <Plus size={20} color={modelReady ? colors.primary : colors.secondaryText} />
           </Pressable>
           {plusOpen && (
             // Anchored to the plus button's wrapper and extending right into
@@ -254,7 +256,7 @@ export function ChatInput({
         <TextInput
           value={draft}
           onChangeText={setDraft}
-          placeholder={ready ? "Type a message…" : "Select a model to start chatting"}
+          placeholder="Type a message…"
           placeholderTextColor={colors.secondaryText}
           multiline
           editable={!sending}
@@ -264,24 +266,17 @@ export function ChatInput({
         />
         <View className="flex-row items-center gap-1">
           <Pressable
-            onPress={() => void toggleDictation()}
+            onPress={modelReady ? () => void toggleDictation() : undefined}
+            disabled={!modelReady}
             className="h-12 w-12 items-center justify-center rounded-full bg-surface-2"
             accessibilityRole="button"
-            accessibilityLabel={listening ? "Stop dictation" : "Dictate a message"}
+            accessibilityState={{ disabled: !modelReady }}
+            accessibilityLabel={
+              !modelReady ? "Load a model to dictate" : listening ? "Stop dictation" : "Dictate a message"
+            }
           >
-            <Mic size={20} color={listening ? colors.primary : colors.secondaryText} />
+            <Mic size={20} color={modelReady ? (listening ? colors.primary : colors.secondaryText) : colors.secondaryText} />
           </Pressable>
-          {isLocal && (
-            <Pressable
-              onPress={() => setThinkingEnabled(!thinkingEnabled)}
-              className="h-12 w-12 items-center justify-center rounded-full bg-surface-2"
-              accessibilityRole="switch"
-              accessibilityState={{ checked: thinkingEnabled }}
-              accessibilityLabel="Thinking"
-            >
-              <Brain size={20} color={thinkingEnabled ? colors.primary : colors.secondaryText} />
-            </Pressable>
-          )}
         </View>
         {/* Send and Stop are siblings, never nested: two nested pressables
             would be two hit targets and two a11y roles on one control.

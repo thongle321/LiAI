@@ -113,9 +113,9 @@ export function useVoiceLoop() {
 
   /** One shared failure path for error + nomatch events. */
   function handleRecognitionFailure(code: string): void {
-    // Permanent: shows in the Expo terminal AND names the code on
-    // screen at the streak cap, so a deaf recognizer can't fail
-    // silently anymore.
+    // Permanent: the code goes to the Expo terminal; on screen the streak
+    // cap shows clean copy (no raw code), so a deaf recognizer still can't
+    // fail silently.
     console.warn(`[voice] recognition failure: ${code}`);
     if (isThrottlingError(code)) {
       setVoiceThrottled();

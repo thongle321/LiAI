@@ -27,6 +27,7 @@ import { colors } from "../themes/tokens.ts";
 import { useTabContentFade } from "../lib/motion.ts";
 import { VOICE_STATUS_LABEL } from "../lib/voiceStatus.ts";
 import { useVisionTurn } from "../hooks/useVisionTurn.ts";
+import { useModelReady } from "../hooks/useModelReady.ts";
 import {
   VisionBottomPanel,
   VisionPreview,
@@ -40,6 +41,9 @@ export default function VisionScreen() {
   const [inputOpen, setInputOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const camera = useRef<VisionCameraView | null>(null);
+  // No model: talk and type are disabled so the mic can't open a turn that
+  // can never answer.
+  const modelReady = useModelReady();
 
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice(position);
@@ -118,6 +122,7 @@ export default function VisionScreen() {
               onSendDraft={sendDraft}
               onToggleInput={() => setInputOpen((o) => !o)}
               onTalk={() => void bargeIn()}
+              modelReady={modelReady}
             />
           </>
         ) : null}

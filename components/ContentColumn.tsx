@@ -14,9 +14,8 @@ import type { ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import { View } from "react-native";
 
-/** Comfortable reading measure for a list/form column. On the 4px grid. */
-const CONTENT_MAX_WIDTH = 640;
-
+/** Comfortable reading measure for a list/form column, on the 4px grid.
+ * Expressed as the Tailwind cap `max-w-[640px]` in the className below. */
 export function ContentColumn({
   children,
   className,
@@ -30,8 +29,8 @@ export function ContentColumn({
 }) {
   return (
     <View
-      style={[{ width: "100%", maxWidth: CONTENT_MAX_WIDTH, alignSelf: "center" }, style]}
-      className={className}
+      className={`w-full max-w-[640px] self-center${className ? ` ${className}` : ""}`}
+      style={style}
     >
       {children}
     </View>

@@ -57,6 +57,8 @@ export interface ChatCtx {
   runTurn: TurnRunner;
   /** Stop the live generation; the loaded model stays cached. */
   stopEngine: () => void;
+  /** Stop and free the loaded model (Unload). Drops the engine slot. */
+  releaseEngine: () => void;
   active: { handle: { cancel(): void } | null };
   streamGen: number;
 }
@@ -76,6 +78,8 @@ export interface ChatState {
   send: (text: string, image?: string) => Promise<boolean>;
   /** Stop the live reply; the partial text stays in its bubble. */
   stop: () => void;
+  /** Free the loaded model from memory (Unload); the next Load reloads. */
+  releaseEngine: () => void;
   retry: (messageId: string) => Promise<boolean>;
   regenerate: (messageId: string) => Promise<boolean>;
   newConversation: () => Promise<void>;

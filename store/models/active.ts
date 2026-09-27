@@ -13,10 +13,13 @@ export const createActiveSlice: StateCreator<ModelStore, [], [], ActiveSlice> = 
   activeProviderType: null,
 
   setActiveModel: (modelId, providerType = "local") => {
-    set({ activeModelId: modelId, activeProviderType: providerType });
+    // Unload clears both: a null id with a stranded provider type reads as a
+    // half-torn-down active model. Mirrors the remote deactivate path.
+    const nextType = modelId === null ? null : providerType;
+    set({ activeModelId: modelId, activeProviderType: nextType });
     asyncStorage.setItem(
       ACTIVE_MODEL_KEY,
-      JSON.stringify({ modelId, providerType }),
+      JSON.stringify({ modelId, providerType: nextType }),
     );
   },
 

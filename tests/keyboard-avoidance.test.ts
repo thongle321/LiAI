@@ -128,4 +128,20 @@ describe("keyboard avoidance", () => {
     }
     assert.deepEqual(offenders, []);
   });
+
+  it("the shared helper is callable from the UI runtime", () => {
+    // keyboardOcclusion is called INSIDE useDerivedValue, which runs on the
+    // UI runtime. A plain JS function there throws at runtime:
+    // "[Worklets] Tried to synchronously call a Remote Function". Node tests
+    // cannot catch that - the directive is a no-op there - so it is asserted
+    // statically. Pure was not enough; worklet-compatible is a separate
+    // property from being pure.
+    const helper = readFileSync("lib/keyboard.ts", "utf8");
+    const body = helper.slice(helper.indexOf("export function keyboardOcclusion"));
+    assert.match(
+      body.slice(0, body.indexOf("}")),
+      /["']worklet["']/,
+      "keyboardOcclusion needs the 'worklet' directive: it runs on the UI thread",
+    );
+  });
 });

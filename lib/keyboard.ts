@@ -20,5 +20,10 @@
  * shorter than the inset must not translate the other way.
  */
 export function keyboardOcclusion(height: number, insetsBottom: number): number {
+  // Called from inside useDerivedValue, which executes on the UI runtime.
+  // Without this directive the UI thread tries to call a JS-thread function
+  // and throws "[Worklets] Tried to synchronously call a Remote Function".
+  // A no-op on the JS thread, so the node tests still call it directly.
+  "worklet";
   return Math.max(0, Math.abs(height) - insetsBottom);
 }

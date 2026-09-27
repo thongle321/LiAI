@@ -34,16 +34,14 @@ export default function RootLayout() {
     // and pickers land in LiAI's world instead of the platform's default.
     <Host colorScheme="light" seedColor={colors.primary} style={{ flex: 1 }}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        {/* One keyboard event source for the whole app. The library already
-            runs edge-to-edge and applies its own top padding to imitate a
-            standard RN app, so the two flags below only declare that the
-            system bars really are translucent here — they are NOT what makes
-            the keyboard height correct. (An earlier comment here claimed
-            that; it was a guess, not a documented requirement.) */}
-        <KeyboardProvider
-          statusBarTranslucent
-          navigationBarTranslucent
-        >
+        {/* One keyboard event source for the whole app. No translucent flags:
+            the runtime logs "statusBarTranslucent and navigationBarTranslucent
+            values are ignored when using react-native-edge-to-edge", and the
+            library's docs confirm it sets them itself in that mode. The app
+            is edge-to-edge, so they were dead props being passed on every
+            launch. (An earlier comment here claimed they were what made the
+            keyboard height correct. That was a guess, and it was wrong.) */}
+        <KeyboardProvider>
           <Stack
             screenOptions={{
               headerShown: false,

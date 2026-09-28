@@ -1,9 +1,8 @@
 /** Bottom tabs (JavaScript tabs per the Expo Router tabs guide).
  *
  * Chat + voice + vision share one router-owned bar — the existing
- * BottomNav design, unchanged. The bar hides ITSELF while the vision
- * route is focused (the camera wants the full screen), so vision reads
- * as a tab everywhere except its own screen.
+ * BottomNav design, unchanged. The bar hides only for the keyboard;
+ * vision shows it like every other tab.
  */
 
 import { View } from "react-native";
@@ -35,20 +34,20 @@ export default function TabLayout() {
  */
 function TabBar({ state }: { state: { index: number; routeNames: string[] } }) {
   const insets = useSafeAreaInsets();
-  // The bar is chrome, not input: while the keyboard is up it would sit
-  // directly on top of it and steal height from the composer. Hidden here
-  // rather than via screenOptions.tabBarHideOnKeyboard because this app
-  // supplies a custom tabBar, and React Navigation only applies that
-  // option inside its own BottomTabBar.
   const keyboardVisible = useKeyboardState((s) => s.isVisible);
-  // Hidden on the keyboard (it would sit on top of it) and on vision (the
-  // camera wants the full screen; its own X button is the way out). Hidden
-  // here rather than via screenOptions.tabBarHideOnKeyboard because this
-  // app supplies a custom tabBar, and React Navigation only applies that
-  // option inside its own BottomTabBar.
+  // Hidden on the keyboard only: it would sit directly on top of it and
+  // steal height from whatever input opened it. Hidden here rather than
+  // via screenOptions.tabBarHideOnKeyboard because this app supplies a
+  // custom tabBar, and React Navigation only applies that option inside
+  // its own BottomTabBar.
   const focusedRoute = state.routeNames[state.index] ?? "chat";
-  if (keyboardVisible || focusedRoute === "vision") return null;
-  const active: ChatTab = focusedRoute === "voice" ? "voice" : "chat";
+  if (keyboardVisible) return null;
+  const active: ChatTab =
+    focusedRoute === "voice"
+      ? "voice"
+      : focusedRoute === "vision"
+        ? "vision"
+        : "chat";
 
   return (
     <View className="bg-surface-1" style={{ paddingBottom: insets.bottom }}>

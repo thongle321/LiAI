@@ -1,13 +1,13 @@
-/** Vision tab: full-screen live camera, floating controls.
+/** Vision tab: full-screen live camera above the shared tab bar.
  *
- * A real Tabs.Screen (moved from app/vision.tsx): the bottom tab bar hides
- * ITSELF while this route is focused — see (tabs)/_layout.tsx — so the
- * camera keeps the full screen. Top: exit (left), camera flip + VISION
- * label (right) — no nav bar. Center: the live preview, never frozen,
- * never covered except by the floats. Bottom: compact status area, big
- * mic in the center, small keyboard button opening a floating input.
- * Exit always lands on Chat — vision's only entry point is the tab bar,
- * so there is no "previous screen" to return to.
+ * A real Tabs.Screen (moved from app/vision.tsx): the bottom tab bar
+ * shows here exactly like on chat/voice, and the camera preview lives
+ * in the column above it. Top: exit (left), camera flip + VISION label
+ * (right) — no nav bar. Center: the live preview, never frozen, never
+ * covered except by the floats. Bottom: compact status area, big mic in
+ * the center, small keyboard button opening a floating input. Exit
+ * always lands on Chat — vision's only entry point is the tab bar, so
+ * there is no "previous screen" to return to.
  *
  * Frame rule: a 500ms JS interval snapshots and uploads frames while
  * idle/listening; the worklet frame processor is a bridge-free heartbeat
@@ -26,7 +26,10 @@ import { openSettings } from "expo-linking";
 import { useCameraDevice, useCameraPermission } from "react-native-vision-camera";
 import type { Camera as VisionCameraView } from "react-native-vision-camera";
 
+import { useKeyboardState } from "react-native-keyboard-controller";
+
 import { colors } from "../../../themes/tokens.ts";
+import { TAB_BAR_HEIGHT } from "../../../components/BottomNav.tsx";
 import { useTabContentFade } from "../../../lib/motion.ts";
 import { VOICE_STATUS_LABEL } from "../../../lib/voiceStatus.ts";
 import { useVisionTurn } from "../../../hooks/useVisionTurn.ts";
@@ -53,6 +56,16 @@ export default function VisionScreen() {
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
   const contentFade = useTabContentFade();
+  // The tab bar owns the bottom inset ("applied once, at the bar"), so the
+  // panel anchors 12px above the bar top. When the keyboard opens the bar
+  // hides and the screen grows by the bar's height — the same shift chat's
+  // overlays compensate for — so the anchor carries that height back while
+  // the keyboard is up, or the panel visibly jumps as the bar disappears.
+  // The value doubles as the panel's lift anchor, so the draft input still
+  // lands exactly on the keyboard top (see VisionBottomPanel).
+  const keyboardVisible = useKeyboardState((s) => s.isVisible);
+  const panelBottom =
+    12 + (keyboardVisible ? TAB_BAR_HEIGHT + insets.bottom : 0);
 
   const {
     phase,
@@ -112,7 +125,7 @@ export default function VisionScreen() {
             />
 
             <VisionBottomPanel
-              bottom={insets.bottom + 12}
+              bottom={panelBottom}
               issue={issue}
               needsSettings={needsSettings}
               onOpenSettings={() => void openSettings()}

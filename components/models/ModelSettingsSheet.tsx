@@ -1,18 +1,23 @@
-/** Per-model settings editor: display name, system prompt, stop words.
+/** Per-model settings: identity, prompt, stop words, and a generation
+ * sub-view for the sampler override.
  *
- * Persists in modelStore (liai_model_settings_v1), keyed by model id.
+ * The generation view is a second view inside this sheet, not a second
+ * sheet: stacking two native sheets on one another is fragile, and the
+ * override is a sibling of these fields, not a separate destination.
  */
 
 import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { BottomSheet } from "@expo/ui";
-// KeyboardAwareScrollView, not ScrollView: three fields in a sheet, and the
-// keyboard covers the lower ones otherwise.
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import { X } from "lucide-react-native";
+import { ChevronLeft, X } from "lucide-react-native";
 
+import { useModelStore } from "../../store/modelStore.ts";
+import { useInference } from "../../store/inference.ts";
+import { resolveSampler, type SamplerParams } from "../../lib/inference/sampler.ts";
+import { SamplerRows } from "../SamplingSettings.tsx";
+import { NavRow, SettingsSection } from "../SettingsRows.tsx";
 import { colors, scrim } from "../../themes/tokens.ts";
-import { useModelStore } from "../../store/modelStore";
 
 function parseStopWords(text: string): string[] {
   return text
@@ -29,9 +34,16 @@ export function ModelSettingsSheet({
   onClose: () => void;
 }) {
   const { getModelSettings, updateModelSettings } = useModelStore();
+  const { sampler: globalSampler, load } = useInference();
+  const [view, setView] = useState<"main" | "generation">("main");
   const [displayName, setDisplayName] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [stopWordsText, setStopWordsText] = useState("");
+  const [draft, setDraft] = useState<Partial<SamplerParams>>({});
+
+  useEffect(() => {
+    void load();
+  }, []);
 
   useEffect(() => {
     if (modelId) {
@@ -39,6 +51,8 @@ export function ModelSettingsSheet({
       setDisplayName(s.displayName);
       setSystemPrompt(s.systemPrompt);
       setStopWordsText(s.stopWords.join("\n"));
+      setDraft(s.sampler ?? {});
+      setView("main");
     }
   }, [modelId]);
 
@@ -51,6 +65,14 @@ export function ModelSettingsSheet({
     });
     onClose();
   }
+
+  function saveSampler(next: Partial<SamplerParams>): void {
+    if (!modelId) return;
+    setDraft(next);
+    updateModelSettings(modelId, { sampler: next });
+  }
+
+  const overrideCount = Object.keys(draft).length;
 
   // Native sheet (SwiftUI / Compose), themed to the app by the root Host:
   // Clean White container, the Scrim backdrop, seed Signal Blue.
@@ -68,7 +90,21 @@ export function ModelSettingsSheet({
         keyboardShouldPersistTaps="handled"
       >
         <View className="mb-4 flex-row items-center justify-between">
-          <Text className="font-sans-semibold text-h3 text-primary-text">Model Settings</Text>
+          {view === "generation" ? (
+            <Pressable
+              onPress={() => setView("main")}
+              className="h-12 w-12 items-center justify-center"
+              accessibilityRole="button"
+              accessibilityLabel="Back to model settings"
+            >
+              <ChevronLeft size={20} color={colors.secondaryText} />
+            </Pressable>
+          ) : (
+            <View className="h-12 w-12" />
+          )}
+          <Text className="font-sans-semibold text-h3 text-primary-text">
+            {view === "generation" ? "Generation" : "Model Settings"}
+          </Text>
           <Pressable
             onPress={onClose}
             className="h-12 w-12 items-center justify-center"
@@ -79,6 +115,33 @@ export function ModelSettingsSheet({
           </Pressable>
         </View>
 
+        {view === "generation" ? (
+          <View className="flex-col gap-4">
+            <Text className="font-sans text-body-md text-secondary-text">
+              {overrideCount === 0
+                ? "This model uses the global sampling settings."
+                : `${overrideCount} value${overrideCount === 1 ? "" : "s"} overridden. Everything else follows the global settings.`}
+            </Text>
+            <SettingsSection>
+              <SamplerRows
+                sampler={resolveSampler(globalSampler, draft)}
+                onChange={(patch) => saveSampler({ ...draft, ...patch })}
+              />
+            </SettingsSection>
+            {overrideCount > 0 ? (
+              <Pressable
+                onPress={() => saveSampler({})}
+                className="btn btn--secondary"
+                accessibilityRole="button"
+                accessibilityLabel="Reset generation settings to global"
+              >
+                <Text className="font-sans text-body-md text-primary">
+                  Reset to global
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : (
           <View className="flex-col gap-4">
             <View>
               <Text className="font-sans text-body-sm text-secondary-text mb-1">Display name</Text>
@@ -97,11 +160,11 @@ export function ModelSettingsSheet({
                 value={systemPrompt}
                 onChangeText={setSystemPrompt}
                 placeholder="Personality and instructions for this model"
+                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
+                placeholderTextColor={colors.secondaryText}
                 multiline
                 numberOfLines={3}
                 textAlignVertical="top"
-                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
-                placeholderTextColor={colors.secondaryText}
               />
             </View>
 
@@ -113,14 +176,25 @@ export function ModelSettingsSheet({
                 value={stopWordsText}
                 onChangeText={setStopWordsText}
                 placeholder={"<|eot_id|>\n<|end_of_text|>"}
+                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
+                placeholderTextColor={colors.secondaryText}
                 multiline
                 numberOfLines={3}
                 textAlignVertical="top"
                 autoCapitalize="none"
-                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
-                placeholderTextColor={colors.secondaryText}
               />
             </View>
+
+            <SettingsSection>
+              <View className="row">
+                <NavRow
+                  label="Generation"
+                  description="Sampling overrides for this model alone."
+                  value={overrideCount === 0 ? "Default" : "Custom"}
+                  onPress={() => setView("generation")}
+                />
+              </View>
+            </SettingsSection>
 
             <View className="flex-row gap-2 pt-2">
               <Pressable
@@ -141,7 +215,8 @@ export function ModelSettingsSheet({
               </Pressable>
             </View>
           </View>
-        </KeyboardAwareScrollView>
+        )}
+      </KeyboardAwareScrollView>
     </BottomSheet>
   );
 }

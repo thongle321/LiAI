@@ -14,6 +14,7 @@ import type {
   CompletionMessage,
   EngineSource,
 } from "../inference/engine.ts";
+import type { SamplerParams } from "../inference/sampler.ts";
 import { runLocalAgent } from "../agent/runner.ts";
 import { talentDefinitions, type TalentSearchAuth } from "../agent/registry.ts";
 
@@ -46,6 +47,9 @@ export interface TurnDeps {
   getSystemPrompt(): Promise<string | undefined>;
   /** Local-only thinking preference; omitted keeps the native default. */
   getThinking?: () => Promise<boolean>;
+  /** Local-only sampling params, already resolved global-vs-model; null
+   *  falls back to whatever the native default is. */
+  getSampler?: () => Promise<SamplerParams | null>;
   /** Data-uri → temp file path for multimodal turns; null = text-only. */
   saveImage(dataUri: string): Promise<string | null>;
 }
@@ -97,6 +101,7 @@ export function createTurnRunner(deps: TurnDeps) {
     const search = await deps.getSearch().catch(() => null);
     const systemPrompt = await deps.getSystemPrompt().catch(() => undefined);
     const thinking = await deps.getThinking?.().catch(() => undefined);
+    const sampler = await deps.getSampler?.().catch(() => null);
     let imagePaths: string[] | undefined;
     if (paths.image) {
       const saved = await deps.saveImage(paths.image).catch(() => null);
@@ -110,6 +115,7 @@ export function createTurnRunner(deps: TurnDeps) {
       // Local reads imagePaths (llama media_paths); remote stays text-only.
       ...(imagePaths ? { imagePaths } : {}),
       ...(thinking !== undefined ? { enableThinking: thinking } : {}),
+    ...(sampler ? { sampler } : {}),
       fetchImpl: fetch,
       search,
       userTexts: userTextsOf(paths.history),

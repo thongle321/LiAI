@@ -10,6 +10,7 @@ import {
   MIN_CONTEXT,
   parseInferenceParams,
 } from "../store/inference.ts";
+import { DEFAULT_SAMPLER } from "../lib/inference/sampler.ts";
 import { EngineManager } from "../lib/inference/manager.ts";
 import type { KeyValueStorage } from "../lib/storage.ts";
 
@@ -61,10 +62,38 @@ describe("inference store", () => {
         specDraftCacheK: s.specDraftCacheK,
         specDraftCacheV: s.specDraftCacheV,
         thinkingEnabled: s.thinkingEnabled,
+        sampler: s.sampler,
       },
       { ...DEFAULT_INFERENCE },
     );
     assert.equal(s.loaded, true);
+  });
+
+  it("patches the sampler, clamps it, and survives a reload", async () => {
+    const useStore = createInferenceStore(storage);
+    await useStore.getState().load();
+    useStore.getState().setSampler({ temperature: 0.15, topP: 9 });
+    await new Promise((r) => setTimeout(r, 0));
+    const s = useStore.getState();
+    assert.equal(s.sampler.temperature, 0.15);
+    assert.equal(s.sampler.topP, 1, "clamped on the way in");
+
+    const raw = storage.data[INFERENCE_KEY];
+    assert.ok(raw);
+    const reloaded = createInferenceStore(memoryStorage({ [INFERENCE_KEY]: raw }));
+    await reloaded.getState().load();
+    assert.equal(reloaded.getState().sampler.temperature, 0.15);
+    assert.equal(reloaded.getState().sampler.topP, 1);
+  });
+
+  it("fills a missing or corrupt sampler from an older save", () => {
+    const noSampler = parseInferenceParams(JSON.stringify({ nCtx: 8192 }));
+    assert.equal(noSampler.nCtx, 8192, "the rest of the payload still loads");
+    assert.deepEqual(noSampler.sampler, DEFAULT_SAMPLER);
+    const badSampler = parseInferenceParams(
+      JSON.stringify({ sampler: { temperature: "hot" } }),
+    );
+    assert.equal(badSampler.sampler.temperature, DEFAULT_SAMPLER.temperature);
   });
 
   it("clamps context and gpu layers into range", async () => {

@@ -348,6 +348,18 @@ Confident and flat. Buttons never lift, never glow, and never animate their own 
 - **Internal padding:** 20px (`5`) on all sides. 16px for a card that contains a list of rows rather than prose.
 - **Row cards** (settings, model list, session history) drop the internal padding to 0 and let a 16px horizontal / 12px vertical row padding define the rhythm, so the divider lines run edge to edge.
 
+### Settings
+
+A settings screen is a stack of **titled row cards** on Cool Paper, grouped by subject rather than by screen. This grouping came from PocketPal's Material 3 settings screen; it is rebuilt here in Uniwind against this file's tokens, and it borrows the *structure* only — no `react-native-paper`, no second design language, and nothing here overrides a rule above.
+
+- **Section:** a Title (20/28, 500) label in Ink, then one Clean White row card beneath it with a 1px Hairline border and Default radius. Sections are spaced 24px (`6`) apart.
+- **Row:** 48–56px minimum, 16px horizontal / 12px vertical padding, dividers running edge to edge between rows (never around the card's outside edge).
+- **Every row carries a description.** The label is Body (16/24) Ink; the line under it is Body Small (14/20) Slate and says what the value does or what happens if you change it. A row with no description available does not ship — a bare label tells the user nothing about the consequence.
+- **Controls sit right-aligned**; the label block takes the remaining width. A value that needs explaining beyond the description is a picker, not a wider label.
+- **Trailing chevron means "this opens something."** A row that navigates carries one; a row that edits in place does not. The one exception is the Advanced group, which expands in place and so carries the chevron that says so. Chevrons are 2px stroke at 16px in Slate.
+- **"Advanced" is a collapsed group by default** and renders as a full-width row with a chevron that rotates to point down when open. A screen with more than ~8 visible rows uses one; the tuning a power user wants is not what a first-run user should read past.
+- **A row with no effect is a defect.** Every control here is wired to real behaviour. A toggle that does nothing is worse than a missing one.
+
 ### Navigation
 
 - **Header (56px, Clean White, 1px Hairline bottom):** a leading control (menu or back), the wordmark in Headline (600, 24/32) Ink, and trailing controls. Leading and trailing slots are **fixed width and equal** so the wordmark stays optically centred no matter how many trailing icons appear. Icons are 2px stroke at 20px in Ink; a header control that opens something live takes Signal Blue.

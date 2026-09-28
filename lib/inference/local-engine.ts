@@ -5,6 +5,7 @@
  * One native slot per engine instance — the manager owns switching.
  */
 
+import { toLlamaSampler, type LlamaSamplerParams } from "./sampler.ts";
 import type {
   CompletionCallbacks,
   CompletionEngine,
@@ -32,12 +33,16 @@ export interface LlamaCompletionResult {
   tokens_evaluated?: number;
 }
 
-/** Params the wrapper forwards (messages/tools/media/thinking only). */
-export interface LlamaCompletionParams {
+/** Params the wrapper forwards (messages/tools/media/thinking/sampler). */
+export interface LlamaCompletionParams extends Partial<LlamaSamplerParams> {
   messages: Array<{ role: string; content: string }>;
   tools?: unknown;
   media_paths?: string[];
   enable_thinking?: boolean;
+  // The sampler's 16 fields arrive as FLAT, top-level siblings here — they
+  // extend from LlamaSamplerParams rather than being restated, so the names
+  // are defined once. They are NOT nested under a key: llama.rn's converter
+  // drops unknown keys, so nesting type-checks and then does nothing.
 }
 
 /** Structural slice of LlamaContext: completion + stop + release. */
@@ -95,6 +100,12 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
           ...(request.enableThinking !== undefined
             ? { enable_thinking: request.enableThinking }
             : {}),
+          // Flat, top-level, and NOT nested under a key: llama.rn's
+          // NativeCompletionParams takes these as siblings (types.d.ts), and
+          // the JSI converter drops unknown keys. Nesting them under
+          // `sampler:` compiles, type-checks, passes every test, and does
+          // nothing at runtime.
+          ...(request.sampler ? toLlamaSampler(request.sampler) : {}),
         },
         (data) => {
           const delta = data.content ?? data.token ?? "";

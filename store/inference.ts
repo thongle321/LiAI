@@ -9,6 +9,11 @@
 import { create } from "zustand";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "../lib/storage";
+import {
+  DEFAULT_SAMPLER,
+  parseSampler,
+  type SamplerParams,
+} from "../lib/inference/sampler.ts";
 
 export const INFERENCE_KEY = "liai_inference_v1";
 
@@ -38,6 +43,8 @@ export interface InferenceParams {
   specDraftCacheK: CacheType;
   specDraftCacheV: CacheType;
   thinkingEnabled: boolean;
+  /** Sampling params, nested so one setter covers the whole group. */
+  sampler: SamplerParams;
 }
 
 export interface InferenceState extends InferenceParams {
@@ -58,6 +65,8 @@ export interface InferenceState extends InferenceParams {
   setSpecDraftCacheK: (v: CacheType) => void;
   setSpecDraftCacheV: (v: CacheType) => void;
   setThinkingEnabled: (on: boolean) => void;
+  /** Patch any subset; each value is clamped by the sampler module. */
+  setSampler: (patch: Partial<SamplerParams>) => void;
 }
 
 export const DEFAULT_INFERENCE: InferenceParams = {
@@ -76,6 +85,7 @@ export const DEFAULT_INFERENCE: InferenceParams = {
   specDraftCacheK: "q8_0",
   specDraftCacheV: "q8_0",
   thinkingEnabled: true,
+  sampler: { ...DEFAULT_SAMPLER },
 };
 
 /** Single clamp every numeric param flows through (persist/restore + setters). */
@@ -119,6 +129,7 @@ function asParams(value: unknown): InferenceParams {
     specDraftCacheK: cache("specDraftCacheK", DEFAULT_INFERENCE.specDraftCacheK),
     specDraftCacheV: cache("specDraftCacheV", DEFAULT_INFERENCE.specDraftCacheV),
     thinkingEnabled: flag("thinkingEnabled", DEFAULT_INFERENCE.thinkingEnabled),
+    sampler: parseSampler(v.sampler),
   };
 }
 
@@ -150,6 +161,7 @@ export function createInferenceStore(storage: KeyValueStorage) {
         specDraftCacheK,
         specDraftCacheV,
         thinkingEnabled,
+        sampler,
       } = get();
       try {
         await storage.setItem(
@@ -170,6 +182,7 @@ export function createInferenceStore(storage: KeyValueStorage) {
             specDraftCacheK,
             specDraftCacheV,
             thinkingEnabled,
+            sampler,
           }),
         );
       } catch {
@@ -241,6 +254,10 @@ export function createInferenceStore(storage: KeyValueStorage) {
       },
       setThinkingEnabled: (on) => {
         set({ thinkingEnabled: on });
+        void persist();
+      },
+      setSampler: (patch) => {
+        set({ sampler: parseSampler({ ...get().sampler, ...patch }) });
         void persist();
       },
     };

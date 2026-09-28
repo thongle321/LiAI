@@ -13,6 +13,7 @@ import type {
   EngineToolCall,
   ToolDefinition,
 } from "../inference/engine.ts";
+import type { SamplerParams } from "../inference/sampler.ts";
 import { runTalent, type TalentSearchAuth } from "./registry.ts";
 
 export interface AgentStep {
@@ -47,6 +48,8 @@ export interface AgentRunOptions {
   imagePaths?: string[];
   /** Local-only: jinja thinking blocks on/off for every loop turn. */
   enableThinking?: boolean;
+  /** Local-only: resolved sampling params for every loop turn. */
+  sampler?: SamplerParams;
   fetchImpl: typeof fetch;
   search: TalentSearchAuth | null;
   userTexts?: string[];
@@ -117,6 +120,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
             ...(options.enableThinking !== undefined
               ? { enableThinking: options.enableThinking }
               : {}),
+            ...(options.sampler ? { sampler: options.sampler } : {}),
           },
           {
             onToken: (delta) => {

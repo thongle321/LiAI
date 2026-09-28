@@ -11,6 +11,7 @@ import {
   type LlamaContextLike,
   type LlamaTokenData,
 } from "../lib/inference/local-engine.ts";
+import { DEFAULT_SAMPLER } from "../lib/inference/sampler.ts";
 
 function fakeContext(
   over: Partial<LlamaContextLike> = {},
@@ -98,6 +99,31 @@ describe("createLocalEngine", () => {
     await engine.completion({ messages: [{ role: "user", content: "y" }] }, { onToken: () => {} });
     assert.equal(seen[0].enable_thinking, false);
     assert.equal("enable_thinking" in seen[1], false);
+  });
+
+  it("forwards the sampler flat, as llama.rn's sibling keys", async () => {
+    const seen: LlamaCompletionParams[] = [];
+    const ctx = fakeContext({
+      completion: async (params: LlamaCompletionParams) => {
+        seen.push(params);
+        return { text: "t", content: "t", tool_calls: [], tokens_predicted: 1, tokens_evaluated: 1 };
+      },
+    });
+    const engine = createLocalEngine(ctx);
+    await engine.completion(
+      {
+        messages: [{ role: "user", content: "x" }],
+        sampler: { ...DEFAULT_SAMPLER, temperature: 0.15, penaltyFrequency: 1.5 },
+      },
+      { onToken: () => {} },
+    );
+    await engine.completion({ messages: [{ role: "user", content: "y" }] }, { onToken: () => {} });
+    // Top level, or the native converter drops them: the first version of
+    // this nested them under `sampler:`, passed every check, and did nothing.
+    assert.equal(seen[0].temperature, 0.15);
+    assert.equal(seen[0].penalty_freq, 1.5, "not penalty_frequency");
+    assert.equal("sampler" in seen[0], false, "nothing is nested under a sampler key");
+    assert.equal("temperature" in seen[1], false, "an absent sampler stays absent");
   });
 
   it("forwards stop and release to the native context", async () => {

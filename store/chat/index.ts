@@ -19,6 +19,7 @@ import { createDraftSlice } from "./draft.ts";
 import type { ChatCtx, ChatDeps, ChatState, TurnRunner } from "./types.ts";
 import { selectEngineSource, type EngineSource } from "../../lib/inference/engine.ts";
 import { EngineManager } from "../../lib/inference/manager.ts";
+import { resolveSampler, type SamplerParams } from "../../lib/inference/sampler.ts";
 import { createRemoteEngine } from "../../lib/inference/remote-engine.ts";
 import { createTurnRunner } from "../../lib/chat/turn.ts";
 import type { SessionStore } from "../../lib/chat/session-store.ts";
@@ -153,6 +154,27 @@ async function defaultThinking(): Promise<boolean> {
   }
 }
 
+/** Resolved sampling params for the active model, or null for a remote
+ *  engine (an OpenAI-compatible endpoint keeps its own defaults and has no
+ *  equivalent for typical-p, XTC or mirostat, so sending ours would be
+ *  sending knobs the server silently ignores). */
+async function defaultSampler(): Promise<SamplerParams | null> {
+  try {
+    const [{ useInference }, { useModelStore }] = await Promise.all([
+      import("../inference.ts"),
+      import("../modelStore.ts"),
+    ]);
+    const m = useModelStore.getState();
+    if (!m.activeModelId || m.activeProviderType === "remote") return null;
+    return resolveSampler(
+      useInference.getState().sampler,
+      m.getModelSettings(m.activeModelId).sampler,
+    );
+  } catch {
+    return null;
+  }
+}
+
 /** Per-model system prompt override; absent stays absent. */
 async function defaultSystemPrompt(): Promise<string | undefined> {
   try {
@@ -179,6 +201,7 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
       },
       getSystemPrompt: () => defaultSystemPrompt(),
       getThinking: () => defaultThinking(),
+    getSampler: () => defaultSampler(),
       saveImage: (uri: string) => defaultSaveImage(uri),
     });
     return runTurn(text, paths, onToken);

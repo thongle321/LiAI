@@ -15,7 +15,7 @@ import {
   type SearchProviderId,
 } from "../lib/search-providers.ts";
 import { useSearch } from "../store/search.ts";
-import { PickerRow, StepperRow, ToggleRow } from "./SettingsRows.tsx";
+import { PickerRow, SettingsSection, StepperRow, ToggleRow } from "./SettingsRows.tsx";
 
 function ProviderKeys({ id }: { id: SearchProviderId }) {
   const getProviderKey = useSearch((s) => s.getProviderKey);
@@ -100,15 +100,23 @@ export function SearchSettings() {
   const providerIds = SEARCH_PROVIDERS.map((p) => p.id);
 
   return (
-    <View className="mb-6">
-      <Text className="mb-2 font-sans-semibold text-h4 text-primary-text">Web search</Text>
-      <View className="rows mb-3">
+    <>
+      <SettingsSection
+        title="Web search"
+        description="Searches leave your device and go to the provider below."
+      >
         <View className="row">
-          <ToggleRow label="Allow web search" on={hasConsented} onPress={() => setConsented(!hasConsented)} />
+          <ToggleRow
+            label="Allow web search"
+            description="Let the model look things up. Required before any search is sent."
+            on={hasConsented}
+            onPress={() => setConsented(!hasConsented)}
+          />
         </View>
         <View className="row">
           <StepperRow
             label="Results"
+            description="How many pages a search may bring back."
             display={`${resultCount}`}
             onMinus={() => setResultCount(resultCount - 1)}
             onPlus={() => setResultCount(resultCount + 1)}
@@ -116,22 +124,22 @@ export function SearchSettings() {
             plusDisabled={resultCount >= MAX_RESULT_COUNT}
           />
         </View>
-      </View>
-      <Text className="mb-2 mt-1 font-sans-semibold text-body-sm text-secondary-text">Provider</Text>
-      <View className="rows">
+      </SettingsSection>
+      <SettingsSection title="Provider">
         <View className="row">
           {/* Three providers is a closed set that does not fit inline, so
               it is a native menu rather than three radio rows. */}
           <PickerRow
             label="Provider"
+            description="Which search service answers, and which key it uses."
             options={providerIds}
             value={activeProviderId}
             onChange={(next) => setActiveProvider(next as SearchProviderId)}
             displayFor={(id) => SEARCH_PROVIDERS.find((p) => p.id === id)?.name ?? id}
           />
         </View>
-      </View>
+      </SettingsSection>
       {selectedProvider !== undefined && <ProviderKeys id={selectedProvider.id} />}
-    </View>
+    </>
   );
 }

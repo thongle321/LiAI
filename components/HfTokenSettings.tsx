@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import { colors } from "../themes/tokens.ts";
+import { SettingsSection } from "./SettingsRows.tsx";
 import { useModelStore } from "../store/modelStore";
 
 export function HfTokenSettings() {
@@ -26,13 +27,15 @@ export function HfTokenSettings() {
   }
 
   return (
-    <View className="mb-6">
-      <Text className="mb-2 font-sans-semibold text-h4 text-primary-text">Hugging Face</Text>
-      <Text className="mb-3 font-sans text-body-sm text-secondary-text">
-        {hfToken ? "Token saved on this device." : "Needed only for gated repos."}
-      </Text>
-      <View className="rows">
-        <View className="row flex-row items-center gap-2">
+    <SettingsSection
+      title="Hugging Face"
+      description={
+        hfToken
+          ? "Token saved on this device. Needed only for gated repos."
+          : "Add a token to search gated repos. Needed only for those."
+      }
+    >
+      <View className="row flex-row items-center gap-2">
           <TextInput
             value={draft}
             onChangeText={setDraft}
@@ -62,7 +65,6 @@ export function HfTokenSettings() {
             </Pressable>
           )}
         </View>
-      </View>
-    </View>
+    </SettingsSection>
   );
 }

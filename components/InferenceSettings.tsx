@@ -4,10 +4,15 @@
  * Values persist via the inference store and reach llama.rn on the next
  * reply (the engine slot reloads when params change). Same rows render on
  * both platforms — no hardware gating.
+ *
+ * Grouped the way PocketPal groups them: what a first run needs up front,
+ * then Advanced (collapsed), then Memory. Twenty-eight undifferentiated rows
+ * is a wall, and the tuning a power user wants is not what anyone reads past
+ * on day one (DESIGN.md, Settings).
  */
 
 import { useEffect } from "react";
-import { Pressable, Text, View } from "react-native";
+import { View } from "react-native";
 
 import {
   CACHE_TYPES,
@@ -19,51 +24,19 @@ import {
   type CacheType,
   type FlashAttn,
 } from "../store/inference.ts";
-import { SliderRow, StepperRow, ToggleRow } from "./SettingsRows.tsx";
+import {
+  AdvancedGroup,
+  Segmented,
+  SettingsSection,
+  SliderRow,
+  StepperRow,
+  ToggleRow,
+} from "./SettingsRows.tsx";
 
 const CTX_STEP = 1024;
 const CTX_MAX = 131072;
 const BATCH_STEP = 128;
 const FLASH_OPTIONS: FlashAttn[] = ["auto", "on", "off"];
-
-function Segmented<T extends string>({
-  label,
-  hint,
-  value,
-  options,
-  onPick,
-}: {
-  label: string;
-  hint?: string;
-  value: T;
-  options: readonly T[];
-  onPick: (v: T) => void;
-}) {
-  return (
-    <View className="py-2">
-      <Text className="font-sans text-body-md text-primary-text">{label}</Text>
-      {hint && (
-        <Text className="font-sans text-body-sm text-secondary-text mt-0.5">{hint}</Text>
-      )}
-      <View className="flex-row gap-2 mt-2">
-        {options.map((o) => (
-          <Pressable
-            key={o}
-            onPress={() => onPick(o)}
-            className={o === value ? "seg seg--active" : "seg"}
-            accessibilityRole="radio"
-            accessibilityLabel={o}
-            accessibilityState={{ selected: o === value }}
-          >
-            <Text className={o === value ? "seg-label seg-label--active" : "seg-label"}>
-              {o}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  );
-}
 
 export function InferenceSettings() {
   const {
@@ -103,15 +76,15 @@ export function InferenceSettings() {
   }, []);
 
   return (
-    <View className="mb-6">
-      <Text className="mb-2 font-sans-semibold text-h4 text-primary-text">On-device model</Text>
-      <Text className="mb-3 font-sans text-body-sm text-secondary-text">
-        Takes effect on the next reply — the model reloads automatically.
-      </Text>
-      <View className="rows mb-3">
+    <>
+      <SettingsSection
+        title="Initialization"
+        description="Takes effect on the next reply — the model reloads automatically."
+      >
         <View className="row">
           <StepperRow
             label="Context size"
+            description="How much conversation the model can hold at once."
             display={`${nCtx}`}
             onMinus={() => setNCtx(nCtx - CTX_STEP)}
             onPlus={() => setNCtx(nCtx + CTX_STEP)}
@@ -122,6 +95,7 @@ export function InferenceSettings() {
         <View className="row">
           <SliderRow
             label="GPU layers"
+            description="How much of the model runs on the GPU. All of it is fastest."
             display={`${nGpuLayers}`}
             value={nGpuLayers}
             min={0}
@@ -130,28 +104,9 @@ export function InferenceSettings() {
           />
         </View>
         <View className="row">
-          <StepperRow
-            label="Batch size"
-            display={`${nBatch}`}
-            onMinus={() => setNBatch(nBatch - BATCH_STEP)}
-            onPlus={() => setNBatch(nBatch + BATCH_STEP)}
-            minusDisabled={nBatch <= 1}
-            plusDisabled={nBatch >= MAX_BATCH}
-          />
-        </View>
-        <View className="row">
-          <StepperRow
-            label="Physical batch size"
-            display={`${nUbatch}`}
-            onMinus={() => setNUbatch(nUbatch - BATCH_STEP)}
-            onPlus={() => setNUbatch(nUbatch + BATCH_STEP)}
-            minusDisabled={nUbatch <= 1}
-            plusDisabled={nUbatch >= MAX_BATCH}
-          />
-        </View>
-        <View className="row">
           <SliderRow
             label="CPU threads"
+            description="Cores used for the work the GPU does not take."
             display={`${nThreads}`}
             value={nThreads}
             min={1}
@@ -159,83 +114,135 @@ export function InferenceSettings() {
             onChange={setNThreads}
           />
         </View>
-      </View>
-      <View className="rows">
+      </SettingsSection>
+      {/* No section title: the Advanced group IS the header row, and it is
+          closed on arrival (DESIGN.md, Settings). */}
+      <SettingsSection>
         <View className="row">
-          <Segmented
+          <AdvancedGroup
+            label="Advanced"
+            description="Batching, attention, caches and speculative decoding."
+          >
+          <StepperRow
+            label="Batch size"
+            description="Tokens processed per pass. Larger is faster, heavier on memory."
+            display={`${nBatch}`}
+            onMinus={() => setNBatch(nBatch - BATCH_STEP)}
+            onPlus={() => setNBatch(nBatch + BATCH_STEP)}
+            minusDisabled={nBatch <= 1}
+            plusDisabled={nBatch >= MAX_BATCH}
+          />
+          <StepperRow
+            label="Physical batch size"
+            description="The hardware-level batch underneath it."
+            display={`${nUbatch}`}
+            onMinus={() => setNUbatch(nUbatch - BATCH_STEP)}
+            onPlus={() => setNUbatch(nUbatch + BATCH_STEP)}
+            minusDisabled={nUbatch <= 1}
+            plusDisabled={nUbatch >= MAX_BATCH}
+          />
+          <Segmented<FlashAttn>
             label="Flash attention"
+            description="A faster attention kernel where the hardware has one."
             value={flashAttn}
             options={FLASH_OPTIONS}
             onPick={setFlashAttn}
           />
-        </View>
-        <View className="row">
           <Segmented<CacheType>
             label="Key cache type"
+            description="Quantisation of the cached keys. Lower saves memory."
             value={cacheK}
             options={CACHE_TYPES}
             onPick={setCacheK}
           />
-        </View>
-        <View className="row">
           <Segmented<CacheType>
             label="Value cache type"
+            description="Quantisation of the cached values. Lower saves memory."
             value={cacheV}
             options={CACHE_TYPES}
             onPick={setCacheV}
           />
-        </View>
-        <View className="row">
           <ToggleRow
-            label="Speculative decoding (MTP)"
+            label="Speculative decoding"
+            description="Guesses ahead with the model's own draft layers, then verifies. Faster on some hardware."
             on={speculativeEnabled}
             onPress={() => setSpeculativeEnabled(!speculativeEnabled)}
           />
-        </View>
-      </View>
-      {speculativeEnabled && (
-        <>
-          <Text className="mt-2 mb-1 font-sans text-body-sm text-secondary-text">
-            Uses the loaded model's embedded draft layers — no separate draft model needed.
-          </Text>
-          <View className="rows mb-3">
-            <View className="row">
+          {speculativeEnabled ? (
+            <>
               <SliderRow
                 label="Draft GPU layers"
+                description="Layers the draft guess runs on."
                 display={`${specDraftGpuLayers}`}
                 value={specDraftGpuLayers}
                 min={0}
                 max={MAX_GPU_LAYERS}
                 onChange={setSpecDraftGpuLayers}
               />
-            </View>
-            <View className="row">
               <Segmented<CacheType>
                 label="Draft key cache type"
+                description="Quantisation of the draft guess's cached keys."
                 value={specDraftCacheK}
                 options={CACHE_TYPES}
                 onPick={setSpecDraftCacheK}
               />
-            </View>
-            <View className="row">
               <Segmented<CacheType>
                 label="Draft value cache type"
+                description="Quantisation of the draft guess's cached values."
                 value={specDraftCacheV}
                 options={CACHE_TYPES}
                 onPick={setSpecDraftCacheV}
               />
-            </View>
-          </View>
-        </>
-      )}
-      <View className="rows">
-        <View className="row">
-          <ToggleRow label="Lock memory (mlock)" on={useMlock} onPress={() => setUseMlock(!useMlock)} />
-        </View>
-        <View className="row">
-          <ToggleRow label="Memory-map model (mmap)" on={useMmap} onPress={() => setUseMmap(!useMmap)} />
-        </View>
+            </>
+          ) : null}
+        </AdvancedGroup>
       </View>
-    </View>
+      </SettingsSection>
+      <SettingsSection
+        title="Memory"
+        description="How the model file is held once it is loaded."
+      >
+        <View className="row">
+          <ToggleRow
+            label="Lock memory (mlock)"
+            description="Keeps the model in RAM instead of letting the OS page it out."
+            on={useMlock}
+            onPress={() => setUseMlock(!useMlock)}
+          />
+        </View>
+        <View className="row">
+          <ToggleRow
+            label="Memory-map model (mmap)"
+            description="Loads the model from disk on demand. Cheaper, slightly slower to read."
+            on={useMmap}
+            onPress={() => setUseMmap(!useMmap)}
+          />
+        </View>
+      </SettingsSection>
+    </>
+  );
+}
+
+/** Reasoning output: a separate section because it is a template switch, not
+ *  an inference param, and because it changes what a reply looks like rather
+ *  than how it is generated. No load() here: InferenceSettings is mounted
+ *  beside it and owns the one load for the shared inference store. */
+export function ThinkingSettings() {
+  const { thinkingEnabled, setThinkingEnabled } = useInference();
+
+  return (
+    <SettingsSection
+      title="Thinking"
+      description="Reasoning models show their working before the answer."
+    >
+      <View className="row">
+        <ToggleRow
+          label="Show thinking"
+          description="Turn off to skip the reasoning pass entirely — faster, and the model answers directly."
+          on={thinkingEnabled}
+          onPress={() => setThinkingEnabled(!thinkingEnabled)}
+        />
+      </View>
+    </SettingsSection>
   );
 }

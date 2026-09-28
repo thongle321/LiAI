@@ -200,7 +200,7 @@ export default function ChatRoute() {
           </Animated.View>
         </View>
         <Pressable
-          onPress={() => router.push("/models")}
+          onPress={() => router.navigate("/models")}
           className="flex-1"
           accessibilityRole="button"
           accessibilityLabel="Open models"

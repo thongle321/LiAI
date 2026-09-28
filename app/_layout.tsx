@@ -49,16 +49,11 @@ export default function RootLayout() {
             }}
           >
             <Stack.Screen name="index" />
-            <Stack.Screen name="onboarding" />
-            {/* Drawer group owns (tabs) + the navigator drawer (app/(drawer)/).
-                Tab switches never animate, so the shared bar stays static. */}
+            {/* Drawer group owns EVERY destination: (tabs) plus
+                models/settings/voice-settings/about. Tab switches never
+                animate, so the shared bar stays static. */}
             <Stack.Screen name="(drawer)" options={{ animation: "none" }} />
-            {/* Standalone vision screen: same instant-switch discipline —
-                the camera fades itself in, nothing else moves. */}
-            <Stack.Screen name="vision" options={{ animation: "none" }} />
-            <Stack.Screen name="settings" />
-            <Stack.Screen name="about" />
-            <Stack.Screen name="models" />
+            <Stack.Screen name="onboarding" />
           </Stack>
         </KeyboardProvider>
       </GestureHandlerRootView>

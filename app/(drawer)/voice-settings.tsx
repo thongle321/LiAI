@@ -6,10 +6,10 @@
 import { ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { colors } from "../themes/tokens.ts";
-import { ScreenHeader } from "../components/ScreenHeader.tsx";
-import { ContentColumn } from "../components/ContentColumn.tsx";
-import { VoiceSettings } from "../components/VoiceSettings.tsx";
+import { colors } from "../../themes/tokens.ts";
+import { ScreenHeader } from "../../components/ScreenHeader.tsx";
+import { ContentColumn } from "../../components/ContentColumn.tsx";
+import { VoiceSettings } from "../../components/VoiceSettings.tsx";
 
 export default function VoiceSettingsScreen() {
   return (

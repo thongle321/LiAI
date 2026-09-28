@@ -239,7 +239,7 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
         containerColor={colors.surface1}
         scrimColor={scrim}
         contentPadding={20}
-        testID="hf-token-sheet"
+        testID="hf-search-token-sheet"
       >
         <View>
           <Text className="font-sans-semibold text-h3 text-primary-text mb-2">

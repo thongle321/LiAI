@@ -11,9 +11,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { Text, View, useWindowDimensions } from "react-native";
-import { BottomSheet } from "@expo/ui";
-import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { Text, View } from "react-native";
 
 import {
   DEFAULT_SAMPLER,
@@ -22,9 +20,9 @@ import {
 } from "../../lib/inference/sampler.ts";
 import { useInference } from "../../store/inference.ts";
 import { useChatStore, defaultGetStore } from "../../store/chat";
-import { colors, scrim } from "../../themes/tokens.ts";
 import { SamplerRows } from "../SamplerRows.tsx";
 import { ActionRow, SettingsSection, Segmented } from "../SettingsRows.tsx";
+import { Sheet } from "../Sheet.tsx";
 
 type Mode = "session" | "preset";
 
@@ -36,13 +34,6 @@ export function GenerationSettingsSheet({
   onClose: () => void;
 }) {
   const sessionId = useChatStore((s) => s.sessionId);
-  const { width } = useWindowDimensions();
-  // The native sheet wraps this view and sizes to it, so an unconstrained
-  // scroll view measures to its widest unbreakable child — the 31-character
-  // title — and overflows the screen. Pinning the width to the window less
-  // the sheet's 20dp horizontal contentPadding breaks that circle, and the
-  // title wraps instead. See contentPadding={20} on the BottomSheet.
-  const bodyWidth = width - 40;
   const {
     sampler: preset,
     thinkingEnabled,
@@ -115,69 +106,18 @@ export function GenerationSettingsSheet({
   const overrideCount = override ? Object.keys(override).length : 0;
 
   return (
-    <BottomSheet
-      isPresented={visible}
-      onDismiss={onClose}
-      // REQUIRED, not decoration: with snapPoints omitted the native sheet
-      // auto-sizes to its content, so 18 sampler rows made it taller than
-      // the screen and its width came from the title's intrinsic unwrapped
-      // width — the title and the cards ran off the right edge. 'full'
-      // bounds it and the KeyboardAwareScrollView does the scrolling.
-      snapPoints={["full"]}
-      containerColor={colors.surface1}
-      scrimColor={scrim}
-      contentPadding={20}
-      testID="generation-settings-sheet"
-    >
-      <KeyboardAwareScrollView
-        className="flex-col"
-        style={{ width: bodyWidth }}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text className="font-sans-semibold text-h3 text-primary-text">
-          {isSession
-            ? "Chat Generation Settings (Session)"
-            : "Chat Generation Settings (Preset)"}
-        </Text>
-        <Text className="mt-1 mb-4 font-sans text-body-md text-secondary-text">
-          {isSession
-            ? overrideCount === 0
-              ? "This conversation follows the preset."
-              : `${overrideCount} value${overrideCount === 1 ? "" : "s"} overridden. Everything else follows the preset.`
-            : "The default every conversation starts from, unless it overrides it."}
-        </Text>
-
-        <SettingsSection>
-          <View className="row">
-            <Segmented<Mode>
-              label="Settings source"
-              description={
-                hasSession
-                  ? undefined
-                  : "Start a conversation to give it its own settings. Until then these are the preset."
-              }
-              value={isSession ? "session" : "preset"}
-              options={availableModes}
-              displayFor={(m) => (m === "session" ? "Session" : "Preset")}
-              onPick={setMode}
-            />
-          </View>
-        </SettingsSection>
-
-        <SettingsSection>
-          <SamplerRows
-            sampler={resolved}
-            thinkingEnabled={thinkingEnabled}
-            showThinking={!isSession}
-            onChange={apply}
-            onThinkingChange={setThinkingEnabled}
-          />
-        </SettingsSection>
-
-        {/* Reset is an action, not a value row, so it is an ActionRow. In
-            Session mode it is only offered when there is something to
-            drop: a button that resets nothing is a dead control. */}
-        {(!isSession || overrideCount > 0) ? (
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title={
+        isSession
+          ? "Chat Generation Settings (Session)"
+          : "Chat Generation Settings (Preset)"
+      }
+      // Pinned below the scrolling body, and only when there is something
+      // to reset: a button that resets nothing is a dead control.
+      footer={
+        !isSession || overrideCount > 0 ? (
           <SettingsSection>
             <View className="row">
               <ActionRow
@@ -187,16 +127,50 @@ export function GenerationSettingsSheet({
                     ? "Drop this conversation's overrides; it follows the preset again."
                     : "Return every value to its shipped default, for this and every conversation."
                 }
-                buttonLabel={
-                  isSession ? "Reset to Preset" : "Reset to System Defaults"
-                }
+                buttonLabel={isSession ? "Reset to Preset" : "Reset to System Defaults"}
                 variant="secondary"
                 onPress={reset}
               />
             </View>
           </SettingsSection>
-        ) : null}
-      </KeyboardAwareScrollView>
-    </BottomSheet>
+        ) : undefined
+      }
+      testID="generation-settings-sheet"
+    >
+      <Text className="mb-4 font-sans text-body-md text-secondary-text">
+        {isSession
+          ? overrideCount === 0
+            ? "This conversation follows the preset."
+            : `${overrideCount} value${overrideCount === 1 ? "" : "s"} overridden. Everything else follows the preset.`
+          : "The default every conversation starts from, unless it overrides it."}
+      </Text>
+
+      <SettingsSection>
+        <View className="row">
+          <Segmented<Mode>
+            label="Settings source"
+            description={
+              hasSession
+                ? undefined
+                : "Start a conversation to give it its own settings. Until then these are the preset."
+            }
+            value={isSession ? "session" : "preset"}
+            options={availableModes}
+            displayFor={(m) => (m === "session" ? "Session" : "Preset")}
+            onPick={setMode}
+          />
+        </View>
+      </SettingsSection>
+
+      <SettingsSection>
+        <SamplerRows
+          sampler={resolved}
+          thinkingEnabled={thinkingEnabled}
+          showThinking={!isSession}
+          onChange={apply}
+          onThinkingChange={setThinkingEnabled}
+        />
+      </SettingsSection>
+    </Sheet>
   );
 }

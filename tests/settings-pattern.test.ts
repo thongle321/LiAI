@@ -154,24 +154,55 @@ describe("settings card pattern", () => {
     }
   });
 
-  it("constrains the height of any sheet holding unbounded rows", () => {
-    // @expo/ui's BottomSheet: "When omitted, the sheet auto-sizes to its
-    // content." The Generation sheet holds 18 sampler rows, so it grew
-    // past the bottom of the screen, and its width came from the title's
-    // intrinsic unwrapped width, so the title and the cards ran off the
-    // right edge too. One cause, two symptoms.
+  it("never asks a native sheet for a snap point", () => {
+    // snapPoints is not a height constraint, it is the BUG. The native
+    // sheet applies no window insets at all (ModalBottomSheetView.kt has no
+    // WindowInsets reference), so a snapped sheet covers the status bar; on
+    // Android it can only rest at 'half' or 'full', so it cannot stop just
+    // below the status bar; and its pan gesture fights a nested scroll
+    // view, so the body will not scroll. Long sheets use components/Sheet.tsx.
     //
-    // Auto-sizing stays correct for the short form sheets, so this only
-    // constrains a sheet whose content is a long list.
+    // This replaces an earlier guard that required snapPoints on a sheet of
+    // sampler rows. It was green through the whole outage because it
+    // encoded the mechanism that was GUESSED, not the one that broke.
     const offenders = screenFiles().filter((file) => {
       const source = read(file);
-      return (
-        /<BottomSheet/.test(source) &&
-        /<SamplerRows/.test(source) &&
-        !/snapPoints=/.test(source)
-      );
+      return /<BottomSheet/.test(source) && /snapPoints=/.test(source);
     });
-    assert.deepEqual(offenders, [], "a sheet of sampler rows must declare snapPoints");
+    assert.deepEqual(
+      offenders,
+      [],
+      "a native sheet must not use snapPoints; use components/Sheet.tsx",
+    );
+  });
+
+  it("grows the shared sheet's scroll view instead of zeroing its basis", () => {
+    // REGRESSION. Uniwind compiles flex-1 to native `flex: 1`, which Yoga
+    // resolves as flexBasis 0% — and a zero basis inside a maxHeight
+    // container measured the scroll view to zero, rendering a WHITE sheet.
+    // That cause was observed and confirmed by experiment on a device, not
+    // guessed, which is what separates this guard from the snapPoints guard
+    // it replaced.
+    //
+    // LIMITATION, stated rather than hidden: this is a text scan, so it
+    // only sees the literal className. Moving `grow` into a .sheet--body
+    // rule in global.css would satisfy the intent and fail this test, and a
+    // refactor to <ScrollView style={...}> would pass it wrongly. There is
+    // no renderer in this repo, so a layout assertion is not available; the
+    // device check is what covers that gap.
+    const sheet = read("components/Sheet.tsx");
+    const body = sheet.match(/<ScrollView[\s\S]*?>/);
+    assert.ok(body, "the sheet's body must be a scroll view");
+    assert.match(
+      body[0],
+      /className="grow"/,
+      "the body must grow, not flex its basis",
+    );
+    assert.doesNotMatch(
+      body[0],
+      /\bflex-1\b/,
+      "flex-1 is flexBasis 0% and collapses the sheet",
+    );
   });
 
   it("never flexes a scroll view inside a native sheet", () => {

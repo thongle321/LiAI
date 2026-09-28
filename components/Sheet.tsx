@@ -78,7 +78,6 @@ export function Sheet({
         style={{ backgroundColor: scrim }}
       />
       <View
-        testID={testID ? `${testID}-card` : undefined}
         className="absolute left-0 right-0 bottom-0 rounded-t-xl bg-surface-1"
         // Runtime-computed: the cap is what keeps the top edge below the
         // status bar, and it depends on the window and the inset.

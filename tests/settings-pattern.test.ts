@@ -135,7 +135,7 @@ describe("settings card pattern", () => {
     // DESIGN.md, Settings: a bare label says nothing about what the value
     // does. Three rows shipped without one before this existed.
     const rows =
-      /<(ToggleRow|StepperRow|SliderRow|PickerRow|Segmented|NavRow|ActionRow|TextFieldRow)\b[\s\S]*?\/>/g;
+      /<(ToggleRow|StepperRow|SliderRow|PickerRow|Segmented|ActionRow|TextFieldRow)\b[\s\S]*?\/>/g;
     for (const file of [
       "SearchSettings.tsx",
       "VoiceSettings.tsx",

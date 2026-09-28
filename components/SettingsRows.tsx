@@ -17,7 +17,7 @@
 import { Children, useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { Host, Picker, Slider, Switch } from "@expo/ui";
-import { ChevronDown, ChevronRight, Minus, Plus } from "lucide-react-native";
+import { ChevronDown, Minus, Plus } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 
@@ -397,36 +397,6 @@ export function ActionRow({
         </Text>
       </Pressable>
     </View>
-  );
-}
-
-/** A row that opens something: value on the right, chevron last. */
-export function NavRow({
-  label,
-  description,
-  value,
-  onPress,
-}: {
-  label: string;
-  description?: string;
-  value?: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      className="flex-row items-center justify-between py-2"
-      accessibilityRole="button"
-      accessibilityLabel={label}
-    >
-      <RowLabel label={label} description={description} />
-      <View className="flex-row items-center gap-1">
-        {value ? (
-          <Text className="font-sans text-body-md text-secondary-text">{value}</Text>
-        ) : null}
-        <ChevronRight size={16} color={colors.secondaryText} />
-      </View>
-    </Pressable>
   );
 }
 

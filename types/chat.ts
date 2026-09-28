@@ -1,21 +1,27 @@
 /** Chat domain types: messages, steps, sessions.
  *
- * Stored turns (Supabase rows) plus client-only render state
+ * Stored turns (local Store rows) plus client-only render state
  * (streaming bubbles, errors).
  */
 
 import type { ApiError } from "./api.ts";
 
-/** One tool invocation surfaced in a bubble (Wave 2: running, then done). */
+/** One tool invocation behind a reply, in call order.
+ *
+ * `position` is the call index and the only ordering key: the Store's
+ * child table is an unordered map, so nothing else preserves call order.
+ * There is deliberately no status — a call is only ever written once it
+ * has finished, so a "running" state had no writer and the bubble's
+ * branch for it was unreachable. Add one back with the code that emits
+ * it, not before.
+ */
 export interface AgentStep {
-  /** Wire identity: running→done upserts match on this, so parallel
-   * same-name calls keep their own results. Absent on history steps
-   * (reloaded rows render done-only, never upsert). */
-  id?: string;
+  /** Row identity, for a stable React key inside the bubble. */
+  id: string;
   tool: string;
-  status: "running" | "done";
   input?: Record<string, unknown>;
   result?: string;
+  position: number;
 }
 
 export interface MessageUsage {
@@ -40,12 +46,14 @@ export interface ChatMessage {
   streaming?: boolean;
 }
 
-/** One row of the Supabase-owned session list. */
+/** One row of the session list, owned by the local Store (ADR-0012).
+ * `updatedAt` is a wall clock for display; the store keeps a separate
+ * monotonic counter for sort order. */
 export interface SessionInfo {
   id: string;
   title: string;
   pinned: boolean;
-  updated_at: string;
+  updatedAt: number;
 }
 
 /** One row in the drawer's history list (derived from SessionInfo). */

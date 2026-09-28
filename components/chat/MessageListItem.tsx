@@ -119,27 +119,17 @@ export function MessageListItem({
           <MarkdownView text={message.text} />
           {settled && <LinkPreviewCard text={message.text} />}
           {message.steps !== undefined && message.steps.length > 0 && (
+            // One settled chip style: a step is only ever written after
+            // the call finished, so the old "running" variant had no
+            // writer. The key is the row id, not the array index.
             <View className="mt-2 flex-row flex-wrap items-center gap-2">
-              {message.steps.map((step, index) => (
+              {message.steps.map((step) => (
                 <View
-                  key={step.id ?? `${step.tool}-${index}`}
-                  className={`flex-row items-center gap-1 rounded-full border px-2 py-0.5 ${
-                    step.status === "running"
-                      ? "border-primary bg-surface-2"
-                      : "border-border bg-surface-2"
-                  }`}
+                  key={step.id}
+                  className="flex-row items-center gap-1 rounded-full border border-border bg-surface-2 px-2 py-0.5"
                 >
-                  <Wrench
-                    size={11}
-                    color={
-                      step.status === "running" ? colors.primary : colors.secondaryText
-                    }
-                  />
-                  <Text
-                    className={`font-sans text-caption ${
-                      step.status === "running" ? "text-primary" : "text-secondary-text"
-                    }`}
-                  >
+                  <Wrench size={11} color={colors.secondaryText} />
+                  <Text className="font-sans text-caption text-secondary-text">
                     {step.tool}
                   </Text>
                 </View>

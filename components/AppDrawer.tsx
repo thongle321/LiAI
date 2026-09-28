@@ -3,7 +3,7 @@
  * Rendered by the navigator-owned <Drawer> (app/(drawer)/_layout.tsx),
  * which provides the panel slide, scrim, gestures, and back handling —
  * this file is only the panel chrome and footer nav. The history section
- * lives in components/chat/SessionList (Supabase-owned sessions).
+ * lives in components/chat/SessionList (the local session list).
  */
 
 import { Pressable, Text, View } from "react-native";

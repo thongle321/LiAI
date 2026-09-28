@@ -1,8 +1,13 @@
 # ADR-0010: Chat persistence in Supabase; AsyncStorage keeps UI state
 
 Date: 2026-09-24
-Status: Accepted
+Status: Superseded by ADR-0012
 Amends: ADR-005 (sessions backend-owned), ADR-001 (KV store scope)
+
+> Superseded 2026-09-28 by [ADR-0012](0012-tinybase-chat-store.md): chat
+> persistence is local (TinyBase + SQLite), there is no backend and no
+> identity. Kept as the record of why the remote store was chosen and
+> then abandoned — read it for the reasoning, not for the decision.
 
 ## Context
 

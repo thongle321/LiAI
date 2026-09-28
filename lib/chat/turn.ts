@@ -8,6 +8,7 @@
 
 import type { AgentStep } from "../../types/chat.ts";
 import type { ChatMessage } from "../../types/chat.ts";
+import type { StoredTurn } from "./session-store.ts";
 import type {
   CompletionEngine,
   CompletionMessage,
@@ -19,17 +20,13 @@ import { talentDefinitions, type TalentSearchAuth } from "../agent/registry.ts";
 /** First user message becomes the session title, truncated here. */
 export const SESSION_TITLE_LEN = 48;
 
+/** The slice of the session store a turn needs. Structural on purpose:
+ *  a turn is the one place that must work with a fake, and this keeps
+ *  the fake to three methods. The turn shape is the shared one, so the
+ *  write contract has exactly one definition. */
 export interface TurnSessionStore {
   create(): Promise<string>;
-  append(
-    sessionId: string,
-    turn: {
-      role: "user" | "assistant";
-      content: string;
-      type?: string;
-      metadata?: Record<string, unknown> | null;
-    },
-  ): Promise<void>;
+  append(sessionId: string, turn: StoredTurn): Promise<void>;
   setTitleIfEmpty(sessionId: string, title: string): Promise<void>;
 }
 
@@ -126,17 +123,17 @@ export function createTurnRunner(deps: TurnDeps) {
     if (result.text.trim() === "" && result.steps.length === 0) {
       throw new Error("empty reply");
     }
-    const steps: AgentStep[] = result.steps.map((s) => ({
+    const steps: AgentStep[] = result.steps.map((s, position) => ({
       id: s.id,
       tool: s.tool,
-      status: "done" as const,
+      position,
       ...(s.input ? { input: s.input } : {}),
       ...(s.result !== undefined ? { result: s.result } : {}),
     }));
     const usage = {
-      prompt_tokens: result.promptTokens,
-      completion_tokens: result.completionTokens,
-      total_tokens: result.promptTokens + result.completionTokens,
+      promptTokens: result.promptTokens,
+      completionTokens: result.completionTokens,
+      totalTokens: result.promptTokens + result.completionTokens,
     };
     // Best-effort persistence: a store failure must not blank the reply.
     // Retry re-answers a stored question, so it skips the user append.
@@ -150,14 +147,8 @@ export function createTurnRunner(deps: TurnDeps) {
           role: "assistant",
           content: result.text,
           type: "text",
-          metadata: {
-            tool_runs: steps.map((s) => ({
-              name: s.tool,
-              ...(s.input ? { input: s.input } : {}),
-              ...(s.result !== undefined ? { result: s.result } : {}),
-            })),
-            usage,
-          },
+          usage,
+          steps,
         });
       }
     } catch {

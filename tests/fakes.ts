@@ -1,91 +1,91 @@
-/** Shared fakes for store tests: memory KV, in-memory sessions, scripted turns.
+/** Shared fakes for store tests: in-memory sessions, scripted turns.
  *
- * The chat slices take all collaborators by injection (storage, session
- * store, turn runner, engine source), so these tests never touch fetch,
- * XHR, Supabase, or native modules.
+ * The chat slices take their collaborators by injection (session store,
+ * turn runner, engine source), so these tests never touch fetch, XHR,
+ * SQLite, or native modules. There is no storage fake here any more:
+ * sessions, the active-session pointer and drafts all live in the
+ * session store (ADR-0012).
  */
 
-import type { KeyValueStorage } from "../lib/storage.ts";
-import type {
-  ChatTurn,
-  SessionRow,
-  SessionStore,
-} from "../lib/chat/supabase-store.ts";
-import type { AgentStep } from "../types/chat.ts";
+import type { SessionStore, StoredTurn } from "../lib/chat/session-store.ts";
+import { draftSlot } from "../lib/chat/session-store.ts";
+import type { AgentStep, SessionInfo } from "../types/chat.ts";
 import type { TurnRunner } from "../store/chat/types.ts";
-
-export function memoryStorage(seed: Record<string, string> = {}): KeyValueStorage & {
-  data: Record<string, string>;
-} {
-  const data: Record<string, string> = { ...seed };
-  return {
-    data,
-    getItem: async (k: string) => data[k] ?? null,
-    setItem: async (k: string, v: string) => {
-      data[k] = v;
-    },
-    removeItem: async (k: string) => {
-      delete data[k];
-    },
-  };
-}
 
 interface SeedSession {
   id: string;
   title?: string;
   pinned?: boolean;
-  turns?: ChatTurn[];
+  turns?: StoredTurn[];
 }
 
 export interface FakeStoreCalls {
   creates: number;
-  appends: Array<{ sessionId: string; turn: ChatTurn }>;
+  appends: Array<{ sessionId: string; turn: StoredTurn }>;
   deletes: string[];
 }
 
-/** In-memory SessionStore with call counters (no network, no SDK). */
-export function fakeSessionStore(seeds: SeedSession[] = []): {
+/** In-memory SessionStore with call counters (no native, no SDK).
+ *  `activeSessionId` seeds the pointer, which is what the old
+ *  `memoryStorage({liai_session_id})` seed used to do. */
+export function fakeSessionStore(
+  seeds: SeedSession[] = [],
+  activeSessionId: string | null = null,
+): {
   store: SessionStore;
   calls: FakeStoreCalls;
 } {
   const sessions = new Map<
     string,
-    { title: string; pinned: boolean; turns: ChatTurn[] }
+    { title: string; pinned: boolean; turns: StoredTurn[]; seq: number }
   >();
   for (const seed of seeds) {
     sessions.set(seed.id, {
       title: seed.title ?? "",
       pinned: seed.pinned ?? false,
       turns: (seed.turns ?? []).map((t) => ({ ...t })),
+      seq: 0,
     });
   }
+  const drafts = new Map<string, string>();
+  let active: string | null = activeSessionId;
+  let clock = 0;
   const calls: FakeStoreCalls = { creates: 0, appends: [], deletes: [] };
   const store: SessionStore = {
     create: async () => {
       calls.creates += 1;
       const id = `s-${calls.creates}`;
-      sessions.set(id, { title: "", pinned: false, turns: [] });
+      sessions.set(id, { title: "", pinned: false, turns: [], seq: 0 });
       return id;
     },
     get: async (sessionId: string) => {
       const row = sessions.get(sessionId);
-      return row ? row.turns.map((t) => ({ ...t })) : null;
+      if (!row) return null;
+      // Tool calls come back in call order: the real store sorts the
+      // child table by `position`, so the fake must honour the same
+      // contract rather than returning whatever order it was written in.
+      return row.turns.map((t) => ({
+        ...t,
+        ...(t.steps !== undefined
+          ? { steps: [...t.steps].sort((a, b) => a.position - b.position) }
+          : {}),
+      }));
     },
-    append: async (sessionId: string, turn: ChatTurn) => {
+    append: async (sessionId: string, turn: StoredTurn) => {
       let row = sessions.get(sessionId);
       if (!row) {
-        row = { title: "", pinned: false, turns: [] };
+        row = { title: "", pinned: false, turns: [], seq: 0 };
         sessions.set(sessionId, row);
       }
       row.turns.push({ ...turn });
       calls.appends.push({ sessionId, turn: { ...turn } });
     },
-    listSessions: async (): Promise<SessionRow[]> =>
+    listSessions: async (): Promise<SessionInfo[]> =>
       [...sessions.entries()].map(([id, row]) => ({
         id,
         title: row.title,
         pinned: row.pinned,
-        updated_at: "t",
+        updatedAt: row.seq,
       })),
     renameSession: async (id: string, title: string) => {
       const row = sessions.get(id);
@@ -101,10 +101,15 @@ export function fakeSessionStore(seeds: SeedSession[] = []): {
     },
     deleteSession: async (id: string) => {
       calls.deletes.push(id);
+      // Mirrors the real store: the draft and the pointer are its data.
+      drafts.delete(draftSlot(id));
+      if (active === id) active = null;
       return sessions.delete(id);
     },
     setTitleIfEmpty: async (id: string, title: string) => {
       const row = sessions.get(id);
+      // No mint-if-absent, matching the real store: a session row always
+      // exists before this is called.
       if (row && row.title === "") row.title = title;
     },
     popLastAssistant: async (id: string) => {
@@ -115,8 +120,21 @@ export function fakeSessionStore(seeds: SeedSession[] = []): {
       row.turns.pop();
       return true;
     },
+    getDraft: async (sessionId) => drafts.get(draftSlot(sessionId)) ?? "",
+    setDraft: async (sessionId, text) => {
+      clock += 1;
+      if (text === "") drafts.delete(draftSlot(sessionId));
+      else drafts.set(draftSlot(sessionId), text);
+    },
+    clearDraft: async (sessionId) => {
+      drafts.delete(draftSlot(sessionId));
+    },
+    getActiveSessionId: async () => active,
+    setActiveSessionId: async (sessionId) => {
+      active = sessionId;
+    },
   };
-  return { store, calls };
+  return { store, calls, drafts };
 }
 
 export interface ScriptedTurn {

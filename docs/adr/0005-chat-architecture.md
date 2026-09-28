@@ -12,6 +12,9 @@ session, non-streaming, plain-text, with the backend owning history
 (Supabase `sessions`/`messages`). Porting parity requires choosing the session
 store, the streaming transport, the UI stack, and the markdown renderer.
 
+> Superseded in part by ADR-0012: sessions are local (TinyBase + SQLite), not
+> backend-owned. The rest of this record stands.
+
 ## Decision
 
 - **Sessions are backend-owned.** Supabase `sessions`/`messages` is the only

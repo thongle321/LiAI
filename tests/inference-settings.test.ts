@@ -11,7 +11,27 @@ import {
   parseInferenceParams,
 } from "../store/inference.ts";
 import { EngineManager } from "../lib/inference/manager.ts";
-import { memoryStorage } from "./fakes.ts";
+import type { KeyValueStorage } from "../lib/storage.ts";
+
+// Inference params are a preference, not chat state: they live in
+// AsyncStorage, so this suite carries its own storage fake (as the
+// models-ui, search-settings and voice-settings suites do) rather than
+// borrowing one from the chat fakes.
+function memoryStorage(seed: Record<string, string> = {}): KeyValueStorage & {
+  data: Record<string, string>;
+} {
+  const data: Record<string, string> = { ...seed };
+  return {
+    data,
+    getItem: async (k: string) => data[k] ?? null,
+    setItem: async (k: string, v: string) => {
+      data[k] = v;
+    },
+    removeItem: async (k: string) => {
+      delete data[k];
+    },
+  };
+}
 
 describe("inference store", () => {
   let storage: ReturnType<typeof memoryStorage>;

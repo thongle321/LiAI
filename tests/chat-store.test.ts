@@ -1,34 +1,33 @@
-/** Chat store tests (on-device: Supabase sessions + local turns).
- * Run: node --test frontend/tests/chat-store.test.ts */
+/** Chat store tests (local Store sessions + on-device turns).
+ * Run: node --test tests/chat-store.test.ts */
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { createChatStore, SESSION_KEY } from "../store/chat.ts";
-import { draftKey } from "../lib/chat/drafts.ts";
+import { createChatStore } from "../store/chat.ts";
 import {
   fakeRunTurn,
   fakeSessionStore,
   gatedRunTurn,
-  memoryStorage,
 } from "./fakes.ts";
 
-function storeWith(seeds: Parameters<typeof fakeSessionStore>[0]) {
-  const fake = fakeSessionStore(seeds);
-  return {
-    ...fake,
-    getStore: async () => fake.store,
-  };
+/** A runner that never answers: the session tests never send. */
+const idleRunTurn = fakeRunTurn([]).runTurn;
+
+/** `active` seeds the store's active-session pointer — the same job the
+ *  old `memoryStorage({liai_session_id})` seed used to do. */
+function storeWith(
+  seeds: Parameters<typeof fakeSessionStore>[0],
+  active: string | null = null,
+) {
+  const fake = fakeSessionStore(seeds, active);
+  return { ...fake, getStore: async () => fake.store, runTurn: idleRunTurn };
 }
 
 describe("chat store sessions", () => {
   it("loads the session list and history on loadSession", async () => {
-    const { getStore } = storeWith([{ id: "s1", title: "Hi" }]);
-    const storage = memoryStorage({ liai_session_id: "s1" });
-    const useStore = createChatStore(storage, {
-      getStore,
-      runTurn: fakeRunTurn([]).runTurn,
-    });
+    const { getStore, runTurn } = storeWith([{ id: "s1", title: "Hi" }], "s1");
+    const useStore = createChatStore({ getStore, runTurn });
     await useStore.getState().loadSession();
     const state = useStore.getState();
     assert.equal(state.sessionId, "s1");
@@ -39,9 +38,9 @@ describe("chat store sessions", () => {
     assert.equal(state.sessions[0].title, "Hi");
   });
 
-  it("starts empty when no session is stored, without minting", async () => {
+  it("starts empty when no session is active, without minting", async () => {
     const fake = fakeSessionStore([]);
-    const useStore = createChatStore(memoryStorage(), {
+    const useStore = createChatStore({
       getStore: async () => fake.store,
       runTurn: fakeRunTurn([]).runTurn,
     });
@@ -51,35 +50,22 @@ describe("chat store sessions", () => {
     assert.equal(fake.calls.creates, 0);
   });
 
-  it("keeps state when the store fails", async () => {
-    const useStore = createChatStore(memoryStorage({ liai_session_id: "s1" }), {
+  it("survives a store that cannot be reached", async () => {
+    // The active-session pointer lives in the store now, so a store that
+    // cannot be read means no active session — never a dangling id.
+    const useStore = createChatStore({
       getStore: async () => {
-        throw new Error("supabase down");
+        throw new Error("store down");
       },
       runTurn: fakeRunTurn([]).runTurn,
     });
     await useStore.getState().loadSession();
-    assert.equal(useStore.getState().sessionId, "s1");
+    assert.equal(useStore.getState().sessionId, null);
     assert.deepEqual(useStore.getState().sessions, []);
   });
 
-  it("drops the legacy on-device history index", async () => {
-    const { getStore } = storeWith([{ id: "s1", title: "Hi" }]);
-    const storage = memoryStorage({
-      liai_session_id: "s1",
-      liai_history_v1: JSON.stringify([{ id: "s1", title: "old", at: 1 }]),
-    });
-    const useStore = createChatStore(storage, {
-      getStore,
-      runTurn: fakeRunTurn([]).runTurn,
-    });
-    await useStore.getState().loadSession();
-    assert.equal(storage.data["liai_history_v1"], undefined);
-  });
-
   it("switchSession loads history with steps and usage", async () => {
-    const { getStore } = storeWith([
-      { id: "s2", title: "T" },
+    const { getStore, runTurn, store } = storeWith([
       {
         id: "s2",
         title: "T",
@@ -89,19 +75,15 @@ describe("chat store sessions", () => {
             role: "assistant",
             content: "It is noon",
             type: "text",
-            metadata: {
-              tool_calls: ["get_current_time"],
-              usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
-            },
+            usage: { promptTokens: 1, completionTokens: 2, totalTokens: 3 },
+            steps: [
+              { id: "w1", tool: "get_current_time", position: 0, result: "noon" },
+            ],
           },
         ],
       },
     ]);
-    const storage = memoryStorage();
-    const useStore = createChatStore(storage, {
-      getStore,
-      runTurn: fakeRunTurn([]).runTurn,
-    });
+    const useStore = createChatStore({ getStore, runTurn });
     await useStore.getState().loadSession();
     assert.equal(await useStore.getState().switchSession("s2"), true);
     const state = useStore.getState();
@@ -114,18 +96,18 @@ describe("chat store sessions", () => {
       ],
     );
     assert.deepEqual(state.messages[1].steps, [
-      { tool: "get_current_time", status: "done" },
+      { id: "w1", tool: "get_current_time", position: 0, result: "noon" },
     ]);
     assert.deepEqual(state.messages[1].usage, {
       promptTokens: 1,
       completionTokens: 2,
       totalTokens: 3,
     });
-    assert.equal(storage.data[SESSION_KEY], "s2");
+    assert.equal(await store.getActiveSessionId(), "s2");
   });
 
-  it("switchSession prefers persisted tool_runs over bare names", async () => {
-    const { getStore } = storeWith([
+  it("keeps tool calls in call order", async () => {
+    const { getStore, runTurn } = storeWith([
       {
         id: "s2",
         title: "T",
@@ -135,44 +117,34 @@ describe("chat store sessions", () => {
             role: "assistant",
             content: "Found it",
             type: "text",
-            metadata: {
-              tool_calls: ["web_search"],
-              tool_runs: [{ name: "web_search", input: { query: "q" }, result: "R" }],
-            },
+            steps: [
+              { id: "b", tool: "web_search", position: 1, result: "second" },
+              { id: "a", tool: "read_page", position: 0, result: "first" },
+            ],
           },
         ],
       },
     ]);
-    const useStore = createChatStore(memoryStorage(), {
-      getStore,
-      runTurn: fakeRunTurn([]).runTurn,
-    });
+    const useStore = createChatStore({ getStore, runTurn });
     await useStore.getState().loadSession();
     assert.equal(await useStore.getState().switchSession("s2"), true);
-    assert.deepEqual(useStore.getState().messages[1].steps, [
-      {
-        tool: "web_search",
-        status: "done",
-        input: { query: "q" },
-        result: "R",
-      },
-    ]);
+    assert.deepEqual(
+      useStore.getState().messages[1].steps?.map((s) => s.tool),
+      ["read_page", "web_search"],
+    );
   });
 
   it("renameSession patches the store and updates the row", async () => {
-    const { getStore } = storeWith([{ id: "s1", title: "Hi" }]);
-    const useStore = createChatStore(memoryStorage({ liai_session_id: "s1" }), {
-      getStore,
-      runTurn: fakeRunTurn([]).runTurn,
-    });
+    const { getStore, runTurn } = storeWith([{ id: "s1", title: "Hi" }], "s1");
+    const useStore = createChatStore({ getStore, runTurn });
     await useStore.getState().loadSession();
     assert.equal(await useStore.getState().renameSession("s1", "New"), true);
     assert.equal(useStore.getState().sessions[0].title, "New");
   });
 
   it("renameSession returns false when the store rejects", async () => {
-    const fake = fakeSessionStore([{ id: "s1", title: "Hi" }]);
-    const useStore = createChatStore(memoryStorage({ liai_session_id: "s1" }), {
+    const fake = fakeSessionStore([{ id: "s1", title: "Hi" }], "s1");
+    const useStore = createChatStore({
       getStore: async () => ({
         ...fake.store,
         renameSession: async () => {
@@ -187,11 +159,8 @@ describe("chat store sessions", () => {
   });
 
   it("setPinned toggles pin state through the store", async () => {
-    const { getStore } = storeWith([{ id: "s1", title: "Hi" }]);
-    const useStore = createChatStore(memoryStorage({ liai_session_id: "s1" }), {
-      getStore,
-      runTurn: fakeRunTurn([]).runTurn,
-    });
+    const { getStore, runTurn } = storeWith([{ id: "s1", title: "Hi" }], "s1");
+    const useStore = createChatStore({ getStore, runTurn });
     await useStore.getState().loadSession();
     assert.equal(useStore.getState().sessions[0].pinned, false);
     assert.equal(await useStore.getState().setPinned("s1", true), true);
@@ -199,44 +168,43 @@ describe("chat store sessions", () => {
   });
 
   it("deleteSession removes the session and clears the active view", async () => {
-    const fake = fakeSessionStore([{ id: "s1", title: "Hi" }]);
-    const storage = memoryStorage({ liai_session_id: "s1" });
-    const useStore = createChatStore(storage, {
-      getStore: async () => fake.store,
-      runTurn: fakeRunTurn([]).runTurn,
-    });
+    const { getStore, runTurn, store, calls } = storeWith(
+      [{ id: "s1", title: "Hi" }],
+      "s1",
+    );
+    const useStore = createChatStore({ getStore, runTurn });
     await useStore.getState().loadSession();
     await useStore.getState().deleteSession("s1");
-    assert.deepEqual(fake.calls.deletes, ["s1"]);
+    assert.deepEqual(calls.deletes, ["s1"]);
     const state = useStore.getState();
     assert.deepEqual(state.sessions, []);
     assert.equal(state.sessionId, null);
-    assert.equal(storage.data[SESSION_KEY], undefined);
+    assert.equal(await store.getActiveSessionId(), null);
   });
 
   it("newConversation clears the view without touching the store", async () => {
-    const fake = fakeSessionStore([{ id: "s1", title: "Hi" }]);
-    const storage = memoryStorage({ liai_session_id: "s1" });
-    const useStore = createChatStore(storage, {
-      getStore: async () => fake.store,
-      runTurn: fakeRunTurn([]).runTurn,
-    });
+    const { getStore, runTurn, calls, store } = storeWith(
+      [{ id: "s1", title: "Hi" }],
+      "s1",
+    );
+    const useStore = createChatStore({ getStore, runTurn });
     await useStore.getState().loadSession();
     await useStore.getState().newConversation();
     const state = useStore.getState();
     assert.equal(state.sessionId, null);
     assert.deepEqual(state.messages, []);
-    assert.equal(fake.calls.creates, 0);
-    assert.equal(fake.calls.appends.length, 0);
+    assert.equal(calls.creates, 0);
+    assert.equal(calls.appends.length, 0);
+    assert.equal(await store.getActiveSessionId(), null);
   });
 });
 
 describe("chat store turns", () => {
   it("streams tokens into a pending bubble, then finalizes", async () => {
     const gate = gatedRunTurn();
-    const storage = memoryStorage();
-    const useStore = createChatStore(storage, {
-      getStore: async () => fakeSessionStore([]).store,
+    const fake = fakeSessionStore([]);
+    const useStore = createChatStore({
+      getStore: async () => fake.store,
       runTurn: gate.runTurn,
     });
     const promise = useStore.getState().send("hi");
@@ -266,12 +234,12 @@ describe("chat store turns", () => {
       totalTokens: 3,
     });
     assert.equal(state.sessionId, "s-new");
-    assert.equal(storage.data[SESSION_KEY], "s-new");
+    assert.equal(await fake.store.getActiveSessionId(), "s-new");
     assert.equal(state.draft, "");
-    assert.equal(storage.data[draftKey(null)], undefined);
+    assert.equal(await fake.store.getDraft("s-new"), "");
   });
 
-  it("renders outcome steps as done chips", async () => {
+  it("keeps the turn's tool calls on the bubble", async () => {
     const { runTurn } = fakeRunTurn([
       {
         reply: "done",
@@ -279,14 +247,14 @@ describe("chat store turns", () => {
           {
             id: "w1",
             tool: "web_search",
-            status: "done",
+            position: 0,
             input: { query: "q" },
             result: "R",
           },
         ],
       },
     ]);
-    const useStore = createChatStore(memoryStorage(), {
+    const useStore = createChatStore({
       getStore: async () => fakeSessionStore([]).store,
       runTurn,
     });
@@ -295,7 +263,7 @@ describe("chat store turns", () => {
       {
         id: "w1",
         tool: "web_search",
-        status: "done",
+        position: 0,
         input: { query: "q" },
         result: "R",
       },
@@ -304,7 +272,7 @@ describe("chat store turns", () => {
 
   it("marks the bubble when the runner fails", async () => {
     const { runTurn } = fakeRunTurn([{ fail: "boom" }]);
-    const useStore = createChatStore(memoryStorage(), {
+    const useStore = createChatStore({
       getStore: async () => fakeSessionStore([]).store,
       runTurn,
     });
@@ -322,7 +290,7 @@ describe("chat store turns", () => {
       { fail: "slow" },
       { reply: "recovered" },
     ]);
-    const useStore = createChatStore(memoryStorage(), {
+    const useStore = createChatStore({
       getStore: async () => fakeSessionStore([]).store,
       runTurn,
     });
@@ -338,7 +306,7 @@ describe("chat store turns", () => {
 
   it("retry on a bubble without error returns false", async () => {
     const { runTurn, calls } = fakeRunTurn([{ reply: "ok" }]);
-    const useStore = createChatStore(memoryStorage(), {
+    const useStore = createChatStore({
       getStore: async () => fakeSessionStore([]).store,
       runTurn,
     });
@@ -348,22 +316,21 @@ describe("chat store turns", () => {
   });
 
   it("regenerate replaces a completed reply and pops the stored turn", async () => {
-    const fake = fakeSessionStore([
-      {
-        id: "s1",
-        title: "T",
-        turns: [
-          { role: "user", content: "hi", type: "text" },
-          { role: "assistant", content: "first", type: "text" },
-        ],
-      },
-    ]);
-    const { runTurn, calls } = fakeRunTurn([{ reply: "second" }]);
-    const storage = memoryStorage({ liai_session_id: "s1" });
-    const useStore = createChatStore(storage, {
-      getStore: async () => fake.store,
-      runTurn,
-    });
+    const { getStore, store } = storeWith(
+      [
+        {
+          id: "s1",
+          title: "T",
+          turns: [
+            { role: "user", content: "hi", type: "text" },
+            { role: "assistant", content: "first", type: "text" },
+          ],
+        },
+      ],
+      "s1",
+    );
+    const { runTurn: run, calls } = fakeRunTurn([{ reply: "second" }]);
+    const useStore = createChatStore({ getStore, runTurn: run });
     await useStore.getState().loadSession();
     const assistantId = useStore.getState().messages[1].id;
     await useStore.getState().regenerate(assistantId);
@@ -371,7 +338,7 @@ describe("chat store turns", () => {
     assert.equal(useStore.getState().messages[1].text, "second");
     // The store level pops the stale turn; the re-append is the turn
     // builder's tested job (the fake runner bypasses it by design).
-    const stored = await fake.store.get("s1");
+    const stored = await store.get("s1");
     assert.deepEqual(
       stored?.map((t) => t.content),
       ["hi"],
@@ -380,7 +347,7 @@ describe("chat store turns", () => {
 
   it("blocked sends return false and change nothing", async () => {
     const { runTurn, calls } = fakeRunTurn([]);
-    const useStore = createChatStore(memoryStorage(), {
+    const useStore = createChatStore({
       getStore: async () => fakeSessionStore([]).store,
       runTurn,
     });
@@ -391,7 +358,7 @@ describe("chat store turns", () => {
 
   it("ignores a second send while a turn is in flight", async () => {
     const gate = gatedRunTurn();
-    const useStore = createChatStore(memoryStorage(), {
+    const useStore = createChatStore({
       getStore: async () => fakeSessionStore([]).store,
       runTurn: gate.runTurn,
     });
@@ -406,14 +373,14 @@ describe("chat store turns", () => {
   });
 
   it("checkHealth reflects engine readiness, not the network", async () => {
-    const up = createChatStore(memoryStorage(), {
+    const up = createChatStore({
       getStore: async () => fakeSessionStore([]).store,
       runTurn: fakeRunTurn([]).runTurn,
       getEngineSource: async () => ({ kind: "local", fileName: "a.gguf" }),
     });
     await up.getState().checkHealth();
     assert.equal(up.getState().connection, "up");
-    const down = createChatStore(memoryStorage(), {
+    const down = createChatStore({
       getStore: async () => fakeSessionStore([]).store,
       runTurn: fakeRunTurn([]).runTurn,
       getEngineSource: async () => null,
@@ -421,5 +388,4 @@ describe("chat store turns", () => {
     await down.getState().checkHealth();
     assert.equal(down.getState().connection, "down");
   });
-
 });

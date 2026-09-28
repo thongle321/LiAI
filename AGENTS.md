@@ -44,7 +44,7 @@ The mobile application is responsible for:
 
 - llama.rn (on-device GGUF inference, approved)
 
-- @supabase/supabase-js (chat session persistence, approved)
+- tinybase (chat session persistence, approved) + expo-sqlite (its persister; native, dev-client rebuild)
 
 - react-native-marked + react-native-code-highlighter (chat markdown + code, approved)
 
@@ -154,7 +154,7 @@ recommendations). Keep it typed (see `lib/models/device-tiers.ts`).
 activeModelId, download jobs/progress, chat sessions/drafts,
 inference params, voice state. Persist with AsyncStorage when needed.
 **lib/** holds external service helpers (inference/, models/,
-chat/, supabase.ts, secrets.ts).
+chat/, tinybase.ts, secrets.ts).
 Never expose secret keys here.
 ---
 

@@ -4,6 +4,6 @@
  * existing imports (`../store/chat`) keep working.
  */
 
-export { createChatStore, useChatStore, SESSION_KEY } from "./chat/index.ts";
+export { createChatStore, useChatStore } from "./chat/index.ts";
 export type { ChatDeps, ChatState, ChatCtx, Connection } from "./chat/index.ts";
 export type { ChatMessage, ChatSession } from "../types/chat.ts";

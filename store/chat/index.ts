@@ -1,15 +1,17 @@
-/** Chat store: Supabase-owned sessions, on-device turns.
+/** Chat store: local Store-owned sessions, on-device turns.
  *
  * Composed from focused slices; the public path stays `../store/chat`
- * (that file re-exports this). The factory takes storage plus injectable
- * session/turn seams so tests inject memory fakes.
+ * (that file re-exports this). The factory takes injectable session/turn
+ * seams so tests inject memory fakes.
+ *
+ * There is no storage seam: sessions, the active-session pointer and
+ * drafts all live in the local Store (ADR-0012), reached through
+ * getStore(). AsyncStorage is gone from this slice entirely.
  */
 
 import { create } from "zustand";
-import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 
 import type { SearchAuth } from "../../types/api.ts";
-import type { KeyValueStorage } from "../../lib/storage.ts";
 import { useSearch } from "../search.ts";
 import { createSendSlice } from "./send.ts";
 import { createSessionsSlice } from "./sessions.ts";
@@ -19,27 +21,7 @@ import { selectEngineSource, type EngineSource } from "../../lib/inference/engin
 import { EngineManager } from "../../lib/inference/manager.ts";
 import { createRemoteEngine } from "../../lib/inference/remote-engine.ts";
 import { createTurnRunner } from "../../lib/chat/turn.ts";
-import { SupabaseChatStore, type SessionStore } from "../../lib/chat/supabase-store.ts";
-
-// ponytail: lazy import keeps the native module out of plain-Node tests;
-// Metro still bundles it statically for the app.
-async function rnStorage(): Promise<AsyncStorageStatic> {
-  const mod = await import("@react-native-async-storage/async-storage");
-  // CJS/ESM interop differs between Metro and Node; the static lives on default.
-  // SAFETY: the module's default export is the AsyncStorage instance; the
-  // interop shim can surface it under `.default` or on the namespace itself.
-  return (mod.default ?? mod) as unknown as AsyncStorageStatic;
-}
-
-const asyncStorage: KeyValueStorage = {
-  getItem: async (key) => (await rnStorage()).getItem(key),
-  setItem: async (key, value) => {
-    await (await rnStorage()).setItem(key, value);
-  },
-  removeItem: async (key) => {
-    await (await rnStorage()).removeItem(key);
-  },
-};
+import type { SessionStore } from "../../lib/chat/session-store.ts";
 
 /** Default BYOK resolver: consent-gated key from SecureStore, never KV.
  * Short-circuits before touching SecureStore when consent is absent. */
@@ -67,18 +49,13 @@ async function defaultEngineSource(): Promise<EngineSource | null> {
   }
 }
 
-/** Default session store: anonymous provision + Supabase client.
- * The user id rides session writes so the RLS WITH CHECK policy passes. */
+/** Default session store: the local Store + its SQLite persister.
+ * ponytail: lazy import keeps expo-sqlite (a native module) out of
+ * plain-Node tests; Metro still bundles it statically for the app. */
 async function defaultGetStore(): Promise<SessionStore | null> {
   try {
-    const { ensureAnonymous, getChatClient, getUserId } = await import(
-      "../../lib/supabase.ts"
-    );
-    const ok = await ensureAnonymous();
-    if (!ok) return null;
-    const client = await getChatClient();
-    if (!client) return null;
-    return new SupabaseChatStore(client, await getUserId());
+    const { getSessionStore } = await import("../../lib/tinybase.ts");
+    return await getSessionStore();
   } catch {
     return null;
   }
@@ -208,10 +185,9 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
   };
 }
 
-export function createChatStore(storage: KeyValueStorage, deps?: ChatDeps) {
+export function createChatStore(deps?: ChatDeps) {
   const getSearchAuth = deps?.getSearchAuth ?? defaultSearchAuth;
   const ctx: ChatCtx = {
-    storage,
     getStore: deps?.getStore ?? defaultGetStore,
     getSearchAuth,
     getEngineSource: deps?.getEngineSource ?? defaultEngineSource,
@@ -233,7 +209,7 @@ export function createChatStore(storage: KeyValueStorage, deps?: ChatDeps) {
     ...createDraftSlice(set, get, ctx),
 
     // Engine readiness (not network): a resolvable model means the app
-    // can answer; Supabase failures surface per-action instead.
+    // can answer; a store failure surfaces per-action instead.
     checkHealth: async () => {
       try {
         const source = await ctx.getEngineSource();
@@ -248,7 +224,6 @@ export function createChatStore(storage: KeyValueStorage, deps?: ChatDeps) {
   }));
 }
 
-export const useChatStore = createChatStore(asyncStorage);
+export const useChatStore = createChatStore();
 
-export { SESSION_KEY } from "./types.ts";
 export type { ChatDeps, ChatState, ChatCtx, Connection } from "./types.ts";

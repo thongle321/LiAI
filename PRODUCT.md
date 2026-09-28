@@ -34,9 +34,9 @@ the hobbyist audience is deliberately abandoned.
 ## Product Purpose
 
 LiAI is a multimodal AI companion for mobile that runs its primary capabilities with no LiAI
-server. Inference, tools, and search run on the device. Chat history lives in Supabase, reached
-directly from the app under a silently provisioned anonymous identity, so a person never meets
-a login screen and never needs an account to keep their history.
+server. Inference, tools, and search run on the device, and chat history is stored locally on
+the device itself (ADR-0012), so a person never meets a login screen, never needs an account,
+and never has their conversations leave the phone.
 
 The product exists because a presentation client that cannot function without a backend is not
 a companion — it is a thin window onto someone else's computer. This direction was a deliberate
@@ -110,11 +110,11 @@ name-keyed engines, feeds results back under a turn budget of 5, and then forces
 answer. Four talents ship: datetime, calculate, web_search, and read_url. HTML rendering is
 explicitly deferred — it needs a WebView that is not an approved dependency.
 
-**Persistence (ADR-0010).** Supabase is the sessions and messages store, accessed from the app
-directly, keeping the `sessions`/`messages` shape including titles, pin state, turn metadata,
-tool provenance, and token usage. Identity is anonymous sign-in at first run, persisted
-on-device, upgradeable to email later. Row-level security is per user. There is no client
-database; the app holds only the active session id and per-session drafts.
+**Persistence (ADR-0012).** A local TinyBase Store is the sessions and messages database,
+persisted to SQLite on the device. Tables are `sessions`, `messages`, `toolRuns` (tool calls in
+call order) and `drafts`; token usage is typed cells rather than a JSON blob. There is no
+backend, no anonymous sign-in, and no per-user identity — one device, one dataset — so history
+is not backed up anywhere else. This superseded the Supabase store of ADR-0010.
 
 **Secrets (ADR-004).** Two tiers, and the distinction is architectural, not cosmetic. App-owned
 keys never reach the client. User bring-your-own keys — a remote provider, a search provider,
@@ -132,8 +132,8 @@ previews are limited to uncredentialed public pages, the single exception to the
 route-all-external-access-through-the-server rule.
 
 **Documentation drift, unresolved.** `docs/specs/2026-09-24-pocketpal-parity.md` is still marked
-Draft and describes the retired backend architecture; it predates ADR-0008, ADR-0010, and
-ADR-0011 and must not be treated as current. `AGENTS.md` and `app.json` still reference
+Draft and describes the retired backend architecture; it predates ADR-0008, ADR-0010, ADR-0011,
+and ADR-0012 and must not be treated as current. `AGENTS.md` and `app.json` still reference
 `llama.rn`, which ADR-0011 deleted. These are open and unfixed.
 
 ## Brand Commitments

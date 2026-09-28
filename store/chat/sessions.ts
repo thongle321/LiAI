@@ -1,9 +1,7 @@
-/** Sessions slice: Supabase-owned list + active-session lifecycle. */
+/** Sessions slice: Store-owned list + active-session lifecycle. */
 
 import { toMessages, toSession } from "../../lib/chat/messages.ts";
-import { draftKey } from "../../lib/chat/drafts.ts";
-import type { SessionStore } from "../../lib/chat/supabase-store.ts";
-import { HISTORY_KEY, SESSION_KEY } from "./types.ts";
+import type { SessionStore } from "../../lib/chat/session-store.ts";
 import { readDraftFor } from "./draft.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
@@ -85,7 +83,6 @@ export function createSessionsSlice(
     refreshSessions,
 
     loadSession: async () => {
-      await quiet(ctx.storage.removeItem(HISTORY_KEY));
       const store = await storeOf(ctx);
       let listed = false;
       try {
@@ -96,9 +93,12 @@ export function createSessionsSlice(
       } catch {
         // keep whatever is already in state
       }
+      // The pointer is the store's own value, so it cannot name a session
+      // that does not exist: there is nothing to validate against a
+      // remote list any more.
       let stored: string | null = null;
       try {
-        stored = await ctx.storage.getItem(SESSION_KEY);
+        stored = store ? await store.getActiveSessionId() : null;
       } catch {
         stored = null;
       }
@@ -112,7 +112,7 @@ export function createSessionsSlice(
         return;
       }
       if (!get().sessions.some((s) => s.id === stored)) {
-        await quiet(ctx.storage.removeItem(SESSION_KEY));
+        if (store) await quiet(store.setActiveSessionId(null));
         set({ sessionId: null, messages: [], draft: await readDraftFor(ctx, null) });
         return;
       }
@@ -122,7 +122,8 @@ export function createSessionsSlice(
     newConversation: async () => {
       cancelActive();
       await quiet(get().persistDraft());
-      await quiet(ctx.storage.removeItem(SESSION_KEY));
+      const store = await storeOf(ctx);
+      if (store) await quiet(store.setActiveSessionId(null));
       set({
         sessionId: null,
         messages: [],
@@ -140,7 +141,7 @@ export function createSessionsSlice(
       try {
         const turns = await store.get(id);
         if (turns === null) return false;
-        await quiet(ctx.storage.setItem(SESSION_KEY, id));
+        await quiet(store.setActiveSessionId(id));
         set({
           sessionId: id,
           messages: toMessages(turns),
@@ -156,13 +157,13 @@ export function createSessionsSlice(
       // Never pull the rug on an in-flight turn.
       if (get().sending && get().sessionId === id) return;
       const store = await storeOf(ctx);
+      // deleteSession also clears the session's draft and the pointer to
+      // it, so nothing is left pointing at a conversation that is gone.
       if (store) await quiet(store.deleteSession(id));
-      await quiet(ctx.storage.removeItem(draftKey(id)));
       set((s) => ({ sessions: s.sessions.filter((sess) => sess.id !== id) }));
       if (get().sessionId === id) {
-        await quiet(ctx.storage.removeItem(SESSION_KEY));
         // The deleted session's text must not haunt the fresh composer:
-        // fall back to whatever was parked under the new key.
+        // fall back to whatever is parked in the unsent slot.
         set({
           sessionId: null,
           messages: [],

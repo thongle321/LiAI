@@ -20,13 +20,11 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRouter } from "expo-router";
 import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
-import { Check, Menu, Search, Share, X } from "lucide-react-native";
+import { Menu, Search, X } from "lucide-react-native";
 
 import { colors } from "../../../themes/tokens.ts";
 import { filterMessages } from "../../../lib/chat/filter.ts";
 import { buildRows, type ChatRow } from "../../../lib/chat/rows.ts";
-import { buildTranscript } from "../../../lib/chat/transcript.ts";
-import { useCopy } from "../../../hooks/useCopy.ts";
 import {
   fadeEntering,
   fadeExiting,
@@ -52,8 +50,6 @@ import { ChatMenu } from "../../../components/chat/ChatMenu.tsx";
 
 export default function ChatRoute() {
   const messages = useChatStore((s) => s.messages);
-  const sessionId = useChatStore((s) => s.sessionId);
-  const sessions = useChatStore((s) => s.sessions);
   const connection = useChatStore((s) => s.connection);
   const sending = useChatStore((s) => s.sending);
   const loadSession = useChatStore((s) => s.loadSession);
@@ -63,7 +59,6 @@ export default function ChatRoute() {
   const regenerate = useChatStore((s) => s.regenerate);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const { copied, copy } = useCopy();
 
   const visible = searchOpen ? filterMessages(messages, query) : messages;
   // Adapter rows for the list: date headers + group/avatar/status flags.
@@ -172,7 +167,6 @@ export default function ChatRoute() {
   }, [streaming, listHeight, blankSpace, motionDuration]);
   const menuPress = usePressFeedback();
   const searchPress = usePressFeedback();
-  const copyPress = usePressFeedback();
   const [generationOpen, setGenerationOpen] = useState(false);
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
@@ -237,26 +231,6 @@ export default function ChatRoute() {
                 <X size={20} color={colors.primary} />
               ) : (
                 <Search size={20} color={colors.secondaryText} />
-              )}
-            </Pressable>
-          </Animated.View>
-          <Animated.View style={copyPress.animatedStyle}>
-            <Pressable
-              onPress={() => {
-                const title = sessions.find((s) => s.id === sessionId)?.title;
-                copy(buildTranscript(messages, title));
-              }}
-              onPressIn={copyPress.onPressIn}
-              onPressOut={copyPress.onPressOut}
-              className="h-12 w-12 items-center justify-center"
-              hitSlop={4}
-              accessibilityRole="button"
-              accessibilityLabel={copied ? "Copied" : "Copy transcript"}
-            >
-              {copied ? (
-                <Check size={20} color={colors.success} />
-              ) : (
-                <Share size={20} color={colors.secondaryText} />
               )}
             </Pressable>
           </Animated.View>

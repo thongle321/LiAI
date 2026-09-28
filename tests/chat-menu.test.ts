@@ -88,12 +88,16 @@ describe("chat menu", () => {
 });
 
 describe("chat header", () => {
-  it("has exactly three trailing controls, so w-36 stays correct", () => {
+  it("keeps the trailing group inside the w-36 slot", () => {
     // The geometry: 360px screen - px-5 (40px) = 320px, and DESIGN.md
-    // requires BOTH header slots equal to the wider group. A fourth
-    // 48dp control needs w-48 (192px) per side = 384px of 320, so it
-    // cannot fit. Counted as 48dp targets, not labels: two of the three
-    // carry conditional labels, and the invariant is about space.
+    // requires BOTH header slots equal to the wider group. w-36 is 144px,
+    // so the trailing group holds at most THREE 48dp controls; a fourth
+    // needs w-48 (192px) per side = 384px of 320, and cannot fit.
+    //
+    // An upper bound, not an exact count: the count changes whenever a
+    // control is added or removed, but overflowing the slot does not.
+    // Counted as 48dp targets, not labels — two carry conditional labels,
+    // and the invariant is about space.
     const lines = CHAT.split(/\r?\n/);
     const start = lines.findIndex((l) => l.includes("h-14 flex-row items-center border-b"));
     assert.ok(start > -1, "the chat header must still exist");
@@ -102,22 +106,19 @@ describe("chat header", () => {
     const end = lines.findIndex((l, i) => i > start && l.includes("{searchOpen && ("));
     assert.ok(end > start, "the header must end before the search bar");
     const header = lines.slice(start, end).join("\n");
-    // The trailing group is three controls: search, copy, and the menu.
-    // The menu's own 48dp trigger lives in ChatMenu.tsx, not here, so this
-    // file holds the drawer plus two trailing targets.
-    const targets = [...header.matchAll(/className="h-12 w-12/g)].length;
-    assert.equal(
-      targets,
-      3,
-      `expected 3 targets in the chat route (drawer, search, copy), found ${targets}`,
-    );
-    // ...and the menu supplies the third, at the same size. Together that
-    // is the three-control trailing group w-36 was sized for.
+    // This file holds the leading drawer plus the trailing controls that
+    // live here; the menu supplies the rest of its own trigger.
+    const here = [...header.matchAll(/className="h-12 w-12/g)].length;
     const menuTriggers = [...MENU.matchAll(/className="h-12 w-12/g)].length;
     assert.equal(
       menuTriggers,
       1,
       `the menu must have exactly one 48dp trigger, found ${menuTriggers}`,
+    );
+    const trailing = here - 1 + menuTriggers; // here includes the drawer
+    assert.ok(
+      trailing <= 3,
+      `trailing group is ${trailing} controls; ${trailing * 48}px does not fit w-36 (144px)`,
     );
   });
 

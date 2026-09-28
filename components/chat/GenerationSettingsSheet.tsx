@@ -106,6 +106,13 @@ export function GenerationSettingsSheet({
   const overrideCount = override ? Object.keys(override).length : 0;
 
   return (
+    // NOT @expo/ui's native BottomSheet, though it was tried and reverted:
+    // an RN ScrollView inside its Compose Dialog crashes the app on touch
+    // (NativeGestureUtil -> RootViewUtil.getRootView asserts, because that
+    // view has no RN RootView inside a native window). Expo's advice to "wrap
+    // it in a ScrollView" means @expo/ui's own native one, which cannot host
+    // the RN components these rows are built from. The drag handle and
+    // swipe-to-dismiss are the price of a scroll that works.
     <Sheet
       visible={visible}
       onClose={onClose}

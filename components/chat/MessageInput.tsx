@@ -1,7 +1,8 @@
-/** Chat composer: text input + dictation + vision/voice shortcuts.
+/** Message input: the composer — text field + dictation + vision/voice
+ * shortcuts.
  *
- * Moved from components/InteractionPanel.tsx (Wave 1 chat): same behavior,
- * new home. The composer mic dictates into the draft (you press Send); the
+ * Renamed from ChatInput.tsx (message-view refactor): same behavior, new
+ * name. The composer mic dictates into the draft (you press Send); the
  * Voice tab opens the standalone /voice hands-free screen, and the Vision
  * entry opens the standalone /vision camera screen.
  */
@@ -36,7 +37,7 @@ import { pickImage, type ImageSource } from "../../lib/chat/attachments.ts";
 import { usePressFeedback } from "../../lib/motion.ts";
 import { useKeyboardLift } from "../../hooks/useKeyboardLift.ts";
 
-export function ChatInput({
+export function MessageInput({
   sending,
   ready,
   onSend,
@@ -48,7 +49,7 @@ export function ChatInput({
   ready: boolean;
   onSend: (text: string, image?: string) => Promise<boolean>;
   /** Where the caller wants this box to sit. The composer floats above the
-   *  keyboard, so ChatScreen passes `absolute inset-x-0 bottom-0`. Note this
+   *  keyboard, so the chat route passes `absolute inset-x-0 bottom-0`. Note this
    *  component is the chat composer and not a generic input: the keyboard
    *  lift below is unconditional, so a second caller in a sheet or a modal
    *  would be dragged up by the keyboard whether it wanted that or not. It

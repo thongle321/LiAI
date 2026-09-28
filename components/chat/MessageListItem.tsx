@@ -1,8 +1,9 @@
-/** Chat bubble: user card, assistant card (markdown + tool chips + actions),
- * and the tap-to-retry error card.
+/** Message list item: user card, assistant card (markdown + tool chips +
+ * actions), and the tap-to-retry error card — one row, either role.
  *
- * Moved from components/Bubble.tsx (Wave 1 chat): assistant text renders
- * through MarkdownView; streaming replies re-parse per token chunk.
+ * Renamed from Bubble.tsx (message-view refactor): same behavior, new
+ * name. Assistant text renders through MarkdownView; streaming replies
+ * re-parse per token chunk.
  */
 
 import { ActivityIndicator, Image as RNImage, Pressable, Text, View } from "react-native";
@@ -29,7 +30,7 @@ import { MarkdownView } from "./MarkdownView.tsx";
 import { MessageActions } from "./MessageActions.tsx";
 import { LinkPreviewCard } from "./LinkPreview.tsx";
 
-export function Bubble({
+export function MessageListItem({
   row,
   onRetry,
   onRegenerate,

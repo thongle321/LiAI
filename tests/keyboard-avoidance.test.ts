@@ -103,7 +103,7 @@ describe("keyboard avoidance", () => {
     // components plus ONE reconciled lift: the guide names four ways
     // KeyboardAvoidingView falls short on chat, and two parts translating
     // independently is what made the empty state look like it was sinking.
-    const chat = read("components/chat/ChatScreen.tsx");
+    const chat = read("app/(drawer)/(tabs)/chat.tsx");
     const list = read("components/chat/MessageList.tsx");
 
     assert.doesNotMatch(chat, /KeyboardAvoidingView/, "chat must not use a KAV");
@@ -146,7 +146,7 @@ describe("keyboard avoidance", () => {
     // when the keyboard opened, and it has nothing to do with the keyboard
     // height. Both overlays anchored to the COLUMN must give that height back,
     // or their centring box differs between the two states.
-    const chat = read("components/chat/ChatScreen.tsx");
+    const chat = read("app/(drawer)/(tabs)/chat.tsx");
     assert.match(chat, /const tabBarCompensation = keyboardVisible \? keyboardOffset : 0/);
     // The empty state and the jump-to-latest pill are the two column-anchored
     // ones; the composer overlays are screen-anchored and must NOT compensate,
@@ -180,11 +180,11 @@ describe("keyboard avoidance", () => {
       defs.map(({ file }) => file),
       ["components/BottomNav.tsx"],
     );
-    const chat = read("components/chat/ChatScreen.tsx");
+    const chat = read("app/(drawer)/(tabs)/chat.tsx");
     assert.match(
       chat,
-      /import \{ TAB_BAR_HEIGHT \} from "\.\.\/BottomNav\.tsx"/,
-      "ChatScreen must import the height, not invent its own number",
+      /import \{ TAB_BAR_HEIGHT \} from "\.\.\/\.\.\/\.\.\/components\/BottomNav\.tsx"/,
+      "the chat route must import the height, not invent its own number",
     );
     assert.doesNotMatch(
       chat,
@@ -201,22 +201,22 @@ describe("keyboard avoidance", () => {
   it("the composer is the floating box, with no wrapper between it and the screen", () => {
     // A wrapper that only re-exports a transform is a second box that can
     // disagree with the one it wraps. That is not hypothetical: the previous
-    // revision had ChatScreen's container lifting on one path and the centred
-    // empty state padded on another, and the composer stopped rising in
-    // exactly the empty-thread case. ChatInput is the box; ChatScreen only
-    // says where it goes.
-    const chat = read("components/chat/ChatScreen.tsx");
-    const input = read("components/chat/ChatInput.tsx");
+    // revision had the screen component's container lifting on one path and
+    // the centred empty state padded on another, and the composer stopped
+    // rising in exactly the empty-thread case. MessageInput is the box; the
+    // chat route only says where it goes.
+    const chat = read("app/(drawer)/(tabs)/chat.tsx");
+    const input = read("components/chat/MessageInput.tsx");
 
     assert.match(
       chat,
-      /<ChatInput\s+className="absolute inset-x-0 bottom-0"/,
-      "ChatScreen positions the floating composer",
+      /<MessageInput\s+className="absolute inset-x-0 bottom-0"/,
+      "the chat route positions the floating composer",
     );
     assert.doesNotMatch(
       chat,
       /useAnimatedStyle\(/,
-      "ChatScreen must not hand-roll a transform: lifts come from the hook",
+      "the chat route must not hand-roll a transform: lifts come from the hook",
     );
     assert.doesNotMatch(
       chat,
@@ -230,7 +230,7 @@ describe("keyboard avoidance", () => {
     );
 
     // The floating box is the one that lifts and the one that measures.
-    assert.match(input, /style=\{lift\}/, "ChatInput carries its own lift");
+    assert.match(input, /style=\{lift\}/, "MessageInput carries its own lift");
     assert.match(input, /onLayout=\{onHeightChange\}/, "measured at the outermost level");
 
     // The field IS the composer: the docked full-bleed variant of the field
@@ -278,7 +278,7 @@ describe("keyboard avoidance", () => {
     // anchored at 0, which under-lifted it by exactly the navigation bar
     // height — the reported "the chat input is not above the keyboard".
     const hook = read("hooks/useKeyboardLift.ts");
-    const input = read("components/chat/ChatInput.tsx");
+    const input = read("components/chat/MessageInput.tsx");
 
     assert.match(
       hook,
@@ -329,8 +329,8 @@ describe("keyboard avoidance", () => {
     // application inside the composer is dead space under the input.
     const offenders: string[] = [];
     for (const file of [
-      "components/chat/ChatScreen.tsx",
-      "components/chat/ChatInput.tsx",
+      "app/(drawer)/(tabs)/chat.tsx",
+      "components/chat/MessageInput.tsx",
       "app/(drawer)/(tabs)/voice.tsx",
     ]) {
       const code = read(file);
@@ -366,7 +366,7 @@ describe("keyboard avoidance", () => {
     // rather than by counting: an earlier version counted occurrences of the
     // group string starting at that string's own index, so the count could
     // never be 0 and the assertion could only fire on an exact duplicate.
-    const chat = read("components/chat/ChatScreen.tsx");
+    const chat = read("app/(drawer)/(tabs)/chat.tsx");
     assert.match(
       chat,
       /className="absolute inset-x-0 px-4"/,
@@ -383,8 +383,8 @@ describe("keyboard avoidance", () => {
     // only thing asking the list to reserve space for something over it. The
     // in-conversation no-model signal is now the field's placeholder, which
     // costs no layout, plus a tappable chip on focus.
-    const chat = read("components/chat/ChatScreen.tsx");
-    const input = read("components/chat/ChatInput.tsx");
+    const chat = read("app/(drawer)/(tabs)/chat.tsx");
+    const input = read("components/chat/MessageInput.tsx");
 
     // Asserted POSITIVELY: there is no in-composer prompt for the no-model
     // state at all. The field's placeholder is the whole signal, and the
@@ -408,7 +408,7 @@ describe("keyboard avoidance", () => {
     // attached, and extraContentPadding (fed from the field's onLayout) would
     // not know about it. That is the 6f8d572 bug. So it lives inside the
     // outermost field box, ahead of the control row.
-    const input = read("components/chat/ChatInput.tsx");
+    const input = read("components/chat/MessageInput.tsx");
     const root = input.indexOf("<Animated.View");
     const close = input.indexOf("</Animated.View>", root);
     assert.notEqual(root, -1, "the field root must exist");
@@ -438,7 +438,7 @@ describe("keyboard avoidance", () => {
   it("the docked field keeps the tokens the amended design system requires", () => {
     // Full-bleed Clean White, square, 1px Hairline top only, 16px value inset.
     // Asserted positively so an empty or truncated file cannot pass it.
-    const input = read("components/chat/ChatInput.tsx");
+    const input = read("components/chat/MessageInput.tsx");
     assert.match(input, /className=\{`border-t border-border bg-surface-1\$\{className/);
     // Top border ONLY: an all-round `border` here would draw two 1px lines
     // straight onto the screen edges.

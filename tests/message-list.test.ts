@@ -30,11 +30,11 @@ describe("message list stability", () => {
       /streaming\s*\?\s*\{\s*minIndexForVisible/,
       "pinning must be gated on streaming",
     );
-    const chat = read("components/chat/ChatScreen.tsx");
+    const chat = read("app/(drawer)/(tabs)/chat.tsx");
     assert.match(
       chat,
       /streaming=\{streaming\}/,
-      "ChatScreen feeds its streaming flag into the list",
+      "the chat route feeds its streaming flag into the list",
     );
   });
 
@@ -50,17 +50,17 @@ describe("message list stability", () => {
       /keyExtractor=\{\(row\) => \(row\.kind === "message" \? row\.message\.id : row\.id\)\}/,
     );
     assert.doesNotMatch(list, /renderBubble/, "rows replaced the message-only render prop");
-    const chat = read("components/chat/ChatScreen.tsx");
+    const chat = read("app/(drawer)/(tabs)/chat.tsx");
     assert.match(chat, /buildRows\(visible, \{ sending \}\)/);
     assert.match(chat, /useMemo\(\(\) => buildRows/, "rows memoized: new identity must not retrigger follow");
     assert.match(chat, /<DateHeader label=\{row\.label\} \/>/);
-    const bubble = read("components/chat/Bubble.tsx");
+    const item = read("components/chat/MessageListItem.tsx");
     // One row in, not three flags: the adapter's flags travel together.
-    assert.match(bubble, /row: MessageRow/);
-    assert.doesNotMatch(bubble, /grouped: boolean/, "flags arrive bundled, not as siblings");
-    assert.match(bubble, /<AssistantAvatar shown=\{showAvatar\} \/>/);
-    assert.match(bubble, /status === "sending"/);
-    assert.match(bubble, /!grouped && \(/);
+    assert.match(item, /row: MessageRow/);
+    assert.doesNotMatch(item, /grouped: boolean/, "flags arrive bundled, not as siblings");
+    assert.match(item, /<AssistantAvatar shown=\{showAvatar\} \/>/);
+    assert.match(item, /status === "sending"/);
+    assert.match(item, /!grouped && \(/);
     const avatar = read("components/chat/AssistantAvatar.tsx");
     assert.match(avatar, /if \(!shown\) return <View className="mr-2 w-8" \/>/);
   });
@@ -70,9 +70,12 @@ describe("message list stability", () => {
     // duplicated the same state (sending coincides with the streaming stub
     // — send/retry/regenerate mint both in one set()) while overlapping
     // content instead of scrolling with it.
-    const chat = read("components/chat/ChatScreen.tsx");
+    const chat = read("app/(drawer)/(tabs)/chat.tsx");
     assert.match(chat, /row\.kind === "pending" \? \(\s*<PendingIndicator \/>/);
-    assert.match(chat, /import \{ PendingIndicator \} from "\.\/PendingIndicator\.tsx"/);
+    assert.match(
+      chat,
+      /import \{ PendingIndicator \} from "\.\.\/\.\.\/\.\.\/components\/chat\/PendingIndicator\.tsx"/,
+    );
     assert.doesNotMatch(chat, /LiAI…/, "the overlay chip must stay deleted");
     const list = read("components/chat/MessageList.tsx");
     assert.match(

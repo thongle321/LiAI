@@ -23,7 +23,7 @@ const ROOTS = ["app", "components"];
 
 /** Files allowed to auto-focus, and the field each is expected to be. */
 const ALLOWED = new Map<string, string[]>([
-  ["components/chat/ChatScreen.tsx", ["in-conversation search"]],
+  ["app/(drawer)/(tabs)/chat.tsx", ["in-conversation search"]],
   ["components/VisionOverlays.tsx", ["vision draft input (gated on modelReady)"]],
   ["components/models/HFModelSearch.tsx", ["model search box"]],
   ["components/chat/SessionList.tsx", ["new-conversation title"]],

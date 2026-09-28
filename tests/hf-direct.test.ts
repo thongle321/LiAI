@@ -108,15 +108,19 @@ describe("hub search", () => {
 
   it("forwards the caller's abort signal to fetch", async () => {
     const controller = new AbortController();
-    let seen: AbortSignal | null = null;
+    // A box, not a bare `let seen: AbortSignal | null = null`: TypeScript
+    // keeps that narrowed to `null` at the assertion (it cannot see the
+    // assignment happen inside the fetch mock), so `seen?.aborted` would
+    // be `never` and this test would not typecheck.
+    const seen: { signal: AbortSignal | null } = { signal: null };
     mockFetch(async (_url, init) => {
-      seen = (init?.signal as AbortSignal | undefined) ?? null;
+      seen.signal = (init?.signal as AbortSignal | undefined) ?? null;
       return jsonResponse([]);
     });
     await searchModels("qwen", undefined, controller.signal);
-    assert.equal(seen?.aborted, false);
+    assert.equal(seen.signal?.aborted, false);
     controller.abort();
-    assert.equal(seen?.aborted, true, "aborting the caller must abort the request");
+    assert.equal(seen.signal?.aborted, true, "aborting the caller must abort the request");
   });
 });
 

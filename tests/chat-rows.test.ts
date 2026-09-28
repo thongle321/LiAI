@@ -79,7 +79,13 @@ describe("buildRows", () => {
       { now: atMidday(2026, 9, 27) },
     );
     assert.deepEqual(
-      rows.map((r) => (r.kind === "date" ? r.label : r.message.text)),
+      rows.map((r) =>
+        r.kind === "date"
+          ? r.label
+          : r.kind === "message"
+            ? r.message.text
+            : "",
+      ),
       ["Yesterday", "yesterday", "Today", "today"],
     );
   });
@@ -134,10 +140,11 @@ describe("buildRows", () => {
     const now = atMidday(2026, 9, 27);
     const q = user("q", now);
     const rows = buildRows([q, assistant("a", now)], { now, sending: true });
-    assert.equal(
-      rows.find((r) => r.kind === "message" && r.message.id === q.id)?.status,
-      "sent",
+    const found = rows.find(
+      (r): r is Extract<typeof r, { kind: "message" }> =>
+        r.kind === "message" && r.message.id === q.id,
     );
+    assert.equal(found?.status, "sent");
     const solo = buildRows([q], { now, sending: true });
     assert.equal(
       solo.find((r) => r.kind === "message")?.status,

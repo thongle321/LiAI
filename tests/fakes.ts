@@ -34,6 +34,8 @@ export function fakeSessionStore(
 ): {
   store: SessionStore;
   calls: FakeStoreCalls;
+  /** Drafts by slot, so a test can assert what was persisted. */
+  drafts: Map<string, string>;
 } {
   const sessions = new Map<
     string,

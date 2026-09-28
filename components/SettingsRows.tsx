@@ -462,8 +462,14 @@ export function AdvancedGroup({
           carries the 16px inset, the 48dp floor and the divider, and rows
           written bare lose all three. */}
       {open
-        ? Children.toArray(children).map((child) => (
-            <View className="row" key={Children.count(children) + String(child)}>
+        ? Children.toArray(children).map((child, index) => (
+            // The index, because it is the only key guaranteed unique among
+            // siblings — and safe here: this list is a fixed, unfiltered set
+            // of children that holds no per-row state, so a reordering key
+            // buys nothing. (The previous version synthesised one from
+            // String(child), which is always "[object Object]" and so
+            // collapsed to a single key for every row — a crash.)
+            <View className="row" key={index}>
               {child}
             </View>
           ))

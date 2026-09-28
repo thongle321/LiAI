@@ -112,6 +112,26 @@ describe("settings card pattern", () => {
     );
   });
 
+  it("keys the Advanced group's rows uniquely", () => {
+    // This crashed the app: the rows were built with a key synthesised from
+    // String(child), which is always "[object Object]", so every sibling row
+    // got the SAME key. Children.toArray is used to flatten, so the map must
+    // key off the index — the only value guaranteed unique among siblings.
+    const rows = read("components/SettingsRows.tsx");
+    const group = rows.slice(rows.indexOf("export function AdvancedGroup"));
+    assert.doesNotMatch(
+      group,
+      /key=\{[^}]*String\(/,
+      "String(element) is constant, so it cannot key a list",
+    );
+    assert.match(
+      group,
+      /Children\.toArray\(children\)\.map\(\(child, index\)/,
+      "AdvancedGroup must map with an index to key its rows",
+    );
+    assert.match(group, /key=\{index\}/, "the row key must be the index");
+  });
+
   it("gives every row a description", () => {
     // DESIGN.md, Settings: a bare label says nothing about what the value
     // does. Three rows shipped without one before this existed.

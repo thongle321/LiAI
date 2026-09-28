@@ -1,8 +1,9 @@
 /** Bottom tabs (JavaScript tabs per the Expo Router tabs guide).
  *
- * Chat + voice share one router-owned bar — the existing BottomNav
- * design, unchanged. Vision stays a standalone Stack screen with no
- * bar; selecting it pushes the vision route over the tabs.
+ * Chat + voice + vision share one router-owned bar — the existing
+ * BottomNav design, unchanged. The bar hides ITSELF while the vision
+ * route is focused (the camera wants the full screen), so vision reads
+ * as a tab everywhere except its own screen.
  */
 
 import { View } from "react-native";
@@ -24,6 +25,7 @@ export default function TabLayout() {
     >
       <Tabs.Screen name="chat" />
       <Tabs.Screen name="voice" />
+      <Tabs.Screen name="vision" />
     </Tabs>
   );
 }
@@ -39,16 +41,21 @@ function TabBar({ state }: { state: { index: number; routeNames: string[] } }) {
   // supplies a custom tabBar, and React Navigation only applies that
   // option inside its own BottomTabBar.
   const keyboardVisible = useKeyboardState((s) => s.isVisible);
-  if (keyboardVisible) return null;
-  const focused = state.routeNames[state.index] ?? "chat";
-  const active: ChatTab = focused === "voice" ? "voice" : "chat";
+  // Hidden on the keyboard (it would sit on top of it) and on vision (the
+  // camera wants the full screen; its own X button is the way out). Hidden
+  // here rather than via screenOptions.tabBarHideOnKeyboard because this
+  // app supplies a custom tabBar, and React Navigation only applies that
+  // option inside its own BottomTabBar.
+  const focusedRoute = state.routeNames[state.index] ?? "chat";
+  if (keyboardVisible || focusedRoute === "vision") return null;
+  const active: ChatTab = focusedRoute === "voice" ? "voice" : "chat";
 
   return (
     <View className="bg-surface-1" style={{ paddingBottom: insets.bottom }}>
       <BottomNav
         active={active}
         onSelect={(t) => {
-          if (t === "vision") router.push("/vision");
+          if (t === "vision") router.navigate("/vision");
           else if (t !== active) router.navigate(t === "voice" ? "/voice" : "/chat");
         }}
       />

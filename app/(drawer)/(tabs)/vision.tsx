@@ -1,10 +1,13 @@
-/** Standalone vision screen: full-screen live camera, floating controls.
+/** Vision tab: full-screen live camera, floating controls.
  *
- * Top: stop-vision (left), camera flip + VISION label (right) — no nav
- * bar. Center: the live preview, never frozen, never covered except by
- * the floats. Bottom: compact status area, big mic in the center,
- * small keyboard button opening a floating input. No BottomNav here —
- * vision is not a tab; stop-vision returns to the previous screen.
+ * A real Tabs.Screen (moved from app/vision.tsx): the bottom tab bar hides
+ * ITSELF while this route is focused — see (tabs)/_layout.tsx — so the
+ * camera keeps the full screen. Top: exit (left), camera flip + VISION
+ * label (right) — no nav bar. Center: the live preview, never frozen,
+ * never covered except by the floats. Bottom: compact status area, big
+ * mic in the center, small keyboard button opening a floating input.
+ * Exit always lands on Chat — vision's only entry point is the tab bar,
+ * so there is no "previous screen" to return to.
  *
  * Frame rule: a 500ms JS interval snapshots and uploads frames while
  * idle/listening; the worklet frame processor is a bridge-free heartbeat
@@ -23,16 +26,16 @@ import { openSettings } from "expo-linking";
 import { useCameraDevice, useCameraPermission } from "react-native-vision-camera";
 import type { Camera as VisionCameraView } from "react-native-vision-camera";
 
-import { colors } from "../themes/tokens.ts";
-import { useTabContentFade } from "../lib/motion.ts";
-import { VOICE_STATUS_LABEL } from "../lib/voiceStatus.ts";
-import { useVisionTurn } from "../hooks/useVisionTurn.ts";
-import { useModelReady } from "../hooks/useModelReady.ts";
+import { colors } from "../../../themes/tokens.ts";
+import { useTabContentFade } from "../../../lib/motion.ts";
+import { VOICE_STATUS_LABEL } from "../../../lib/voiceStatus.ts";
+import { useVisionTurn } from "../../../hooks/useVisionTurn.ts";
+import { useModelReady } from "../../../hooks/useModelReady.ts";
 import {
   VisionBottomPanel,
   VisionPreview,
   VisionTopFloat,
-} from "../components/VisionOverlays.tsx";
+} from "../../../components/VisionOverlays.tsx";
 
 export default function VisionScreen() {
   const [position, setPosition] = useState<"back" | "front">("back");
@@ -70,7 +73,9 @@ export default function VisionScreen() {
 
   function exit(): void {
     stopAll();
-    router.back();
+    // A tab has no "back": the only way in is the tab bar, so the only
+    // way out is a known tab. Chat is the home tab.
+    router.navigate("/chat");
   }
 
   function sendDraft(): void {

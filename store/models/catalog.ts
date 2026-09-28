@@ -53,7 +53,7 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
     try {
       const results = await hfSearchModels(
         query,
-        get().hfToken ?? undefined,
+        get().activeHfToken() ?? undefined,
         controller.signal,
       );
       if (controller.signal.aborted) return;
@@ -72,7 +72,7 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
   },
 
   getModelFiles: (modelId) =>
-    hfGetModelFiles(modelId, get().hfToken ?? undefined),
+    hfGetModelFiles(modelId, get().activeHfToken() ?? undefined),
 
   addModel: (model) => {
     set((state) => ({

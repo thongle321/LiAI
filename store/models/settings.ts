@@ -4,14 +4,16 @@ import type { StateCreator } from "zustand";
 
 import type { ModelStore, SettingsSlice } from "./types";
 import { parseModelSettings } from "../../lib/model-settings";
+import { activeHfToken } from "../../lib/hf-token";
 import { HF_TOKEN_SS_KEY } from "../../lib/secrets";
-import { asyncStorage, MODEL_SETTINGS_KEY, deleteSecret, writeSecret } from "./storage";
+import { asyncStorage, HF_TOKEN_USE_KEY, MODEL_SETTINGS_KEY, deleteSecret, writeSecret } from "./storage";
 
 export const createSettingsSlice: StateCreator<ModelStore, [], [], SettingsSlice> = (
   set,
   get,
 ) => ({
   hfToken: null,
+  useHfToken: true,
   modelSettings: {},
 
   saveModelSettings: async () => {
@@ -32,6 +34,22 @@ export const createSettingsSlice: StateCreator<ModelStore, [], [], SettingsSlice
     } else {
       await deleteSecret(HF_TOKEN_SS_KEY);
     }
+  },
+
+  setUseHfToken: async (on) => {
+    set({ useHfToken: on });
+    try {
+      await asyncStorage.setItem(HF_TOKEN_USE_KEY, on ? "true" : "false");
+    } catch (e) {
+      console.warn("Failed to save Hugging Face token preference:", e);
+    }
+  },
+
+  // The one place a token becomes a header: every caller that attaches one
+  // goes through here, so the switch cannot be forgotten at a call site.
+  activeHfToken: (override) => {
+    const { hfToken, useHfToken } = get();
+    return activeHfToken({ hfToken, useHfToken }, override);
   },
 
   getModelSettings: (modelId) => parseModelSettings(get().modelSettings[modelId]),

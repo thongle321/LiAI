@@ -9,6 +9,7 @@
 
 import type { SessionStore, StoredTurn } from "../lib/chat/session-store.ts";
 import { draftSlot } from "../lib/chat/session-store.ts";
+import type { SamplerParams } from "../lib/inference/sampler.ts";
 import type { AgentStep, SessionInfo } from "../types/chat.ts";
 import type { TurnRunner } from "../store/chat/types.ts";
 
@@ -50,6 +51,7 @@ export function fakeSessionStore(
     });
   }
   const drafts = new Map<string, string>();
+  const samplers = new Map<string, Partial<SamplerParams>>();
   let active: string | null = activeSessionId;
   let clock = 0;
   const calls: FakeStoreCalls = { creates: 0, appends: [], deletes: [] };
@@ -101,10 +103,12 @@ export function fakeSessionStore(
       row.pinned = pinned;
       return true;
     },
-    deleteSession: async (id: string) => {
+      deleteSession: async (id: string) => {
       calls.deletes.push(id);
-      // Mirrors the real store: the draft and the pointer are its data.
+      // Mirrors the real store: the draft, the sampler override and the
+      // pointer are its data.
       drafts.delete(draftSlot(id));
+      samplers.delete(id);
       if (active === id) active = null;
       return sessions.delete(id);
     },
@@ -134,6 +138,14 @@ export function fakeSessionStore(
     getActiveSessionId: async () => active,
     setActiveSessionId: async (sessionId) => {
       active = sessionId;
+    },
+    getSessionSampler: async (sessionId) => samplers.get(sessionId) ?? null,
+    setSessionSampler: async (sessionId, override) => {
+      if (override === null || Object.keys(override).length === 0) {
+        samplers.delete(sessionId);
+      } else {
+        samplers.set(sessionId, override);
+      }
     },
   };
   return { store, calls, drafts };

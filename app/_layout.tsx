@@ -12,6 +12,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { Uniwind } from "uniwind";
 
 import { colors } from "../themes/tokens.ts";
+import { useEngineOffload } from "../hooks/useEngineOffload.ts";
 
 // Light-locked (DESIGN.md): one theme, and it is the light one —
 // device dark mode must not invent a second world.
@@ -23,6 +24,9 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
   });
+  // Release the loaded model when the app is backgrounded, so a multi-GB
+  // GGUF is not held resident (Settings > Model Loading).
+  useEngineOffload();
 
   // Gate first paint on the font resolving so nothing flashes in the
   // system typeface (DESIGN.md, Single Family Rule).

@@ -67,13 +67,13 @@ describe("settings card pattern", () => {
   });
 
   it("defines the sampler rows once, in one component", () => {
-    // The sampler is the one list with a second host (the per-model
-    // Generation view), so a second copy of these rows would be a silent
-    // fork with its own defaults.
+    // The sampler is the one list with a second host (the Generation sheet
+    // renders it for both Session and Preset), so a second copy of these
+    // rows would be a silent fork with its own defaults and ranges.
     const withSampler = screenFiles()
-      .filter((f) => /label="Temperature"/.test(read(f)))
+      .filter((f) => /label="TEMPERATURE"/.test(read(f)))
       .map((f) => path.relative(ROOT, f).replace(/\\/g, "/"));
-    assert.deepEqual(withSampler, ["components/SamplingSettings.tsx"]);
+    assert.deepEqual(withSampler, ["components/SamplerRows.tsx"]);
   });
 
   it("keeps Advanced collapsed until asked", () => {
@@ -97,26 +97,32 @@ describe("settings card pattern", () => {
         `${file} hand-rolls group spacing; SettingsSection owns it`,
       );
     }
-    // The key editor is a row inside the Provider card, not a loose sibling.
+    // The key editor is reached from a row (an ActionRow opening a sheet),
+    // never rendered as a loose sibling beside the card.
     const search = read("components/SearchSettings.tsx");
-    const keys = search.slice(search.indexOf("function ProviderKeys"));
+    assert.doesNotMatch(
+      search,
+      /function ProviderKeys/,
+      "the old loose key editor must not come back",
+    );
     assert.match(
-      keys.slice(0, keys.indexOf("export function")),
-      /<View className="row"/,
-      "ProviderKeys must render as a .row, so it sits in a card with a divider",
+      search,
+      /<ActionRow[\s\S]{0,400}label="API key"/,
+      "the search key must be opened by a row, so it sits inside the card",
     );
   });
 
   it("gives every row a description", () => {
     // DESIGN.md, Settings: a bare label says nothing about what the value
     // does. Three rows shipped without one before this existed.
-    const rows = /<(ToggleRow|StepperRow|SliderRow|PickerRow|Segmented|NavRow)\b[\s\S]*?\/>/g;
+    const rows =
+      /<(ToggleRow|StepperRow|SliderRow|PickerRow|Segmented|NavRow|ActionRow|TextFieldRow)\b[\s\S]*?\/>/g;
     for (const file of [
       "SearchSettings.tsx",
       "VoiceSettings.tsx",
       "HfTokenSettings.tsx",
       "InferenceSettings.tsx",
-      "SamplingSettings.tsx",
+      "SamplerRows.tsx",
       "models/ModelSettingsSheet.tsx",
     ]) {
       const source = read(`components/${file}`);

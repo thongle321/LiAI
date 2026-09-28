@@ -32,12 +32,14 @@ export interface ModelsUiState {
   downloadedOnly: boolean;
   hfOnly: boolean;
   grouped: boolean;
+  autoNavigateToChat: boolean;
   loaded: boolean;
   load: () => Promise<void>;
   setVisible: (section: ModelsUiSection, visible: boolean) => void;
   setOpen: (section: ModelsUiSection, open: boolean) => void;
   setAllOpen: (open: boolean) => void;
   setFilter: (filter: ModelsUiFilter, value: boolean) => void;
+  setAutoNavigateToChat: (value: boolean) => void;
 }
 
 const DEFAULTS = {
@@ -48,6 +50,8 @@ const DEFAULTS = {
   downloadedOnly: false,
   hfOnly: false,
   grouped: true,
+  /** Jump to the chat after activating a model, so you can start typing. */
+  autoNavigateToChat: true,
 };
 
 function parseUiState(raw: string | null): typeof DEFAULTS {
@@ -67,6 +71,7 @@ function parseUiState(raw: string | null): typeof DEFAULTS {
       downloadedOnly: flag("downloadedOnly", false),
       hfOnly: flag("hfOnly", false),
       grouped: flag("grouped", true),
+      autoNavigateToChat: flag("autoNavigateToChat", true),
     };
   } catch {
     return { ...DEFAULTS };
@@ -84,6 +89,7 @@ export function createModelsUiStore(storage: KeyValueStorage) {
         downloadedOnly,
         hfOnly,
         grouped,
+        autoNavigateToChat,
       } = get();
       try {
         await storage.setItem(
@@ -96,6 +102,7 @@ export function createModelsUiStore(storage: KeyValueStorage) {
             downloadedOnly,
             hfOnly,
             grouped,
+            autoNavigateToChat,
           }),
         );
       } catch {
@@ -124,6 +131,10 @@ export function createModelsUiStore(storage: KeyValueStorage) {
       },
       setFilter: (filter, value) => {
         set({ [filter]: value });
+        void persist();
+      },
+      setAutoNavigateToChat: (value) => {
+        set({ autoNavigateToChat: value });
         void persist();
       },
     };

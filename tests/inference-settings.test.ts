@@ -63,6 +63,11 @@ describe("inference store", () => {
         specDraftCacheV: s.specDraftCacheV,
         thinkingEnabled: s.thinkingEnabled,
         sampler: s.sampler,
+        useHexagonNpu: s.useHexagonNpu,
+        useWeightRepacking: s.useWeightRepacking,
+        imageMaxTokens: s.imageMaxTokens,
+        draftModelId: s.draftModelId,
+        autoOffload: s.autoOffload,
       },
       { ...DEFAULT_INFERENCE },
     );
@@ -202,6 +207,7 @@ describe("engine manager init key", () => {
       spec_draft_n_gpu_layers: 99,
       spec_draft_cache_type_k: "q8_0" as const,
       spec_draft_cache_type_v: "q8_0" as const,
+      no_extra_bufts: true,
     };
     await manager.ensure(source, undefined, base);
     await manager.ensure(source, undefined, base);

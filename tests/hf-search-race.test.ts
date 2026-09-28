@@ -12,12 +12,21 @@ interface SearchSlice {
   searchError: string | null;
   searchLoading: boolean;
   searchModels: (query: string) => Promise<void>;
+  // searchModels resolves the token through the store, so the stand-in has
+  // to provide it or the slice throws before it ever fetches.
+  activeHfToken: (override?: string | null) => string | null;
 }
 
 // The slice is typed against the whole ModelStore but searchModels only
-// touches search state, so a narrow stand-in is enough to drive it.
-const makeStore = () =>
-  createStore(createCatalogSlice as unknown as StateCreator<SearchSlice>);
+// touches search state and the token resolver, so a narrow stand-in is
+// enough to drive it.
+const makeStore = () => {
+  const store = createStore(
+    createCatalogSlice as unknown as StateCreator<SearchSlice>,
+  );
+  store.setState({ activeHfToken: () => null });
+  return store;
+};
 
 function mockFetch(impl: (url: string, init?: RequestInit) => Promise<Response>): void {
   (globalThis as Record<string, unknown>).fetch = impl;

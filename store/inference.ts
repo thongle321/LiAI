@@ -21,6 +21,10 @@ export const MIN_CONTEXT = 512;
 export const MAX_GPU_LAYERS = 99;
 export const MAX_BATCH = 4096;
 export const MAX_THREADS = 16;
+/** PocketPal's range for the vision budget: 256-512 is faster, up to 4096
+ *  keeps maximum detail. */
+export const MIN_IMAGE_TOKENS = 256;
+export const MAX_IMAGE_TOKENS = 4096;
 
 export type FlashAttn = "auto" | "on" | "off";
 export type CacheType = "f16" | "q8_0" | "q4_0";
@@ -45,6 +49,20 @@ export interface InferenceParams {
   thinkingEnabled: boolean;
   /** Sampling params, nested so one setter covers the whole group. */
   sampler: SamplerParams;
+  /** Opt into Android's Hexagon NPU. False leaves `devices` unset, which
+   *  llama.rn reads as "platform default". */
+  useHexagonNpu: boolean;
+  /** UI name for the inverted no_extra_bufts flag. */
+  useWeightRepacking: boolean;
+  /** Vision budget, applied when the projector loads. */
+  imageMaxTokens: number;
+  /** Id of a separate draft GGUF for MTP speculative decoding. */
+  draftModelId: string | null;
+  /** Release the model when the app backgrounds, instead of holding a
+   *  multi-GB GGUF resident. Default on: that is the point of the setting,
+   *  and a phone that re-loads a model on the next message is fine while
+   *  one that never releases it gets killed for memory. */
+  autoOffload: boolean;
 }
 
 export interface InferenceState extends InferenceParams {
@@ -67,6 +85,11 @@ export interface InferenceState extends InferenceParams {
   setThinkingEnabled: (on: boolean) => void;
   /** Patch any subset; each value is clamped by the sampler module. */
   setSampler: (patch: Partial<SamplerParams>) => void;
+  setUseHexagonNpu: (on: boolean) => void;
+  setUseWeightRepacking: (on: boolean) => void;
+  setImageMaxTokens: (n: number) => void;
+  setDraftModelId: (id: string | null) => void;
+  setAutoOffload: (on: boolean) => void;
 }
 
 export const DEFAULT_INFERENCE: InferenceParams = {
@@ -86,6 +109,13 @@ export const DEFAULT_INFERENCE: InferenceParams = {
   specDraftCacheV: "q8_0",
   thinkingEnabled: true,
   sampler: { ...DEFAULT_SAMPLER },
+  useHexagonNpu: false,
+  // Repacking on by default, matching PocketPal's Android default: it makes
+  // prompt processing faster for a small memory cost.
+  useWeightRepacking: true,
+  imageMaxTokens: 512,
+  draftModelId: null,
+  autoOffload: true,
 };
 
 /** Single clamp every numeric param flows through (persist/restore + setters). */
@@ -130,6 +160,15 @@ function asParams(value: unknown): InferenceParams {
     specDraftCacheV: cache("specDraftCacheV", DEFAULT_INFERENCE.specDraftCacheV),
     thinkingEnabled: flag("thinkingEnabled", DEFAULT_INFERENCE.thinkingEnabled),
     sampler: parseSampler(v.sampler),
+    useHexagonNpu: flag("useHexagonNpu", DEFAULT_INFERENCE.useHexagonNpu),
+    useWeightRepacking: flag("useWeightRepacking", DEFAULT_INFERENCE.useWeightRepacking),
+    imageMaxTokens: clampInt(
+      num("imageMaxTokens", DEFAULT_INFERENCE.imageMaxTokens),
+      MIN_IMAGE_TOKENS,
+      MAX_IMAGE_TOKENS,
+    ),
+    draftModelId: typeof v.draftModelId === "string" ? v.draftModelId : null,
+    autoOffload: flag("autoOffload", DEFAULT_INFERENCE.autoOffload),
   };
 }
 
@@ -162,6 +201,11 @@ export function createInferenceStore(storage: KeyValueStorage) {
         specDraftCacheV,
         thinkingEnabled,
         sampler,
+        useHexagonNpu,
+        useWeightRepacking,
+        imageMaxTokens,
+        draftModelId,
+        autoOffload,
       } = get();
       try {
         await storage.setItem(
@@ -183,6 +227,11 @@ export function createInferenceStore(storage: KeyValueStorage) {
             specDraftCacheV,
             thinkingEnabled,
             sampler,
+            useHexagonNpu,
+            useWeightRepacking,
+            imageMaxTokens,
+            draftModelId,
+            autoOffload,
           }),
         );
       } catch {
@@ -258,6 +307,26 @@ export function createInferenceStore(storage: KeyValueStorage) {
       },
       setSampler: (patch) => {
         set({ sampler: parseSampler({ ...get().sampler, ...patch }) });
+        void persist();
+      },
+      setUseHexagonNpu: (on) => {
+        set({ useHexagonNpu: on });
+        void persist();
+      },
+      setUseWeightRepacking: (on) => {
+        set({ useWeightRepacking: on });
+        void persist();
+      },
+      setImageMaxTokens: (n) => {
+        set({ imageMaxTokens: clampInt(n, MIN_IMAGE_TOKENS, MAX_IMAGE_TOKENS) });
+        void persist();
+      },
+      setDraftModelId: (id) => {
+        set({ draftModelId: id });
+        void persist();
+      },
+      setAutoOffload: (on) => {
+        set({ autoOffload: on });
         void persist();
       },
     };

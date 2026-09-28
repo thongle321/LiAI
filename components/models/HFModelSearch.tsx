@@ -42,6 +42,7 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
     pauseModelDownload,
     resumeModelDownload,
     hfToken,
+    activeHfToken,
     setHfToken,
     models,
   } = useModelStore();
@@ -204,7 +205,7 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
                           progress={prog}
                           onPress={() =>
                             guard(file.size, () =>
-                              startDownload(item.modelId, file, hfToken || undefined),
+                              startDownload(item.modelId, file, activeHfToken() ?? undefined),
                             )
                           }
                           onPause={() => void pauseModelDownload(hfSpecId(item.modelId, file.name))}

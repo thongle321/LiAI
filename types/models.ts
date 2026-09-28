@@ -1,7 +1,5 @@
 /** Model types for the LiAI model management system. */
 
-import type { SamplerParams } from "../lib/inference/sampler.ts";
-
 export type ModelOrigin = "preset" | "huggingface" | "local" | "remote_api";
 
 export type ModelType = "llm" | "vision" | "projection";
@@ -131,8 +129,4 @@ export interface ModelSettings {
   displayName: string;
   systemPrompt: string;
   stopWords: string[];
-  /** Sampling override. Absent = use the global sampler; present = only the
-   *  fields it names are overridden, so a new global default still reaches a
-   *  model that never touched that one. */
-  sampler?: Partial<SamplerParams>;
 }

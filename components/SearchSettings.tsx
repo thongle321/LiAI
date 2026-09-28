@@ -1,13 +1,18 @@
-/** Web-search settings: provider, key, result count, consent.
+/** Internet Search card: consent, provider, key, result count.
  *
- * Keys go straight to SecureStore, never KV; the on-device talent
- * reads them per run (consent-gated).
+ * Consent is a button ("I understand" -> "Revoke"), not a switch: it is a
+ * one-way acknowledgement of something leaving the device, and a switch
+ * that silently flips both ways is the wrong control for it. Keys go
+ * straight to SecureStore, never KV, and sit behind a button rather than on
+ * the screen.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
+import { BottomSheet } from "@expo/ui";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
-import { colors } from "../themes/tokens.ts";
+import { colors, scrim } from "../themes/tokens.ts";
 import {
   MAX_RESULT_COUNT,
   MIN_RESULT_COUNT,
@@ -15,9 +20,35 @@ import {
   type SearchProviderId,
 } from "../lib/search-providers.ts";
 import { useSearch } from "../store/search.ts";
-import { PickerRow, SettingsSection, StepperRow, ToggleRow } from "./SettingsRows.tsx";
+import {
+  ActionRow,
+  PickerRow,
+  SettingsSection,
+  SliderRow,
+} from "./SettingsRows.tsx";
 
-function ProviderKeys({ id }: { id: SearchProviderId }) {
+const CONSENT_TEXT =
+  "When the assistant searches the web, your query is sent to the provider below over the internet. " +
+  "When it reads a page, the URL and page content may be sent to a default reader service if the " +
+  "provider has no native reader. Keys and queries are never stored by us.";
+
+function providerName(id: SearchProviderId): string {
+  return SEARCH_PROVIDERS.find((p) => p.id === id)?.name ?? id;
+}
+
+/** The key editor, as a sheet: a secret should not sit on the settings
+ *  screen waiting to be read over someone's shoulder. */
+function ProviderKeySheet({
+  providerId,
+  onClose,
+  onChanged,
+}: {
+  providerId: SearchProviderId | null;
+  onClose: () => void;
+  /** Fired after a save or clear, so the row behind the sheet stops
+   *  claiming no key is set while one is. */
+  onChanged: () => void;
+}) {
   const getProviderKey = useSearch((s) => s.getProviderKey);
   const setProviderKey = useSearch((s) => s.setProviderKey);
   const clearProviderKey = useSearch((s) => s.clearProviderKey);
@@ -25,126 +56,183 @@ function ProviderKeys({ id }: { id: SearchProviderId }) {
   const [hasKey, setHasKey] = useState(false);
 
   useEffect(() => {
-    getProviderKey(id).then(
+    if (providerId === null) return;
+    setDraft("");
+    getProviderKey(providerId).then(
       (k) => setHasKey(k !== null && k !== ""),
       () => setHasKey(false),
     );
-  }, [id, getProviderKey]);
+  }, [providerId, getProviderKey]);
 
   async function save(): Promise<void> {
-    if (draft.trim() === "") return;
-    await setProviderKey(id, draft.trim());
+    if (!providerId || draft.trim() === "") return;
+    await setProviderKey(providerId, draft.trim());
     setDraft("");
     setHasKey(true);
-  }
-
-  async function clear(): Promise<void> {
-    await clearProviderKey(id);
-    setHasKey(false);
+    onChanged();
   }
 
   return (
-    <View className="row">
-      <View className="flex-row items-center gap-2">
+    <BottomSheet
+      isPresented={providerId !== null}
+      onDismiss={onClose}
+      containerColor={colors.surface1}
+      scrimColor={scrim}
+      contentPadding={20}
+      testID="search-key-sheet"
+    >
+      <KeyboardAwareScrollView
+        className="flex-col"
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text className="mb-1 font-sans-semibold text-h3 text-primary-text">
+          {providerId === null ? "" : providerName(providerId)}
+        </Text>
+        <Text className="mb-4 font-sans text-body-md text-secondary-text">
+          {hasKey ? "A key is saved for this provider." : "No key set for this provider."}
+        </Text>
         <TextInput
           value={draft}
           onChangeText={setDraft}
           placeholder={hasKey ? "Key saved — enter to replace" : "Enter API key"}
           secureTextEntry
           autoCapitalize="none"
-          className="input flex-1 font-sans text-body-md"
+          className="input font-sans text-body-md"
           placeholderTextColor={colors.secondaryText}
-          accessibilityLabel={`${id} API key`}
+          accessibilityLabel={`${providerId ?? ""} API key`}
         />
-        <Pressable
-          onPress={save}
-          className="btn btn--primary min-h-12 px-5 py-2"
-          accessibilityRole="button"
-          accessibilityLabel="Save key"
-        >
-          <Text className="font-sans text-body-sm text-on-primary">Save</Text>
-        </Pressable>
-        {hasKey && (
+        <View className="mt-4 flex-row gap-2">
+          {hasKey ? (
+            <Pressable
+              onPress={() => {
+                if (providerId) void clearProviderKey(providerId);
+                setHasKey(false);
+                onChanged();
+              }}
+              className="btn btn--ghost flex-1"
+              accessibilityRole="button"
+              accessibilityLabel="Clear key"
+            >
+              <Text className="font-sans text-body-md text-primary">Clear</Text>
+            </Pressable>
+          ) : null}
           <Pressable
-            onPress={clear}
-            className="btn btn--ghost min-h-12 px-5 py-2"
+            onPress={() => void save()}
+            className="btn btn--primary flex-1"
             accessibilityRole="button"
-            accessibilityLabel="Clear key"
+            accessibilityLabel="Save key"
           >
-            <Text className="font-sans text-body-sm text-primary">Clear</Text>
+            <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
           </Pressable>
-        )}
-      </View>
-    </View>
+        </View>
+      </KeyboardAwareScrollView>
+    </BottomSheet>
   );
 }
 
 export function SearchSettings() {
   const {
-    activeProviderId,
-    resultCount,
     hasConsented,
-    load,
-    setActiveProvider,
-    setResultCount,
     setConsented,
+    activeProviderId,
+    setActiveProvider,
+    resultCount,
+    setResultCount,
+    getProviderKey,
+    load,
   } = useSearch();
+  const [keySheetFor, setKeySheetFor] = useState<SearchProviderId | null>(null);
+  const [hasKey, setHasKey] = useState(false);
 
   useEffect(() => {
     void load();
   }, []);
 
-  // The key editor follows the selected provider rather than sitting under
-  // every row, so the picker row stays a single line.
-  const selectedProvider = SEARCH_PROVIDERS.find((p) => p.id === activeProviderId);
+  // Re-checked whenever the provider or consent changes, and again after the
+  // key sheet writes: the button says whether a key exists, and that moves
+  // when the provider does or when one is saved.
+  const refreshKey = useCallback(() => {
+    if (!hasConsented) {
+      setHasKey(false);
+      return;
+    }
+    void getProviderKey(activeProviderId).then(
+      (k) => setHasKey(k !== null && k !== ""),
+      () => setHasKey(false),
+    );
+  }, [hasConsented, activeProviderId, getProviderKey]);
+
+  useEffect(refreshKey, [refreshKey]);
+
   const providerIds = SEARCH_PROVIDERS.map((p) => p.id);
 
   return (
-    <>
-      <SettingsSection
-        title="Web search"
-        description="Searches leave your device and go to the provider below."
-      >
+    <SettingsSection
+      title="Internet Search"
+      description="Searches leave this device. Bring your own key — we never hold it."
+    >
+      {hasConsented ? (
         <View className="row">
-          <ToggleRow
-            label="Allow web search"
-            description="Let the model look things up. Required before any search is sent."
-            on={hasConsented}
-            onPress={() => setConsented(!hasConsented)}
+          <ActionRow
+            label="Searching the web is enabled"
+            description={CONSENT_TEXT}
+            buttonLabel="Revoke"
+            variant="secondary"
+            onPress={() => setConsented(false)}
           />
         </View>
+      ) : (
         <View className="row">
-          <StepperRow
-            label="Results"
-            description="How many pages a search may bring back."
-            display={`${resultCount}`}
-            onMinus={() => setResultCount(resultCount - 1)}
-            onPlus={() => setResultCount(resultCount + 1)}
-            minusDisabled={resultCount <= MIN_RESULT_COUNT}
-            plusDisabled={resultCount >= MAX_RESULT_COUNT}
+          <ActionRow
+            label="Searches leave your device"
+            description={CONSENT_TEXT}
+            buttonLabel="I understand"
+            onPress={() => setConsented(true)}
           />
         </View>
-      </SettingsSection>
-      <SettingsSection
-        title="Provider"
-        description="Which search service answers, and the key it uses."
-      >
-        <View className="row">
-          {/* Three providers is a closed set that does not fit inline, so
-              it is a native menu rather than three radio rows. */}
-          <PickerRow
-            label="Service"
-            description="Tavily or Brave."
-            options={providerIds}
-            value={activeProviderId}
-            onChange={(next) => setActiveProvider(next as SearchProviderId)}
-            displayFor={(id) => SEARCH_PROVIDERS.find((p) => p.id === id)?.name ?? id}
-          />
-        </View>
-        {/* The key belongs to the provider, so it is a row in the same card
-            rather than a loose editor hanging below it. */}
-        {selectedProvider !== undefined && <ProviderKeys id={selectedProvider.id} />}
-      </SettingsSection>
-    </>
+      )}
+      <View className="row">
+        <PickerRow<SearchProviderId>
+          label="Search provider"
+          description="Which service answers, and which key it uses."
+          options={providerIds}
+          value={activeProviderId}
+          onChange={(next) => setActiveProvider(next)}
+          displayFor={providerName}
+        />
+      </View>
+      <View className="row">
+        <ActionRow
+          label="API key"
+          description={
+            hasConsented
+              ? hasKey
+                ? `Key is set for ${providerName(activeProviderId)}.`
+                : `No key set for ${providerName(activeProviderId)}.`
+              : "Accept the disclosure above to set a key and enable search."
+          }
+          buttonLabel={hasKey ? "Update Key" : "Set Key"}
+          variant="secondary"
+          onPress={() => setKeySheetFor(activeProviderId)}
+        />
+      </View>
+      <View className="row">
+        <SliderRow
+          label="Results per search"
+          description="Fewer results keep more room in the model's context."
+          display={`${resultCount}`}
+          value={resultCount}
+          min={MIN_RESULT_COUNT}
+          max={MAX_RESULT_COUNT}
+          step={1}
+          onChange={setResultCount}
+        />
+      </View>
+      <ProviderKeySheet
+        providerId={keySheetFor}
+        onClose={() => setKeySheetFor(null)}
+        onChanged={refreshKey}
+      />
+    </SettingsSection>
   );
 }

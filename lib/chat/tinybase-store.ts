@@ -26,6 +26,7 @@ import { createStore, type Store } from "tinybase";
 import type { AgentStep, SessionInfo } from "../../types/chat.ts";
 import type { SessionStore, StoredTurn } from "./session-store.ts";
 import { draftSlot } from "./session-store.ts";
+import { DEFAULT_SAMPLER, type SamplerParams } from "../inference/sampler.ts";
 
 /** Row id: the timestamp prefix keeps ids unique across restarts, the
  *  counter keeps them ordered inside one millisecond. Named apart from
@@ -256,10 +257,12 @@ export class TinyBaseSessionStore implements SessionStore {
       this.store.delRow("messages", entry.id);
     }
     this.store.delRow("sessions", sessionId);
-    // A deleted conversation's draft and the pointer to it are its data
-    // too: leaving them behind would strand a draft for a session that
-    // can never be reopened, and leave the app pointing at nothing.
+    // A deleted conversation's draft, its sampler override and the pointer
+    // to it are its data too: leaving them behind would strand a draft and
+    // a tuning for a session that can never be reopened, and leave the app
+    // pointing at nothing.
     await this.clearDraft(sessionId);
+    await this.setSessionSampler(sessionId, null);
     if ((await this.getActiveSessionId()) === sessionId) {
       await this.setActiveSessionId(null);
     }
@@ -306,6 +309,40 @@ export class TinyBaseSessionStore implements SessionStore {
 
   async clearDraft(sessionId: string | null): Promise<void> {
     this.store.delRow("drafts", draftSlot(sessionId));
+  }
+
+  async getSessionSampler(sessionId: string): Promise<Partial<SamplerParams> | null> {
+    const raw = this.store.getCell("sessionSampler", sessionId, "values");
+    if (typeof raw !== "string" || raw === "") return null;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+    if (!isRecord(parsed)) return null;
+    // Only finite numbers count as an override: a half-written save
+    // degrades to "this session follows the global preset" rather than
+    // pinning a value the user cannot see.
+    const out: Record<string, number> = {};
+    for (const key of Object.keys(DEFAULT_SAMPLER)) {
+      const v = parsed[key];
+      if (typeof v === "number" && Number.isFinite(v)) out[key] = v;
+    }
+    return Object.keys(out).length > 0 ? (out as Partial<SamplerParams>) : null;
+  }
+
+  async setSessionSampler(
+    sessionId: string,
+    override: Partial<SamplerParams> | null,
+  ): Promise<void> {
+    // An empty override IS "follow the global preset", so it deletes the
+    // row rather than storing "{}".
+    if (override === null || Object.keys(override).length === 0) {
+      this.store.delRow("sessionSampler", sessionId);
+      return;
+    }
+    this.store.setCell("sessionSampler", sessionId, "values", JSON.stringify(override));
   }
 
   async getActiveSessionId(): Promise<string | null> {

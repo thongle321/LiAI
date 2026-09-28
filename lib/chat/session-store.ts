@@ -15,6 +15,7 @@ import type {
   MessageUsage,
   SessionInfo,
 } from "../../types/chat.ts";
+import type { SamplerParams } from "../inference/sampler.ts";
 
 /** One durable turn. Streaming/error are NOT here: they are live render
  * state owned by the chat store, and persisting them would resurrect a
@@ -73,4 +74,12 @@ export interface SessionStore {
   /** Which conversation is open, or null. */
   getActiveSessionId(): Promise<string | null>;
   setActiveSessionId(sessionId: string | null): Promise<void>;
+  /** Sampling override for one conversation, or null when it follows the
+   *  global preset. Partial on purpose: only the fields the session actually
+   *  changed are stored, so a new global default still reaches it. */
+  getSessionSampler(sessionId: string): Promise<Partial<SamplerParams> | null>;
+  setSessionSampler(
+    sessionId: string,
+    override: Partial<SamplerParams> | null,
+  ): Promise<void>;
 }

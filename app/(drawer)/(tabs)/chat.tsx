@@ -20,7 +20,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRouter } from "expo-router";
 import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
-import { Check, Menu, Search, Share, X } from "lucide-react-native";
+import { Check, Menu, Search, Share, SlidersHorizontal, X } from "lucide-react-native";
 
 import { colors } from "../../../themes/tokens.ts";
 import { filterMessages } from "../../../lib/chat/filter.ts";
@@ -47,6 +47,7 @@ import { MessageInput } from "../../../components/chat/MessageInput.tsx";
 import { UsageStats } from "../../../components/chat/UsageStats.tsx";
 import { SuggestedPrompts } from "../../../components/chat/SuggestedPrompts.tsx";
 import { MessageList } from "../../../components/chat/MessageList.tsx";
+import { GenerationSettingsSheet } from "../../../components/chat/GenerationSettingsSheet.tsx";
 
 export default function ChatRoute() {
   const messages = useChatStore((s) => s.messages);
@@ -171,6 +172,8 @@ export default function ChatRoute() {
   const menuPress = usePressFeedback();
   const searchPress = usePressFeedback();
   const copyPress = usePressFeedback();
+  const genPress = usePressFeedback();
+  const [generationOpen, setGenerationOpen] = useState(false);
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
 
@@ -180,11 +183,11 @@ export default function ChatRoute() {
       style={{ flex: 1, backgroundColor: colors.base }}
     >
       {/* 56px header on Clean White with a 1px Hairline bottom. Both slots
-          are w-24 (96px): the trailing group is two 48px targets, so equal
-          slots must be sized to the WIDER group or its overflow eats the
-          wordmark's flex space and shifts it off-centre. */}
+          are w-36 (144px): the trailing group is three 48px targets, so
+          equal slots must be sized to the WIDER group or its overflow eats
+          the wordmark's flex space and shifts it off-centre. */}
       <View className="h-14 flex-row items-center border-b border-border bg-surface-1 px-5">
-        <View className="w-24 flex-row items-center">
+        <View className="w-36 flex-row items-center">
           <Animated.View style={menuPress.animatedStyle}>
             <Pressable
               onPress={() => navigation.openDrawer()}
@@ -212,7 +215,20 @@ export default function ChatRoute() {
             {APP_NAME}
           </Text>
         </Pressable>
-        <View className="w-24 flex-row items-center justify-end">
+        <View className="w-36 flex-row items-center justify-end">
+          <Animated.View style={genPress.animatedStyle}>
+            <Pressable
+              onPress={() => setGenerationOpen(true)}
+              onPressIn={genPress.onPressIn}
+              onPressOut={genPress.onPressOut}
+              className="h-12 w-12 items-center justify-center"
+              hitSlop={4}
+              accessibilityRole="button"
+              accessibilityLabel="Generation settings"
+            >
+              <SlidersHorizontal size={20} color={colors.secondaryText} />
+            </Pressable>
+          </Animated.View>
           <Animated.View style={searchPress.animatedStyle}>
             <Pressable
               onPress={() => {
@@ -407,6 +423,12 @@ export default function ChatRoute() {
         )}
         <UsageStats messages={messages} />
       </Animated.View>
+      {/* Sampling is per conversation and lives here, not in Settings —
+          the same split PocketPal uses. */}
+      <GenerationSettingsSheet
+        visible={generationOpen}
+        onClose={() => setGenerationOpen(false)}
+      />
     </SafeAreaView>
   );
 }

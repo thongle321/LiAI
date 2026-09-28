@@ -95,10 +95,17 @@ export interface RemoteSlice {
 
 export interface SettingsSlice {
   hfToken: string | null;
+  /** Attach the token to API requests. Kept as its own switch so a token
+   *  that is causing auth failures can be parked without deleting it. */
+  useHfToken: boolean;
   modelSettings: Record<string, ModelSettings>;
 
   saveModelSettings: () => Promise<void>;
   setHfToken: (token: string | null) => Promise<void>;
+  setUseHfToken: (on: boolean) => Promise<void>;
+  /** The token to send, honouring the Use HF Token switch. An explicit
+   *  override wins: a caller passing one means it. */
+  activeHfToken: (override?: string | null) => string | null;
   getModelSettings: (modelId: string) => ModelSettings;
   updateModelSettings: (modelId: string, updates: Partial<ModelSettings>) => void;
 }

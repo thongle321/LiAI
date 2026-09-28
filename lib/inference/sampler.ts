@@ -51,17 +51,20 @@ export const DEFAULT_SAMPLER: SamplerParams = {
   nPredict: -1,
 };
 
-/** Per-field ranges. A stored value is never trusted: it can be from an
- *  older build, a hand-edited file, or a half-written save. */
+/** Per-field ranges, taken from PocketPal's completionParams rather than
+ *  llama.cpp's widest: a curated range is a better control than one that
+ *  spans values nobody should pick. A stored value is never trusted — it
+ *  can be from an older build, a hand-edited file, or a half-written save,
+ *  so an out-of-range value from a previous version is pulled in here. */
 const RANGES = {
   temperature: [0, 2],
-  topK: [0, 1000],
+  topK: [1, 128],
   topP: [0, 1],
   minP: [0, 1],
-  typicalP: [0, 1],
+  typicalP: [0, 2],
   xtcThreshold: [0, 1],
   xtcProbability: [0, 1],
-  penaltyLastN: [0, 65536],
+  penaltyLastN: [0, 256],
   penaltyRepeat: [0, 2],
   penaltyFrequency: [0, 2],
   penaltyPresence: [0, 2],

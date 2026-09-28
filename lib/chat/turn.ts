@@ -47,9 +47,11 @@ export interface TurnDeps {
   getSystemPrompt(): Promise<string | undefined>;
   /** Local-only thinking preference; omitted keeps the native default. */
   getThinking?: () => Promise<boolean>;
-  /** Local-only sampling params, already resolved global-vs-model; null
-   *  falls back to whatever the native default is. */
-  getSampler?: () => Promise<SamplerParams | null>;
+  /** Local-only sampling params for THIS session, already resolved
+   *  session-vs-preset; null falls back to the native default. Takes the
+   *  id rather than reading the active pointer, because a turn that mints
+   *  its own session is not the pointer until after it runs. */
+  getSampler?: (sessionId: string) => Promise<SamplerParams | null>;
   /** Data-uri → temp file path for multimodal turns; null = text-only. */
   saveImage(dataUri: string): Promise<string | null>;
 }
@@ -101,7 +103,7 @@ export function createTurnRunner(deps: TurnDeps) {
     const search = await deps.getSearch().catch(() => null);
     const systemPrompt = await deps.getSystemPrompt().catch(() => undefined);
     const thinking = await deps.getThinking?.().catch(() => undefined);
-    const sampler = await deps.getSampler?.().catch(() => null);
+    const sampler = await deps.getSampler?.(sessionId).catch(() => null);
     let imagePaths: string[] | undefined;
     if (paths.image) {
       const saved = await deps.saveImage(paths.image).catch(() => null);

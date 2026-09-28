@@ -122,6 +122,32 @@ describe("sampler precedence", () => {
   });
 });
 
+describe("pocketpal ranges", () => {
+  // The bounds are PocketPal's, not llama.cpp's widest: a curated range is a
+  // better control than one spanning values no one should pick.
+  it("clamps top K to 1-128", () => {
+    assert.equal(parseSampler({ topK: 500 }).topK, 128);
+    assert.equal(parseSampler({ topK: 0 }).topK, 1);
+    assert.equal(parseSampler({ topK: 40 }).topK, 40);
+  });
+
+  it("allows typical P above 1, up to 2", () => {
+    assert.equal(parseSampler({ typicalP: 1.5 }).typicalP, 1.5);
+    assert.equal(parseSampler({ typicalP: 3 }).typicalP, 2);
+  });
+
+  it("clamps the penalty window to 0-256", () => {
+    assert.equal(parseSampler({ penaltyLastN: 1000 }).penaltyLastN, 256);
+    assert.equal(parseSampler({ penaltyLastN: 64 }).penaltyLastN, 64);
+  });
+
+  it("keeps the default seed and length sentinels", () => {
+    const d = DEFAULT_SAMPLER;
+    assert.equal(d.seed, -1);
+    assert.equal(d.nPredict, -1);
+  });
+});
+
 describe("llama.rn parameter mapping", () => {
   it("uses llama.rn's own snake_case names", () => {
     assert.deepEqual(toLlamaSampler(DEFAULT_SAMPLER), {

@@ -52,8 +52,11 @@ async function defaultEngineSource(): Promise<EngineSource | null> {
 
 /** Default session store: the local Store + its SQLite persister.
  * ponytail: lazy import keeps expo-sqlite (a native module) out of
- * plain-Node tests; Metro still bundles it statically for the app. */
-async function defaultGetStore(): Promise<SessionStore | null> {
+ * plain-Node tests; Metro still bundles it statically for the app.
+ * Exported so the Generation settings sheet can reach the session's
+ * sampler override; it is not part of ChatState on purpose, since a
+ * component needs one field, not the whole store. */
+export async function defaultGetStore(): Promise<SessionStore | null> {
   try {
     const { getSessionStore } = await import("../../lib/tinybase.ts");
     return await getSessionStore();
@@ -78,6 +81,26 @@ function getManager(): EngineManager {
           ]);
           const docsDir = fs.documentDirectory ?? "";
           const params = inference.useInference.getState();
+          // A separate draft GGUF, if one is chosen and still downloaded.
+          let modelDraft: string | undefined;
+          if (params.draftModelId) {
+            try {
+              const { useModelStore } = await import("../modelStore.ts");
+              const draft = useModelStore
+                .getState()
+                .models.find(
+                  (m) =>
+                    m.id === params.draftModelId &&
+                    m.downloadStatus === "completed",
+                );
+              const file = draft?.files[0];
+              if (file) {
+                modelDraft = engine.resolveLocalFile(docsDir, file.name);
+              }
+            } catch {
+              // No draft is fine; embedded MTP still applies.
+            }
+          }
           const ctx = await local.loadLlamaContext(
             engine.resolveLocalFile(docsDir, fileName),
             mmprojPath,
@@ -96,6 +119,13 @@ function getManager(): EngineManager {
               spec_draft_n_gpu_layers: params.specDraftGpuLayers,
               spec_draft_cache_type_k: params.specDraftCacheK,
               spec_draft_cache_type_v: params.specDraftCacheV,
+              // The UI says "enable repacking"; llama.cpp wants the inverse.
+              no_extra_bufts: !params.useWeightRepacking,
+              // Omitted unless opted into, because a missing `devices` is
+              // "platform default" and [] is a different instruction.
+              ...(params.useHexagonNpu ? { devices: ["HTP*"] } : {}),
+              ...(modelDraft ? { model_draft: modelDraft } : {}),
+              image_max_tokens: params.imageMaxTokens,
             },
           );
           return {
@@ -154,21 +184,31 @@ async function defaultThinking(): Promise<boolean> {
   }
 }
 
-/** Resolved sampling params for the active model, or null for a remote
+/** Resolved sampling params for one conversation, or null for a remote
  *  engine (an OpenAI-compatible endpoint keeps its own defaults and has no
  *  equivalent for typical-p, XTC or mirostat, so sending ours would be
- *  sending knobs the server silently ignores). */
-async function defaultSampler(): Promise<SamplerParams | null> {
+ *  sending knobs the server silently ignores).
+ *
+ *  Takes the session id rather than reading the active pointer: the turn
+ *  that mints a new session writes to THAT id and only adopts it as the
+ *  pointer afterwards, so reading the pointer here would resolve the
+ *  previous conversation's tuning — or none at all.
+ *
+ *  Precedence is session override, then the global preset — a conversation
+ *  that never overrode anything follows the preset. */
+async function defaultSampler(sessionId: string | null): Promise<SamplerParams | null> {
   try {
-    const [{ useInference }, { useModelStore }] = await Promise.all([
+    const [{ useInference }, { useModelStore }, sessionStore] = await Promise.all([
       import("../inference.ts"),
       import("../modelStore.ts"),
+      defaultGetStore(),
     ]);
-    const m = useModelStore.getState();
-    if (!m.activeModelId || m.activeProviderType === "remote") return null;
+    if (useModelStore.getState().activeProviderType === "remote") return null;
+    const global = useInference.getState().sampler;
+    if (!sessionStore || !sessionId) return global;
     return resolveSampler(
-      useInference.getState().sampler,
-      m.getModelSettings(m.activeModelId).sampler,
+      global,
+      await sessionStore.getSessionSampler(sessionId).catch(() => null),
     );
   } catch {
     return null;
@@ -201,7 +241,7 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
       },
       getSystemPrompt: () => defaultSystemPrompt(),
       getThinking: () => defaultThinking(),
-    getSampler: () => defaultSampler(),
+    getSampler: (sid) => defaultSampler(sid),
       saveImage: (uri: string) => defaultSaveImage(uri),
     });
     return runTurn(text, paths, onToken);

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Modal, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 
 import { colors } from "../../themes/tokens.ts";
 import { ScreenHeader } from "../ScreenHeader.tsx";
@@ -20,6 +21,7 @@ import { ModelSettingsSheet } from "./ModelSettingsSheet.tsx";
 
 export function ModelsScreen() {
   const { loadPersisted, startDownload } = useModelStore();
+  const router = useRouter();
   const importLocalModel = useLocalModelImport();
   const {
     readyVisible,
@@ -34,6 +36,7 @@ export function ModelsScreen() {
     setOpen,
     setAllOpen,
     setFilter,
+    autoNavigateToChat,
   } = useModelsUi();
 
   useEffect(() => {
@@ -78,6 +81,12 @@ export function ModelsScreen() {
                 open={readyOpen}
                 onToggle={(next) => setOpen("ready", next)}
                 onOpenSettings={setSettingsModelId}
+                // "Auto-Navigate to Chat": activating a model should land
+                // you somewhere you can type, not back on a list you now
+                // have to leave again.
+                onNavigateToChat={
+                  autoNavigateToChat ? () => router.push("/chat") : undefined
+                }
                 hfOnly={hfOnly}
               />
             )}

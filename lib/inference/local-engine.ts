@@ -167,6 +167,45 @@ export interface LlamaInitParams {
   spec_draft_n_gpu_layers: number;
   spec_draft_cache_type_k: LlamaCacheType;
   spec_draft_cache_type_v: LlamaCacheType;
+  /** Inverted: the UI says "Enable Weight Repacking", llama.cpp wants
+   *  "no extra bufts", so the store flips it and this stays dumb. */
+  no_extra_bufts: boolean;
+  /** Compute devices. OMITTED unless the Hexagon NPU is opted into —
+   *  llama.rn reads a missing `devices` as "platform default", which is not
+   *  the same instruction as an empty array. */
+  devices?: string[];
+  /** A separate draft GGUF for MTP-mode speculative decoding. */
+  model_draft?: string;
+  /** Vision budget, applied when the projector loads rather than per
+   *  completion, so a change lands on the next model load. */
+  image_max_tokens?: number;
+}
+
+/** Pure so the conditional parts are testable without the native import. */
+export function buildInitParams(init: LlamaInitParams): Record<string, unknown> {
+  return {
+    n_ctx: init.n_ctx,
+    n_gpu_layers: init.n_gpu_layers,
+    use_mlock: init.use_mlock,
+    use_mmap: init.use_mmap,
+    n_batch: init.n_batch,
+    n_ubatch: init.n_ubatch,
+    n_threads: init.n_threads,
+    flash_attn_type: init.flash_attn_type,
+    cache_type_k: init.cache_type_k,
+    cache_type_v: init.cache_type_v,
+    speculative: init.speculative,
+    no_extra_bufts: init.no_extra_bufts,
+    ...(init.devices ? { devices: init.devices } : {}),
+    ...(init.model_draft ? { model_draft: init.model_draft } : {}),
+    ...(init.speculative
+      ? {
+          spec_draft_n_gpu_layers: init.spec_draft_n_gpu_layers,
+          spec_draft_cache_type_k: init.spec_draft_cache_type_k,
+          spec_draft_cache_type_v: init.spec_draft_cache_type_v,
+        }
+      : {}),
+  };
 }
 
 /** Default loader: lazy llama.rn import + optional mmproj attach. */
@@ -180,33 +219,22 @@ export async function loadLlamaContext(
   // LlamaContextLike slice (same completion/stop/release signatures).
   const ctx = (await initLlama({
     model: filePath,
-    ...(init
-      ? {
-          n_ctx: init.n_ctx,
-          n_gpu_layers: init.n_gpu_layers,
-          use_mlock: init.use_mlock,
-          use_mmap: init.use_mmap,
-          n_batch: init.n_batch,
-          n_ubatch: init.n_ubatch,
-          n_threads: init.n_threads,
-          flash_attn_type: init.flash_attn_type,
-          cache_type_k: init.cache_type_k,
-          cache_type_v: init.cache_type_v,
-          speculative: init.speculative,
-          ...(init.speculative
-            ? {
-                spec_draft_n_gpu_layers: init.spec_draft_n_gpu_layers,
-                spec_draft_cache_type_k: init.spec_draft_cache_type_k,
-                spec_draft_cache_type_v: init.spec_draft_cache_type_v,
-              }
-            : {}),
-        }
-      : {}),
+    ...(init ? buildInitParams(init) : {}),
   })) as unknown as LlamaContextLike & {
-    initMultimodal?: (opts: { path: string }) => Promise<boolean>;
+    initMultimodal?: (opts: {
+      path: string;
+      image_max_tokens?: number;
+    }) => Promise<boolean>;
   };
   if (mmprojPath) {
-    await ctx.initMultimodal?.({ path: mmprojPath }).catch(() => false);
+    // image_max_tokens is set when the projector loads, not per completion,
+    // so changing it means the next model load picks it up.
+    await ctx.initMultimodal?.({
+      path: mmprojPath,
+      ...(init?.image_max_tokens !== undefined
+        ? { image_max_tokens: init.image_max_tokens }
+        : {}),
+    }).catch(() => false);
   }
   return ctx;
 }

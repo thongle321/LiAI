@@ -19,6 +19,13 @@ function newStore(): TinyBaseSessionStore {
   return new TinyBaseSessionStore(createStore());
 }
 
+/** The same store plus the raw TinyBase handle, for writing cells the
+ *  public API would never produce (a half-written or corrupt row). */
+function newStoreRaw(): { store: TinyBaseSessionStore; tiny: ReturnType<typeof createStore> } {
+  const tiny = createStore();
+  return { store: new TinyBaseSessionStore(tiny), tiny };
+}
+
 describe("tool calls", () => {
   it("round-trips steps in call order and rounds the usage up", async () => {
     const store = newStore();
@@ -268,6 +275,72 @@ describe("drafts", () => {
     await store.setDraft(id, "bye");
     await store.clearDraft(id);
     assert.equal(await store.getDraft(id), "");
+  });
+});
+
+describe("session sampler", () => {
+  it("has no override until one is set", async () => {
+    const store = newStore();
+    const id = await store.create();
+    assert.equal(await store.getSessionSampler(id), null);
+  });
+
+  it("stores only the fields a session overrides", async () => {
+    // Partial on purpose: a field the session never touched must keep
+    // following the global preset, so a new global default still lands.
+    const store = newStore();
+    const id = await store.create();
+    await store.setSessionSampler(id, { temperature: 0.2 });
+    assert.deepEqual(await store.getSessionSampler(id), { temperature: 0.2 });
+  });
+
+  it("keeps each session's override its own", async () => {
+    const store = newStore();
+    const a = await store.create();
+    const b = await store.create();
+    await store.setSessionSampler(a, { temperature: 0.2 });
+    assert.equal(await store.getSessionSampler(b), null);
+    await store.setSessionSampler(b, { topP: 0.5, temperature: 0.9 });
+    assert.deepEqual(await store.getSessionSampler(a), { temperature: 0.2 });
+  });
+
+  it("restores the global preset when cleared with null", async () => {
+    const store = newStore();
+    const id = await store.create();
+    await store.setSessionSampler(id, { temperature: 0.2 });
+    await store.setSessionSampler(id, null);
+    assert.equal(await store.getSessionSampler(id), null);
+  });
+
+  it("treats an empty override as no override", async () => {
+    const store = newStore();
+    const id = await store.create();
+    await store.setSessionSampler(id, {});
+    assert.equal(await store.getSessionSampler(id), null, "no row is kept for nothing");
+  });
+
+  it("drops the override when the session is deleted", async () => {
+    const store = newStore();
+    const id = await store.create();
+    await store.setSessionSampler(id, { temperature: 0.2 });
+    await store.deleteSession(id);
+    assert.equal(await store.getSessionSampler(id), null);
+  });
+
+  it("returns no override for a corrupt one rather than throwing", async () => {
+    const { store, tiny } = newStoreRaw();
+    const id = await store.create();
+    tiny.setRow("sessionSampler", id, { values: "not json" });
+    assert.equal(await store.getSessionSampler(id), null);
+  });
+
+  it("ignores a stored field that is not a finite number", async () => {
+    const { store, tiny } = newStoreRaw();
+    const id = await store.create();
+    tiny.setRow("sessionSampler", id, {
+      values: JSON.stringify({ temperature: "hot", topP: 0.5 }),
+    });
+    assert.deepEqual(await store.getSessionSampler(id), { topP: 0.5 });
   });
 });
 

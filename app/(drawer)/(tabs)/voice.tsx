@@ -13,6 +13,7 @@ import { useEffect } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   Text,
   View,
 } from "react-native";
@@ -32,7 +33,6 @@ import {
   motionEasing,
   useMotionDuration,
   usePressFeedback,
-  useTabContentFade,
 } from "../../../lib/motion.ts";
 import { useVoiceLoop } from "../../../hooks/useVoiceLoop.ts";
 import { useModelReady } from "../../../hooks/useModelReady.ts";
@@ -40,7 +40,6 @@ import { useModelReady } from "../../../hooks/useModelReady.ts";
 export default function VoiceScreen() {
   const { phase, heard, reply, issue, needsSettings, bargeIn, retry } = useVoiceLoop();
   const motionDuration = useMotionDuration();
-  const contentFade = useTabContentFade();
   const replyVisible = phase === "speaking";
   const micPress = usePressFeedback();
 
@@ -78,7 +77,7 @@ export default function VoiceScreen() {
         <Text className="font-sans-semibold text-h2 text-primary-text">Voice</Text>
       </View>
 
-      <Animated.ScrollView style={contentFade} contentContainerClassName="flex-1 items-center justify-center px-8">
+      <ScrollView contentContainerClassName="flex-1 items-center justify-center px-8">
         {/* The hit area IS the visual: a 44px target wrapped around a 160px
             circle would make the outer ring dead to the thumb. */}
         <Animated.View style={micPress.animatedStyle}>
@@ -179,7 +178,7 @@ export default function VoiceScreen() {
             </Pressable>
           </View>
         )}
-      </Animated.ScrollView>
+      </ScrollView>
 
       {/* The disabled mic carries the no-model state on its own; no warning
           copy or way-forward button here (the user removed it). */}

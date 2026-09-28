@@ -16,14 +16,13 @@ import {
 
 import { colors, scrim } from "../themes/tokens.ts";
 import { useKeyboardLift } from "../hooks/useKeyboardLift.ts";
-import { usePressFeedback, type useTabContentFade } from "../lib/motion.ts";
+import { usePressFeedback } from "../lib/motion.ts";
 import type { VoicePhase } from "../lib/voiceStatus.ts";
 
 export function VisionPreview({
   hasPermission,
   device,
   focused,
-  fade,
   cameraRef,
   onReady,
   onProblem,
@@ -32,7 +31,6 @@ export function VisionPreview({
   hasPermission: boolean;
   device: CameraDevice | undefined;
   focused: boolean;
-  fade: ReturnType<typeof useTabContentFade>;
   cameraRef: RefObject<VisionCameraView | null>;
   onReady: () => void;
   onProblem: (message: string) => void;
@@ -40,7 +38,7 @@ export function VisionPreview({
 }) {
   if (hasPermission && device !== undefined) {
     return (
-      <Animated.View style={[{ flex: 1 }, fade]}>
+      <View className="flex-1">
         <Camera
           ref={cameraRef}
           style={{ flex: 1 }}
@@ -52,7 +50,7 @@ export function VisionPreview({
             onProblem(`Camera error: ${String(e.message ?? e)}`)
           }
         />
-      </Animated.View>
+      </View>
     );
   }
   return (

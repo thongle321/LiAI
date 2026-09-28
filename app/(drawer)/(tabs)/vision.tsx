@@ -27,10 +27,8 @@ import { useCameraDevice, useCameraPermission } from "react-native-vision-camera
 import type { Camera as VisionCameraView } from "react-native-vision-camera";
 
 import { useKeyboardState } from "react-native-keyboard-controller";
-
 import { colors } from "../../../themes/tokens.ts";
 import { TAB_BAR_HEIGHT } from "../../../components/BottomNav.tsx";
-import { useTabContentFade } from "../../../lib/motion.ts";
 import { VOICE_STATUS_LABEL } from "../../../lib/voiceStatus.ts";
 import { useVisionTurn } from "../../../hooks/useVisionTurn.ts";
 import { useModelReady } from "../../../hooks/useModelReady.ts";
@@ -55,7 +53,6 @@ export default function VisionScreen() {
   const device = useCameraDevice(position);
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
-  const contentFade = useTabContentFade();
   // The tab bar owns the bottom inset ("applied once, at the bar"), so the
   // panel anchors 12px above the bar top. When the keyboard opens the bar
   // hides and the screen grows by the bar's height — the same shift chat's
@@ -109,7 +106,6 @@ export default function VisionScreen() {
           hasPermission={hasPermission}
           device={device}
           focused={focused}
-          fade={contentFade}
           cameraRef={camera}
           onReady={() => setCamLive(true)}
           onProblem={setCamProblem}

@@ -32,7 +32,6 @@ import {
   fadeExiting,
   useMotionDuration,
   usePressFeedback,
-  useTabContentFade,
 } from "../../../lib/motion.ts";
 import { APP_NAME } from "../../../constants/app.ts";
 import { TAB_BAR_HEIGHT } from "../../../components/BottomNav.tsx";
@@ -107,7 +106,6 @@ export default function ChatRoute() {
   const showPlaceholder = !ready && emptyState;
 
   const motionDuration = useMotionDuration();
-  const contentFade = useTabContentFade();
   const navigation = useNavigation<{ openDrawer: () => void }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -301,8 +299,7 @@ export default function ChatRoute() {
           KeyboardAvoidingView is the wrong tool for chat, so there is no KAV
           on this screen. */}
       <View style={{ flex: 1 }}>
-        <Animated.View
-          style={contentFade}
+        <View
           className="flex-1"
           onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
         >
@@ -332,7 +329,7 @@ export default function ChatRoute() {
               )
             }
           />
-        </Animated.View>
+        </View>
         {/* The no-model empty state, as an overlay rather than scroll content.
             MessageList's header explains why: a ListEmptyComponent would sit
             inside the keyboard's contentInset and visibly re-centre as the

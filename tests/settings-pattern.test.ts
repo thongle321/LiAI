@@ -174,6 +174,30 @@ describe("settings card pattern", () => {
     assert.deepEqual(offenders, [], "a sheet of sampler rows must declare snapPoints");
   });
 
+  it("never flexes a scroll view inside a native sheet", () => {
+    // REGRESSION, and the reason the sheet went WHITE. flex-1 on the
+    // KeyboardAwareScrollView gave it flexBasis 0 inside a native parent
+    // that does not bound the child's height, so it measured to zero and
+    // rendered nothing. The sheet, its drag indicator and its rounded
+    // corners were all there; the body was blank.
+    //
+    // A static class is the tell, and it is worth a guard because the
+    // sibling snapPoints guard was green through the whole outage: it
+    // locked the mechanism that was guessed, not the one that broke.
+    const offenders = screenFiles().filter((file) => {
+      const source = read(file);
+      if (!/<BottomSheet/.test(source)) return false;
+      // The first scroll view after the sheet opening tag is the body.
+      const body = source.slice(source.indexOf("<BottomSheet"));
+      return /<(KeyboardAware)?ScrollView[^>]*className="[^"]*\bflex-1\b/.test(body);
+    });
+    assert.deepEqual(
+      offenders,
+      [],
+      "a sheet's scroll view must not be flex-1; the native parent leaves it unbounded",
+    );
+  });
+
   it("never repeats a section title as a row label", () => {
     // "Voice" over a row called "Voice" reads as a stutter, and the user
     // reads it as two things that should be one.

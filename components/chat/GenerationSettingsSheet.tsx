@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { Text, View, useWindowDimensions } from "react-native";
 import { BottomSheet } from "@expo/ui";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
@@ -36,6 +36,13 @@ export function GenerationSettingsSheet({
   onClose: () => void;
 }) {
   const sessionId = useChatStore((s) => s.sessionId);
+  const { width } = useWindowDimensions();
+  // The native sheet wraps this view and sizes to it, so an unconstrained
+  // scroll view measures to its widest unbreakable child — the 31-character
+  // title — and overflows the screen. Pinning the width to the window less
+  // the sheet's 20dp horizontal contentPadding breaks that circle, and the
+  // title wraps instead. See contentPadding={20} on the BottomSheet.
+  const bodyWidth = width - 40;
   const {
     sampler: preset,
     thinkingEnabled,
@@ -123,7 +130,8 @@ export function GenerationSettingsSheet({
       testID="generation-settings-sheet"
     >
       <KeyboardAwareScrollView
-        className="flex-1 flex-col"
+        className="flex-col"
+        style={{ width: bodyWidth }}
         keyboardShouldPersistTaps="handled"
       >
         <Text className="font-sans-semibold text-h3 text-primary-text">

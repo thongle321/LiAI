@@ -37,8 +37,7 @@ function sourceFiles(dir: string): string[] {
 
 function screenFiles(): string[] {
   // Relative to ROOT, which read() joins once.
-  return [...sourceFiles("components"), ...sourceFiles("app")];
-}
+  return [...sourceFiles("components"), ...sourceFiles("app")];}
 
 describe("settings card pattern", () => {
   it("owns the row card in exactly one place", () => {
@@ -153,6 +152,26 @@ describe("settings card pattern", () => {
         );
       }
     }
+  });
+
+  it("constrains the height of any sheet holding unbounded rows", () => {
+    // @expo/ui's BottomSheet: "When omitted, the sheet auto-sizes to its
+    // content." The Generation sheet holds 18 sampler rows, so it grew
+    // past the bottom of the screen, and its width came from the title's
+    // intrinsic unwrapped width, so the title and the cards ran off the
+    // right edge too. One cause, two symptoms.
+    //
+    // Auto-sizing stays correct for the short form sheets, so this only
+    // constrains a sheet whose content is a long list.
+    const offenders = screenFiles().filter((file) => {
+      const source = read(file);
+      return (
+        /<BottomSheet/.test(source) &&
+        /<SamplerRows/.test(source) &&
+        !/snapPoints=/.test(source)
+      );
+    });
+    assert.deepEqual(offenders, [], "a sheet of sampler rows must declare snapPoints");
   });
 
   it("never repeats a section title as a row label", () => {

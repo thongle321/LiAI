@@ -111,13 +111,19 @@ export function GenerationSettingsSheet({
     <BottomSheet
       isPresented={visible}
       onDismiss={onClose}
+      // REQUIRED, not decoration: with snapPoints omitted the native sheet
+      // auto-sizes to its content, so 18 sampler rows made it taller than
+      // the screen and its width came from the title's intrinsic unwrapped
+      // width — the title and the cards ran off the right edge. 'full'
+      // bounds it and the KeyboardAwareScrollView does the scrolling.
+      snapPoints={["full"]}
       containerColor={colors.surface1}
       scrimColor={scrim}
       contentPadding={20}
       testID="generation-settings-sheet"
     >
       <KeyboardAwareScrollView
-        className="flex-col"
+        className="flex-1 flex-col"
         keyboardShouldPersistTaps="handled"
       >
         <Text className="font-sans-semibold text-h3 text-primary-text">

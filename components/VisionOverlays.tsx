@@ -26,7 +26,7 @@ export function VisionPreview({
   cameraRef,
   onReady,
   onProblem,
-  onGrant,
+  onOpenSettings,
 }: {
   hasPermission: boolean;
   device: CameraDevice | undefined;
@@ -34,7 +34,8 @@ export function VisionPreview({
   cameraRef: RefObject<VisionCameraView | null>;
   onReady: () => void;
   onProblem: (message: string) => void;
-  onGrant: () => void;
+  /** Denied camera: the only route left is the system settings screen. */
+  onOpenSettings: () => void;
 }) {
   if (hasPermission && device !== undefined) {
     return (
@@ -57,11 +58,18 @@ export function VisionPreview({
     <View className="flex-1 items-center justify-center px-8">
       {!hasPermission ? (
         <>
+          {/* No "grant" button: the screen asks the platform for camera
+              access when this tab opens, and Android shows its own
+              dialog. A second request after a denial is ignored by the
+              OS, so the only way forward from here is system settings —
+              the same dead end the voice screen uses for a blocked mic. */}
           <Text className="text-center font-sans text-body-md text-primary-text">
             Camera access is needed to see.
           </Text>
-          <Pressable onPress={onGrant} className="btn btn--primary mt-4">
-            <Text className="font-sans-semibold text-on-primary">Grant access</Text>
+          <Pressable onPress={onOpenSettings} className="btn btn--primary mt-4">
+            <Text className="font-sans-semibold text-on-primary">
+              Open settings
+            </Text>
           </Pressable>
         </>
       ) : (

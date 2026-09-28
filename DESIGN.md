@@ -136,12 +136,9 @@ components:
   tab-bar:
     backgroundColor: "{colors.clean-white}"
     textColor: "{colors.slate}"
-    height: "75px"
+    height: "69px"
   tab-active:
-    backgroundColor: "{colors.surface-tint}"
     textColor: "{colors.signal-blue}"
-    rounded: "{rounded.large}"
-    size: "40px"
   ai-listening:
     backgroundColor: "{colors.surface-tint}"
     textColor: "{colors.signal-blue}"
@@ -206,7 +203,7 @@ A light, cool-neutral palette built from three near-white planes and one confide
 
 Two tints exist, and they exist for a specific reason: a selected element needs a ground to sit on.
 
-- **Surface Tint** (`#EFF6FF`): the 50-step of Signal Blue's own hue. It is the fill of the user's message bubble, the assistant message card, the active tab pill, and the Listening ring. It is a *ground*, never a border, an icon colour, or a text colour.
+- **Surface Tint** (`#EFF6FF`): the 50-step of Signal Blue's own hue. It is the fill of the user's message bubble, the assistant message card, and the Listening ring. It is a *ground*, never a border, an icon colour, or a text colour.
 - **Alert Tint** (`rgba(239, 68, 68, 0.12)`): Alert Red at 12% over Clean White. The fill of destructive icon buttons and error chips.
 
 > **Unresolved.** The board shows a green-tinted success card, a red-tinted error card, and a violet-tinted Speaking waveform, but its palette panel does not specify those three values. They are deliberately absent here rather than invented. Derive them the same way as the two tints above (a low-alpha step of the documented status hue) and add them as tokens when you settle them — do not let each component pick its own.
@@ -258,7 +255,7 @@ The spatial model is a 4px scale — 4, 8, 12, 16, 20, 24, 32, 40, 48 — with *
 
 **Containers.** Surfaces are full-bleed or inset by the gutter; there is no centred max-width column. Chat is the one exception to horizontal rhythm — message bubbles are edge-anchored (user right, assistant left) and capped at roughly 75% of viewport width, because a chat reads as a column of alternating edges, not a stack of equal cards.
 
-**Navigation geometry.** The header is 56px tall, sits on Clean White with a 1px Hairline bottom border, and holds a leading control, the wordmark, and trailing controls in slots of **equal width, sized to hold the wider of the two groups** — equal slots alone do not centre the wordmark if one group overflows its slot. The tab bar is 75px plus the device's bottom safe-area inset, with a 1px Hairline top border; the inset is applied once, at the bar, and screens opt out of it rather than double-applying it.
+**Navigation geometry.** The header is 56px tall, sits on Clean White with a 1px Hairline bottom border, and holds a leading control, the wordmark, and trailing controls in slots of **equal width, sized to hold the wider of the two groups** — equal slots alone do not centre the wordmark if one group overflows its slot. The tab bar is 69px plus the device's bottom safe-area inset, with a 1px Hairline top border; the inset is applied once, at the bar, and screens opt out of it rather than double-applying it.
 
 **Gutters are owned by one layer.** A screen gutter is applied once, at the outermost container of a column. A child that also insets itself stacks the gutter; that is the defect, not a style choice.
 
@@ -354,8 +351,8 @@ Confident and flat. Buttons never lift, never glow, and never animate their own 
 ### Navigation
 
 - **Header (56px, Clean White, 1px Hairline bottom):** a leading control (menu or back), the wordmark in Headline (600, 24/32) Ink, and trailing controls. Leading and trailing slots are **fixed width and equal** so the wordmark stays optically centred no matter how many trailing icons appear. Icons are 2px stroke at 20px in Ink; a header control that opens something live takes Signal Blue.
-- **Tab bar (75px + safe-area inset, Clean White, 1px Hairline top):** items are icon-over-label, 2px stroke icon at 24px, Caption label. Inactive is Slate. Active is Signal Blue on both icon and label, sitting on a Surface Tint pill (Large radius) with a 2px Signal Blue indicator bar above the label. Exactly one tab is active.
-- **The active pill is always mounted.** Swap its fill and its indicator's opacity; do not mount and unmount it. Mounting on selection changes the row's height and makes the whole bar jump.
+- **Tab bar (69px + safe-area inset, Clean White, 1px Hairline top):** items are icon-over-label, 2px stroke icon at 24px, Caption label. Inactive is Slate. Active is Signal Blue on both icon and label, and **colour is the only active signal** — no pill, no indicator bar. Exactly one tab is active.
+- **Colour is the whole active state.** The Surface Tint pill and the 2px indicator bar were removed: a square behind the icon read as a shape rather than a state. The 40x40 icon box stays because it is the touch target, not decoration.
 - **Predictive Back and transitions.** Predictive Back is enabled so the system gesture animates the pop. The "transitions do not animate" rule governs the app's own JS navigator — tab and screen switches cut, and shared chrome (tab bar, composer) never moves. The OS back gesture is a platform affordance, not an app transition.
 - **Nav chrome is static.** No fade, no slide, no scale on the bar itself — only the content behind it may transition.
 
@@ -404,7 +401,7 @@ Machine-in-the-loop feedback. These are the only places Coolant Cyan is allowed.
 - **Do** separate with a 1px Hairline border or one step between Cool Paper, Clean White, and Mist. That is the whole depth model.
 - **Do** keep every value on the 4px spacing scale and every radius on the five-step scale — the sole exception being radius 0 on a full-bleed rectangle (the 999px circle form is a separate language, not a scale step). If a number is not on a scale, it does not ship.
 - **Do** meet the accessibility floor on every screen: 4.5:1 text contrast, 48×48dp touch targets, 16px minimum body text, dynamic type support, and reduced-motion honoured.
-- **Do** pair every status colour with a glyph and a word — check, exclamation, dot trail, word. Colour is never the only indicator.
+- **Do** pair every status colour with a glyph and a word — check, exclamation, dot trail, word. Colour is never the only indicator. The one documented exception is the bottom tab bar, where the active tab is tint alone (see Navigation).
 - **Do** use Coolant Cyan only for machine-in-the-loop states (thinking, vision, streaming) and Signal Blue everywhere else.
 - **Do** keep nav chrome and the composer static. Only the content behind them transitions.
 - **Do** apply safe-area insets exactly once per edge, at the component that owns that edge.
@@ -416,9 +413,9 @@ Machine-in-the-loop feedback. These are the only places Coolant Cyan is allowed.
 - **Don't** add a shadow, a glow, a blur, or a decorative gradient. There is no such token, and adding one means this file is out of date.
 - **Don't** use a second typeface or a monospace exception. Inter carries code and metadata.
 - **Don't** render text below Caption (12px), and don't drop reading text below Body Small (14px) to make a layout fit.
-- **Don't** use colour as the only signal. Every state carries a glyph and a word.
+- **Don't** use colour as the only signal. Every *status* carries a glyph and a word. Selection state in platform-native navigation (the active bottom tab) is the exception, and it is tint alone.
 - **Don't** let two status colours appear in one component. One component, one status.
 - **Don't** tint a border, an icon, or a label. Tints are grounds for selected surfaces only.
 - **Don't** animate loopingly or decoratively, and don't exceed 300ms. State changes and feedback only; honour the reduced-motion system setting by collapsing durations to zero.
-- **Don't** animate the tab bar, the header, or the composer, and don't mount/unmount the active tab indicator — a bar that changes height under the user's thumb is a bug, not a transition.
+- **Don't** animate the tab bar, the header, or the composer, and don't let the bar's height change under the user's thumb — a bar that shifts is a bug, not a transition.
 - **Don't** invent a colour that isn't in this file. If a design needs one, add the token here first, with a reason.

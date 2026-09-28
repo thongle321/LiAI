@@ -17,7 +17,7 @@
  * never freezes.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRef } from "react";
 import { View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -52,6 +52,16 @@ export default function VisionScreen() {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice(position);
   const focused = useIsFocused();
+  // Android owns the permission prompt: opening this tab is the intent to
+  // use the camera, so the system dialog is raised here instead of behind
+  // an in-app button the user has to find. Re-entering the tab after a
+  // denial asks again (the OS allows that unless "don't ask again" was
+  // chosen), and a permanently-denied user gets the Open settings path.
+  // useCameraPermission re-checks on app foreground, so returning from
+  // system settings lights the camera up with no extra plumbing.
+  useEffect(() => {
+    if (focused && !hasPermission) void requestPermission();
+  }, [focused, hasPermission, requestPermission]);
   const insets = useSafeAreaInsets();
   // The tab bar owns the bottom inset ("applied once, at the bar"), so the
   // panel anchors 12px above the bar top. When the keyboard opens the bar
@@ -63,6 +73,9 @@ export default function VisionScreen() {
   const keyboardVisible = useKeyboardState((s) => s.isVisible);
   const panelBottom =
     12 + (keyboardVisible ? TAB_BAR_HEIGHT + insets.bottom : 0);
+  // Two dead ends land on the same system screen: a denied camera and a
+  // blocked mic. One handler for both.
+  const goToSettings = () => void openSettings();
 
   const {
     phase,
@@ -109,7 +122,7 @@ export default function VisionScreen() {
           cameraRef={camera}
           onReady={() => setCamLive(true)}
           onProblem={setCamProblem}
-          onGrant={() => void requestPermission()}
+          onOpenSettings={goToSettings}
         />
 
         {camLive ? (
@@ -124,7 +137,7 @@ export default function VisionScreen() {
               bottom={panelBottom}
               issue={issue}
               needsSettings={needsSettings}
-              onOpenSettings={() => void openSettings()}
+              onOpenSettings={goToSettings}
               onRetry={() => void retry()}
               phase={phase}
               answer={answer}

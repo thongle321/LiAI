@@ -1,11 +1,12 @@
 /** Bottom tab bar (DESIGN.md Navigation).
  *
- * 75px (see TAB_BAR_HEIGHT) plus the device's bottom safe-area inset, on
- * Clean White with a 1px Hairline top border. Items are icon over Caption label; inactive is
- * Slate, active is Signal Blue sitting on a Surface Tint pill with a 2px
- * indicator above the label. The pill and indicator are always mounted —
- * mounting on selection changes the row's height and the bar jumps under
- * the user's thumb. Nav chrome is static: no motion, ever.
+ * 69px (see TAB_BAR_HEIGHT) plus the device's bottom safe-area inset, on
+ * Clean White with a 1px Hairline top border. Items are icon over Caption
+ * label; inactive is Slate, active is Signal Blue on icon and label —
+ * colour is the ONLY active signal. The Surface Tint pill and the 2px
+ * indicator bar are gone: the square behind the icon read as a shape
+ * rather than a state. The 40x40 icon box stays because it is the touch
+ * target, not decoration. Nav chrome is static: no motion, ever.
  */
 
 import { Pressable, Text, View } from "react-native";
@@ -26,15 +27,14 @@ export type ChatTab = "chat" | "voice" | "vision";
  *   pt-2                8
  *   icon box h-10      40
  *   caption label      16  (text-caption line-height, global.css)
- *   mt-1 indicator      6  (4 gap + h-0.5)
  *   pb-1                4
- * Single definition by decree: ChatScreen's keyboard compensation and the
- * message list's offset both import this, because three separate copies
- * (60 here, 64 in prose, 75 real) is exactly how the no-model card came to
- * drift when the keyboard opened. The SUM above is the spec — if the bar's
- * classes change, change this with them; the value itself is verified on
- * device, not by test. */
-export const TAB_BAR_HEIGHT = 75;
+ * Single definition by decree: the chat screen's keyboard compensation and
+ * the message list's offset both import it, because when this change landed
+ * three separate copies (60 in code, 64 in prose, 75 actual) is exactly how
+ * the no-model card came to drift when the keyboard opened. The SUM above
+ * is the spec — if the bar's classes change, change this with them; the
+ * value itself is verified on device, not by test. */
+export const TAB_BAR_HEIGHT = 69;
 
 const TABS: { id: ChatTab; label: string; Icon: LucideIcon }[] = [
   { id: "chat", label: "Chat", Icon: MessageCircle },
@@ -62,11 +62,11 @@ export function BottomNav({
             accessibilityState={{ selected }}
             accessibilityLabel={t.label}
           >
-            <View
-              className={`h-10 w-10 items-center justify-center rounded-xl ${
-                selected ? "bg-surface-3" : "bg-transparent"
-              }`}
-            >
+            {/* No fill: the active state is the icon and label colour only.
+                The box is not the touch target — the Pressable is, and it
+                measures 56px (this box + the label) so it clears the 48dp
+                floor; the box gives it that height. */}
+            <View className="h-10 w-10 items-center justify-center">
               <t.Icon
                 size={24}
                 color={selected ? colors.primary : colors.secondaryText}
@@ -79,12 +79,6 @@ export function BottomNav({
             >
               {t.label}
             </Text>
-            {/* Always mounted, transparent when idle — see the file note. */}
-            <View
-              className={`mt-1 h-0.5 w-8 rounded-full ${
-                selected ? "bg-primary" : "bg-transparent"
-              }`}
-            />
           </Pressable>
         );
       })}

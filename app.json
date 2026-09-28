@@ -73,7 +73,8 @@
           "forceCxx20": true,
           "enableOpenCLAndHexagon": true
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "extra": {
       "router": {},

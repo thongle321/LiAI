@@ -78,6 +78,9 @@ export interface ChatState {
   newConversation: () => Promise<void>;
   switchSession: (sessionId: string) => Promise<boolean>;
   deleteSession: (sessionId: string) => Promise<void>;
+  /** Fork a conversation and adopt the copy. False when it could not be
+   *  forked, or when the source is mid-turn. */
+  duplicateSession: (sessionId: string) => Promise<boolean>;
   renameSession: (sessionId: string, title: string) => Promise<boolean>;
   setPinned: (sessionId: string, pinned: boolean) => Promise<boolean>;
   refreshSessions: () => Promise<void>;

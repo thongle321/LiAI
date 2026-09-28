@@ -27,6 +27,7 @@ import type { AgentStep, SessionInfo } from "../../types/chat.ts";
 import type { SessionStore, StoredTurn } from "./session-store.ts";
 import { draftSlot } from "./session-store.ts";
 import { DEFAULT_SAMPLER, type SamplerParams } from "../inference/sampler.ts";
+import { newId } from "./messages.ts";
 
 /** Row id: the timestamp prefix keeps ids unique across restarts, the
  *  counter keeps them ordered inside one millisecond. Named apart from
@@ -309,6 +310,31 @@ export class TinyBaseSessionStore implements SessionStore {
 
   async clearDraft(sessionId: string | null): Promise<void> {
     this.store.delRow("drafts", draftSlot(sessionId));
+  }
+
+  async duplicateSession(sessionId: string): Promise<string | null> {
+    if (!this.store.hasRow("sessions", sessionId)) return null;
+    const turns = (await this.get(sessionId)) ?? [];
+    const sampler = await this.getSessionSampler(sessionId);
+    const seq = this.nextSeq();
+    const copyId = rowId(seq);
+    const title = str(this.store.getCell("sessions", sessionId, "title"));
+    // New row, so append below cannot re-title it.
+    this.newSessionRow(copyId, `${title} - Copy`);
+    for (const turn of turns) {
+      // Fresh step ids, and this is load-bearing: toolRuns is keyed by
+      // step id, so appending the source's ids verbatim made every copied
+      // step overwrite the SOURCE's row with the copy's messageId. The
+      // fork looked perfect and the original lost every tool call.
+      const forked: StoredTurn = turn.steps
+        ? { ...turn, steps: turn.steps.map((s) => ({ ...s, id: newId() })) }
+        : turn;
+      await this.append(copyId, forked);
+    }
+    if (sampler) await this.setSessionSampler(copyId, sampler);
+    // The fork is where you are going next; the drawer should show it.
+    await this.setActiveSessionId(copyId);
+    return copyId;
   }
 
   async getSessionSampler(sessionId: string): Promise<Partial<SamplerParams> | null> {

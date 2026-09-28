@@ -20,7 +20,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRouter } from "expo-router";
 import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
-import { Check, Menu, Search, Share, SlidersHorizontal, X } from "lucide-react-native";
+import { Check, Menu, Search, Share, X } from "lucide-react-native";
 
 import { colors } from "../../../themes/tokens.ts";
 import { filterMessages } from "../../../lib/chat/filter.ts";
@@ -48,6 +48,7 @@ import { UsageStats } from "../../../components/chat/UsageStats.tsx";
 import { SuggestedPrompts } from "../../../components/chat/SuggestedPrompts.tsx";
 import { MessageList } from "../../../components/chat/MessageList.tsx";
 import { GenerationSettingsSheet } from "../../../components/chat/GenerationSettingsSheet.tsx";
+import { ChatMenu } from "../../../components/chat/ChatMenu.tsx";
 
 export default function ChatRoute() {
   const messages = useChatStore((s) => s.messages);
@@ -172,7 +173,6 @@ export default function ChatRoute() {
   const menuPress = usePressFeedback();
   const searchPress = usePressFeedback();
   const copyPress = usePressFeedback();
-  const genPress = usePressFeedback();
   const [generationOpen, setGenerationOpen] = useState(false);
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
@@ -216,19 +216,10 @@ export default function ChatRoute() {
           </Text>
         </Pressable>
         <View className="w-36 flex-row items-center justify-end">
-          <Animated.View style={genPress.animatedStyle}>
-            <Pressable
-              onPress={() => setGenerationOpen(true)}
-              onPressIn={genPress.onPressIn}
-              onPressOut={genPress.onPressOut}
-              className="h-12 w-12 items-center justify-center"
-              hitSlop={4}
-              accessibilityRole="button"
-              accessibilityLabel="Generation settings"
-            >
-              <SlidersHorizontal size={20} color={colors.secondaryText} />
-            </Pressable>
-          </Animated.View>
+          {/* The overflow menu carries generation settings as its first
+              item, so the trailing group stays at three controls and the
+              w-36 slot is unchanged. */}
+          <ChatMenu onOpenGeneration={() => setGenerationOpen(true)} />
           <Animated.View style={searchPress.animatedStyle}>
             <Pressable
               onPress={() => {

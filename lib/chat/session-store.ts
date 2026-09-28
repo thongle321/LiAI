@@ -82,4 +82,12 @@ export interface SessionStore {
     sessionId: string,
     override: Partial<SamplerParams> | null,
   ): Promise<void>;
+  /** Fork a conversation: its turns, its tool calls, and its sampler
+   *  override. Titled "<title> - Copy", becomes the active conversation,
+   *  and is never pinned. Null when the source does not exist.
+   *
+   *  The override travels with the copy on purpose: it is per
+   *  conversation, so a fork that dropped it would silently revert to the
+   *  preset — noticed only after trusting the fork. */
+  duplicateSession(sessionId: string): Promise<string | null>;
 }

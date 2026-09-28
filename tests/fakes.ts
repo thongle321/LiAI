@@ -147,6 +147,24 @@ export function fakeSessionStore(
         samplers.set(sessionId, override);
       }
     },
+    duplicateSession: async (sessionId) => {
+      const row = sessions.get(sessionId);
+      if (!row) return null;
+      calls.creates += 1;
+      const copyId = `s-${calls.creates}`;
+      // Deep-copied turns: a fork that shared turn objects with its source
+      // would mutate both when one of them is regenerated.
+      sessions.set(copyId, {
+        title: `${row.title} - Copy`,
+        pinned: false,
+        turns: row.turns.map((t) => ({ ...t })),
+        seq: 0,
+      });
+      const sampler = samplers.get(sessionId);
+      if (sampler) samplers.set(copyId, { ...sampler });
+      active = copyId;
+      return copyId;
+    },
   };
   return { store, calls, drafts };
 }

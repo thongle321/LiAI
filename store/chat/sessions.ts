@@ -33,6 +33,7 @@ export function createSessionsSlice(
   | "newConversation"
   | "switchSession"
   | "deleteSession"
+  | "duplicateSession"
   | "renameSession"
   | "setPinned"
   | "refreshSessions"
@@ -173,8 +174,40 @@ export function createSessionsSlice(
       }
     },
 
-    renameSession: (id: string, title: string) => patchSession(id, { title }),
+    duplicateSession: async (id: string) => {
+    // Never fork mid-turn: the copy would be a snapshot of a reply that is
+    // still being written.
+    if (get().sending && get().sessionId === id) return false;
+    const store = await storeOf(ctx);
+    if (!store) return false;
+    // The draft belongs to the source conversation; persist it before the
+    // pointer moves or it would land on the copy.
+    await quiet(get().persistDraft());
+    let copyId: string | null = null;
+    try {
+      copyId = await store.duplicateSession(id);
+    } catch {
+      return false;
+    }
+    if (copyId === null) return false;
+    // Deliberately no bail on a failed read: the port has already moved
+    // the store's active pointer, so returning false here would leave the
+    // store and Zustand disagreeing. Adopting the copy with no text yet is
+    // recoverable; a desync is not.
+    const turns = (await store.get(copyId).catch(() => null)) ?? [];
+    // The store already pointed at the copy; adopt its text here.
+    set({
+      sessionId: copyId,
+      messages: toMessages(turns),
+      draft: await readDraftFor(ctx, copyId),
+      sending: false,
+    });
+    await quiet(get().refreshSessions());
+    return true;
+  },
 
-    setPinned: (id: string, pinned: boolean) => patchSession(id, { pinned }),
+  renameSession: (id: string, title: string) => patchSession(id, { title }),
+
+  setPinned: (id: string, pinned: boolean) => patchSession(id, { pinned }),
   };
 }

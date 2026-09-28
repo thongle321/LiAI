@@ -344,6 +344,138 @@ describe("session sampler", () => {
   });
 });
 
+describe("duplicating a session", () => {
+  async function seeded() {
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, { role: "user", content: "how do I fix a wobbly shelf?" });
+    await store.append(id, {
+      role: "assistant",
+      content: "Check the wall anchors.",
+      steps: [
+        { id: "s1", tool: "web_search", position: 1 },
+        { id: "s0", tool: "read_page", position: 0, result: "a guide" },
+      ],
+    });
+    await store.setTitleIfEmpty(id, "Wobbly shelf");
+    return { store, id };
+  }
+
+  it("copies every turn, in order", async () => {
+    const { store, id } = await seeded();
+    const copyId = await store.duplicateSession(id);
+    assert.ok(copyId);
+    assert.notEqual(copyId, id);
+    const copied = await store.get(copyId);
+    assert.deepEqual(
+      copied?.map((t) => t.content),
+      ["how do I fix a wobbly shelf?", "Check the wall anchors."],
+    );
+  });
+
+  it("copies the tool calls, still in call order", async () => {
+    // A fork that loses its tool results is not a fork of the conversation.
+    const { store, id } = await seeded();
+    const copyId = await store.duplicateSession(id);
+    assert.ok(copyId);
+    const turns = await store.get(copyId);
+    assert.deepEqual(
+      turns?.[1].steps?.map((s) => s.tool),
+      ["read_page", "web_search"],
+    );
+  });
+
+  it("leaves the original's tool calls intact", async () => {
+    // REGRESSION: toolRuns is keyed by step id, so re-appending the
+    // source's ids made every copy step overwrite the SOURCE's row with
+    // the copy's messageId. The fork looked perfect and the original
+    // silently lost every tool call.
+    const { store, id } = await seeded();
+    const copyId = await store.duplicateSession(id);
+    assert.ok(copyId);
+
+    const original = await store.get(id);
+    assert.deepEqual(
+      original?.[1].steps?.map((s) => s.tool),
+      ["read_page", "web_search"],
+      "the source must keep its tool calls after being forked",
+    );
+    assert.equal(
+      original?.[1].steps?.find((s) => s.tool === "read_page")?.result,
+      "a guide",
+      "the source must keep its tool result too",
+    );
+
+    // And the two conversations must not share step rows.
+    const copied = await store.get(copyId);
+    assert.equal(copied?.[1].steps?.find((s) => s.tool === "read_page")?.result, "a guide");
+    for (const step of copied?.[1].steps ?? []) {
+      assert.ok(
+        !(original?.[1].steps ?? []).some((s) => s.id === step.id),
+        "copy and original must not share a step id",
+      );
+    }
+  });
+
+  it("carries the session's sampler override", async () => {
+    // The override is per conversation, so a fork that dropped it would
+    // silently revert to the preset — only noticed after trusting the fork.
+    const { store, id } = await seeded();
+    await store.setSessionSampler(id, { temperature: 0.2, topP: 0.5 });
+    const copyId = await store.duplicateSession(id);
+    assert.ok(copyId);
+    assert.deepEqual(await store.getSessionSampler(copyId), {
+      temperature: 0.2,
+      topP: 0.5,
+    });
+  });
+
+  it("leaves no override on the copy when the source had none", async () => {
+    const { store, id } = await seeded();
+    const copyId = await store.duplicateSession(id);
+    assert.ok(copyId);
+    assert.equal(await store.getSessionSampler(copyId), null);
+  });
+
+  it("titles the copy and makes it the active conversation", async () => {
+    const { store, id } = await seeded();
+    const copyId = await store.duplicateSession(id);
+    assert.ok(copyId);
+    const sessions = await store.listSessions();
+    const copy = sessions.find((s) => s.id === copyId);
+    assert.equal(copy?.title, "Wobbly shelf - Copy");
+    assert.equal(await store.getActiveSessionId(), copyId);
+  });
+
+  it("never copies the pin", async () => {
+    // A pinned row sits at the top of the drawer; a fork should not
+    // silently occupy two of the top slots.
+    const { store, id } = await seeded();
+    await store.setSessionPinned(id, true);
+    const copyId = await store.duplicateSession(id);
+    assert.ok(copyId);
+    const sessions = await store.listSessions();
+    assert.equal(sessions.find((s) => s.id === copyId)?.pinned, false);
+  });
+
+  it("leaves the original exactly as it was", async () => {
+    const { store, id } = await seeded();
+    await store.setSessionPinned(id, true);
+    const copyId = await store.duplicateSession(id);
+    assert.ok(copyId);
+    const sessions = await store.listSessions();
+    const original = sessions.find((s) => s.id === id);
+    assert.equal(original?.title, "Wobbly shelf");
+    assert.equal(original?.pinned, true);
+    assert.equal((await store.get(id))?.length, 2);
+  });
+
+  it("refuses a session that does not exist", async () => {
+    const store = newStore();
+    assert.equal(await store.duplicateSession("ghost"), null);
+  });
+});
+
 describe("active session", () => {
   it("round-trips the active session id", async () => {
     const store = newStore();

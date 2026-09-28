@@ -61,7 +61,7 @@ export function VoiceSettings() {
       </View>
       <View className="row">
         <PickerRow
-          label="Voice"
+          label="Reading voice"
           description="Voices installed for this device's language."
           options={voiceOptions(voices, voiceId)}
           value={voiceId ?? SYSTEM_VOICE}

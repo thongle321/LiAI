@@ -44,7 +44,7 @@ function ProviderKeys({ id }: { id: SearchProviderId }) {
   }
 
   return (
-    <View className="py-2">
+    <View className="row">
       <View className="flex-row items-center gap-2">
         <TextInput
           value={draft}
@@ -125,21 +125,26 @@ export function SearchSettings() {
           />
         </View>
       </SettingsSection>
-      <SettingsSection title="Provider">
+      <SettingsSection
+        title="Provider"
+        description="Which search service answers, and the key it uses."
+      >
         <View className="row">
           {/* Three providers is a closed set that does not fit inline, so
               it is a native menu rather than three radio rows. */}
           <PickerRow
-            label="Provider"
-            description="Which search service answers, and which key it uses."
+            label="Service"
+            description="Tavily or Brave."
             options={providerIds}
             value={activeProviderId}
             onChange={(next) => setActiveProvider(next as SearchProviderId)}
             displayFor={(id) => SEARCH_PROVIDERS.find((p) => p.id === id)?.name ?? id}
           />
         </View>
+        {/* The key belongs to the provider, so it is a row in the same card
+            rather than a loose editor hanging below it. */}
+        {selectedProvider !== undefined && <ProviderKeys id={selectedProvider.id} />}
       </SettingsSection>
-      {selectedProvider !== undefined && <ProviderKeys id={selectedProvider.id} />}
     </>
   );
 }

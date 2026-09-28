@@ -83,4 +83,64 @@ describe("settings card pattern", () => {
     const group = rows.slice(rows.indexOf("export function AdvancedGroup"));
     assert.match(group, /useState\(false\)/, "Advanced must start closed");
   });
+
+  it("puts no settings group outside a card", () => {
+    // The search key editor was a bare <View className="py-2"> sitting under
+    // the Provider card: no surface, no divider, 8px from the card instead of
+    // the 24px between groups. Group spacing belongs to SettingsSection, so a
+    // hand-rolled margin in a settings file is the smell.
+    for (const file of ["SearchSettings.tsx", "VoiceSettings.tsx", "HfTokenSettings.tsx"]) {
+      const source = read(`components/${file}`);
+      assert.doesNotMatch(
+        source,
+        /className="mb-6/,
+        `${file} hand-rolls group spacing; SettingsSection owns it`,
+      );
+    }
+    // The key editor is a row inside the Provider card, not a loose sibling.
+    const search = read("components/SearchSettings.tsx");
+    const keys = search.slice(search.indexOf("function ProviderKeys"));
+    assert.match(
+      keys.slice(0, keys.indexOf("export function")),
+      /<View className="row"/,
+      "ProviderKeys must render as a .row, so it sits in a card with a divider",
+    );
+  });
+
+  it("gives every row a description", () => {
+    // DESIGN.md, Settings: a bare label says nothing about what the value
+    // does. Three rows shipped without one before this existed.
+    const rows = /<(ToggleRow|StepperRow|SliderRow|PickerRow|Segmented|NavRow)\b[\s\S]*?\/>/g;
+    for (const file of [
+      "SearchSettings.tsx",
+      "VoiceSettings.tsx",
+      "HfTokenSettings.tsx",
+      "InferenceSettings.tsx",
+      "SamplingSettings.tsx",
+      "models/ModelSettingsSheet.tsx",
+    ]) {
+      const source = read(`components/${file}`);
+      for (const m of source.matchAll(rows)) {
+        assert.ok(
+          m[0].includes("description="),
+          `${file}: <${m[1]}> "${m[0].match(/label="([^"]+)"/)?.[1] ?? "?"}" has no description`,
+        );
+      }
+    }
+  });
+
+  it("never repeats a section title as a row label", () => {
+    // "Voice" over a row called "Voice" reads as a stutter, and the user
+    // reads it as two things that should be one.
+    for (const file of ["VoiceSettings.tsx", "SearchSettings.tsx", "HfTokenSettings.tsx"]) {
+      const source = read(`components/${file}`);
+      for (const m of source.matchAll(/title="([^"]+)"/g)) {
+        const title = m[1];
+        assert.ok(
+          !source.includes(`label="${title}"`),
+          `${file}: the section title "${title}" is repeated as a row label`,
+        );
+      }
+    }
+  });
 });

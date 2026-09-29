@@ -261,6 +261,8 @@ Two tints exist, and they exist for a specific reason: a selected element needs 
 
 **The Caption Means Metadata Rule.** Caption labels things that happened or things that are counted — a time, a token total, a file size, a state name. It never carries a sentence a user is expected to act on.
 
+**The Fluid Type Rule.** The scale above is authoritative at a **375dp base**; rendered sizes may drift from it by the device width, nowhere else. The drift is `1 + (width / 375 − 1) × 0.5`, clamped to **[0.9, 1.1]** and rounded to whole px, applied as `--text-*` overrides at the root (`themes/textScale.ts`, consumed by `hooks/useFluidTextScale.ts` through Uniwind's `ScopedVariables`). `themes/tokens.ts` and the contrast tests keep base values — the drift is presentation, not a second system, and no call site applies it by hand. The system accessibility scale composes on top of it. Where geometry is pinned, the system scale is capped so the pinned dimension never moves: the tab bar labels at **1.2**, header titles at **1.5**. Everything else — settings rows, chat, sheets, empty states — is uncapped and grows freely; that is the "dynamic type support" the accessibility floor asks for.
+
 ## Layout
 
 The spatial model is a 4px scale — 4, 8, 12, 16, 20, 24, 32, 40, 48 — with **no off-scale values**. On Uniwind/Tailwind this scale is already the default (`p-1` through `p-12`), so no custom spacing configuration is needed; the discipline is in *choosing* from it, not in defining it.

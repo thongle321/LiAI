@@ -16,6 +16,7 @@ import {
   Mic,
   type LucideIcon,
 } from "lucide-react-native";
+import { ScopedVariables } from "uniwind";
 
 import { colors } from "../themes/tokens.ts";
 
@@ -42,6 +43,17 @@ const TABS: { id: ChatTab; label: string; Icon: LucideIcon }[] = [
   { id: "vision", label: "Vision", Icon: Eye },
 ];
 
+/** The caption pair PINNED at the bar (Fluid Type Rule: pinned geometry
+ * never moves). The bar's 69px is a class sum whose label box is the
+ * 16px caption line-height, so the width drift must not reach it — the
+ * drift would render that box 18px wide-device and shift the bar. The
+ * system scale is capped on the label below; this pins the other axis.
+ * Module-level so the variables object keeps a stable identity. */
+const PINNED_CAPTION = {
+  "--text-caption": 12,
+  "--text-caption--line-height": 16,
+};
+
 export function BottomNav({
   active,
   onSelect,
@@ -50,7 +62,8 @@ export function BottomNav({
   onSelect: (tab: ChatTab) => void;
 }) {
   return (
-    <View className="flex-row border-t border-border bg-surface-1 px-2 pt-2 pb-1">
+    <ScopedVariables variables={PINNED_CAPTION}>
+      <View className="flex-row border-t border-border bg-surface-1 px-2 pt-2 pb-1">
       {TABS.map((t) => {
         const selected = t.id === active;
         return (
@@ -73,6 +86,11 @@ export function BottomNav({
               />
             </View>
             <Text
+              numberOfLines={1}
+              // Capped: DESIGN pins the bar at 69px. Worst case font
+              // 12 × 1.1 (Fluid Type clamp) × 1.2 = 15.84px, inside the
+              // pinned 16px line box — the bar never shifts.
+              maxFontSizeMultiplier={1.2}
               className={`font-sans text-caption ${
                 selected ? "text-primary" : "text-secondary-text"
               }`}
@@ -82,6 +100,7 @@ export function BottomNav({
           </Pressable>
         );
       })}
-    </View>
+      </View>
+    </ScopedVariables>
   );
 }

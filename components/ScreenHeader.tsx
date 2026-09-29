@@ -37,6 +37,10 @@ export function ScreenHeader({ title, right }: { title: string; right?: ReactNod
       </View>
       <Text
         numberOfLines={1}
+        // Capped: DESIGN pins the header at 56px. Worst case
+        // 24 (h2) × 1.1 (Fluid Type clamp) × 1.5 = 39.6px < 56 —
+        // the bar never shifts; prose elsewhere stays uncapped.
+        maxFontSizeMultiplier={1.5}
         className="flex-1 text-center font-sans-semibold text-h2 text-primary-text"
       >
         {title}

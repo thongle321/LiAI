@@ -204,6 +204,9 @@ export default function ChatRoute() {
         >
           <Text
             numberOfLines={1}
+            // Capped like ScreenHeader's title: DESIGN pins the
+            // header at 56px (Fluid Type Rule caps geometry).
+            maxFontSizeMultiplier={1.5}
             className="text-center font-sans-semibold text-h2 text-primary-text"
           >
             {APP_NAME}

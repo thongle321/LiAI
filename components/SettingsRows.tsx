@@ -26,7 +26,7 @@ import {
   Text as ComposeText,
 } from "@expo/ui/jetpack-compose";
 import { defaultMinSize, menuAnchor } from "@expo/ui/jetpack-compose/modifiers";
-import { ChevronDown, Minus, Plus } from "lucide-react-native";
+import { ChevronDown, ChevronRight, Minus, Plus } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 
@@ -93,7 +93,12 @@ export function ToggleRow({
       {/* No `label` on the native Switch: on iOS it draws a second copy of
           the text next to the control, so the row's own Text is the label and
           the Host carries the accessible name for it. */}
-      <Host matchContents>
+      {/* Seeded HERE, not inherited: each @expo/ui Host builds its own native
+          theme, and a Host without seedColor falls back to the device's
+          Material You wallpaper — which is exactly what turned every switch
+          teal. colorScheme="light" keeps the light lock when the device is
+          dark (DESIGN.md, Native Palette Rule). */}
+      <Host matchContents colorScheme="light" seedColor={colors.primary}>
         <Switch value={on} onValueChange={onPress} testID={`toggle-${label}`} />
       </Host>
     </View>
@@ -145,7 +150,7 @@ export function PickerRow<T extends string>({
         accessibilityHint="Opens a list of choices"
         accessibilityState={{ expanded: open }}
       >
-        <Host matchContents>
+        <Host matchContents colorScheme="light" seedColor={colors.primary}>
           <ExposedDropdownMenuBox expanded={open} onExpandedChange={setOpen}>
             {/* The anchor the popup positions against, and the only thing
                 Compose draws in the row. */}
@@ -284,17 +289,22 @@ export function SliderRow({
         <Text className="font-sans text-body-md text-primary-text">{display}</Text>
       </View>
       <View className="mt-2">
-        {/* @expo/ui's COMMUNITY Slider — a drop-in replacement for
-         * @react-native-community/slider, which is what PocketPal uses.
-         * It wraps the platform-specific primitives (Jetpack Compose Slider
-         * on Android, SwiftUI Slider on iOS) and honors the value prop
-         * after a drag, so no key-remount workaround is needed. */}
+        {/* @expo/ui's COMMUNITY Slider — a drop-in for
+         * @react-native-community/slider (PocketPal's choice), which wraps
+         * its own Host. That Host takes no seedColor from outside, so any
+         * theme-painted part lands in the device wallpaper palette — which
+         * is what put teal dots on the track. `step` is therefore NOT
+         * passed: Material draws ticks for stepped sliders, and the board's
+         * slider is a clean track, so the row runs continuous and rounds
+         * back to its step (the original row's own formula). Tints carry
+         * the brand: Signal Blue thumb and active track, Mist inactive. */}
         <Slider
           value={value}
           minimumValue={min}
           maximumValue={max}
-          step={step}
-          onValueChange={onChange}
+          onValueChange={(v) =>
+            onChange(step > 0 ? Math.round((v - min) / step) * step + min : v)
+          }
           thumbTintColor={colors.primary}
           minimumTrackTintColor={colors.primary}
           maximumTrackTintColor={colors.surface2}
@@ -499,11 +509,15 @@ export function AdvancedGroup({
         accessibilityLabel={label}
       >
         <RowLabel label={label} description={description} />
-        <ChevronDown
-          size={16}
-          color={colors.secondaryText}
-          style={open ? undefined : { transform: [{ rotate: "-90deg" }] }}
-        />
+        {/* Glyph swap, not a transform: a style-rotated lucide icon
+            rendered INVISIBLE on device (the closed group showed no chevron
+            at all). Right when closed, down when open — the affordance
+            DESIGN.md specifies: "rotates to point down when open". */}
+        {open ? (
+          <ChevronDown size={16} color={colors.secondaryText} />
+        ) : (
+          <ChevronRight size={16} color={colors.secondaryText} />
+        )}
       </Pressable>
       {/* The children are wrapped here, not at each call site: .row is what
           carries the 16px inset, the 48dp floor and the divider, and rows

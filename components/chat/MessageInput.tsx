@@ -207,8 +207,14 @@ export function MessageInput({
   const composerPlaceholder = modelReady
     ? "Type a message…"
     : downloading
-      ? "Loading model ..."
-      : "Model not loaded. Please initialize the model.";
+      ? "Loading model…"
+      // One line, not three: the field is ~22 characters wide, so the old
+      // "Model not loaded. Please initialize the model." wrapped to three
+      // lines and made the EMPTY composer as tall as a paragraph. DESIGN.md
+      // (Chat Messages): the placeholder only has to *say so* — the empty
+      // thread's card carries the button. "Loading model ..." also matched
+      // "Type a message…"'s ellipsis style while it was at it.
+      : "Model not loaded.";
   const sendPress = usePressFeedback();
   const stopPress = usePressFeedback();
   const micPress = usePressFeedback();
@@ -355,7 +361,7 @@ export function MessageInput({
         // the only always-present statement that the composer is blocked.
         accessibilityHint={modelReady ? undefined : composerPlaceholder}
         />
-        <View className="flex-row items-center gap-1">
+        <View className="flex-row items-center gap-2">
           <Animated.View style={micPress.animatedStyle}>
             <Pressable
               onPress={modelReady ? () => void toggleDictation() : undefined}

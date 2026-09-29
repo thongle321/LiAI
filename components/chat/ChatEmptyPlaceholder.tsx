@@ -43,7 +43,13 @@ export function ChatEmptyPlaceholder() {
   return (
     <View className="flex-1 items-center justify-center px-8">
       <View className="h-24 w-24 items-center justify-center rounded-full bg-surface-2">
-        <Image source={images.icon} className="h-16 w-16" />
+        {/* The adaptive-icon FOREGROUND (arrow on transparent), not images.icon:
+            the full icon carries its own light-blue SQUARE background, and a
+            square inside the 999px Mist plate is a shape collision. The
+            foreground is the glyph alone — "a soft glyph at 999px in Mist"
+            exactly. 80 keeps the arrow optically centred with the plate's
+            own margin around it. */}
+        <Image source={images.glyph} className="h-20 w-20" />
       </View>
       <View className="mt-6">
         <Text className="text-center font-sans-medium text-h3 text-primary-text">

@@ -230,7 +230,9 @@ export default function ChatRoute() {
               {searchOpen ? (
                 <X size={20} color={colors.primary} />
               ) : (
-                <Search size={20} color={colors.secondaryText} />
+                // Ink, like the menu and kebab beside it: DESIGN.md,
+                // Navigation — "Icons are 2px stroke at 20px in Ink".
+                <Search size={20} color={colors.primaryText} />
               )}
             </Pressable>
           </Animated.View>

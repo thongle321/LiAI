@@ -396,9 +396,12 @@ describe("keyboard avoidance", () => {
     // (The header wordmark still routes to /models - that is the intended way
     // there, so a bare router.push assertion would be wrong here.)
     // The placeholder carries the state, on the engine-accurate gate rather
-    // than the stale-able `connection` check.
-    assert.match(input, /Model not loaded\. Please initialize the model\./);
-    assert.match(input, /Loading model \.\.\./);
+    // than the stale-able `connection` check. It is one line by design: the
+    // field is ~22 characters wide, and the old two-sentence copy wrapped to
+    // three lines, making the EMPTY composer as tall as a paragraph.
+    assert.match(input, /Model not loaded\./);
+    assert.doesNotMatch(input, /Please initialize the model/);
+    assert.match(input, /Loading model…/);
     assert.match(input, /const composerPlaceholder = modelReady/);
   });
 

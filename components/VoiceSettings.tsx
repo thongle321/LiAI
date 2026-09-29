@@ -56,8 +56,11 @@ export function VoiceSettings() {
   const byId = new Map(voices.map((v) => [v.identifier, v]));
 
   return (
+    // No `title`: the route's own header already reads "Voice", and a second
+    // "Voice" stacked directly beneath it reads as one heading printed twice
+    // (compare Settings → "Memory Settings", whose section titles differ from
+    // the screen's). The description alone leads the card.
     <SettingsSection
-      title="Voice"
       description="How replies are read aloud."
     >
       <View className="row">

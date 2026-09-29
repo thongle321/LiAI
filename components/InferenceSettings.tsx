@@ -138,8 +138,8 @@ export function ModelInitializationSettings() {
           wrapping it would stack the inset and add a second divider. */}
       <AdvancedGroup
         label="Advanced Settings"
-          description="Batching, attention, caches, and speculative decoding."
-        >
+        description="Batching, attention, caches, and speculative decoding."
+      >
           <SliderRow
             label="Batch Size"
             description="Tokens processed per pass. Larger is faster, heavier on memory."

@@ -16,7 +16,16 @@
 
 import { Children, useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { Host, Picker, Slider, Switch } from "@expo/ui";
+import { Host, Switch } from "@expo/ui";
+import Slider from "@expo/ui/community/slider";
+import {
+  DropdownMenuItem,
+  ExposedDropdownMenu,
+  ExposedDropdownMenuBox,
+  Row,
+  Text as ComposeText,
+} from "@expo/ui/jetpack-compose";
+import { defaultMinSize, menuAnchor } from "@expo/ui/jetpack-compose/modifiers";
 import { ChevronDown, Minus, Plus } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
@@ -114,21 +123,84 @@ export function PickerRow<T extends string>({
   displayFor?: (value: T) => string;
 }) {
   const show = displayFor ?? ((v: T) => String(v));
+  const [open, setOpen] = useState(false);
   return (
     <View className="flex-row items-center justify-between py-2">
       <RowLabel label={label} description={description} />
-      <Host matchContents>
-        <Picker
-          selectedValue={value}
-          onValueChange={onChange}
-          appearance="menu"
-          testID={`picker-${label}`}
-        >
-          {options.map((option) => (
-            <Picker.Item key={option} label={show(option)} value={option} />
-          ))}
-        </Picker>
-      </Host>
+      {/* NOT @expo/ui's Picker component. On Android that renders a Material
+       * 3 ExposedDropdownMenuBox whose anchor is a TextField, and an M3 text
+       * field carries a 56dp minimum height — which made this settings row
+       * ~56dp tall with dead space above and below the control. The
+       * `appearance` prop we used to pass, asking for a menu, is ignored on
+       * Android outright ("Material 3 has no wheel-style picker").
+       * @expo/ui's own docs say the anchor may be "e.g. TextField or Text",
+       * so we use a Text: same native popup, same seeded Material colours, no
+       * minimum height, and the row goes back to being sized by its own
+       * label. */}
+      <Pressable
+        onPress={() => setOpen((o) => !o)}
+        className="min-h-12 flex-row items-center justify-end gap-1"
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${show(value)}`}
+        accessibilityHint="Opens a list of choices"
+        accessibilityState={{ expanded: open }}
+      >
+        <Host matchContents>
+          <ExposedDropdownMenuBox expanded={open} onExpandedChange={setOpen}>
+            {/* The anchor the popup positions against, and the only thing
+                Compose draws in the row. */}
+            <Row
+              verticalAlignment="center"
+              horizontalArrangement="end"
+              modifiers={[menuAnchor()]}
+            >
+              {/* maxLines={1} + ellipsis: device voice names run long
+                  ("Microsoft Zira Desktop - English (United States)"). Without
+                  a cap the anchor wraps and the whole row grows, which is the
+                  same class of defect as the 56dp text field this replaced.
+                  The MENU items below stay unwrapped — that is where the user
+                  actually reads a long name. */}
+              <ComposeText
+                color={colors.secondaryText}
+                style={{ fontSize: 14 }}
+                maxLines={1}
+                overflow="ellipsis"
+              >
+                {show(value)}
+              </ComposeText>
+            </Row>
+                <ExposedDropdownMenu
+                  expanded={open}
+                  onDismissRequest={() => setOpen(false)}
+                  // A Material 3 ExposedDropdownMenu sizes itself to its
+                  // anchor, and this anchor is a short value ("Tavily"). That
+                  // left the popup a few characters wide and wrapped every
+                  // option into a one-word-per-line column. The floor is set on
+                  // the menu rather than the anchor so the row keeps its own
+                  // compact width; long names still grow it, because this is a
+                  // minimum, not a fixed size.
+                  modifiers={[defaultMinSize({ minWidth: 200 })]}
+                >
+              {options.map((option) => (
+                <DropdownMenuItem
+                  key={option}
+                  onClick={() => {
+                    onChange(option);
+                    setOpen(false);
+                  }}
+                >
+                  <DropdownMenuItem.Text>
+                    <ComposeText color={colors.primaryText} style={{ fontSize: 14 }}>
+                      {show(option)}
+                    </ComposeText>
+                  </DropdownMenuItem.Text>
+                </DropdownMenuItem>
+              ))}
+            </ExposedDropdownMenu>
+          </ExposedDropdownMenuBox>
+        </Host>
+        <ChevronDown size={16} color={colors.secondaryText} />
+      </Pressable>
     </View>
   );
 }
@@ -212,16 +284,21 @@ export function SliderRow({
         <Text className="font-sans text-body-md text-primary-text">{display}</Text>
       </View>
       <View className="mt-2">
-        <Host matchContents={{ horizontal: true }}>
-          <Slider
-            value={value}
-            min={min}
-            max={max}
-            step={step}
-            onValueChange={onChange}
-            testID={`slider-${label}`}
-          />
-        </Host>
+        {/* @expo/ui's COMMUNITY Slider — a drop-in replacement for
+         * @react-native-community/slider, which is what PocketPal uses.
+         * It wraps the platform-specific primitives (Jetpack Compose Slider
+         * on Android, SwiftUI Slider on iOS) and honors the value prop
+         * after a drag, so no key-remount workaround is needed. */}
+        <Slider
+          value={value}
+          minimumValue={min}
+          maximumValue={max}
+          step={step}
+          onValueChange={onChange}
+          thumbTintColor={colors.primary}
+          minimumTrackTintColor={colors.primary}
+          maximumTrackTintColor={colors.surface2}
+        />
       </View>
     </View>
   );

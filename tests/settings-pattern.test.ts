@@ -155,12 +155,13 @@ describe("settings card pattern", () => {
   });
 
   it("never asks a native sheet for a snap point", () => {
-    // snapPoints is not a height constraint, it is the BUG. The native
-    // sheet applies no window insets at all (ModalBottomSheetView.kt has no
-    // WindowInsets reference), so a snapped sheet covers the status bar; on
-    // Android it can only rest at 'half' or 'full', so it cannot stop just
-    // below the status bar; and its pan gesture fights a nested scroll
-    // view, so the body will not scroll. Long sheets use components/Sheet.tsx.
+    // snapPoints is not a height constraint, it is the BUG. On the community
+    // sheet snapPoints turns OFF fitToContents
+    // (BottomSheet.android.tsx: `enableDynamicSizing && (!snapPointsProp ||
+    // snapPointsProp.length === 0)`), which flips the hosted child to
+    // Modifier.fillMaxSize() and the surface to the full dialog, covering
+    // the status bar. Android's own snap points are only half/full, so a
+    // snapped sheet can never stop just below the status bar.
     //
     // This replaces an earlier guard that required snapPoints on a sheet of
     // sampler rows. It was green through the whole outage because it
@@ -172,7 +173,7 @@ describe("settings card pattern", () => {
     assert.deepEqual(
       offenders,
       [],
-      "a native sheet must not use snapPoints; use components/Sheet.tsx",
+      "a sheet must not use snapPoints; omit it so the sheet fits its content",
     );
   });
 
@@ -205,27 +206,117 @@ describe("settings card pattern", () => {
     );
   });
 
-  it("never flexes a scroll view inside a native sheet", () => {
-    // REGRESSION, and the reason the sheet went WHITE. flex-1 on the
-    // KeyboardAwareScrollView gave it flexBasis 0 inside a native parent
-    // that does not bound the child's height, so it measured to zero and
-    // rendered nothing. The sheet, its drag indicator and its rounded
-    // corners were all there; the body was blank.
+  it("only flexes a sheet body when the sheet has a definite height", () => {
+    // The rule this encodes was BOTH ways round, and both were observed on a
+    // device rather than guessed:
     //
-    // A static class is the tell, and it is worth a guard because the
-    // sibling snapPoints guard was green through the whole outage: it
-    // locked the mechanism that was guessed, not the one that broke.
-    const offenders = screenFiles().filter((file) => {
+    //  - flexBasis 0 (Uniwind's flex-1) inside a container that does not
+    //    bound the child measures the body to zero: the sheet, its drag
+    //    indicator and its corners all render and the body is blank. That is
+    //    the white sheet from commit 9e62cbb's aftermath.
+    //  - The community sheet has no maxHeight / maxDynamicContentSize /
+    //    topInset and never forwards `modifiers`, so the child's OWN height
+    //    is the only lever on the surface. A maxHeight wrapper is an
+    //    at-most box, which leaves RNHostView's childSize at zero so
+    //    requiredSize never applies and the surface goes full-height,
+    //    covering the status bar. A definite `height:` closes that loop on
+    //    the first pass.
+    //
+    // So flex-1 is legal on a sheet body ONLY beside a definite height.
+    //
+    // It previously matched /<(KeyboardAware)?ScrollView/, which cannot match
+    // <BottomSheetScrollView> — the guard went silently green over exactly
+    // the file it existed to police. Any new body tag must be added here.
+    const BODY = /<(?:KeyboardAware|BottomSheet)?ScrollView[^>]*className="[^"]*\bflex-1\b/;
+    const DEFINITE_HEIGHT = /style=\{\{\s*height:/;
+    const AT_MOST_HEIGHT = /style=\{\{\s*maxHeight:/;
+    const offenders: string[] = [];
+    for (const file of screenFiles()) {
       const source = read(file);
-      if (!/<BottomSheet/.test(source)) return false;
+      if (!/<BottomSheet/.test(source)) continue;
       // The first scroll view after the sheet opening tag is the body.
       const body = source.slice(source.indexOf("<BottomSheet"));
-      return /<(KeyboardAware)?ScrollView[^>]*className="[^"]*\bflex-1\b/.test(body);
-    });
+      if (!BODY.test(body)) continue;
+      const rel = file.replace(/\\/g, "/").split("/").slice(-2).join("/");
+      if (AT_MOST_HEIGHT.test(source)) {
+        offenders.push(`${rel}: flex-1 body under a maxHeight wrapper — white sheet`);
+      }
+      if (!DEFINITE_HEIGHT.test(source)) {
+        offenders.push(`${rel}: flex-1 body with no definite height on the sheet wrapper`);
+      }
+    }
     assert.deepEqual(
       offenders,
       [],
-      "a sheet's scroll view must not be flex-1; the native parent leaves it unbounded",
+      "a flex-1 sheet body needs a definite `height:` wrapper, never `maxHeight:`",
+    );
+  });
+
+  it("never puts @expo/ui's native Picker in a settings row", () => {
+    // REGRESSION. @expo/ui's Android Picker renders a Material 3
+    // ExposedDropdownMenuBox whose anchor is a TextField
+    // (universal/Picker/Picker.android.tsx), and an M3 text field carries a
+    // 56dp minimum height — so every picker row in the settings list came out
+    // ~56dp tall with dead space above and below the control. The
+    // `appearance="menu"` that was meant to make it compact is ignored on
+    // Android outright: "Material 3 has no wheel-style picker".
+    //
+    // PickerRow now composes ExposedDropdownMenuBox itself with a Text
+    // anchor, which is the alternative @expo/ui documents ("e.g. TextField
+    // or Text"). This locks the primitive choice, which is the part that
+    // regressed; the resulting row height is still a device check, because
+    // this repo has no renderer to measure layout with.
+    const source = read("components/SettingsRows.tsx");
+    assert.doesNotMatch(
+      source,
+      /<Picker[\s>]/,
+      "the native Picker anchors on a 56dp M3 TextField on Android",
+    );
+    assert.doesNotMatch(
+      source,
+      /appearance="menu"/,
+      "appearance is ignored on Android and hid the real cause",
+    );
+  });
+
+  it("uses the community slider, not the universal one", () => {
+    // REGRESSION. The universal Slider (@expo/ui) does not forward
+    // onValueChangeFinished, so the native side latches isDragging = true
+    // and stops honoring the value prop after one drag — the control
+    // could not be dragged at all. The community slider
+    // (@expo/ui/community/slider) is a drop-in replacement for
+    // @react-native-community/slider (what PocketPal uses) and honors the
+    // value prop after a drag, so no key-remount workaround is needed.
+    const source = read("components/SettingsRows.tsx");
+    assert.match(
+      source,
+      /import Slider from "@expo\/ui\/community\/slider"/,
+      "the slider must be the community drop-in, not the universal one",
+    );
+    assert.doesNotMatch(
+      source,
+      /<Host[^>]*>\s*<Slider[\s\S]*?<\/Host>/,
+      "the community slider does not need a Host wrapper",
+    );
+  });
+
+  it("gives the picker menu a width floor so options cannot collapse", () => {
+    // REGRESSION. A Material 3 ExposedDropdownMenu sizes itself to its
+    // anchor, and this anchor is a short value ("Tavily"), so the popup came
+    // out a few characters wide and wrapped every option into a
+    // one-word-per-line column. The floor belongs on the MENU, not the
+    // anchor: a minimum lets long device voice names grow it instead of
+    // truncating, and leaves the settings row its own compact width.
+    const source = read("components/SettingsRows.tsx");
+    // Match the WHOLE element, not just up to the first ">": the props carry
+    // `onDismissRequest={() => ...}`, whose ">" would end a non-greedy
+    // opening-tag match before `modifiers` is ever reached.
+    const menu = source.match(/<ExposedDropdownMenu[\s\S]*?<\/ExposedDropdownMenu>/);
+    assert.ok(menu, "the picker must render an ExposedDropdownMenu");
+    assert.match(
+      menu[0],
+      /defaultMinSize\(\{\s*minWidth:/,
+      "the menu needs a minWidth floor or its options wrap to a single column",
     );
   });
 

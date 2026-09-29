@@ -23,6 +23,11 @@ export function VoiceSettings() {
   const { rate, pitch, autoSpeak, voiceId, load, setRate, setPitch, setAutoSpeak, setVoice } =
     useVoice();
   const [voices, setVoices] = useState<DeviceVoice[]>([]);
+  // "loading" | "failed" | "ok". Kept because the failure is invisible
+  // otherwise: the picker falls back to a single System default option and
+  // the row still claims voices are installed, so a device that cannot
+  // enumerate looks identical to a device with one voice.
+  const [enumState, setEnumState] = useState<"loading" | "failed" | "ok">("loading");
 
   useEffect(() => {
     void load();
@@ -32,12 +37,16 @@ export function VoiceSettings() {
     let cancelled = false;
     Speech.getAvailableVoicesAsync()
       .then((all) => {
-        if (!cancelled) setVoices(filterVoices(all, deviceLanguage()));
+        if (cancelled) return;
+        setVoices(filterVoices(all, deviceLanguage()));
+        setEnumState("ok");
       })
       .catch(() => {
-        // No enumeration available: the picker stays on System default, which
-        // is exactly how the app behaved before this row existed.
-        if (!cancelled) setVoices([]);
+        // No enumeration available. Say so rather than leaving a one-option
+        // picker under a description that promises more.
+        if (cancelled) return;
+        setVoices([]);
+        setEnumState("failed");
       });
     return () => {
       cancelled = true;
@@ -62,7 +71,15 @@ export function VoiceSettings() {
       <View className="row">
         <PickerRow
           label="Reading voice"
-          description="Voices installed for this device's language."
+          description={
+            enumState === "loading"
+              ? "Looking for voices installed for this device's language."
+              : enumState === "failed"
+                ? "This device would not report its voices, so only the system default is offered. Replies still read aloud."
+                : voices.length === 0
+                  ? "No voices are installed for this device's language. Replies will use the system default."
+                  : "Voices installed for this device's language."
+          }
           options={voiceOptions(voices, voiceId)}
           value={voiceId ?? SYSTEM_VOICE}
           onChange={(id) => setVoice(id === SYSTEM_VOICE ? null : id)}

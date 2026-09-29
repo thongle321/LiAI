@@ -7,10 +7,10 @@
 
 import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { BottomSheet } from "@expo/ui";
+import BottomSheet from "@expo/ui/community/bottom-sheet";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
-import { colors, scrim } from "../themes/tokens.ts";
+import { colors } from "../themes/tokens.ts";
 import { useModelStore } from "../store/modelStore";
 import { ActionRow, SettingsSection, ToggleRow } from "./SettingsRows.tsx";
 
@@ -24,16 +24,24 @@ function HfTokenSheet({ open, onClose }: { open: boolean; onClose: () => void })
   }, [open]);
 
   return (
+    // The COMMUNITY sheet, not the universal one. The universal sheet puts
+    // children straight into a Compose Dialog that holds no RN RootView, so
+    // the KeyboardAwareScrollView below crashed the app on any drag
+    // (RootViewUtil.getRootView asserts). This one hosts children in an
+    // RNHostView whose TouchDispatchingRootViewGroup implements RootView.
+    // No snapPoints: that is what keeps it content-sized.
     <BottomSheet
-      isPresented={open}
-      onDismiss={onClose}
-      containerColor={colors.surface1}
-      scrimColor={scrim}
-      contentPadding={20}
-      testID="hf-token-sheet"
+      index={open ? 0 : -1}
+      onChange={(i) => {
+        if (i === -1) onClose();
+      }}
+      onClose={onClose}
+      enablePanDownToClose
+      backgroundStyle={{ backgroundColor: colors.surface1 }}
     >
       <KeyboardAwareScrollView
-        className="flex-col"
+        testID="hf-token-sheet"
+        className="flex-col px-5 py-5"
         keyboardShouldPersistTaps="handled"
       >
         <Text className="mb-1 font-sans-semibold text-h3 text-primary-text">

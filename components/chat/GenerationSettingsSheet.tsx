@@ -11,7 +11,10 @@
  */
 
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View, useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { X } from "lucide-react-native";
+import BottomSheet, { BottomSheetScrollView } from "@expo/ui/community/bottom-sheet";
 
 import {
   DEFAULT_SAMPLER,
@@ -21,8 +24,9 @@ import {
 import { useInference } from "../../store/inference.ts";
 import { useChatStore, defaultGetStore } from "../../store/chat";
 import { SamplerRows } from "../SamplerRows.tsx";
+import { sheetMaxHeight } from "../../lib/sheet.ts";
+import { colors } from "../../themes/tokens.ts";
 import { ActionRow, SettingsSection, Segmented } from "../SettingsRows.tsx";
-import { Sheet } from "../Sheet.tsx";
 
 type Mode = "session" | "preset";
 
@@ -104,80 +108,125 @@ export function GenerationSettingsSheet({
   }
 
   const overrideCount = override ? Object.keys(override).length : 0;
+  // Read outside the sheet: the sheet is its own native window.
+  const insets = useSafeAreaInsets();
+  const { height: winHeight } = useWindowDimensions();
+  const title = isSession
+    ? "Chat Generation Settings (Session)"
+    : "Chat Generation Settings (Preset)";
 
   return (
-    // NOT @expo/ui's native BottomSheet, though it was tried and reverted:
-    // an RN ScrollView inside its Compose Dialog crashes the app on touch
-    // (NativeGestureUtil -> RootViewUtil.getRootView asserts, because that
-    // view has no RN RootView inside a native window). Expo's advice to "wrap
-    // it in a ScrollView" means @expo/ui's own native one, which cannot host
-    // the RN components these rows are built from. The drag handle and
-    // swipe-to-dismiss are the price of a scroll that works.
-    <Sheet
-      visible={visible}
+    // @expo/ui's COMMUNITY sheet, not the universal one. The universal sheet
+    // put children straight into a Compose Dialog with no RN RootView, so an
+    // RN ScrollView there crashed on touch (RootViewUtil.getRootView). This
+    // one hosts children in an RNHostView whose TouchDispatchingRootViewGroup
+    // implements RootView + NestedScrollingChild3, so RN scroll views work.
+    //
+    // No snapPoints on purpose: that is what makes it fitToContents, so the
+    // sheet wraps the child's capped height instead of going fillMaxSize and
+    // covering the status bar. Capping the child is what puts the top edge at
+    // insets.top + 16.
+    <BottomSheet
+      index={visible ? 0 : -1}
+      onChange={(i) => {
+        if (i === -1) onClose();
+      }}
       onClose={onClose}
-      title={
-        isSession
-          ? "Chat Generation Settings (Session)"
-          : "Chat Generation Settings (Preset)"
-      }
-      // Pinned below the scrolling body, and only when there is something
-      // to reset: a button that resets nothing is a dead control.
-      footer={
-        !isSession || overrideCount > 0 ? (
+      enablePanDownToClose
+      backgroundStyle={{ backgroundColor: colors.surface1 }}
+    >
+      <View
+        // A DEFINITE height, not maxHeight. This view is the sheet's only
+        // lever on its own height (the community BottomSheet has no
+        // maxHeight / maxDynamicContentSize / topInset, and never forwards
+        // `modifiers`), and the native side sizes the surface from the
+        // child's measured size via RNHostView's requiredSize(childSize).
+        // maxHeight is an at-most box, so that measurement starts at zero and
+        // the surface falls back to the full dialog. A definite height closes
+        // the loop on the first pass, which is what puts the top edge at
+        // insets.top + 16. This is the same arithmetic PocketPal gets from
+        // gorhom's maxDynamicContentSize.
+        style={{ height: sheetMaxHeight(winHeight, insets.top) }}
+        className="rounded-t-xl"
+      >
+        <View className="flex-row items-center justify-between px-4 pb-2 pt-4">
+          <Text className="flex-1 mr-2 font-sans-semibold text-h3 text-primary-text">
+            {title}
+          </Text>
+          <Pressable
+            onPress={onClose}
+            className="h-12 w-12 items-center justify-center"
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel="Close generation settings"
+          >
+            <X size={20} color={colors.secondaryText} />
+          </Pressable>
+        </View>
+
+        <BottomSheetScrollView
+          // flex-1 is safe here and grow is not: the parent now has a
+          // definite height, so flexBasis 0 has a box to resolve against.
+          className="flex-1"
+          contentContainerClassName="px-4 pb-4"
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text className="mb-4 font-sans text-body-md text-secondary-text">
+            {isSession
+              ? overrideCount === 0
+                ? "This conversation follows the preset."
+                : `${overrideCount} value${overrideCount === 1 ? "" : "s"} overridden. Everything else follows the preset.`
+              : "The default every conversation starts from, unless it overrides it."}
+          </Text>
+
           <SettingsSection>
             <View className="row">
-              <ActionRow
-                label="Reset"
+              <Segmented<Mode>
+                label="Settings source"
                 description={
-                  isSession
-                    ? "Drop this conversation's overrides; it follows the preset again."
-                    : "Return every value to its shipped default, for this and every conversation."
+                  hasSession
+                    ? undefined
+                    : "Start a conversation to give it its own settings. Until then these are the preset."
                 }
-                buttonLabel={isSession ? "Reset to Preset" : "Reset to System Defaults"}
-                variant="secondary"
-                onPress={reset}
+                value={isSession ? "session" : "preset"}
+                options={availableModes}
+                displayFor={(m) => (m === "session" ? "Session" : "Preset")}
+                onPick={setMode}
               />
             </View>
           </SettingsSection>
-        ) : undefined
-      }
-      testID="generation-settings-sheet"
-    >
-      <Text className="mb-4 font-sans text-body-md text-secondary-text">
-        {isSession
-          ? overrideCount === 0
-            ? "This conversation follows the preset."
-            : `${overrideCount} value${overrideCount === 1 ? "" : "s"} overridden. Everything else follows the preset.`
-          : "The default every conversation starts from, unless it overrides it."}
-      </Text>
 
-      <SettingsSection>
-        <View className="row">
-          <Segmented<Mode>
-            label="Settings source"
-            description={
-              hasSession
-                ? undefined
-                : "Start a conversation to give it its own settings. Until then these are the preset."
-            }
-            value={isSession ? "session" : "preset"}
-            options={availableModes}
-            displayFor={(m) => (m === "session" ? "Session" : "Preset")}
-            onPick={setMode}
-          />
-        </View>
-      </SettingsSection>
+          <SettingsSection>
+            <SamplerRows
+              sampler={resolved}
+              thinkingEnabled={thinkingEnabled}
+              showThinking={!isSession}
+              onChange={apply}
+              onThinkingChange={setThinkingEnabled}
+            />
+          </SettingsSection>
+        </BottomSheetScrollView>
 
-      <SettingsSection>
-        <SamplerRows
-          sampler={resolved}
-          thinkingEnabled={thinkingEnabled}
-          showThinking={!isSession}
-          onChange={apply}
-          onThinkingChange={setThinkingEnabled}
-        />
-      </SettingsSection>
-    </Sheet>
+        {!isSession || overrideCount > 0 ? (
+          <View className="px-4 pt-2" style={{ paddingBottom: 10 + insets.bottom }}>
+            <SettingsSection>
+              <View className="row">
+                <ActionRow
+                  label="Reset"
+                  description={
+                    isSession
+                      ? "Drop this conversation's overrides; it follows the preset again."
+                      : "Return every value to its shipped default, for this and every conversation."
+                  }
+                  buttonLabel={isSession ? "Reset to Preset" : "Reset to System Defaults"}
+                  variant="secondary"
+                  onPress={reset}
+                />
+              </View>
+            </SettingsSection>
+          </View>
+        ) : null}
+      </View>
+    </BottomSheet>
   );
 }

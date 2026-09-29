@@ -9,10 +9,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { BottomSheet } from "@expo/ui";
+import BottomSheet from "@expo/ui/community/bottom-sheet";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
-import { colors, scrim } from "../themes/tokens.ts";
+import { colors } from "../themes/tokens.ts";
 import {
   MAX_RESULT_COUNT,
   MIN_RESULT_COUNT,
@@ -73,16 +73,22 @@ function ProviderKeySheet({
   }
 
   return (
+    // The COMMUNITY sheet, not the universal one: the universal sheet holds no
+    // RN RootView in its Compose Dialog, so dragging this KeyboardAware
+    // ScrollView crashed the app (RootViewUtil.getRootView). See
+    // HfTokenSettings for the same swap.
     <BottomSheet
-      isPresented={providerId !== null}
-      onDismiss={onClose}
-      containerColor={colors.surface1}
-      scrimColor={scrim}
-      contentPadding={20}
-      testID="search-key-sheet"
+      index={providerId !== null ? 0 : -1}
+      onChange={(i) => {
+        if (i === -1) onClose();
+      }}
+      onClose={onClose}
+      enablePanDownToClose
+      backgroundStyle={{ backgroundColor: colors.surface1 }}
     >
       <KeyboardAwareScrollView
-        className="flex-col"
+        testID="search-key-sheet"
+        className="flex-col px-5 py-5"
         keyboardShouldPersistTaps="handled"
       >
         <Text className="mb-1 font-sans-semibold text-h3 text-primary-text">

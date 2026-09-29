@@ -8,12 +8,12 @@
 
 import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { BottomSheet } from "@expo/ui";
+import BottomSheet from "@expo/ui/community/bottom-sheet";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { X } from "lucide-react-native";
 
 import { useModelStore } from "../../store/modelStore";
-import { colors, scrim } from "../../themes/tokens.ts";
+import { colors } from "../../themes/tokens.ts";
 
 function parseStopWords(text: string): string[] {
   return text
@@ -53,19 +53,23 @@ export function ModelSettingsSheet({
     onClose();
   }
 
-  // Native sheet (SwiftUI / Compose), themed to the app by the root Host:
-  // Clean White container, the Scrim backdrop, seed Signal Blue.
+  // The COMMUNITY sheet, not the universal one: the universal sheet holds no
+  // RN RootView in its Compose Dialog, so dragging this KeyboardAware
+  // ScrollView crashed the app (RootViewUtil.getRootView). See
+  // HfTokenSettings for the same swap. No snapPoints keeps it content-sized.
   return (
     <BottomSheet
-      isPresented={modelId !== null}
-      onDismiss={onClose}
-      containerColor={colors.surface1}
-      scrimColor={scrim}
-      contentPadding={20}
-      testID="model-settings-sheet"
+      index={modelId !== null ? 0 : -1}
+      onChange={(i) => {
+        if (i === -1) onClose();
+      }}
+      onClose={onClose}
+      enablePanDownToClose
+      backgroundStyle={{ backgroundColor: colors.surface1 }}
     >
       <KeyboardAwareScrollView
-        className="flex-col"
+        testID="model-settings-sheet"
+        className="flex-col px-5 py-5"
         keyboardShouldPersistTaps="handled"
       >
         <View className="mb-4 flex-row items-center justify-between">

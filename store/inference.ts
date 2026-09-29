@@ -239,11 +239,32 @@ export function createInferenceStore(storage: KeyValueStorage) {
       }
     }
 
+    /** In-flight hydration, so concurrent callers share one read. */
+    let hydrating: Promise<void> | null = null;
+
     return {
       ...DEFAULT_INFERENCE,
       loaded: false,
       load: async () => {
-        set({ ...parseInferenceParams(await storage.getItem(INFERENCE_KEY)), loaded: true });
+        // Single-flight, and it has to be. The settings screen mounts three
+        // cards that each call this on open, so an unguarded read did the same
+        // AsyncStorage fetch and parse three times on first mount and again on
+        // every visit — and, worse, a read resolving after the user changed a
+        // setting would write the stored value back over their change. The
+        // store is the in-memory source of truth once hydrated and nothing
+        // writes INFERENCE_KEY from outside this store, so a repeat call has
+        // nothing left to fetch. `hydrating` is cleared in `finally` so a
+        // failed read does not poison every later attempt.
+        if (get().loaded) return;
+        hydrating ??= (async () => {
+          set({
+            ...parseInferenceParams(await storage.getItem(INFERENCE_KEY)),
+            loaded: true,
+          });
+        })().finally(() => {
+          hydrating = null;
+        });
+        await hydrating;
       },
       setNCtx: (n) => {
         set({ nCtx: clampInt(n, MIN_CONTEXT, Number.MAX_SAFE_INTEGER) });

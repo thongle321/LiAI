@@ -25,6 +25,8 @@ export interface ModelsContentInput {
   availableVisible: boolean;
   /** The PocketPal `downloaded` filter: hides the Available section entirely. */
   downloadedOnly: boolean;
+  /** The PocketPal `hf` filter: Ready hides remotes and non-HF downloads. */
+  hfOnly: boolean;
   downloadedCount: number;
   remoteCount: number;
   downloadableCount: number;
@@ -38,4 +40,15 @@ export function modelsContentIsEmpty(c: ModelsContentInput): boolean {
   const availableShows =
     c.availableVisible && !c.downloadedOnly && c.downloadableCount > 0;
   return !readyShows && !availableShows;
+}
+
+/** Whether the screen should say anything about the empty body.
+ *
+ * Both filters on at once is a DELIBERATE choice: the user ticked
+ * "downloaded only" and "HF only" and already knows the list is empty,
+ * so explaining it is nagging, not help. One filter on (or none) still
+ * earns the explanation, because that combination is where an empty
+ * body is genuinely surprising. */
+export function shouldExplainEmptyContent(c: ModelsContentInput): boolean {
+  return modelsContentIsEmpty(c) && !(c.hfOnly && c.downloadedOnly);
 }

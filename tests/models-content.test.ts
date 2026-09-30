@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   downloadablePresets,
   modelsContentIsEmpty,
+  shouldExplainEmptyContent,
 } from "../lib/models/models-content.ts";
 import type { ModelSpec, PresetModel } from "../types/models.ts";
 
@@ -15,6 +16,7 @@ const base = {
   readyVisible: true,
   availableVisible: true,
   downloadedOnly: false,
+  hfOnly: false,
   downloadedCount: 0,
   remoteCount: 0,
   downloadableCount: 3,
@@ -56,6 +58,24 @@ test("hiding both sections is empty even with rows behind them", () => {
     }),
     true,
   );
+});
+
+test("an empty body explains itself, except when both filters are on", () => {
+  const empty = { ...base, downloadableCount: 0 };
+  // One filter on (or none): the emptiness is surprising, so it is explained.
+  assert.equal(shouldExplainEmptyContent(empty), true);
+  assert.equal(
+    shouldExplainEmptyContent({ ...empty, downloadedOnly: true }),
+    true,
+  );
+  assert.equal(shouldExplainEmptyContent({ ...empty, hfOnly: true }), true);
+  // Both on is a deliberate choice — the user knows why it is empty.
+  assert.equal(
+    shouldExplainEmptyContent({ ...empty, downloadedOnly: true, hfOnly: true }),
+    false,
+  );
+  // Nothing empty, nothing to say either way.
+  assert.equal(shouldExplainEmptyContent(base), false);
 });
 
 const PRESET: PresetModel = {

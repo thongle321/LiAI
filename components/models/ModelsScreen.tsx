@@ -13,7 +13,7 @@ import { useModelStore } from "../../store/modelStore";
 import { useModelsUi } from "../../store/modelsUi.ts";
 import {
   downloadablePresets,
-  modelsContentIsEmpty,
+  shouldExplainEmptyContent,
 } from "../../lib/models/models-content.ts";
 import { ModelsHeaderRight } from "./ModelsHeaderRight.tsx";
 import { FABGroup, FAB_STACK_HEIGHT } from "./FABGroup.tsx";
@@ -59,11 +59,13 @@ export function ModelsScreen() {
   // empty "Ready to use (0)" header is dead UI), so the filters can
   // combine into a body with NOTHING in it and no way to tell why —
   // two stale persisted flags did exactly that. Same rules the sections
-  // use, so this can never disagree with what they render.
-  const contentIsEmpty = modelsContentIsEmpty({
+  // use, so this can never disagree with what they render. Both filters
+  // on together is deliberate, so nothing gets said in that case.
+  const explainEmpty = shouldExplainEmptyContent({
     readyVisible,
     availableVisible,
     downloadedOnly,
+    hfOnly,
     downloadedCount: models.filter(
       (m) =>
         m.origin !== "remote_api" &&
@@ -125,7 +127,7 @@ export function ModelsScreen() {
                 grouped={grouped}
               />
             )}
-            {contentIsEmpty ? (
+            {explainEmpty ? (
               <View className="mt-2">
                 <Text className="font-sans-semibold text-h4 text-primary-text">
                   Nothing to show

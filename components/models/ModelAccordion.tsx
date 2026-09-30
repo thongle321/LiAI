@@ -14,7 +14,7 @@
  * (Switch, Picker, Slider, BottomSheet) — just not for a disclosure.
  */
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 
@@ -26,7 +26,6 @@ export function ModelAccordion({
   open,
   onToggle,
   children,
-  active = false,
 }: {
   title: string;
   count: number;
@@ -34,18 +33,16 @@ export function ModelAccordion({
   /** Receives the next state, matching the sibling expand/collapse-all. */
   onToggle: (next: boolean) => void;
   children: ReactNode;
-  /** The section holding the active model (PocketPal's active-group
-      rule): tinted in both states, never a border — the Tint Rule
-      reserves tints for grounds, and primary belongs to the one
-      live element inside. */
-  active?: boolean;
 }) {
+  const [pressed, setPressed] = useState(false);
   return (
     <View className="mb-6">
       <Pressable
         onPress={() => onToggle(!open)}
+        onPressIn={() => setPressed(true)}
+        onPressOut={() => setPressed(false)}
         className={`min-h-12 flex-row items-center justify-between mb-3 rounded-lg px-3 ${
-          active ? "bg-surface-3" : ""
+          pressed ? "bg-surface-3" : ""
         }`}
         accessibilityRole="button"
         accessibilityLabel={title}

@@ -2,7 +2,7 @@
 
 import { useModelStore } from "../../store/modelStore";
 import { useChatStore } from "../../store/chat";
-import { activeGroupId, isProviderActive } from "../../lib/model-providers.ts";
+import { isProviderActive } from "../../lib/model-providers.ts";
 import { ModelAccordion } from "./ModelAccordion.tsx";
 import { ModelCard, RemoteProviderCard } from "./ModelCard.tsx";
 
@@ -55,7 +55,6 @@ export function ReadyModels({
       count={downloaded.length + remotes.length}
       open={open}
       onToggle={onToggle}
-      active={activeGroupId(activeModelId) === "ready"}
     >
       {downloaded.map((item) => (
         <ModelCard

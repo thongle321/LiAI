@@ -3,11 +3,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  activeGroupId,
-  formatParams,
-  isProviderActive,
-} from "../lib/model-providers.ts";
+import { formatParams, isProviderActive } from "../lib/model-providers.ts";
 
 describe("isProviderActive", () => {
   it("matches only the remote id for that provider", () => {
@@ -15,14 +11,6 @@ describe("isProviderActive", () => {
     assert.equal(isProviderActive("remote-abc", "other"), false);
     assert.equal(isProviderActive("local-xyz", "xyz"), false);
     assert.equal(isProviderActive(null, "abc"), false);
-  });
-});
-
-describe("activeGroupId", () => {
-  it("resolves any active model to the Ready section", () => {
-    assert.equal(activeGroupId("local-xyz"), "ready");
-    assert.equal(activeGroupId("remote-abc"), "ready");
-    assert.equal(activeGroupId(null), null);
   });
 });
 

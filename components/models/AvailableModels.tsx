@@ -187,9 +187,6 @@ export function AvailableModels({
       count={visible.length}
       open={open}
       onToggle={onToggle}
-      // Explicit: this section never holds the active model, so it never
-      // highlights (the Ready section answers that question alone).
-      active={false}
     >
       {grouped ? (
         tiers.map((tier) => {

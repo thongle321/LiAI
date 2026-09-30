@@ -5,15 +5,6 @@
  * badges never re-implement the comparison — works for 1 or 100 providers.
  */
 
-/** Section holding the active model for the accordion highlight: the
- * Ready section contains every loadable model (local specs + remote
- * providers), so any active id resolves to it. Null means no highlight. */
-export function activeGroupId(
-  activeModelId: string | null,
-): "ready" | null {
-  return activeModelId === null ? null : "ready";
-}
-
 export function isProviderActive(
   activeModelId: string | null,
   providerId: string,

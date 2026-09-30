@@ -20,6 +20,10 @@ import type { ChatCtx, ChatDeps, ChatState, TurnRunner } from "./types.ts";
 import { selectEngineSource, type EngineSource } from "../../lib/inference/engine.ts";
 import { EngineManager } from "../../lib/inference/manager.ts";
 import { resolveSampler, type SamplerParams } from "../../lib/inference/sampler.ts";
+import {
+  getAvailableDevices,
+  resolveComputeDevices,
+} from "../../lib/inference/deviceSelection.ts";
 import { createRemoteEngine } from "../../lib/inference/remote-engine.ts";
 import { createTurnRunner } from "../../lib/chat/turn.ts";
 import type { SessionStore } from "../../lib/chat/session-store.ts";
@@ -101,12 +105,22 @@ function getManager(): EngineManager {
               // No draft is fine; embedded MTP still applies.
             }
           }
-          const ctx = await local.loadLlamaContext(
+          // Compute devices resolved against what the phone actually
+          // reports: the raw "HTP*" wildcard is never passed through,
+          // and CPU-only phones init n_gpu_layers 0 (PocketPal's CPU
+          // semantics). A live query is fine here — this path is
+          // already async.
+          const compute = resolveComputeDevices(
+            params.useHexagonNpu,
+            params.nGpuLayers,
+            await getAvailableDevices(),
+          );
+            const ctx = await local.loadLlamaContext(
             engine.resolveLocalFile(docsDir, fileName),
             mmprojPath,
             {
               n_ctx: params.nCtx,
-              n_gpu_layers: params.nGpuLayers,
+              n_gpu_layers: compute.nGpuLayers,
               use_mlock: params.useMlock,
               use_mmap: params.useMmap,
               n_batch: params.nBatch,
@@ -121,9 +135,10 @@ function getManager(): EngineManager {
               spec_draft_cache_type_v: params.specDraftCacheV,
               // The UI says "enable repacking"; llama.cpp wants the inverse.
               no_extra_bufts: !params.useWeightRepacking,
-              // Omitted unless opted into, because a missing `devices` is
-              // "platform default" and [] is a different instruction.
-              ...(params.useHexagonNpu ? { devices: ["HTP*"] } : {}),
+              // Omitted unless a real HTP device resolved above, because
+              // a missing `devices` is "platform default" and [] is a
+              // different instruction.
+              ...(compute.devices ? { devices: compute.devices } : {}),
               ...(modelDraft ? { model_draft: modelDraft } : {}),
               image_max_tokens: params.imageMaxTokens,
             },

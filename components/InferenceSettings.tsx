@@ -1,17 +1,19 @@
 /** Model Initialization, Memory, and Model Loading cards.
  *
  * Grouped and labelled to mirror PocketPal's settings screen row for row,
- * in our tokens and our card pattern. Two deliberate deviations, both ours:
- * the compute-device control is an honest Hexagon toggle (llama.rn has no
- * Metal/GPU/CPU selector — see the row's own note), and the context floor
- * is 512 rather than PocketPal's 200, because small models need it.
+ * in our tokens and our card pattern. One deliberate deviation, ours: the
+ * context floor is 512 rather than PocketPal's 200, because small models
+ * need it. The compute-device rows follow PocketPal's rule — they render
+ * only for hardware the phone actually reports (see deviceSelection.ts);
+ * otherwise the section reads CPU-only, exactly like PocketPal's.
  *
  * Values persist via the inference store and reach llama.rn on the next
  * reply: the engine slot reloads when any init param changes.
  */
 
-import { useEffect } from "react";
-import { Platform, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Linking, Platform, Pressable, Text, View } from "react-native";
+import { ExternalLink } from "lucide-react-native";
 
 import {
   CACHE_TYPES,
@@ -27,6 +29,11 @@ import {
 } from "../store/inference.ts";
 import { useModelStore } from "../store/modelStore";
 import { useModelsUi } from "../store/modelsUi.ts";
+import { colors } from "../themes/tokens.ts";
+import {
+  getAvailableDevices,
+  getDeviceAvailability,
+} from "../lib/inference/deviceSelection.ts";
 import {
   AdvancedGroup,
   PickerRow,
@@ -40,6 +47,9 @@ import {
 const FLASH_OPTIONS: FlashAttn[] = ["auto", "on", "off"];
 /** "None" in the draft picker: the model's own embedded MTP layers. */
 const NO_DRAFT = "";
+/** PocketPal's OpenCL note links here. */
+const OPENCL_DOCS_URL =
+  "https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/OPENCL.md#model-preparation";
 
 export function ModelInitializationSettings() {
   const {
@@ -78,8 +88,29 @@ export function ModelInitializationSettings() {
   const models = useModelStore((s) => s.models);
   const activeModelId = useModelStore((s) => s.activeModelId);
 
+  // Which accelerators the phone actually reports. Unknown (still
+  // loading) reads as CPU-only — PocketPal's direction: never offer
+  // hardware that isn't there. iOS needs no query: Metal is always
+  // present and no Hexagon exists, so it starts resolved (no flash).
+  const [availability, setAvailability] = useState<{
+    hasHexagon: boolean;
+    hasGpu: boolean;
+  } | null>(() =>
+    Platform.OS === "android"
+      ? null
+      : { hasHexagon: false, hasGpu: true },
+  );
+
   useEffect(() => {
     void load();
+    if (Platform.OS !== "android") return;
+    let live = true;
+    void getAvailableDevices().then((devices) => {
+      if (live) setAvailability(getDeviceAvailability(devices));
+    });
+    return () => {
+      live = false;
+    };
   }, []);
 
   // A draft has to be a real, downloaded model, and never the model being
@@ -102,7 +133,7 @@ export function ModelInitializationSettings() {
       title="Model Initialization Settings"
       description="Takes effect on the next reply — the model reloads automatically."
     >
-      {Platform.OS === "android" ? (
+      {availability?.hasHexagon ? (
         <View className="row">
           <ToggleRow
             label="Use Hexagon NPU"
@@ -112,17 +143,48 @@ export function ModelInitializationSettings() {
           />
         </View>
       ) : null}
-      <View className="row">
-        <SliderRow
-          label="GPU layers"
-          description="How much of the model runs on the GPU. All of it is fastest."
-          display={`${nGpuLayers}`}
-          value={nGpuLayers}
-          min={0}
-          max={MAX_GPU_LAYERS}
-          onChange={setNGpuLayers}
-        />
-      </View>
+      {Platform.OS !== "android" || availability?.hasGpu ? (
+        <View className="row">
+          <SliderRow
+            label="GPU layers"
+            description="How much of the model runs on the GPU. All of it is fastest."
+            display={`${nGpuLayers}`}
+            value={nGpuLayers}
+            min={0}
+            max={MAX_GPU_LAYERS}
+            onChange={setNGpuLayers}
+          />
+        </View>
+      ) : null}
+      {!availability ||
+      (!availability.hasHexagon && !availability.hasGpu) ? (
+        <View className="row">
+          <View className="flex-1 pr-4">
+            <Text className="font-sans text-body-lg text-primary-text">
+              Device Selection
+            </Text>
+            <Text className="mt-1 font-sans text-body-md text-secondary-text">
+              CPU only – No hardware accelerators detected.
+            </Text>
+            <Text className="mt-1 font-sans text-body-md text-secondary-text">
+              Note: Pure Q4_0 quantized models perform best with OpenCL.
+            </Text>
+            {/* Slate + underline, not blue: DESIGN's Ink-and-Slate Rule
+                holds for links too — the underline marks it tappable. */}
+            <Pressable
+              onPress={() => void Linking.openURL(OPENCL_DOCS_URL)}
+              accessibilityRole="link"
+              accessibilityLabel="llama.cpp OpenCL docs"
+              className="mt-1 flex-row items-center gap-1"
+            >
+              <Text className="font-sans text-body-md text-secondary-text underline">
+                See llama.cpp OpenCL docs for details.
+              </Text>
+              <ExternalLink size={14} color={colors.secondaryText} />
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
       <View className="row">
         <TextFieldRow
           label="Context Size"

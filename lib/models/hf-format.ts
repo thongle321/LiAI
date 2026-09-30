@@ -87,6 +87,23 @@ export function nextPageFromLink(header: string | null): string | null {
   return match ? match[1] : null;
 }
 
+/** Is this search hit a multimodal model? PocketParity: the details header
+ *  shows a vision tag, decided from the Hub's own tags, with a projector
+ *  file in the siblings as the fallback when a repo is untagged. */
+export function isVisionModel(
+  tags: string[],
+  fileNames: string[],
+): boolean {
+  const tagged = tags.some((t) => {
+    const tag = t.toLowerCase();
+    // The Hub's own spelling is image-text-to-text, not image-text.
+    return tag === "vision" || tag === "multimodal" || tag.startsWith("image-text");
+  });
+  return (
+    tagged || fileNames.some((n) => n.toLowerCase().includes("mmproj"))
+  );
+}
+
 export interface VisionSize {
   llmSize: number;
   /** The mmproj paired with this LLM, when the repo has one. */

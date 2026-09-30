@@ -38,6 +38,8 @@ export function Sheet({
   onClose,
   title,
   footer,
+  scrollable = true,
+  titleEllipsize = false,
   children,
   testID,
 }: {
@@ -46,6 +48,12 @@ export function Sheet({
   title: string;
   /** Pinned below the scrolling body, e.g. a reset action. */
   footer?: ReactNode;
+  /** false for a body that IS the scroller (a paginated FlatList): a
+   *  VirtualizedList nested in this ScrollView warns and never paginates. */
+  scrollable?: boolean;
+  /** Middle-ellipsize a long title (an "org/model" repo name keeps its
+   *  informative end). Off by default: the other callers wrap. */
+  titleEllipsize?: boolean;
   children: ReactNode;
   testID?: string;
 }) {
@@ -86,7 +94,11 @@ export function Sheet({
         <View className="flex-row items-center justify-between px-4 pb-2 pt-4">
           {/* No numberOfLines: the card is full-bleed now, so the title
               wraps, and a cap here would truncate a long one. */}
-          <Text className="flex-1 mr-2 font-sans-semibold text-h3 text-primary-text">
+          <Text
+            className="flex-1 mr-2 font-sans-semibold text-h3 text-primary-text"
+            numberOfLines={titleEllipsize ? 1 : undefined}
+            ellipsizeMode={titleEllipsize ? "middle" : undefined}
+          >
             {title}
           </Text>
           <Pressable
@@ -108,14 +120,20 @@ export function Sheet({
           the base size, so a short sheet stays short and a tall one
           shrinks into a scroll.
         */}
-        <ScrollView
-          className="grow"
-          contentContainerClassName="px-4 pb-4"
-          style={footer ? undefined : { paddingBottom: 16 + insets.bottom }}
-          keyboardShouldPersistTaps="handled"
-        >
-          {children}
-        </ScrollView>
+        {/* flexGrow, deliberately NOT flex-1, on BOTH paths: see the note
+            on the ScrollView below. */}
+        {scrollable ? (
+          <ScrollView
+            className="grow"
+            contentContainerClassName="px-4 pb-4"
+            style={footer ? undefined : { paddingBottom: 16 + insets.bottom }}
+            keyboardShouldPersistTaps="handled"
+          >
+            {children}
+          </ScrollView>
+        ) : (
+          <View className="grow px-4">{children}</View>
+        )}
 
         {footer ? (
           <View

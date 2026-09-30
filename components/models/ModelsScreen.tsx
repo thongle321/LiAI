@@ -1,7 +1,7 @@
 /** Models screen: Ready to use + Available to download, header filters, add FAB. */
 
 import { useEffect, useState } from "react";
-import { Modal, ScrollView, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
@@ -96,6 +96,7 @@ export function ModelsScreen() {
                 open={availableOpen}
                 onToggle={(next) => setOpen("available", next)}
                 onDownload={(modelId, file) => startDownload(modelId, file)}
+                onOpenSettings={(modelId) => setSettingsModelId(modelId)}
                 grouped={grouped}
               />
             )}
@@ -109,19 +110,7 @@ export function ModelsScreen() {
         />
       </View>
 
-      <Modal visible={hfOpen} animationType="slide" onRequestClose={() => setHfOpen(false)}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
-          <ScrollView
-            className="flex-1"
-            contentContainerClassName="w-full"
-            keyboardShouldPersistTaps="handled"
-          >
-            <ContentColumn className="p-5">
-              <HFModelSearch onClose={() => setHfOpen(false)} />
-            </ContentColumn>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
+      <HFModelSearch visible={hfOpen} onClose={() => setHfOpen(false)} />
 
       <RemoteModelSheet visible={remoteModalOpen} onClose={() => setRemoteModalOpen(false)} />
 

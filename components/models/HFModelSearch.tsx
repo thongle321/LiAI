@@ -1,301 +1,700 @@
-/** Hugging Face search: debounced query, stats rows, rich file cards.
+/** Add a model from Hugging Face.
  *
- * Shown in the full-screen Add-from-HF modal. First page only; pagination
- * deferred.
+ * PocketParity with PocketPal's HFModelSearch + DetailsView: one sheet
+ * whose content switches between the result list and a model's file
+ * detail, a search bar carrying its own sort and author filter sheets,
+ * paging from the Hub's Link header, per-file bookmarks, storage-gated
+ * downloads and the four warning chips.
+ *
+ * The sheet is components/Sheet.tsx, not @expo/ui's native sheet: that
+ * one is already rejected in Sheet.tsx's header (no window insets, an
+ * Android snap that collapses to half/full, and a pan gesture that eats
+ * the list's scroll).
  */
 
-import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
-import { BottomSheet } from "@expo/ui";
-import { Check, ChevronDown, Lock, X } from "lucide-react-native";
+import { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { getFreeDiskStorageAsync } from "expo-file-system/legacy";
+import {
+  ArrowLeft,
+  ArrowUpDown,
+  Bookmark,
+  CheckCircle2,
+  ChevronRight,
+  Flame,
+  Lock,
+  Search,
+  SlidersHorizontal,
+  User,
+  X,
+} from "lucide-react-native";
 
-import { colors, scrim } from "../../themes/tokens.ts";
-import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
+import { Sheet } from "../Sheet.tsx";
+import { colors } from "../../themes/tokens.ts";
 import { useModelStore } from "../../store/modelStore";
 import { hfSpecId } from "../../lib/models/huggingface.ts";
-import type { HFModelFile } from "../../types/models";
 import {
+  extractHFModelTitle,
+  formatNumber,
+  isVisionModel,
+  timeAgo,
+  visionSizeBreakdown,
+} from "../../lib/models/hf-format.ts";
+import { hfFileWarnings } from "../../lib/models/hf-warnings.ts";
+import type { HFWarningCode } from "../../lib/models/hf-warnings.ts";
+import type { HFModelFile, HFModelSearchResult, ModelDownloadStatus } from "../../types/models";
+import {
+  CancelDownloadButton,
   Chip,
   DownloadButton,
   DownloadProgressBar,
   ModelTypeIcon,
-  StatusBadge,
   formatBytes,
-  formatCompact,
   isProgressVisible,
 } from "./ModelBits.tsx";
 
-/** Vision signal without opening the repo (PocketPal DetailsView parity):
- * a projector file among the GGUF siblings means a vision model. */
-function isVisionSearchResult(files: HFModelFile[]): boolean {
-  return files.some((f) => f.name.toLowerCase().includes("mmproj"));
+const SORT_OPTIONS: { value: "relevance" | "downloads" | "lastModified" | "likes"; label: string }[] = [
+  { value: "relevance", label: "Relevance" },
+  { value: "downloads", label: "Downloads" },
+  { value: "lastModified", label: "Last modified" },
+  { value: "likes", label: "Likes" },
+];
+
+/** A warning chip's colour is its severity, so the four codes cannot be
+ *  collapsed into one neutral pill: a full disk is not a legacy quant.
+ *  Whole-string literals per branch: Uniwind compiles class names at build
+ *  time and will not see a string assembled at runtime. */
+function WarningChip({ code, label }: { code: HFWarningCode; label: string }) {
+  return (
+    <View
+      className={
+        code === "not-enough-space"
+          ? "flex-row items-center rounded border px-2 py-1 bg-error/10 border-error/30"
+          : code === "short-memory"
+            ? "flex-row items-center rounded border px-2 py-1 bg-warning/10 border-warning/30"
+            : "flex-row items-center rounded border px-2 py-1 bg-surface-2 border-border"
+      }
+    >
+      <Text className="font-sans text-caption text-secondary-text">{label}</Text>
+    </View>
+  );
 }
 
-export function HFModelSearch({ onClose }: { onClose?: () => void }) {
+function StatChip({
+  label,
+  trending = false,
+}: {
+  label: string;
+  trending?: boolean;
+}) {
+  return (
+    <View className="flex-row items-center gap-1 rounded bg-surface-2 px-2 py-1">
+      {trending ? <Flame size={11} color={colors.primary} /> : null}
+      <Text className="font-sans text-caption text-secondary-text">{label}</Text>
+    </View>
+  );
+}
+
+/** Warnings are numbered here because they are a list the user has to act
+ *  on, not one line of prose. Dismissal scales with the count so a long
+ *  list is readable, PocketPal's 1000 + 2000ms per warning. */
+function WarningSnackbar({
+  warnings,
+  onDone,
+}: {
+  warnings: string[];
+  onDone: () => void;
+}) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 1000 + 2000 * warnings.length);
+    return () => clearTimeout(t);
+  }, [warnings, onDone]);
+
+  return (
+    <View
+      className="absolute left-4 right-4 bottom-4 rounded-lg bg-surface-3 border border-border p-4"
+      accessibilityLiveRegion="polite"
+    >
+      {warnings.map((warning, i) => (
+        <Text
+          key={warning}
+          className="font-sans text-body-sm text-primary-text"
+        >
+          {`${i + 1}. ${warning}`}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
+function SortSheet({
+  visible,
+  active,
+  onPick,
+  onClose,
+}: {
+  visible: boolean;
+  active: string;
+  onPick: (value: "relevance" | "downloads" | "lastModified" | "likes") => void;
+  onClose: () => void;
+}) {
+  return (
+    <Sheet visible={visible} onClose={onClose} title="Sort by" testID="hf-sort-sheet">
+      {SORT_OPTIONS.map((option) => (
+        <Pressable
+          key={option.value}
+          onPress={() => {
+            onPick(option.value);
+            onClose();
+          }}
+          className="min-h-12 flex-row items-center justify-between py-3 border-b border-border"
+          accessibilityRole="button"
+          accessibilityLabel={`Sort by ${option.label}`}
+        >
+          <Text className="font-sans text-body-lg text-primary-text">{option.label}</Text>
+          {active === option.value ? (
+            <CheckCircle2 size={20} color={colors.primary} />
+          ) : null}
+        </Pressable>
+      ))}
+    </Sheet>
+  );
+}
+
+function AuthorSheet({
+  visible,
+  author,
+  onApply,
+  onClose,
+}: {
+  visible: boolean;
+  author: string;
+  onApply: (author: string) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState(author);
+  useEffect(() => {
+    if (visible) setDraft(author);
+  }, [visible, author]);
+
+  return (
+    <Sheet visible={visible} onClose={onClose} title="Filter by author" testID="hf-author-sheet">
+      <TextInput
+        value={draft}
+        onChangeText={setDraft}
+        placeholder="e.g. bartowski"
+        autoCapitalize="none"
+        autoCorrect={false}
+        placeholderTextColor={colors.secondaryText}
+        accessibilityLabel="Author name"
+        className="font-sans text-body-md text-primary-text bg-surface-1 border border-border rounded-lg px-5 py-3"
+      />
+      <View className="flex-row gap-2 pt-4">
+        <Pressable
+          onPress={() => {
+            onApply("");
+            onClose();
+          }}
+          className="min-h-12 flex-1 items-center justify-center rounded-lg border border-border py-3"
+          accessibilityRole="button"
+          accessibilityLabel="Clear author filter"
+        >
+          <Text className="font-sans text-body-md text-primary">Clear</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            onApply(draft.trim());
+            onClose();
+          }}
+          className="min-h-12 flex-1 items-center justify-center rounded-lg bg-primary py-3"
+          accessibilityRole="button"
+          accessibilityLabel="Apply author filter"
+        >
+          <Text className="font-sans-semibold text-body-md text-on-primary">Apply</Text>
+        </Pressable>
+      </View>
+    </Sheet>
+  );
+}
+
+export function HFModelSearch({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
   const {
     searchModels,
+    loadMoreModels,
+    loadSearchFilters,
     searchResults,
     searchLoading,
+    searchLoadingMore,
     searchError,
+    searchFilters,
+    setSearchFilters,
     getModelFiles,
+    disableHfTokenAndRetry,
+    bookmarkModel,
+    isBookmarked,
+    getModelByOid,
+    removeBookmark,
     startDownload,
     pauseModelDownload,
     resumeModelDownload,
-    hfToken,
+    cancelModelDownload,
     activeHfToken,
-    setHfToken,
     models,
+    largestSuccessfulBytes,
   } = useModelStore();
-  const guard = useLoadGuard();
-  const [query, setQuery] = useState("");
-  const [expandedModel, setExpandedModel] = useState<string | null>(null);
-  const [modelFiles, setModelFiles] = useState<Record<string, HFModelFile[]>>({});
-  const [loadingFiles, setLoadingFiles] = useState<Set<string>>(new Set());
-  const [tokenOpen, setTokenOpen] = useState(false);
-  const [draft, setDraft] = useState("");
-
-  // ponytail: debounce so we search once per pause, not per keystroke.
-  useEffect(() => {
-    const t = setTimeout(() => {
-      searchModels(query.length >= 2 ? query : "");
-    }, 500);
-    return () => clearTimeout(t);
-  }, [query]);
-
-  const handleModelPress = async (modelId: string) => {
-    if (expandedModel === modelId) {
-      setExpandedModel(null);
+  const guard = (sizeBytes: number, proceed: () => void) => {
+    if (sizeBytes > largestSuccessfulBytes * 1.5 && largestSuccessfulBytes > 0) {
+      Alert.alert(
+        "Large model",
+        "This file is much larger than models that have downloaded successfully on this device. It may fail or run out of memory.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Download anyway", onPress: proceed },
+        ],
+      );
       return;
     }
+    proceed();
+  };
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<HFModelSearchResult | null>(null);
+  const [files, setFiles] = useState<HFModelFile[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
+  const [authorOpen, setAuthorOpen] = useState(false);
+  const [snackWarnings, setSnackWarnings] = useState<string[] | null>(null);
+  const [freeBytes, setFreeBytes] = useState<number | null>(null);
+  // Bumped by the filter sheets so the debounce effect re-runs: the store
+  // holds the filters, and its identity never changes.
+  const [filtersVersion, setFiltersVersion] = useState(0);
+  // Filters hydrate from storage once per open, BEFORE the first search,
+  // or a returning user's sort would be ignored by that request.
+  const hydrated = useRef(false);
 
-    setExpandedModel(modelId);
-    if (!modelFiles[modelId]) {
-      setLoadingFiles((prev) => new Set(prev).add(modelId));
-      try {
-        const files = await getModelFiles(modelId);
-        setModelFiles((prev) => ({ ...prev, [modelId]: files }));
-      } catch (e) {
-        console.error("Failed to load model files:", e);
-      } finally {
-        setLoadingFiles((prev) => {
-          const next = new Set(prev);
-          next.delete(modelId);
-          return next;
-        });
-      }
+  useEffect(() => {
+    if (!visible) {
+      hydrated.current = false;
+      setSelected(null);
+      return;
+    }
+    // ponytail: debounce, PocketParity's 500ms.
+    const t = setTimeout(() => {
+      void (async () => {
+        if (!hydrated.current) {
+          hydrated.current = true;
+          await loadSearchFilters();
+        }
+        await searchModels(query);
+      })();
+    }, 500);
+    return () => clearTimeout(t);
+  }, [query, visible, filtersVersion, loadSearchFilters, searchModels]);
+
+  const applyFilters = (patch: Parameters<typeof setSearchFilters>[0]) => {
+    setSearchFilters(patch);
+    setFiltersVersion((v) => v + 1);
+  };
+
+  const openDetails = async (result: HFModelSearchResult) => {
+    setSelected(result);
+    setFiles([]);
+    setFilesLoading(true);
+    setFreeBytes(null);
+    try {
+      const [loaded, free] = await Promise.all([
+        getModelFiles(result.modelId),
+        // Free disk is best-effort: a null means "unknown", which must
+        // never disable the download button.
+        getFreeDiskStorageAsync().catch(() => null),
+      ]);
+      setFiles(loaded);
+      setFreeBytes(free);
+    } catch (error) {
+      console.error("Failed to load model files:", error);
+    } finally {
+      setFilesLoading(false);
     }
   };
 
-  return (
-    <View className="mb-6">
-      <View className="flex-row items-center justify-between mb-3">
-        <Text className="font-sans-semibold text-h4 text-primary-text">Search Hugging Face</Text>
-        {onClose && (
-          <Pressable
-            onPress={onClose}
-            className="h-12 w-12 items-center justify-center"
-            hitSlop={4}
-            accessibilityRole="button"
-            accessibilityLabel="Close Hugging Face search"
-          >
-            <X size={22} color={colors.secondaryText} />
-          </Pressable>
-        )}
-      </View>
+  const closeDetails = () => {
+    setSelected(null);
+    setFiles([]);
+    setSnackWarnings(null);
+  };
 
-      <View className="flex-row items-center gap-2 mb-3">
-        <TextInput
-          placeholder="Search models (e.g., llama, qwen, gemma)..."
-          value={query}
-          onChangeText={setQuery}
-          autoFocus={onClose !== undefined}
-          className="flex-1 font-sans text-body-md text-primary-text bg-surface-1 border border-border rounded-lg px-5 py-3"
-          placeholderTextColor={colors.secondaryText}
-        />
-        <Pressable
-          onPress={() => {
-            setDraft("");
-            setTokenOpen(true);
-          }}
-          className="min-h-12 flex-row items-center gap-2 px-3 py-3 bg-surface-1 border border-border rounded-lg"
-          accessibilityRole="button"
-          accessibilityLabel={hfToken ? "Hugging Face token saved" : "Add Hugging Face token"}
-        >
-          {hfToken ? <Check size={14} color={colors.primary} /> : null}
-          <Text className="font-sans text-body-sm text-primary">
-            {hfToken ? "HF Token" : "Add HF Token"}
-          </Text>
-        </Pressable>
-      </View>
+  const onDownload = (result: HFModelSearchResult, file: HFModelFile) => {
+    const breakdown = visionSizeBreakdown(file, files);
+    const warnings = hfFileWarnings({
+      fileName: file.name,
+      requiredBytes: breakdown.total,
+      isVision: breakdown.isVision,
+      hasProjector: breakdown.mmprojSize !== null,
+      freeBytes,
+      learnedCeilingBytes: largestSuccessfulBytes,
+    });
+    if (warnings.length > 0) {
+      setSnackWarnings(warnings.map((w) => w.label));
+    }
+    guard(breakdown.total, () => {
+      void startDownload(result.modelId, file, activeHfToken() ?? undefined);
+    });
+  };
 
-      {searchError && (
-        <Text className="font-sans text-body-sm text-error mb-3">
-          Error: {searchError.message}
-        </Text>
-      )}
+  const onUnbookmark = (oid: string | undefined) => {
+    if (!oid) return;
+    const model = getModelByOid(oid);
+    if (!model) return;
+    if (model.origin === "preset") {
+      Alert.alert("Cannot Remove", "The model is preset.");
+      return;
+    }
+    if (model.downloadStatus === "completed") {
+      Alert.alert(
+        "Cannot Remove",
+        "The model is downloaded. Please delete the file first.",
+      );
+      return;
+    }
+    Alert.alert(
+      "Remove Model",
+      "Are you sure you want to remove this model from the list?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            if (!removeBookmark(model.id)) {
+              Alert.alert("Error", "Failed to remove the model.");
+            }
+          },
+        },
+      ],
+    );
+  };
 
-      {searchLoading && (
-        <View className="flex-row items-center justify-center py-4">
-          <ActivityIndicator size="small" color={colors.primary} />
-          <Text className="ml-2 font-sans text-body-md text-secondary-text">Searching...</Text>
-        </View>
-      )}
+  const isVision = selected
+    ? isVisionModel(selected.tags, files.map((f) => f.name))
+    : false;
+  // Projectors stay out of the list: LiAI cannot pair one (ADR-0011), so
+  // offering the file would be a download that can never be used.
+  const visibleFiles = files.filter(
+    (f) => !f.name.toLowerCase().includes("mmproj"),
+  );
 
-      {searchResults.map((item) => (
-        <Pressable
-          key={item.modelId}
-          onPress={() => handleModelPress(item.modelId)}
-          className="mb-3 bg-surface-1 border border-border rounded-lg overflow-hidden"
-        >
-          <View className="p-5">
-            <View className="flex-row items-center justify-between">
-              <View className="flex-1">
-                <View className="flex-row items-center gap-2">
-                  <ModelTypeIcon
-                    type={isVisionSearchResult(item.ggufFiles) ? "vision" : "llm"}
-                  />
-                  <Text className="font-sans-semibold text-body-md text-primary-text">{item.name}</Text>
-                </View>
-                <Text className="font-sans text-body-sm text-secondary-text/70 mt-1">by {item.author}</Text>
-              </View>
-              <ChevronDown size={20} color={colors.secondaryText} />
-            </View>
+  const renderFile = ({ item: file }: { item: HFModelFile }) => {
+    const result = selected!;
+    const specId = hfSpecId(result.modelId, file.name);
+    const spec = models.find((m) => m.id === specId);
+    const status = (spec?.downloadStatus ?? "idle") as ModelDownloadStatus;
+    const progress = spec?.downloadProgress ?? 0;
+    const breakdown = visionSizeBreakdown(file, files);
+    const bookmarked = file.oid ? isBookmarked(file.oid) : false;
+    const warnings = hfFileWarnings({
+      fileName: file.name,
+      requiredBytes: breakdown.total,
+      isVision: breakdown.isVision,
+      hasProjector: breakdown.mmprojSize !== null,
+      freeBytes,
+      learnedCeilingBytes: largestSuccessfulBytes,
+    });
+    const outOfSpace = freeBytes !== null && breakdown.total > freeBytes;
+
+    return (
+      <View className="py-3 border-b border-border">
+        <View className="flex-row items-center justify-between gap-2">
+          <View className="flex-1">
+            <Text className="font-sans text-body-md text-primary-text">{file.name}</Text>
             <View className="flex-row flex-wrap items-center gap-2 mt-2">
               <Chip label="GGUF" />
-              {item.gated && (
-                <View className="flex-row items-center gap-1 px-2 py-1 bg-surface-2 border border-border rounded">
-                  <Lock size={10} color={colors.secondaryText} />
-                  <Text className="font-sans text-caption text-secondary-text">Gated</Text>
-                </View>
-              )}
+              {/* Informational, never pressable: pairing a projector is
+                  deferred (ADR-0011), so a button here would lie. */}
+              {breakdown.isVision ? <Chip label="Vision" /> : null}
+              {/* A vision model's real footprint is the pair, so the
+                  projector is priced into the number next to the button. */}
               <Text className="font-sans text-body-sm text-secondary-text/70">
-                {formatCompact(item.downloads)} downloads • {formatCompact(item.likes)} likes
+                {breakdown.mmprojSize !== null
+                  ? `${formatBytes(breakdown.llmSize)} + ${formatBytes(breakdown.mmprojSize)} projector`
+                  : formatBytes(file.size)}
               </Text>
-              <StatusBadge status="idle" />
+              {outOfSpace ? (
+                <Text className="font-sans text-caption text-error">
+                  {`Only ${formatBytes(freeBytes ?? 0)} free`}
+                </Text>
+              ) : null}
             </View>
           </View>
-
-          {expandedModel === item.modelId && (
-            <View className="border-t border-border px-5 pb-4">
-              {loadingFiles.has(item.modelId) ? (
-                <View className="flex-row items-center justify-center py-4">
-                  <ActivityIndicator size="small" color={colors.primary} />
-                  <Text className="ml-2 font-sans text-body-md text-secondary-text">Loading files...</Text>
-                </View>
-              ) : (
-                <View>
-                  <View className="mb-3">
-                    <Text className="font-sans-semibold text-body-sm text-secondary-text mb-2">GGUF Files</Text>
-                  </View>
-                  {(modelFiles[item.modelId] || []).map((file) => {
-                    // Store spec id mirrors buildHfModelSpec.
-                    const spec = models.find((m) => m.id === hfSpecId(item.modelId, file.name));
-                    const st = spec?.downloadStatus ?? "idle";
-                    const prog = spec?.downloadProgress ?? 0;
-                    return (
-                    <View key={file.name} className="py-3 border-b border-border">
-                      <View className="flex-row items-center justify-between">
-                        <View className="flex-1">
-                          <Text className="font-sans text-body-md text-primary-text">{file.name}</Text>
-                          <View className="flex-row flex-wrap items-center gap-2 mt-2">
-                            <Chip label="GGUF" />
-                            <Text className="font-sans text-body-sm text-secondary-text/70">{formatBytes(file.size)}</Text>
-                          </View>
-                        </View>
-                        <DownloadButton
-                          status={st}
-                          progress={prog}
-                          onPress={() =>
-                            guard(file.size, () =>
-                              startDownload(item.modelId, file, activeHfToken() ?? undefined),
-                            )
-                          }
-                          onPause={() => void pauseModelDownload(hfSpecId(item.modelId, file.name))}
-                          onResume={() => void resumeModelDownload(hfSpecId(item.modelId, file.name))}
-                          disabled={st === "completed"}
-                        />
-                      </View>
-                      {isProgressVisible(st) && (
-                        <DownloadProgressBar
-                          progress={prog}
-                          speed={spec?.speedBytesPerSec}
-                        />
-                      )}
-                    </View>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-          )}
-        </Pressable>
-      ))}
-      {query.length >= 2 && !searchLoading && searchResults.length === 0 && (
-        <Text className="text-center font-sans text-body-md text-secondary-text py-4">
-          No models found. Try a different search term.
-        </Text>
-      )}
-      <BottomSheet
-        isPresented={tokenOpen}
-        onDismiss={() => setTokenOpen(false)}
-        containerColor={colors.surface1}
-        scrimColor={scrim}
-        contentPadding={20}
-        testID="hf-search-token-sheet"
-      >
-        <View>
-          <Text className="font-sans-semibold text-h3 text-primary-text mb-2">
-            Hugging Face token
-          </Text>
-          <Text className="font-sans text-body-sm text-secondary-text mb-4">
-            Needed only for gated repos. Stored on this device, sent per request.
-          </Text>
-          <TextInput
-            value={draft}
-            onChangeText={setDraft}
-            placeholder="hf_..."
-            secureTextEntry
-            className="input font-sans text-body-md"
-            placeholderTextColor={colors.secondaryText}
-            accessibilityLabel="Hugging Face token"
-          />
-          <View className="flex-row gap-2 pt-4">
-            {hfToken ? (
-              <Pressable
-                onPress={() => {
-                  void setHfToken(null);
-                  setTokenOpen(false);
-                }}
-                className="btn btn--ghost flex-1"
-                accessibilityRole="button"
-                accessibilityLabel="Remove token"
-              >
-                <Text className="font-sans text-body-md text-primary">Remove</Text>
-              </Pressable>
-            ) : null}
+          <View className="flex-row items-center gap-1">
             <Pressable
-              onPress={() => setTokenOpen(false)}
-              className="btn btn--secondary flex-1"
+              onPress={() =>
+                bookmarked && file.oid
+                  ? onUnbookmark(file.oid)
+                  : bookmarkModel(result, file)
+              }
+              className="h-12 w-12 items-center justify-center"
               accessibilityRole="button"
-              accessibilityLabel="Cancel"
+              accessibilityLabel={bookmarked ? `Remove bookmark for ${file.name}` : `Bookmark ${file.name}`}
+              testID={`hf-bookmark-${file.name}`}
             >
-              <Text className="font-sans text-body-md text-primary">Cancel</Text>
+              <Bookmark
+                size={18}
+                color={bookmarked ? colors.primary : colors.secondaryText}
+                fill={bookmarked ? colors.primary : "none"}
+              />
             </Pressable>
-            <Pressable
-              onPress={() => {
-                if (draft.trim() === "") return;
-                void setHfToken(draft.trim());
-                setTokenOpen(false);
-              }}
-              className="btn btn--primary flex-1"
-              accessibilityRole="button"
-              accessibilityLabel="Save token"
-            >
-              <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
-            </Pressable>
+            {isProgressVisible(status) ? (
+              <CancelDownloadButton
+                onPress={() => void cancelModelDownload(specId)}
+              />
+            ) : (
+              <DownloadButton
+                status={status}
+                progress={progress}
+                disabled={outOfSpace || status === "completed"}
+                onPress={() => onDownload(result, file)}
+                onPause={() => void pauseModelDownload(specId)}
+                onResume={() => void resumeModelDownload(specId)}
+              />
+            )}
           </View>
         </View>
-      </BottomSheet>
-    </View>
+        {warnings.length > 0 ? (
+          <View className="flex-row flex-wrap gap-2 mt-2">
+            {warnings.map((w) => (
+              <WarningChip key={w.code} code={w.code} label={w.label} />
+            ))}
+          </View>
+        ) : null}
+        {isProgressVisible(status) ? (
+          <DownloadProgressBar progress={progress} speed={spec?.speedBytesPerSec} />
+        ) : null}
+      </View>
+    );
+  };
+
+  const renderResult = ({ item: result }: { item: HFModelSearchResult }) => (
+    <Pressable
+      onPress={() => void openDetails(result)}
+      className="py-3 border-b border-border"
+      accessibilityRole="button"
+      accessibilityLabel={`${result.name} by ${result.author}`}
+      testID={`hf-result-${result.modelId}`}
+    >
+      <View className="flex-row items-center justify-between">
+        <View className="flex-1 mr-2">
+          <View className="flex-row items-center gap-2">
+            <ModelTypeIcon
+              type={isVisionModel(result.tags, result.ggufFiles.map((f) => f.name)) ? "vision" : "llm"}
+            />
+            <Text className="flex-1 font-sans-semibold text-body-md text-primary-text">
+              {extractHFModelTitle(result.modelId)}
+            </Text>
+          </View>
+          <Text className="font-sans text-body-sm text-secondary-text/70 mt-1">
+            {`by ${result.author}`}
+          </Text>
+        </View>
+        <ChevronRight size={20} color={colors.secondaryText} />
+      </View>
+      <View className="flex-row flex-wrap items-center gap-2 mt-2">
+        <Text className="font-sans text-body-sm text-secondary-text/70">
+          {result.lastModified ? timeAgo(result.lastModified, Date.now(), false) : ""}
+        </Text>
+        <Text className="font-sans text-body-sm text-secondary-text/70">
+          {`${formatNumber(result.downloads)} downloads`}
+        </Text>
+        <Text className="font-sans text-body-sm text-secondary-text/70">
+          {`${formatNumber(result.likes)} likes`}
+        </Text>
+        {result.gated ? (
+          <View className="flex-row items-center gap-1 px-2 py-1 bg-surface-2 border border-border rounded">
+            <Lock size={10} color={colors.secondaryText} />
+            <Text className="font-sans text-caption text-secondary-text">
+              Requires Token
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </Pressable>
+  );
+
+  return (
+    <Sheet
+      visible={visible}
+      onClose={selected ? closeDetails : onClose}
+      title={selected ? extractHFModelTitle(selected.modelId) : "Add from Hugging Face"}
+      titleEllipsize={selected !== null}
+      scrollable={false}
+      testID="hf-search-sheet"
+    >
+      {selected ? (
+        <View className="flex-1">
+          {/* Fixed header above the list, PocketParity's DetailsView. */}
+          <View className="pb-2">
+            <View className="flex-row items-center gap-2">
+              <Pressable
+                onPress={closeDetails}
+                className="h-12 w-12 items-center justify-center -ml-3"
+                accessibilityRole="button"
+                accessibilityLabel="Back to search results"
+              >
+                <ArrowLeft size={20} color={colors.secondaryText} />
+              </Pressable>
+              <Text className="flex-1 font-sans text-body-sm text-secondary-text/70">
+                {selected.author}
+              </Text>
+              {isVision ? <Chip label="Vision" /> : null}
+            </View>
+            <View className="flex-row flex-wrap items-center gap-2 mt-2">
+              {selected.lastModified ? (
+                <StatChip label={timeAgo(selected.lastModified, Date.now(), true)} />
+              ) : null}
+              <StatChip label={`${formatNumber(selected.downloads)} downloads`} />
+              <StatChip label={`${formatNumber(selected.likes)} likes`} />
+              {selected.trendingScore && selected.trendingScore > 20 ? (
+                <StatChip label="Trending" trending />
+              ) : null}
+            </View>
+            <Text className="font-sans-semibold text-body-md text-primary-text mt-3 mb-1">
+              Files
+            </Text>
+          </View>
+          {filesLoading ? (
+            <View className="flex-row items-center justify-center py-4">
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : (
+            <FlatList
+              data={visibleFiles}
+              keyExtractor={(f) => f.name}
+              renderItem={renderFile}
+              keyboardShouldPersistTaps="handled"
+            />
+          )}
+        </View>
+      ) : (
+        <View className="flex-1">
+          <View className="flex-row items-center gap-2 pb-3">
+            <View className="flex-1 flex-row items-center gap-2 bg-surface-1 border border-border rounded-lg px-4">
+              <Search size={16} color={colors.secondaryText} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search models (e.g., llama, qwen, gemma)"
+                placeholderTextColor={colors.secondaryText}
+                accessibilityLabel="Search Hugging Face models"
+                className="flex-1 font-sans text-body-md text-primary-text py-3"
+              />
+              {query.length > 0 ? (
+                <Pressable
+                  onPress={() => setQuery("")}
+                  className="h-8 w-8 items-center justify-center"
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear search"
+                >
+                  <X size={16} color={colors.secondaryText} />
+                </Pressable>
+              ) : null}
+            </View>
+            <Pressable
+              onPress={() => setAuthorOpen(true)}
+              className="h-12 w-12 items-center justify-center rounded-lg border border-border"
+              accessibilityRole="button"
+              accessibilityLabel={`Filter by author${searchFilters.author ? `, ${searchFilters.author}` : ""}`}
+            >
+              <User
+                size={18}
+                color={searchFilters.author ? colors.primary : colors.secondaryText}
+              />
+            </Pressable>
+            <Pressable
+              onPress={() => setSortOpen(true)}
+              className="h-12 w-12 items-center justify-center rounded-lg border border-border"
+              accessibilityRole="button"
+              accessibilityLabel="Sort results"
+            >
+              <ArrowUpDown size={18} color={colors.secondaryText} />
+            </Pressable>
+          </View>
+
+          {searchError ? (
+            <View className="pb-3">
+              <Text className="font-sans text-body-sm text-error">
+                {searchError.message}
+              </Text>
+              {searchError.code === "authentication" ? (
+                <Pressable
+                  onPress={() => void disableHfTokenAndRetry()}
+                  className="min-h-12 flex-row items-center gap-2 mt-2 self-start rounded-lg border border-border px-4 py-2"
+                  accessibilityRole="button"
+                  accessibilityLabel="Disable token and retry"
+                >
+                  <SlidersHorizontal size={14} color={colors.primary} />
+                  <Text className="font-sans text-body-sm text-primary">
+                    Disable Token &amp; Retry
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
+
+          {searchLoading && searchResults.length === 0 ? (
+            <View className="flex-row items-center justify-center py-4">
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text className="ml-2 font-sans text-body-md text-secondary-text">
+                Searching...
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={searchResults}
+              keyExtractor={(r) => r.modelId}
+              renderItem={renderResult}
+              onEndReachedThreshold={0.3}
+              onEndReached={() => void loadMoreModels()}
+              keyboardShouldPersistTaps="handled"
+              ListFooterComponent={
+                searchLoadingMore ? (
+                  <View className="flex-row items-center justify-center py-4">
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                ) : null
+              }
+            />
+          )}
+        </View>
+      )}
+
+      {snackWarnings ? (
+        <WarningSnackbar warnings={snackWarnings} onDone={() => setSnackWarnings(null)} />
+      ) : null}
+
+      <SortSheet
+        visible={sortOpen}
+        active={searchFilters.sortBy}
+        onClose={() => setSortOpen(false)}
+        onPick={(sortBy) => applyFilters({ sortBy })}
+      />
+      <AuthorSheet
+        visible={authorOpen}
+        author={searchFilters.author}
+        onClose={() => setAuthorOpen(false)}
+        onApply={(author) => applyFilters({ author })}
+      />
+    </Sheet>
   );
 }

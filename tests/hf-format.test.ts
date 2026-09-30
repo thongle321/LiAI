@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
@@ -6,6 +6,7 @@ import {
   formatNumber,
   hfSortParams,
   isLegacyQuantization,
+  isVisionModel,
   nextPageFromLink,
   timeAgo,
   visionSizeBreakdown,
@@ -101,5 +102,18 @@ test("visionSizeBreakdown pairs an LLM with its family's mmproj", () => {
     mmprojSize: null,
     total: 10,
     isVision: false,
+  });
+});
+describe("isVisionModel", () => {
+  it("reads the Hub tags", () => {
+    assert.equal(isVisionModel(["gguf", "vision"], []), true);
+    assert.equal(isVisionModel(["gguf", "multimodal"], []), true);
+    assert.equal(isVisionModel(["gguf", "image-text-to-text"], []), true);
+    assert.equal(isVisionModel(["gguf", "conversational"], []), false);
+  });
+
+  it("falls back to a projector file when the repo is untagged", () => {
+    assert.equal(isVisionModel([], ["mmproj-model-f16.gguf"]), true);
+    assert.equal(isVisionModel([], ["model-Q4_K_M.gguf"]), false);
   });
 });

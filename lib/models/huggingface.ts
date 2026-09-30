@@ -52,13 +52,6 @@ interface HFTreeItem {
   lfs?: { size?: number; oid?: string };
 }
 
-/** GGUF specs from `?expand[]=gguf` — decoration for the detail view. */
-export interface HFModelSpecs {
-  gguf?: {
-    parameters?: Record<string, { total?: number }>;
-  };
-}
-
 /** Everything the spec builder needs about a repo, independent of search. */
 export interface HFModelRef {
   modelId: string;
@@ -565,28 +558,10 @@ export async function getModelFiles(
     }));
 }
 
-/** GGUF specs (`?expand[]=gguf`): what the detail view needs to size a
- * vision model and report its parameter count. */
-export async function getModelSpecs(
-  modelId: string,
-  token?: string,
-): Promise<HFModelSpecs> {
-  if (modelId.trim() === "") return {};
-  try {
-    const info = await hubGet<{
-      gguf?: { parameters?: Record<string, { total?: number }> };
-    }>(
-      `${HF_API_BASE}/models/${encodeURIComponent(modelId.trim())}?expand[]=gguf`,
-      token,
-      "Failed to fetch model specs",
-    );
-    return { gguf: info[0]?.gguf ?? {} };
-  } catch {
-    // Specs are decoration (a count, a pairing hint): the file list is
-    // still usable without them, so a failure must not blank the sheet.
-    return {};
-  }
-}
+/** GGUF specs (`?expand[]=gguf`) are NOT requested: nothing in the file
+ * card or the details header reads a parameter count, so the extra
+ * round trip per opened repo would buy nothing. Sizes come from the
+ * sibling LFS metadata above. */
 
 export function hfDownloadUrl(modelId: string, path: string): string {
   return `${HF_HUB_BASE}/${modelId}/resolve/main/${path}`;

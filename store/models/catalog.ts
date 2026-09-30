@@ -131,6 +131,9 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
     if (!nextPageLink || searchLoading || searchLoadingMore) return;
     const since = Date.now() - lastLoadMoreAt;
     if (consecutiveSmallResults >= 3 && since < 5000) return;
+    // onEndReached fires on overscroll frames, so without this a fast
+    // scroll fires one request per frame.
+    if (since < 1000) return;
 
     lastLoadMoreAt = Date.now();
     set({ searchLoadingMore: true });

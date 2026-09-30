@@ -89,12 +89,19 @@ describe("search race", () => {
     assert.equal(store.getState().searchError, null, "an abort is not a failure");
   });
 
-  it("clearing the query aborts and leaves nothing loading", async () => {
-    mockFetch(async (_url, init) => {
-      await new Promise<void>((resolve) => {
-        init?.signal?.addEventListener("abort", () => resolve());
-      });
-      throw new Error("The operation was aborted");
+  it("clearing the query aborts the old search and settles", async () => {
+    // An empty query is a REAL search now (PocketPal parity: the sheet
+    // opens on the Hub's default listing), so this mock answers the
+    // follow-up immediately and only stalls the "qwen" request.
+    mockFetch(async (url, init) => {
+      const query = new URL(String(url)).searchParams.get("search");
+      if (query === "qwen") {
+        await new Promise<void>((resolve) => {
+          init?.signal?.addEventListener("abort", () => resolve());
+        });
+        throw new Error("The operation was aborted");
+      }
+      return jsonResponse([{ modelId: "default/listing" }]);
     });
 
     const store = makeStore();
@@ -102,7 +109,11 @@ describe("search race", () => {
     await store.getState().searchModels("");
     await pending;
 
-    assert.deepEqual(store.getState().searchResults, []);
+    assert.deepEqual(
+      store.getState().searchResults.map((r) => r.modelId),
+      ["default/listing"],
+      "clearing the box lands the default listing, not the aborted results",
+    );
     assert.equal(store.getState().searchError, null);
     assert.equal(store.getState().searchLoading, false, "spinner must not stick");
   });

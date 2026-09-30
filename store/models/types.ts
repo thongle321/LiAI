@@ -15,17 +15,57 @@ import type {
   RemoteApiProvider,
   RemoteCaps,
 } from "../../types/models";
+import type { HFSortBy } from "../../lib/models/hf-format.ts";
+
+/** A Hub failure the UI can branch on: `authentication` is what offers
+ * the Disable-Token-&-Retry escape hatch. */
+export interface HFSearchError {
+  message: string;
+  code: "authentication" | "network" | "unknown";
+}
+
+/** The two filter-sheet values, persisted like the section filters. */
+export interface HFSearchFilters {
+  author: string;
+  sortBy: HFSortBy;
+}
 
 export interface CatalogSlice {
   models: ModelSpec[];
   presets: PresetModel[];
   searchResults: HFModelSearchResult[];
   searchLoading: boolean;
-  searchError: string | null;
+  searchLoadingMore: boolean;
+  /** The "Loading more" footer only shows when this is set. */
+  nextPageLink: string | null;
+  searchError: HFSearchError | null;
+  /** The query behind the current results (the token-retry re-runs it). */
+  searchQuery: string;
+  searchFilters: HFSearchFilters;
 
   loadPresets: () => Promise<void>;
+  loadSearchFilters: () => Promise<void>;
+  /** Runs the search for `query` with the current filters, replacing the
+   *  results. An empty query is a real search (PocketParity): the Hub
+   *  answers with its default relevance listing. */
   searchModels: (query: string) => Promise<void>;
+  /** Appends the next page. No-op while a page is in flight or once the
+   *  Hub has returned three short pages in a row (PocketPal's guard). */
+  loadMoreModels: () => Promise<void>;
   getModelFiles: (modelId: string) => Promise<HFModelFile[]>;
+  setSearchFilters: (patch: Partial<HFSearchFilters>) => void;
+  /** Drop the token flag and retry — the auth-error escape hatch. */
+  disableHfTokenAndRetry: () => Promise<void>;
+
+  /** Save a model WITHOUT downloading it: it joins the catalog as a
+   *  not-downloaded HF spec and shows in "Available to download". */
+  bookmarkModel: (result: HFModelSearchResult, file: HFModelFile) => void;
+  /** The saved spec for a file, if one is bookmarked. */
+  getModelByOid: (oid: string) => ModelSpec | undefined;
+  isBookmarked: (oid: string) => boolean;
+  /** Removes a bookmark. Refuses (returns false) for a downloaded model
+   *  — that is a delete, not an un-bookmark. */
+  removeBookmark: (modelId: string) => boolean;
 
   addModel: (model: ModelSpec) => void;
   removeModel: (modelId: string) => Promise<void>;

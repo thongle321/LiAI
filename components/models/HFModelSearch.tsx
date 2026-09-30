@@ -129,7 +129,9 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
       </View>
 
       {searchError && (
-        <Text className="font-sans text-body-sm text-error mb-3">Error: {searchError}</Text>
+        <Text className="font-sans text-body-sm text-error mb-3">
+          Error: {searchError.message}
+        </Text>
       )}
 
       {searchLoading && (
@@ -160,7 +162,7 @@ export function HFModelSearch({ onClose }: { onClose?: () => void }) {
             </View>
             <View className="flex-row flex-wrap items-center gap-2 mt-2">
               <Chip label="GGUF" />
-              {item.private && (
+              {item.gated && (
                 <View className="flex-row items-center gap-1 px-2 py-1 bg-surface-2 border border-border rounded">
                   <Lock size={10} color={colors.secondaryText} />
                   <Text className="font-sans text-caption text-secondary-text">Gated</Text>

@@ -34,7 +34,7 @@ The mobile application is responsible for:
 
 - TypeScript
 
-- Expo Router (typedRoutes on — hrefs are compile-time checked)
+- Expo Router
 
 - Uniwind
 
@@ -42,36 +42,35 @@ The mobile application is responsible for:
 
 - AsyncStorage
 
-- llama.rn (on-device GGUF inference, approved)
+- llama.rn
 
-- tinybase (chat session persistence, approved) + expo-sqlite (its persister; native, dev-client rebuild)
+- tinybase + expo-sqlite
 
-- react-native-marked + react-native-code-highlighter (chat markdown + code, approved)
+- react-native-marked + react-native-code-highlighter
 
-- expo-clipboard (copy message/transcript, approved)
+- expo-clipboard
 
-- VisionCamera (preview + snapshots + Worklet Frame Processor at 2fps;
-  needs `enableFrameProcessors` and a dev-client binary — not Expo Go)
+- VisionCamera
 
-- lucide-react-native (+ react-native-svg peer, approved)
+- lucide-react-native + react-native-svg
 
-- expo-speech-recognition (voice input, approved)
-- expo-speech (voice output, approved)
+- expo-speech-recognition
+- expo-speech
 
-- expo-font + @expo-google-fonts/inter (Inter type scale, loaded in app/_layout.tsx)
+- expo-font + @expo-google-fonts/inter
 
-- react-native-reanimated (+ worklets peer, motion, approved)
-- react-native-worklets-core (frame-processor JS bridge for vision-camera 4.x, approved)
+- react-native-reanimated
+- react-native-worklets-core
 
-- expo-file-system (+ legacy API, model files/downloads/uploads, approved)
-- expo-document-picker (local model import, approved)
-- expo-secure-store (user-provided secret keys, approved)
-- expo-image-picker (in-chat camera/gallery attach, approved Wave 4 — needs dev-client rebuild)
-- expo-device (RAM-based model tier recommendation in onboarding, approved Wave 5)
-- link-preview-js via the `link-preview-js/mobile` entrypoint (uncredentialed public previews, the one ADR-004 exception, approved)
+- expo-file-system
+- expo-document-picker
+- expo-secure-store
+- expo-image-picker
+- expo-device
+- link-preview-js
 
-- expo-linking + expo-constants (settings deep-link, app metadata)
-- react-native-gesture-handler (navigator drawer gestures, approved; drawer-layout itself stays transitive inside expo-router per the Expo drawer guide)
+- expo-linking + expo-constants
+- react-native-gesture-handler
 
 ### Dependency Policy
 

@@ -13,7 +13,8 @@ const TIERS = parseTiers(tiersJson);
 import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
 import { useModelStore } from "../../store/modelStore";
 import { presetSpecId } from "../../lib/models/huggingface.ts";
-import { isPresetDownloaded, presetCardState, presetFileState } from "../../lib/models/file-state.ts";
+import { downloadablePresets } from "../../lib/models/models-content.ts";
+import { presetCardState, presetFileState } from "../../lib/models/file-state.ts";
 import type { PresetModel, PresetModelFile } from "../../types/models";
 import { ModelAccordion } from "./ModelAccordion.tsx";
 import {
@@ -168,7 +169,9 @@ export function AvailableModels({
   const presets = useModelStore((s) => s.presets);
   const models = useModelStore((s) => s.models);
   // Finished presets live in Ready: hide them here (PocketPal parity).
-  const visible = presets.filter((p) => !isPresetDownloaded(models, p));
+  // The rule lives in models-content.ts so the screen's empty state
+  // cannot disagree with what this section renders.
+  const visible = downloadablePresets(presets, models);
   const guard = useLoadGuard();
   const tiers = TIERS;
 

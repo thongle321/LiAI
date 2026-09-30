@@ -1,7 +1,7 @@
 /** Models screen: Ready to use + Available to download, header filters, add FAB. */
 
 import { useEffect, useState } from "react";
-import { Modal, ScrollView, View } from "react-native";
+import { Modal, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
@@ -11,6 +11,10 @@ import { ContentColumn } from "../ContentColumn.tsx";
 import { useLocalModelImport } from "../../hooks/useLocalModelImport.ts";
 import { useModelStore } from "../../store/modelStore";
 import { useModelsUi } from "../../store/modelsUi.ts";
+import {
+  downloadablePresets,
+  modelsContentIsEmpty,
+} from "../../lib/models/models-content.ts";
 import { ModelsHeaderRight } from "./ModelsHeaderRight.tsx";
 import { FABGroup, FAB_STACK_HEIGHT } from "./FABGroup.tsx";
 import { ReadyModels } from "./ReadyModels.tsx";
@@ -21,6 +25,9 @@ import { ModelSettingsSheet } from "./ModelSettingsSheet.tsx";
 
 export function ModelsScreen() {
   const { loadPersisted, startDownload } = useModelStore();
+  const models = useModelStore((s) => s.models);
+  const remoteApis = useModelStore((s) => s.remoteApis);
+  const presets = useModelStore((s) => s.presets);
   const router = useRouter();
   const importLocalModel = useLocalModelImport();
   const {
@@ -47,6 +54,25 @@ export function ModelsScreen() {
   const [hfOpen, setHfOpen] = useState(false);
   const [remoteModalOpen, setRemoteModalOpen] = useState(false);
   const [settingsModelId, setSettingsModelId] = useState<string | null>(null);
+
+  // Both sections hide themselves when they have nothing to show (an
+  // empty "Ready to use (0)" header is dead UI), so the filters can
+  // combine into a body with NOTHING in it and no way to tell why —
+  // two stale persisted flags did exactly that. Same rules the sections
+  // use, so this can never disagree with what they render.
+  const contentIsEmpty = modelsContentIsEmpty({
+    readyVisible,
+    availableVisible,
+    downloadedOnly,
+    downloadedCount: models.filter(
+      (m) =>
+        m.origin !== "remote_api" &&
+        m.downloadStatus === "completed" &&
+        (!hfOnly || m.origin === "huggingface"),
+    ).length,
+    remoteCount: hfOnly ? 0 : remoteApis.length,
+    downloadableCount: downloadablePresets(presets, models).length,
+  });
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
@@ -99,6 +125,18 @@ export function ModelsScreen() {
                 grouped={grouped}
               />
             )}
+            {contentIsEmpty ? (
+              <View className="mt-2">
+                <Text className="font-sans-semibold text-h4 text-primary-text">
+                  Nothing to show
+                </Text>
+                <Text className="mt-1 font-sans text-body-md text-secondary-text">
+                  {downloadedOnly
+                    ? "Downloaded-only is on and nothing is downloaded yet. Turn it off in the header filters, or add a model with the + button."
+                    : "No models match the current filters. Add one with the + button, or loosen the filters in the header."}
+                </Text>
+              </View>
+            ) : null}
           </ContentColumn>
         </ScrollView>
 

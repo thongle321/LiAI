@@ -1,12 +1,20 @@
 /** Ready-model rows: a downloaded local/HF/preset card and a remote-provider row. */
 
+import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { Power, Settings, Trash2 } from "lucide-react-native";
+import Animated from "react-native-reanimated";
+import { ChevronDown, ChevronRight, Power, Settings, Trash2 } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
 import { useModelStore } from "../../store/modelStore";
+import {
+  fadeEntering,
+  fadeExiting,
+  useMotionDuration,
+} from "../../lib/motion.ts";
 import type { ModelSpec, RemoteApiProvider } from "../../types/models";
 import { Chip, ModelTypeIcon, StatusDot, formatBytes } from "./ModelBits.tsx";
+import { ModelCardDetails } from "./ModelCardDetails.tsx";
 
 function typeLabel(type: ModelSpec["type"]): string {
   if (type === "llm") return "LLM";
@@ -35,6 +43,11 @@ export function ModelCard({
   // Only the file size, never the parameter count next to it: "0.6B" beside
   // "751 MB" reads as two competing sizes for one model.
   const fileBytes = item.files.reduce((sum, f) => sum + f.size, 0);
+  // Detail expand: chevron state only — the region itself mounts with
+  // the shared fade preset (reduced motion collapses the duration to 0
+  // inside useMotionDuration, so no second path is needed here).
+  const [expanded, setExpanded] = useState(false);
+  const duration = useMotionDuration();
 
   return (
     <View className="mb-3 overflow-hidden rounded-lg border border-border bg-surface-1">
@@ -65,6 +78,24 @@ export function ModelCard({
               <StatusDot color={colors.success} />
             </View>
           )}
+          {/* Glyph swap, not a transform: a style-rotated lucide icon
+              rendered invisible on this phone before (SettingsRows
+              AdvancedGroup). Right when closed, down when open. */}
+          <Pressable
+            onPress={() => setExpanded((v) => !v)}
+            className="h-12 w-12 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityState={{ expanded }}
+            accessibilityLabel={
+              expanded ? `Collapse details for ${title}` : `Expand details for ${title}`
+            }
+          >
+            {expanded ? (
+              <ChevronDown size={20} color={colors.secondaryText} />
+            ) : (
+              <ChevronRight size={20} color={colors.secondaryText} />
+            )}
+          </Pressable>
         </View>
         <Text className="mt-1 font-sans text-body-sm text-secondary-text/70">
           by {item.author}
@@ -116,6 +147,15 @@ export function ModelCard({
           </Pressable>
         </View>
       </View>
+      {expanded ? (
+        <Animated.View
+          entering={fadeEntering(duration)}
+          exiting={fadeExiting(duration)}
+          className="border-t border-border px-5 pb-5"
+        >
+          <ModelCardDetails item={item} fileBytes={fileBytes} />
+        </Animated.View>
+      ) : null}
     </View>
   );
 }

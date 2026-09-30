@@ -120,7 +120,7 @@ function WarningSnackbar({
 
   return (
     <View
-      className="absolute left-4 right-4 bottom-4 rounded-lg bg-surface-3 border border-border p-4"
+      className="absolute left-0 right-0 bottom-0 rounded-lg bg-surface-3 border border-border p-4"
       accessibilityLiveRegion="polite"
     >
       {warnings.map((warning, i) => (
@@ -542,7 +542,7 @@ export function HFModelSearch({
       testID="hf-search-sheet"
     >
       {selected ? (
-        <View className="flex-1">
+        <View className="grow">
           {/* Fixed header above the list, PocketParity's DetailsView. */}
           <View className="pb-2">
             <View className="flex-row items-center gap-2">
@@ -579,6 +579,7 @@ export function HFModelSearch({
             </View>
           ) : (
             <FlatList
+              className="grow"
               data={visibleFiles}
               keyExtractor={(f) => f.name}
               renderItem={renderFile}
@@ -587,7 +588,7 @@ export function HFModelSearch({
           )}
         </View>
       ) : (
-        <View className="flex-1">
+        <View className="grow">
           <View className="flex-row items-center gap-2 pb-3">
             <View className="flex-1 flex-row items-center gap-2 bg-surface-1 border border-border rounded-lg px-4">
               <Search size={16} color={colors.secondaryText} />
@@ -661,6 +662,7 @@ export function HFModelSearch({
             </View>
           ) : (
             <FlatList
+              className="grow"
               data={searchResults}
               keyExtractor={(r) => r.modelId}
               renderItem={renderResult}

@@ -113,22 +113,17 @@ Use this folder structure:
 
 ```
  
-app/  (routes + _layout.tsx; (drawer)/ owns the navigator drawer,
-  chat/voice/vision live in (drawer)/(tabs)/)
+app/
 
- (drawer)/  (Drawer layout; drawerContent reuses AppDrawer UI)
-
- (drawer)/(tabs)/  (bottom tabs: chat + voice + vision, bar in (tabs)/_layout.tsx)
-
-components/  (chat/, models/, onboarding/ + shared rows, nav, sheets)
+components/
 
 constants/
 
 hooks/
 
-lib/  (agent/, chat/, inference/, models/ + storage.ts, secrets.ts, motion.ts)
+lib/
 
-store/  (chat/, models/, inference.ts, voice.ts, search.ts, modelsUi.ts)
+store/
 
 themes/
 
@@ -136,7 +131,7 @@ types/
 
 assets/
 
-models/  (app splash config)
+models/
 
 tests/
 
@@ -145,22 +140,11 @@ tests/
 **app/** is for routes and screens only. Screens compose components and
 call hooks or stores. They should not contain large reusable UI blocks
 or business logic.
-**components/** is for reusable UI. Create a component when it is
-reused in multiple places, when it makes a screen easier to read, or
-when it represents a clear UI concept. Examples for this app: model
-cards and sheets (components/models/), chat message list and input
-(components/chat/), settings rows, nav, sheets. Do not create
+**components/** is for reusable UI. Do not create
 components too early.
-**assets/device-tiers.json** holds bundled content (RAM-tier model
-recommendations). Keep it typed (see `lib/models/device-tiers.ts`).
-**store/** holds Zustand stores (store/models/ for catalog, downloads,
-settings, remote, active; store/chat/ for sessions, turns). Examples of
-state to keep here: activeModelId, download jobs/progress, chat
-sessions/drafts, inference params, voice state. Device selection
-(lib/inference/deviceSelection.ts) queries accelerators live instead
-of persisting them.
-**lib/** holds external service helpers (inference/, models/,
-chat/, tinybase.ts, secrets.ts).
+**assets/device-tiers.json** Keep it typed (see `lib/models/device-tiers.ts`).
+**store/** holds Zustand stores.
+**lib/** holds external service helpers.
 Never expose secret keys here.
 ---
 

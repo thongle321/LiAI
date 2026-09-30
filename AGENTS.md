@@ -58,7 +58,7 @@ The mobile application is responsible for:
 - expo-speech-recognition (voice input, approved)
 - expo-speech (voice output, approved)
 
-- expo-font + @expo-google-fonts/raleway (Raleway type scale, approved)
+- expo-font + @expo-google-fonts/inter (Inter type scale, loaded in app/_layout.tsx)
 
 - react-native-reanimated (+ worklets peer, motion, approved)
 - react-native-worklets-core (frame-processor JS bridge for vision-camera 4.x, approved)
@@ -114,27 +114,29 @@ Use this folder structure:
 ```
  
 app/  (routes + _layout.tsx; (drawer)/ owns the navigator drawer,
-  chat/voice live in (drawer)/(tabs)/)
+  chat/voice/vision live in (drawer)/(tabs)/)
 
  (drawer)/  (Drawer layout; drawerContent reuses AppDrawer UI)
 
- (drawer)/(tabs)/  (bottom tabs: chat + voice, bar in (tabs)/_layout.tsx)
+ (drawer)/(tabs)/  (bottom tabs: chat + voice + vision, bar in (tabs)/_layout.tsx)
 
-components/
+components/  (chat/, models/, onboarding/ + shared rows, nav, sheets)
 
 constants/
 
 hooks/
 
-lib/
+lib/  (agent/, chat/, inference/, models/ + storage.ts, secrets.ts, motion.ts)
 
-store/
+store/  (chat/, models/, inference.ts, voice.ts, search.ts, modelsUi.ts)
 
 themes/
 
 types/
 
 assets/
+
+models/  (app splash config)
 
 tests/
 
@@ -145,14 +147,18 @@ call hooks or stores. They should not contain large reusable UI blocks
 or business logic.
 **components/** is for reusable UI. Create a component when it is
 reused in multiple places, when it makes a screen easier to read, or
-when it represents a clear UI concept. Examples for this app:
-ChatScreen, ChatInput, ModelCard, AvailableModels, HFModelSearch,
-InferenceSettings. Do not create components too early.
+when it represents a clear UI concept. Examples for this app: model
+cards and sheets (components/models/), chat message list and input
+(components/chat/), settings rows, nav, sheets. Do not create
+components too early.
 **assets/device-tiers.json** holds bundled content (RAM-tier model
 recommendations). Keep it typed (see `lib/models/device-tiers.ts`).
-**store/** holds Zustand stores. Examples of state to keep here:
-activeModelId, download jobs/progress, chat sessions/drafts,
-inference params, voice state. Persist with AsyncStorage when needed.
+**store/** holds Zustand stores (store/models/ for catalog, downloads,
+settings, remote, active; store/chat/ for sessions, turns). Examples of
+state to keep here: activeModelId, download jobs/progress, chat
+sessions/drafts, inference params, voice state. Device selection
+(lib/inference/deviceSelection.ts) queries accelerators live instead
+of persisting them.
 **lib/** holds external service helpers (inference/, models/,
 chat/, tinybase.ts, secrets.ts).
 Never expose secret keys here.

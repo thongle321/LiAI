@@ -1,15 +1,17 @@
-/** Chat store: Supabase-owned sessions, on-device turns.
+/** Chat store: local Store-owned sessions, on-device turns.
  *
  * Composed from focused slices; the public path stays `../store/chat`
- * (that file re-exports this). The factory takes storage plus injectable
- * session/turn seams so tests inject memory fakes.
+ * (that file re-exports this). The factory takes injectable session/turn
+ * seams so tests inject memory fakes.
+ *
+ * There is no storage seam: sessions, the active-session pointer and
+ * drafts all live in the local Store (ADR-0012), reached through
+ * getStore(). AsyncStorage is gone from this slice entirely.
  */
 
 import { create } from "zustand";
-import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 
 import type { SearchAuth } from "../../types/api.ts";
-import type { KeyValueStorage } from "../../lib/storage.ts";
 import { useSearch } from "../search.ts";
 import { createSendSlice } from "./send.ts";
 import { createSessionsSlice } from "./sessions.ts";
@@ -17,29 +19,14 @@ import { createDraftSlice } from "./draft.ts";
 import type { ChatCtx, ChatDeps, ChatState, TurnRunner } from "./types.ts";
 import { selectEngineSource, type EngineSource } from "../../lib/inference/engine.ts";
 import { EngineManager } from "../../lib/inference/manager.ts";
+import { resolveSampler, type SamplerParams } from "../../lib/inference/sampler.ts";
+import {
+  getAvailableDevices,
+  resolveComputeDevices,
+} from "../../lib/inference/deviceSelection.ts";
 import { createRemoteEngine } from "../../lib/inference/remote-engine.ts";
 import { createTurnRunner } from "../../lib/chat/turn.ts";
-import { SupabaseChatStore, type SessionStore } from "../../lib/chat/supabase-store.ts";
-
-// ponytail: lazy import keeps the native module out of plain-Node tests;
-// Metro still bundles it statically for the app.
-async function rnStorage(): Promise<AsyncStorageStatic> {
-  const mod = await import("@react-native-async-storage/async-storage");
-  // CJS/ESM interop differs between Metro and Node; the static lives on default.
-  // SAFETY: the module's default export is the AsyncStorage instance; the
-  // interop shim can surface it under `.default` or on the namespace itself.
-  return (mod.default ?? mod) as unknown as AsyncStorageStatic;
-}
-
-const asyncStorage: KeyValueStorage = {
-  getItem: async (key) => (await rnStorage()).getItem(key),
-  setItem: async (key, value) => {
-    await (await rnStorage()).setItem(key, value);
-  },
-  removeItem: async (key) => {
-    await (await rnStorage()).removeItem(key);
-  },
-};
+import type { SessionStore } from "../../lib/chat/session-store.ts";
 
 /** Default BYOK resolver: consent-gated key from SecureStore, never KV.
  * Short-circuits before touching SecureStore when consent is absent. */
@@ -67,18 +54,16 @@ async function defaultEngineSource(): Promise<EngineSource | null> {
   }
 }
 
-/** Default session store: anonymous provision + Supabase client.
- * The user id rides session writes so the RLS WITH CHECK policy passes. */
-async function defaultGetStore(): Promise<SessionStore | null> {
+/** Default session store: the local Store + its SQLite persister.
+ * ponytail: lazy import keeps expo-sqlite (a native module) out of
+ * plain-Node tests; Metro still bundles it statically for the app.
+ * Exported so the Generation settings sheet can reach the session's
+ * sampler override; it is not part of ChatState on purpose, since a
+ * component needs one field, not the whole store. */
+export async function defaultGetStore(): Promise<SessionStore | null> {
   try {
-    const { ensureAnonymous, getChatClient, getUserId } = await import(
-      "../../lib/supabase.ts"
-    );
-    const ok = await ensureAnonymous();
-    if (!ok) return null;
-    const client = await getChatClient();
-    if (!client) return null;
-    return new SupabaseChatStore(client, await getUserId());
+    const { getSessionStore } = await import("../../lib/tinybase.ts");
+    return await getSessionStore();
   } catch {
     return null;
   }
@@ -100,12 +85,42 @@ function getManager(): EngineManager {
           ]);
           const docsDir = fs.documentDirectory ?? "";
           const params = inference.useInference.getState();
-          const ctx = await local.loadLlamaContext(
+          // A separate draft GGUF, if one is chosen and still downloaded.
+          let modelDraft: string | undefined;
+          if (params.draftModelId) {
+            try {
+              const { useModelStore } = await import("../modelStore.ts");
+              const draft = useModelStore
+                .getState()
+                .models.find(
+                  (m) =>
+                    m.id === params.draftModelId &&
+                    m.downloadStatus === "completed",
+                );
+              const file = draft?.files[0];
+              if (file) {
+                modelDraft = engine.resolveLocalFile(docsDir, file.name);
+              }
+            } catch {
+              // No draft is fine; embedded MTP still applies.
+            }
+          }
+          // Compute devices resolved against what the phone actually
+          // reports: the raw "HTP*" wildcard is never passed through,
+          // and CPU-only phones init n_gpu_layers 0 (PocketPal's CPU
+          // semantics). A live query is fine here — this path is
+          // already async.
+          const compute = resolveComputeDevices(
+            params.useHexagonNpu,
+            params.nGpuLayers,
+            await getAvailableDevices(),
+          );
+            const ctx = await local.loadLlamaContext(
             engine.resolveLocalFile(docsDir, fileName),
             mmprojPath,
             {
               n_ctx: params.nCtx,
-              n_gpu_layers: params.nGpuLayers,
+              n_gpu_layers: compute.nGpuLayers,
               use_mlock: params.useMlock,
               use_mmap: params.useMmap,
               n_batch: params.nBatch,
@@ -118,6 +133,14 @@ function getManager(): EngineManager {
               spec_draft_n_gpu_layers: params.specDraftGpuLayers,
               spec_draft_cache_type_k: params.specDraftCacheK,
               spec_draft_cache_type_v: params.specDraftCacheV,
+              // The UI says "enable repacking"; llama.cpp wants the inverse.
+              no_extra_bufts: !params.useWeightRepacking,
+              // Omitted unless a real HTP device resolved above, because
+              // a missing `devices` is "platform default" and [] is a
+              // different instruction.
+              ...(compute.devices ? { devices: compute.devices } : {}),
+              ...(modelDraft ? { model_draft: modelDraft } : {}),
+              image_max_tokens: params.imageMaxTokens,
             },
           );
           return {
@@ -176,6 +199,37 @@ async function defaultThinking(): Promise<boolean> {
   }
 }
 
+/** Resolved sampling params for one conversation, or null for a remote
+ *  engine (an OpenAI-compatible endpoint keeps its own defaults and has no
+ *  equivalent for typical-p, XTC or mirostat, so sending ours would be
+ *  sending knobs the server silently ignores).
+ *
+ *  Takes the session id rather than reading the active pointer: the turn
+ *  that mints a new session writes to THAT id and only adopts it as the
+ *  pointer afterwards, so reading the pointer here would resolve the
+ *  previous conversation's tuning — or none at all.
+ *
+ *  Precedence is session override, then the global preset — a conversation
+ *  that never overrode anything follows the preset. */
+async function defaultSampler(sessionId: string | null): Promise<SamplerParams | null> {
+  try {
+    const [{ useInference }, { useModelStore }, sessionStore] = await Promise.all([
+      import("../inference.ts"),
+      import("../modelStore.ts"),
+      defaultGetStore(),
+    ]);
+    if (useModelStore.getState().activeProviderType === "remote") return null;
+    const global = useInference.getState().sampler;
+    if (!sessionStore || !sessionId) return global;
+    return resolveSampler(
+      global,
+      await sessionStore.getSessionSampler(sessionId).catch(() => null),
+    );
+  } catch {
+    return null;
+  }
+}
+
 /** Per-model system prompt override; absent stays absent. */
 async function defaultSystemPrompt(): Promise<string | undefined> {
   try {
@@ -202,16 +256,16 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
       },
       getSystemPrompt: () => defaultSystemPrompt(),
       getThinking: () => defaultThinking(),
+    getSampler: (sid) => defaultSampler(sid),
       saveImage: (uri: string) => defaultSaveImage(uri),
     });
     return runTurn(text, paths, onToken);
   };
 }
 
-export function createChatStore(storage: KeyValueStorage, deps?: ChatDeps) {
+export function createChatStore(deps?: ChatDeps) {
   const getSearchAuth = deps?.getSearchAuth ?? defaultSearchAuth;
   const ctx: ChatCtx = {
-    storage,
     getStore: deps?.getStore ?? defaultGetStore,
     getSearchAuth,
     getEngineSource: deps?.getEngineSource ?? defaultEngineSource,
@@ -233,7 +287,7 @@ export function createChatStore(storage: KeyValueStorage, deps?: ChatDeps) {
     ...createDraftSlice(set, get, ctx),
 
     // Engine readiness (not network): a resolvable model means the app
-    // can answer; Supabase failures surface per-action instead.
+    // can answer; a store failure surfaces per-action instead.
     checkHealth: async () => {
       try {
         const source = await ctx.getEngineSource();
@@ -248,7 +302,6 @@ export function createChatStore(storage: KeyValueStorage, deps?: ChatDeps) {
   }));
 }
 
-export const useChatStore = createChatStore(asyncStorage);
+export const useChatStore = createChatStore();
 
-export { SESSION_KEY } from "./types.ts";
 export type { ChatDeps, ChatState, ChatCtx, Connection } from "./types.ts";

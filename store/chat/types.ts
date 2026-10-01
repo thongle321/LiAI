@@ -4,16 +4,10 @@ import type { StoreApi } from "zustand";
 
 import type { SearchAuth } from "../../types/api.ts";
 import type { EngineSource } from "../../lib/inference/engine.ts";
-import type { SessionStore } from "../../lib/chat/supabase-store.ts";
-import type { KeyValueStorage } from "../../lib/storage.ts";
+import type { SessionStore } from "../../lib/chat/session-store.ts";
 import type { AgentStep, ChatMessage, ChatSession } from "../../types/chat.ts";
 
 export type Connection = "unknown" | "up" | "down";
-
-/** Active-session key. The legacy on-device history index is removed on
- * load — Supabase owns sessions now (ADR-0010). */
-export const SESSION_KEY = "liai_session_id";
-export const HISTORY_KEY = "liai_history_v1";
 
 export type ChatSet = StoreApi<ChatState>["setState"];
 export type ChatGet = StoreApi<ChatState>["getState"];
@@ -50,7 +44,6 @@ export interface ChatDeps {
 
 /** Per-factory mutable stream tracking (never in render state). */
 export interface ChatCtx {
-  storage: KeyValueStorage;
   getStore: () => Promise<SessionStore | null>;
   getSearchAuth: () => Promise<SearchAuth | null>;
   getEngineSource: () => Promise<EngineSource | null>;
@@ -85,6 +78,9 @@ export interface ChatState {
   newConversation: () => Promise<void>;
   switchSession: (sessionId: string) => Promise<boolean>;
   deleteSession: (sessionId: string) => Promise<void>;
+  /** Fork a conversation and adopt the copy. False when it could not be
+   *  forked, or when the source is mid-turn. */
+  duplicateSession: (sessionId: string) => Promise<boolean>;
   renameSession: (sessionId: string, title: string) => Promise<boolean>;
   setPinned: (sessionId: string, pinned: boolean) => Promise<boolean>;
   refreshSessions: () => Promise<void>;

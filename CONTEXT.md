@@ -30,12 +30,12 @@ Glossary only. No implementation details.
 
 ## Chat domain
 
-- **Session** — A named conversation owned in Supabase (`sessions` /
-  `messages`), accessed from the app under per-user RLS. The client keeps
-  only the active session id and per-session drafts locally; never a client
-  database (ADR-0010, ADR-005).
+- **Session** — A named conversation owned in the local Store (`sessions` /
+  `messages` / `toolRuns` tables, persisted to SQLite) with no backend and no
+  per-user identity. The active-session pointer and per-session drafts live in
+  the same Store (ADR-0012, supersedes ADR-0010).
 - **Turn** — One user message plus the assistant reply and any tool steps, the
-  unit the backend persists.
+  unit the local Store persists.
 - **Streaming** — The reply arriving as SSE events (`token`, `tool`, `usage`,
   `done`) rendered incrementally; a request-scoped channel, not a persistent
   socket (ADR-005).

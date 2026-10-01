@@ -41,6 +41,9 @@ answer. The four talents port as local engines; `render_html` stays deferred
 
 ## Consequences
 
+> Superseded in part by ADR-0012: tool-call provenance persists to the local
+> Store's `toolRuns` table, not to Supabase. The rest of this record stands.
+
 - Tool-call provenance keeps persisting with the turn (now to Supabase,
   ADR-0010) so steps re-render after reload.
 - Web-search quality depends on the user's own provider keys; offline means

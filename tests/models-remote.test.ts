@@ -16,6 +16,7 @@ const PROVIDER: RemoteApiProvider = {
   baseUrl: "https://llm.example/v1",
   apiKey: "",
   modelName: "user-model",
+  isActive: false,
 };
 
 function testStore(seed: Partial<ModelStore>) {

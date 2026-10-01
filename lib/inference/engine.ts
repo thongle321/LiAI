@@ -8,6 +8,7 @@
 
 import { buildRemoteModelSpec } from "../models/remote-api.ts";
 import type { ModelSpec, RemoteApiProvider } from "../../types/models.ts";
+import type { SamplerParams } from "./sampler.ts";
 
 /** Token deltas stream here; the runner feeds bubbles directly. */
 export interface CompletionCallbacks {
@@ -59,6 +60,10 @@ export interface CompletionRequest {
   imagePaths?: string[];
   /** Local-only: jinja thinking blocks on/off (native default true). */
   enableThinking?: boolean;
+  /** Local-only: sampling params. Remote engines ignore them — an OpenAI-
+   *  compatible endpoint has its own defaults and no equivalent for the
+   *  llama-only knobs (typical-p, XTC, mirostat). */
+  sampler?: SamplerParams;
 }
 
 /** PocketPal's CompletionEngine shape: stream + stop. */

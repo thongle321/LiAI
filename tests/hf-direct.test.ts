@@ -49,16 +49,19 @@ describe("hub search", () => {
         { modelId: "corp/gated", private: true },
       ]);
     });
-    const results = await searchModels("qwen", "tok");
+    const page = await searchModels("qwen", "tok");
     assert.ok(seen.url.startsWith("https://huggingface.co/api/models?"));
     assert.ok(seen.url.includes("search=qwen"));
-    assert.ok(seen.url.includes("filter=gguf"));
+    // PocketPal parity: conversational joins the gguf filter, and full/config
+    // bring the row data the details header reads.
+    assert.ok(seen.url.includes("filter=gguf%2Cconversational"));
+    assert.ok(seen.url.includes("full=true"));
     assert.equal(seen.headers["Authorization"], "Bearer tok");
     assert.equal(seen.headers["User-Agent"], "LiAI/1.0.0");
     // No visibility filter: the Hub scopes results to what the token may
     // see, and gated rows stay downloadable via the tokened fetch.
     assert.deepEqual(
-      results.map((r) => [r.modelId, r.author, r.name]),
+      page.results.map((r) => [r.modelId, r.author, r.name]),
       [
         ["Qwen/Qwen2.5-0.5B", "Qwen", "Qwen2.5-0.5B"],
         ["corp/gated", "corp", "gated"],
@@ -81,16 +84,50 @@ describe("hub search", () => {
     await assert.rejects(searchModels("qwen", "bad"), /check your Hugging Face token/);
   });
 
-  it("rejects non-list payloads and blanks without fetching", async () => {
+  it("rejects non-list payloads, and an empty query still searches", async () => {
     mockFetch(async () => jsonResponse({ models: [] }));
     await assert.rejects(searchModels("qwen"), /Search failed/);
+    // PocketPal parity: opening the sheet with an empty box lists the
+    // Hub's default results, so the request is NOT skipped.
     let calls = 0;
     mockFetch(async () => {
       calls += 1;
       return jsonResponse([]);
     });
-    assert.deepEqual(await searchModels("   "), []);
-    assert.equal(calls, 0);
+    const page = await searchModels("   ");
+    assert.deepEqual(page.results, []);
+    assert.equal(page.nextPageLink, null);
+    assert.equal(calls, 1);
+  });
+
+  it("surfaces the fallback, never the raw network error", async () => {
+    // The UI renders searchError verbatim, so a raw fetch message here
+    // leaks "Network request failed" to the screen.
+    mockFetch(async () => {
+      throw new Error("Network request failed");
+    });
+    await assert.rejects(searchModels("qwen"), (error: Error) => {
+      assert.equal(error.message, "Search failed");
+      assert.doesNotMatch(error.message, /Network request failed/);
+      return true;
+    });
+  });
+
+  it("forwards the caller's abort signal to fetch", async () => {
+    const controller = new AbortController();
+    // A box, not a bare `let seen: AbortSignal | null = null`: TypeScript
+    // keeps that narrowed to `null` at the assertion (it cannot see the
+    // assignment happen inside the fetch mock), so `seen?.aborted` would
+    // be `never` and this test would not typecheck.
+    const seen: { signal: AbortSignal | null } = { signal: null };
+    mockFetch(async (_url, init) => {
+      seen.signal = (init?.signal as AbortSignal | undefined) ?? null;
+      return jsonResponse([]);
+    });
+    await searchModels("qwen", undefined, controller.signal);
+    assert.equal(seen.signal?.aborted, false);
+    controller.abort();
+    assert.equal(seen.signal?.aborted, true, "aborting the caller must abort the request");
   });
 });
 
@@ -117,10 +154,15 @@ describe("hub files", () => {
     );
   });
 
-  it("wraps network failures as Errors", async () => {
+it("wraps network failures as the fallback, never the raw text", async () => {
+    // The UI renders this message, so the raw fetch text must not escape.
     mockFetch(async () => {
       throw new TypeError("fetch failed");
     });
-    await assert.rejects(getModelFiles("Qwen/x"), /fetch failed/);
-  });
+    await assert.rejects(getModelFiles("Qwen/x"), (error: Error) => {
+      assert.equal(error.message, "Failed to fetch model files");
+      assert.doesNotMatch(error.message, /fetch failed/);
+      return true;
+    });
+});
 });

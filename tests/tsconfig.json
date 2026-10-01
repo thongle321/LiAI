@@ -6,5 +6,7 @@
     "customConditions": [],
     "types": ["node"]
   },
+  "//exclude": "The base config excludes 'tests' (it is the app project). Inherited unchanged, that wiped out this config's own include, so `tsc -p tests` type-checked ZERO files while reporting success. An empty array overrides the inherited list; the paths below are what this project deliberately re-checks.",
+  "exclude": [],
   "include": ["./**/*", "../lib/**/*", "../store/**/*", "../types/**/*"]
 }

@@ -3,7 +3,7 @@
  * Rendered by the navigator-owned <Drawer> (app/(drawer)/_layout.tsx),
  * which provides the panel slide, scrim, gestures, and back handling —
  * this file is only the panel chrome and footer nav. The history section
- * lives in components/chat/SessionList (Supabase-owned sessions).
+ * lives in components/chat/SessionList (the local session list).
  */
 
 import { Pressable, Text, View } from "react-native";
@@ -36,8 +36,12 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
   const setPinned = useChatStore((s) => s.setPinned);
 
   function go(path: "/settings" | "/about" | "/models" | "/voice-settings"): void {
-    onClose();
-    router.push(path);
+    // ONE navigation, no closeDrawer(): every destination is a screen of
+    // the drawer navigator, and its router closes the panel as part of the
+    // same state transition as the swap (DrawerRouter getStateForAction /
+    // NAVIGATE -> closeDrawer when the index changed). Closing AND pushing
+    // in the same tick ran two animations in one frame — the jank.
+    router.navigate(path);
   }
 
   async function openSession(id: string): Promise<boolean> {

@@ -5,12 +5,14 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildInitParams,
   createLocalEngine,
   releaseLocalEngine,
   type LlamaCompletionParams,
   type LlamaContextLike,
   type LlamaTokenData,
 } from "../lib/inference/local-engine.ts";
+import { DEFAULT_SAMPLER } from "../lib/inference/sampler.ts";
 
 function fakeContext(
   over: Partial<LlamaContextLike> = {},
@@ -98,6 +100,74 @@ describe("createLocalEngine", () => {
     await engine.completion({ messages: [{ role: "user", content: "y" }] }, { onToken: () => {} });
     assert.equal(seen[0].enable_thinking, false);
     assert.equal("enable_thinking" in seen[1], false);
+  });
+
+  it("forwards the sampler flat, as llama.rn's sibling keys", async () => {
+    const seen: LlamaCompletionParams[] = [];
+    const ctx = fakeContext({
+      completion: async (params: LlamaCompletionParams) => {
+        seen.push(params);
+        return { text: "t", content: "t", tool_calls: [], tokens_predicted: 1, tokens_evaluated: 1 };
+      },
+    });
+    const engine = createLocalEngine(ctx);
+    await engine.completion(
+      {
+        messages: [{ role: "user", content: "x" }],
+        sampler: { ...DEFAULT_SAMPLER, temperature: 0.15, penaltyFrequency: 1.5 },
+      },
+      { onToken: () => {} },
+    );
+    await engine.completion({ messages: [{ role: "user", content: "y" }] }, { onToken: () => {} });
+    // Top level, or the native converter drops them: the first version of
+    // this nested them under `sampler:`, passed every check, and did nothing.
+    assert.equal(seen[0].temperature, 0.15);
+    assert.equal(seen[0].penalty_freq, 1.5, "not penalty_frequency");
+    assert.equal("sampler" in seen[0], false, "nothing is nested under a sampler key");
+    assert.equal("temperature" in seen[1], false, "an absent sampler stays absent");
+  });
+
+  it("builds init params, omitting what is not in play", () => {
+    // Pure, so the conditional parts are testable without the native import.
+    const base = {
+      n_ctx: 4096,
+      n_gpu_layers: 99,
+      use_mlock: false,
+      use_mmap: true,
+      n_batch: 512,
+      n_ubatch: 512,
+      n_threads: 4,
+      flash_attn_type: "auto" as const,
+      cache_type_k: "q8_0" as const,
+      cache_type_v: "q8_0" as const,
+      speculative: false,
+      spec_draft_n_gpu_layers: 99,
+      spec_draft_cache_type_k: "q8_0" as const,
+      spec_draft_cache_type_v: "q8_0" as const,
+      no_extra_bufts: true,
+    };
+
+    // Omitted, not []: llama.rn reads a missing `devices` as "use the
+    // platform default", and an empty array is a different instruction.
+    assert.equal("devices" in buildInitParams(base), false);
+    assert.deepEqual(buildInitParams({ ...base, devices: ["HTP*"] }).devices, ["HTP*"]);
+
+    // Weight repacking is the inverse of the flag llama.cpp wants.
+    assert.equal(buildInitParams(base).no_extra_bufts, true);
+    assert.equal(buildInitParams({ ...base, no_extra_bufts: false }).no_extra_bufts, false);
+
+    assert.equal("model_draft" in buildInitParams(base), false);
+    assert.equal(
+      buildInitParams({ ...base, model_draft: "/models/small.gguf" }).model_draft,
+      "/models/small.gguf",
+    );
+
+    // The speculative sub-block is conditional on the switch above it.
+    assert.equal("spec_draft_n_gpu_layers" in buildInitParams(base), false);
+    assert.equal(
+      buildInitParams({ ...base, speculative: true }).spec_draft_n_gpu_layers,
+      99,
+    );
   });
 
   it("forwards stop and release to the native context", async () => {

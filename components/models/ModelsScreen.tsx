@@ -1,8 +1,9 @@
 /** Models screen: Ready to use + Available to download, header filters, add FAB. */
 
-import { useCallback, useEffect, useState } from "react";
-import { Modal, ScrollView, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 
 import { colors } from "../../themes/tokens.ts";
 import { ScreenHeader } from "../ScreenHeader.tsx";
@@ -10,7 +11,6 @@ import { ContentColumn } from "../ContentColumn.tsx";
 import { useLocalModelImport } from "../../hooks/useLocalModelImport.ts";
 import { useModelStore } from "../../store/modelStore";
 import { useModelsUi } from "../../store/modelsUi.ts";
-import type { PresetModelFile } from "../../types/models.ts";
 import { ModelsHeaderRight } from "./ModelsHeaderRight.tsx";
 import { FABGroup, FAB_STACK_HEIGHT } from "./FABGroup.tsx";
 import { ReadyModels } from "./ReadyModels.tsx";
@@ -21,26 +21,19 @@ import { ModelSettingsSheet } from "./ModelSettingsSheet.tsx";
 
 export function ModelsScreen() {
   const { loadPersisted, startDownload } = useModelStore();
+  const router = useRouter();
   const importLocalModel = useLocalModelImport();
-  // Stable identity so AvailableModels' memoized PresetModelCard isn't
-  // defeated by a fresh arrow on every parent render (download perf).
-  const onDownload = useCallback(
-    (modelId: string, file: PresetModelFile) => void startDownload(modelId, file),
-    [startDownload],
-  );
   const {
-    readyVisible,
-    availableVisible,
     readyOpen,
     availableOpen,
     downloadedOnly,
     hfOnly,
     grouped,
     load: loadUi,
-    setVisible,
     setOpen,
     setAllOpen,
     setFilter,
+    autoNavigateToChat,
   } = useModelsUi();
 
   useEffect(() => {
@@ -58,13 +51,9 @@ export function ModelsScreen() {
         title="Models"
         right={
           <ModelsHeaderRight
-            readyVisible={readyVisible}
-            availableVisible={availableVisible}
             downloadedOnly={downloadedOnly}
             hfOnly={hfOnly}
             grouped={grouped}
-            onToggleReady={() => setVisible("ready", !readyVisible)}
-            onToggleAvailable={() => setVisible("available", !availableVisible)}
             onToggleFilter={(filter) => {
               const current = { downloadedOnly, hfOnly, grouped };
               setFilter(filter, !current[filter]);
@@ -80,20 +69,25 @@ export function ModelsScreen() {
               FAB_STACK_HEIGHT, and a dynamically-composed Uniwind class has
               failed to resolve on device before (see ModelsHeaderRight). */}
           <ContentColumn className="p-5" style={{ paddingBottom: FAB_STACK_HEIGHT }}>
-            {readyVisible && (
-              <ReadyModels
-                open={readyOpen}
-                onToggle={(next) => setOpen("ready", next)}
-                onOpenSettings={setSettingsModelId}
-                hfOnly={hfOnly}
-              />
-            )}
+            <ReadyModels
+              open={readyOpen}
+              onToggle={(next) => setOpen("ready", next)}
+              onOpenSettings={setSettingsModelId}
+              // "Auto-Navigate to Chat": activating a model should land
+              // you somewhere you can type, not back on a list you now
+              // have to leave again.
+              onNavigateToChat={
+                autoNavigateToChat ? () => router.push("/chat") : undefined
+              }
+              hfOnly={hfOnly}
+            />
             {/* downloadedOnly (PocketPal `downloaded`): only Ready renders. */}
-            {availableVisible && !downloadedOnly && (
+            {!downloadedOnly && (
               <AvailableModels
                 open={availableOpen}
                 onToggle={(next) => setOpen("available", next)}
-                onDownload={onDownload}
+                onDownload={(modelId, file) => startDownload(modelId, file)}
+                onOpenSettings={(modelId) => setSettingsModelId(modelId)}
                 grouped={grouped}
               />
             )}
@@ -107,19 +101,7 @@ export function ModelsScreen() {
         />
       </View>
 
-      <Modal visible={hfOpen} animationType="slide" onRequestClose={() => setHfOpen(false)}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
-          <ScrollView
-            className="flex-1"
-            contentContainerClassName="w-full"
-            keyboardShouldPersistTaps="handled"
-          >
-            <ContentColumn className="p-5">
-              <HFModelSearch onClose={() => setHfOpen(false)} />
-            </ContentColumn>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
+      <HFModelSearch visible={hfOpen} onClose={() => setHfOpen(false)} />
 
       <RemoteModelSheet visible={remoteModalOpen} onClose={() => setRemoteModalOpen(false)} />
 

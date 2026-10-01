@@ -13,6 +13,7 @@ import {
 import {
   ACTIVE_MODEL_KEY,
   HF_TOKEN_KEY,
+  HF_TOKEN_USE_KEY,
   MEMORY_GUARD_KEY,
   MODEL_SETTINGS_KEY,
   REMOTE_APIS_KEY,
@@ -31,16 +32,25 @@ export const createPersistenceSlice: StateCreator<
 > = (set, get) => ({
   loadPersisted: async () => {
     try {
-      const [modelsRaw, apisRaw, legacyTokenRaw, activeRaw, settingsRaw, guardRaw, capsRaw] =
-        await Promise.all([
-          asyncStorage.getItem(STORAGE_KEY),
-          asyncStorage.getItem(REMOTE_APIS_KEY),
-          asyncStorage.getItem(HF_TOKEN_KEY),
-          asyncStorage.getItem(ACTIVE_MODEL_KEY),
-          asyncStorage.getItem(MODEL_SETTINGS_KEY),
-          asyncStorage.getItem(MEMORY_GUARD_KEY),
-          asyncStorage.getItem(REMOTE_CAPS_KEY),
-        ]);
+      const [
+        modelsRaw,
+        apisRaw,
+        legacyTokenRaw,
+        activeRaw,
+        settingsRaw,
+        guardRaw,
+        capsRaw,
+        useTokenRaw,
+      ] = await Promise.all([
+        asyncStorage.getItem(STORAGE_KEY),
+        asyncStorage.getItem(REMOTE_APIS_KEY),
+        asyncStorage.getItem(HF_TOKEN_KEY),
+        asyncStorage.getItem(ACTIVE_MODEL_KEY),
+        asyncStorage.getItem(MODEL_SETTINGS_KEY),
+        asyncStorage.getItem(MEMORY_GUARD_KEY),
+        asyncStorage.getItem(REMOTE_CAPS_KEY),
+        asyncStorage.getItem(HF_TOKEN_USE_KEY),
+      ]);
 
       if (modelsRaw) {
         try {
@@ -103,6 +113,10 @@ export const createPersistenceSlice: StateCreator<
         await writeSecret(HF_TOKEN_SS_KEY, legacyTokenRaw);
         await asyncStorage.removeItem(HF_TOKEN_KEY);
         set({ hfToken: legacyTokenRaw });
+      }
+      // Absent means the default (on): only an explicit "false" parks it.
+      if (useTokenRaw !== null) {
+        set({ useHfToken: useTokenRaw === "true" });
       }
 
       if (activeRaw) {

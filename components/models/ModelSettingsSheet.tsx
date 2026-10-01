@@ -1,15 +1,19 @@
-/** Per-model settings editor: display name, system prompt, stop words.
+/** Per-model settings: identity, prompt, stop words.
  *
- * Persists in modelStore (liai_model_settings_v1), keyed by model id.
+ * No generation settings here, deliberately: sampling is per conversation
+ * (PocketPal's own split — a model sheet holds name, chat template and stop
+ * words, and never the sampler), reached from the chat screen's
+ * "Generation settings" menu.
  */
 
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { BottomSheet } from "@expo/ui";
+import { Pressable, Text, TextInput, View } from "react-native";
+import BottomSheet from "@expo/ui/community/bottom-sheet";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { X } from "lucide-react-native";
 
-import { colors, scrim } from "../../themes/tokens.ts";
 import { useModelStore } from "../../store/modelStore";
+import { colors } from "../../themes/tokens.ts";
 
 function parseStopWords(text: string): string[] {
   return text
@@ -49,18 +53,25 @@ export function ModelSettingsSheet({
     onClose();
   }
 
-  // Native sheet (SwiftUI / Compose), themed to the app by the root Host:
-  // Clean White container, the Scrim backdrop, seed Signal Blue.
+  // The COMMUNITY sheet, not the universal one: the universal sheet holds no
+  // RN RootView in its Compose Dialog, so dragging this KeyboardAware
+  // ScrollView crashed the app (RootViewUtil.getRootView). See
+  // HfTokenSettings for the same swap. No snapPoints keeps it content-sized.
   return (
     <BottomSheet
-      isPresented={modelId !== null}
-      onDismiss={onClose}
-      containerColor={colors.surface1}
-      scrimColor={scrim}
-      contentPadding={20}
-      testID="model-settings-sheet"
+      index={modelId !== null ? 0 : -1}
+      onChange={(i) => {
+        if (i === -1) onClose();
+      }}
+      onClose={onClose}
+      enablePanDownToClose
+      backgroundStyle={{ backgroundColor: colors.surface1 }}
     >
-      <ScrollView className="flex-col">
+      <KeyboardAwareScrollView
+        testID="model-settings-sheet"
+        className="flex-col px-5 py-5"
+        keyboardShouldPersistTaps="handled"
+      >
         <View className="mb-4 flex-row items-center justify-between">
           <Text className="font-sans-semibold text-h3 text-primary-text">Model Settings</Text>
           <Pressable
@@ -73,69 +84,69 @@ export function ModelSettingsSheet({
           </Pressable>
         </View>
 
-          <View className="flex-col gap-4">
-            <View>
-              <Text className="font-sans text-body-sm text-secondary-text mb-1">Display name</Text>
-              <TextInput
-                value={displayName}
-                onChangeText={setDisplayName}
-                placeholder="Optional rename shown in lists"
-                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
-                placeholderTextColor={colors.secondaryText}
-              />
-            </View>
-
-            <View>
-              <Text className="font-sans text-body-sm text-secondary-text mb-1">System prompt</Text>
-              <TextInput
-                value={systemPrompt}
-                onChangeText={setSystemPrompt}
-                placeholder="Personality and instructions for this model"
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
-                placeholderTextColor={colors.secondaryText}
-              />
-            </View>
-
-            <View>
-              <Text className="font-sans text-body-sm text-secondary-text mb-1">
-                Stop words (one per line)
-              </Text>
-              <TextInput
-                value={stopWordsText}
-                onChangeText={setStopWordsText}
-                placeholder={"<|eot_id|>\n<|end_of_text|>"}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-                autoCapitalize="none"
-                className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
-                placeholderTextColor={colors.secondaryText}
-              />
-            </View>
-
-            <View className="flex-row gap-2 pt-2">
-              <Pressable
-                onPress={onClose}
-                className="btn btn--secondary flex-1"
-                accessibilityRole="button"
-                accessibilityLabel="Cancel"
-              >
-                <Text className="font-sans text-body-md text-primary">Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={handleSave}
-                className="btn btn--primary flex-1"
-                accessibilityRole="button"
-                accessibilityLabel="Save model settings"
-              >
-                <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
-              </Pressable>
-            </View>
+        <View className="flex-col gap-4">
+          <View>
+            <Text className="font-sans text-body-sm text-secondary-text mb-1">Display name</Text>
+            <TextInput
+              value={displayName}
+              onChangeText={setDisplayName}
+              placeholder="Optional rename shown in lists"
+              className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
+              placeholderTextColor={colors.secondaryText}
+            />
           </View>
-        </ScrollView>
+
+          <View>
+            <Text className="font-sans text-body-sm text-secondary-text mb-1">System prompt</Text>
+            <TextInput
+              value={systemPrompt}
+              onChangeText={setSystemPrompt}
+              placeholder="Personality and instructions for this model"
+              className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
+              placeholderTextColor={colors.secondaryText}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+          </View>
+
+          <View>
+            <Text className="font-sans text-body-sm text-secondary-text mb-1">
+              Stop words (one per line)
+            </Text>
+            <TextInput
+              value={stopWordsText}
+              onChangeText={setStopWordsText}
+              placeholder={"<|eot_id|>\n<|end_of_text|>"}
+              className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
+              placeholderTextColor={colors.secondaryText}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+              autoCapitalize="none"
+            />
+          </View>
+
+          <View className="flex-row gap-2 pt-2">
+            <Pressable
+              onPress={onClose}
+              className="btn btn--secondary flex-1"
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+            >
+              <Text className="font-sans text-body-md text-primary">Cancel</Text>
+            </Pressable>
+            <Pressable
+              onPress={handleSave}
+              className="btn btn--primary flex-1"
+              accessibilityRole="button"
+              accessibilityLabel="Save model settings"
+            >
+              <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
+            </Pressable>
+          </View>
+        </View>
+      </KeyboardAwareScrollView>
     </BottomSheet>
   );
 }

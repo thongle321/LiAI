@@ -1,12 +1,20 @@
 /** Ready-model rows: a downloaded local/HF/preset card and a remote-provider row. */
 
+import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { Power, Settings, Trash2 } from "lucide-react-native";
+import Animated from "react-native-reanimated";
+import { ChevronDown, ChevronRight, Power, Settings, Trash2, X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
 import { useModelStore } from "../../store/modelStore";
+import {
+  fadeEntering,
+  fadeExiting,
+  useMotionDuration,
+} from "../../lib/motion.ts";
 import type { ModelSpec, RemoteApiProvider } from "../../types/models";
-import { Chip, ModelTypeIcon, StatusDot, formatBytes } from "./ModelBits.tsx";
+import { Chip, CancelDownloadButton, DownloadButton, ModelTypeIcon, StatusDot, formatBytes, isProgressVisible } from "./ModelBits.tsx";
+import { ModelCardDetails } from "./ModelCardDetails.tsx";
 
 function typeLabel(type: ModelSpec["type"]): string {
   if (type === "llm") return "LLM";
@@ -20,6 +28,8 @@ export function ModelCard({
   onActivate,
   onDeactivate,
   onSettings,
+  onDownload,
+  outOfSpace = false,
 }: {
   item: ModelSpec;
   isActive: boolean;
@@ -28,13 +38,32 @@ export function ModelCard({
   /** Unload: free the engine so no model is active. */
   onDeactivate: () => void;
   onSettings: () => void;
+  /** Present only on a bookmark: it has no file yet, so the card offers
+   *  Download instead of Load/Unload. PocketParity with PocketPal's
+   *  not-downloaded ModelCard branch. */
+  onDownload?: () => void;
+  /** The file does not fit on disk: disable the download rather than
+   *  letting it fail halfway. */
+  outOfSpace?: boolean;
 }) {
-  const { removeModel, getModelSettings } = useModelStore();
+  const {
+    removeModel,
+    removeBookmark,
+    getModelSettings,
+    pauseModelDownload,
+    resumeModelDownload,
+    cancelModelDownload,
+  } = useModelStore();
   const settings = getModelSettings(item.id);
   const title = settings.displayName || item.name;
   // Only the file size, never the parameter count next to it: "0.6B" beside
   // "751 MB" reads as two competing sizes for one model.
   const fileBytes = item.files.reduce((sum, f) => sum + f.size, 0);
+  // Detail expand: chevron state only — the region itself mounts with
+  // the shared fade preset (reduced motion collapses the duration to 0
+  // inside useMotionDuration, so no second path is needed here).
+  const [expanded, setExpanded] = useState(false);
+  const duration = useMotionDuration();
 
   return (
     <View className="mb-3 overflow-hidden rounded-lg border border-border bg-surface-1">
@@ -65,6 +94,24 @@ export function ModelCard({
               <StatusDot color={colors.success} />
             </View>
           )}
+          {/* Glyph swap, not a transform: a style-rotated lucide icon
+              rendered invisible on this phone before (SettingsRows
+              AdvancedGroup). Right when closed, down when open. */}
+          <Pressable
+            onPress={() => setExpanded((v) => !v)}
+            className="h-12 w-12 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityState={{ expanded }}
+            accessibilityLabel={
+              expanded ? `Collapse details for ${title}` : `Expand details for ${title}`
+            }
+          >
+            {expanded ? (
+              <ChevronDown size={20} color={colors.secondaryText} />
+            ) : (
+              <ChevronRight size={20} color={colors.secondaryText} />
+            )}
+          </Pressable>
         </View>
         <Text className="mt-1 font-sans text-body-sm text-secondary-text/70">
           by {item.author}
@@ -77,23 +124,42 @@ export function ModelCard({
         {/* Wraps so a long model name + three actions reflow instead of
             clipping at 320pt. */}
         <View className="mt-3 flex-row flex-wrap items-center gap-2">
-          <Pressable
-            onPress={isActive ? onDeactivate : onActivate}
-            className={`btn min-h-12 px-5 py-2 ${isActive ? "btn--secondary" : "btn--primary"}`}
-            accessibilityRole="button"
-            accessibilityLabel={
-              isActive ? `Unload ${title}` : `Load ${title}`
-            }
-          >
-            <Power size={16} color={isActive ? colors.primary : colors.onPrimary} />
-            <Text
-              className={`ml-2 font-sans text-body-sm ${
-                isActive ? "text-primary" : "text-on-primary"
-              }`}
+          {onDownload ? (
+            /* A bookmark IS its spec, so the spec id is the card's own id
+               and the download controls need no prop plumbing. */
+            isProgressVisible(item.downloadStatus) ? (
+              <CancelDownloadButton
+                onPress={() => void cancelModelDownload(item.id)}
+              />
+            ) : (
+              <DownloadButton
+                status={item.downloadStatus}
+                progress={item.downloadProgress}
+                onPress={onDownload}
+                onPause={() => void pauseModelDownload(item.id)}
+                onResume={() => void resumeModelDownload(item.id)}
+                disabled={outOfSpace || item.downloadStatus === "completed"}
+              />
+            )
+          ) : (
+            <Pressable
+              onPress={isActive ? onDeactivate : onActivate}
+              className={`btn min-h-12 px-5 py-2 ${isActive ? "btn--secondary" : "btn--primary"}`}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isActive ? `Unload ${title}` : `Load ${title}`
+              }
             >
-              {isActive ? "Unload" : "Load"}
-            </Text>
-          </Pressable>
+              <Power size={16} color={isActive ? colors.primary : colors.onPrimary} />
+              <Text
+                className={`ml-2 font-sans text-body-sm ${
+                  isActive ? "text-primary" : "text-on-primary"
+                }`}
+              >
+                {isActive ? "Unload" : "Load"}
+              </Text>
+            </Pressable>
+          )}
           <Pressable
             onPress={onSettings}
             className="h-12 w-12 items-center justify-center rounded-full"
@@ -104,18 +170,35 @@ export function ModelCard({
               <Settings size={16} color={colors.secondaryText} />
             </View>
           </Pressable>
+          {/* A bookmark is removed with X, a downloaded file with trash:
+              the glyph says whether anything on disk goes away. */}
           <Pressable
-            onPress={() => removeModel(item.id)}
+            onPress={() =>
+              onDownload ? removeBookmark(item.id) : void removeModel(item.id)
+            }
             className="h-12 w-12 items-center justify-center rounded-full"
             accessibilityRole="button"
-            accessibilityLabel={`Delete ${title}`}
+            accessibilityLabel={onDownload ? `Remove ${title}` : `Delete ${title}`}
           >
             <View className="h-10 w-10 items-center justify-center rounded-full bg-error/10">
-              <Trash2 size={16} color={colors.error} />
+              {onDownload ? (
+                <X size={16} color={colors.error} />
+              ) : (
+                <Trash2 size={16} color={colors.error} />
+              )}
             </View>
           </Pressable>
         </View>
       </View>
+      {expanded ? (
+        <Animated.View
+          entering={fadeEntering(duration)}
+          exiting={fadeExiting(duration)}
+          className="border-t border-border px-5 pb-5"
+        >
+          <ModelCardDetails item={item} fileBytes={fileBytes} />
+        </Animated.View>
+      ) : null}
     </View>
   );
 }

@@ -17,11 +17,17 @@ import {
   withTiming,
   type BaseAnimationBuilder,
 } from "react-native-reanimated";
-import { useIsFocused } from "expo-router";
-import { useEffect } from "react";
 
 export const MOTION_DURATION_MS = 200;
 export const motionEasing = Easing.out(Easing.quad);
+
+/** NOTE: there is deliberately no per-screen focus fade. expo-router's
+ * bottom tabs run with no transition unless an `animation` option is set
+ * (BottomTabView hasAnimation() -> false without it), so a fade here was
+ * the ONLY motion on a tab switch — a 200ms opacity animation wrapped
+ * around the whole tab subtree (message list, camera preview), which
+ * forces full-screen offscreen compositing and janks the switch on
+ * Android. Tab switches are instant: nothing fades, nothing re-centres. */
 
 /** 0 when the OS asks for reduced motion — entering/exiting with
  * duration 0 renders instantly instead of animating. */
@@ -44,17 +50,25 @@ export function fadeExiting(durationMs: number): BaseAnimationBuilder {
   return FadeOut.duration(durationMs).easing(motionEasing);
 }
 
-/** Tab-switch content fade: the navigator transition stays off (so the
- * bottom bar never moves) and each screen fades its own content in on
- * focus instead. No remount — scroll position survives the switch. */
-export function useTabContentFade() {
-  const duration = useMotionDuration();
-  const opacity = useSharedValue(1);
-  const focused = useIsFocused();
-  useEffect(() => {
-    if (!focused) return;
-    opacity.value = 0;
-    opacity.value = withTiming(1, { duration, easing: motionEasing });
-  }, [focused, duration, opacity]);
-  return useAnimatedStyle(() => ({ opacity: opacity.value }));
+/** Press feedback: scale 0.97 on press-in, spring back on press-out.
+ * Runs entirely on the UI thread — no setState, no re-render.
+ * Full-width list rows should highlight their background instead. */
+export function usePressFeedback() {
+  const scale = useSharedValue(1);
+  const reduced = useReducedMotion();
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const onPressIn = () => {
+    if (reduced) return;
+    scale.value = withTiming(0.97, { duration: 100, easing: motionEasing });
+  };
+  const onPressOut = () => {
+    if (reduced) return;
+    scale.value = withTiming(1, { duration: 150, easing: motionEasing });
+  };
+
+  return { animatedStyle, onPressIn, onPressOut };
 }

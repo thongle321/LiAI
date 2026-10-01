@@ -17,11 +17,20 @@ const completedModel = {
   id: "gemma-3-1b",
   name: "Gemma 3 1B",
   author: "ggml-org",
+  description: "Test fixture",
   type: "llm" as const,
   params: 1_000_000_000,
-  files: [{ name: "gemma-3-1b.gguf", size: 999_000_000 }],
+  files: [
+    {
+      name: "gemma-3-1b.gguf",
+      size: 999_000_000,
+      downloadUrl: "https://example.com/gemma-3-1b.gguf",
+    },
+  ],
   downloadStatus: "completed" as const,
   downloadProgress: 100,
+  downloadedBytes: 999_000_000,
+  totalBytes: 999_000_000,
   origin: "huggingface" as const,
   createdAt: 0,
 };

@@ -1,23 +1,84 @@
-/** Shared settings rows: native toggle + stepper. One implementation, reused.
+/** Shared settings rows: native toggle + stepper + the section chrome.
  *
  * Toggles are real native switches (SwiftUI on iOS, Compose on Android) via
  * @expo/ui — the platform owns the control, the app owns the label. The
  * root Host in app/_layout.tsx seeds them with Signal Blue and forces the
  * light scheme, so they land in the app's world rather than the platform's.
+ *
+ * The card is the .rows BEM block in global.css (Clean White, 1px Hairline,
+ * dividers edge to edge, 48dp floor); SettingsSection owns the title and the
+ * rhythm between groups, so no screen hand-rolls that again.
+ *
+ * Every row carries a description (DESIGN.md, Settings): a bare label says
+ * nothing about what the value does, and a control whose effect the user
+ * cannot predict is worse than no control at all.
  */
 
-import { Pressable, Text, View } from "react-native";
-import { Host, Picker, Slider, Switch } from "@expo/ui";
-import { Minus, Plus } from "lucide-react-native";
+import { Children, useEffect, useRef, useState, type ReactNode } from "react";
+import { Pressable, Text, TextInput, View } from "react-native";
+import { Host, Switch } from "@expo/ui";
+import Slider from "@expo/ui/community/slider";
+import {
+  DropdownMenuItem,
+  ExposedDropdownMenu,
+  ExposedDropdownMenuBox,
+  Row,
+  Text as ComposeText,
+} from "@expo/ui/jetpack-compose";
+import { defaultMinSize, menuAnchor } from "@expo/ui/jetpack-compose/modifiers";
+import { ChevronDown, ChevronRight, Minus, Plus } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 
+/** Label + optional description, the left half of every row. */
+function RowLabel({ label, description }: { label: string; description?: string }) {
+  return (
+    <View className="flex-1 pr-4">
+      <Text className="font-sans text-body-lg text-primary-text">{label}</Text>
+      {description ? (
+        <Text className="mt-1 font-sans text-body-md text-secondary-text">
+          {description}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** A titled group of rows. `children` are the .row-wrapped contents. */
+export function SettingsSection({
+  title,
+  description,
+  children,
+}: {
+  title?: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <View className="mb-6">
+      {title ? (
+        <Text className="mb-2 font-sans-semibold text-h3 text-primary-text">
+          {title}
+        </Text>
+      ) : null}
+      {description ? (
+        <Text className="mb-2 font-sans text-body-md text-secondary-text">
+          {description}
+        </Text>
+      ) : null}
+      <View className="rows">{children}</View>
+    </View>
+  );
+}
+
 export function ToggleRow({
   label,
+  description,
   on,
   onPress,
 }: {
   label: string;
+  description?: string;
   on: boolean;
   onPress: () => void;
 }) {
@@ -28,11 +89,16 @@ export function ToggleRow({
       accessibilityState={{ checked: on }}
       accessibilityLabel={label}
     >
-      <Text className="flex-1 pr-4 font-sans text-body-md text-primary-text">{label}</Text>
+      <RowLabel label={label} description={description} />
       {/* No `label` on the native Switch: on iOS it draws a second copy of
           the text next to the control, so the row's own Text is the label and
           the Host carries the accessible name for it. */}
-      <Host matchContents>
+      {/* Seeded HERE, not inherited: each @expo/ui Host builds its own native
+          theme, and a Host without seedColor falls back to the device's
+          Material You wallpaper — which is exactly what turned every switch
+          teal. colorScheme="light" keeps the light lock when the device is
+          dark (DESIGN.md, Native Palette Rule). */}
+      <Host matchContents colorScheme="light" seedColor={colors.primary}>
         <Switch value={on} onValueChange={onPress} testID={`toggle-${label}`} />
       </Host>
     </View>
@@ -45,42 +111,108 @@ export function ToggleRow({
  * root Host seeds it with Signal Blue, so the native menu lands in the
  * app's world rather than the platform's default tint.
  */
-export function PickerRow({
+export function PickerRow<T extends string>({
   label,
+  description,
   options,
   value,
   onChange,
   displayFor,
 }: {
   label: string;
-  options: readonly string[];
-  value: string;
-  onChange: (value: string) => void;
+  description?: string;
+  options: readonly T[];
+  value: T;
+  onChange: (value: T) => void;
   /** Label for the selected value; defaults to the value itself. */
-  displayFor?: (value: string) => string;
+  displayFor?: (value: T) => string;
 }) {
-  const show = displayFor ?? ((v: string) => v);
+  const show = displayFor ?? ((v: T) => String(v));
+  const [open, setOpen] = useState(false);
   return (
     <View className="flex-row items-center justify-between py-2">
-      <Text className="flex-1 pr-4 font-sans text-body-md text-primary-text">{label}</Text>
-      <Host matchContents>
-        <Picker
-          selectedValue={value}
-          onValueChange={onChange}
-          appearance="menu"
-          testID={`picker-${label}`}
-        >
-          {options.map((option) => (
-            <Picker.Item key={option} label={show(option)} value={option} />
-          ))}
-        </Picker>
-      </Host>
+      <RowLabel label={label} description={description} />
+      {/* NOT @expo/ui's Picker component. On Android that renders a Material
+       * 3 ExposedDropdownMenuBox whose anchor is a TextField, and an M3 text
+       * field carries a 56dp minimum height — which made this settings row
+       * ~56dp tall with dead space above and below the control. The
+       * `appearance` prop we used to pass, asking for a menu, is ignored on
+       * Android outright ("Material 3 has no wheel-style picker").
+       * @expo/ui's own docs say the anchor may be "e.g. TextField or Text",
+       * so we use a Text: same native popup, same seeded Material colours, no
+       * minimum height, and the row goes back to being sized by its own
+       * label. */}
+      <Pressable
+        onPress={() => setOpen((o) => !o)}
+        className="min-h-12 flex-row items-center justify-end gap-1"
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${show(value)}`}
+        accessibilityHint="Opens a list of choices"
+        accessibilityState={{ expanded: open }}
+      >
+        <Host matchContents colorScheme="light" seedColor={colors.primary}>
+          <ExposedDropdownMenuBox expanded={open} onExpandedChange={setOpen}>
+            {/* The anchor the popup positions against, and the only thing
+                Compose draws in the row. */}
+            <Row
+              verticalAlignment="center"
+              horizontalArrangement="end"
+              modifiers={[menuAnchor()]}
+            >
+              {/* maxLines={1} + ellipsis: device voice names run long
+                  ("Microsoft Zira Desktop - English (United States)"). Without
+                  a cap the anchor wraps and the whole row grows, which is the
+                  same class of defect as the 56dp text field this replaced.
+                  The MENU items below stay unwrapped — that is where the user
+                  actually reads a long name. */}
+              <ComposeText
+                color={colors.secondaryText}
+                style={{ fontSize: 14 }}
+                maxLines={1}
+                overflow="ellipsis"
+              >
+                {show(value)}
+              </ComposeText>
+            </Row>
+                <ExposedDropdownMenu
+                  expanded={open}
+                  onDismissRequest={() => setOpen(false)}
+                  // A Material 3 ExposedDropdownMenu sizes itself to its
+                  // anchor, and this anchor is a short value ("Tavily"). That
+                  // left the popup a few characters wide and wrapped every
+                  // option into a one-word-per-line column. The floor is set on
+                  // the menu rather than the anchor so the row keeps its own
+                  // compact width; long names still grow it, because this is a
+                  // minimum, not a fixed size.
+                  modifiers={[defaultMinSize({ minWidth: 200 })]}
+                >
+              {options.map((option) => (
+                <DropdownMenuItem
+                  key={option}
+                  onClick={() => {
+                    onChange(option);
+                    setOpen(false);
+                  }}
+                >
+                  <DropdownMenuItem.Text>
+                    <ComposeText color={colors.primaryText} style={{ fontSize: 14 }}>
+                      {show(option)}
+                    </ComposeText>
+                  </DropdownMenuItem.Text>
+                </DropdownMenuItem>
+              ))}
+            </ExposedDropdownMenu>
+          </ExposedDropdownMenuBox>
+        </Host>
+        <ChevronDown size={16} color={colors.secondaryText} />
+      </Pressable>
     </View>
   );
 }
 
 export function StepperRow({
   label,
+  description,
   display,
   onMinus,
   onPlus,
@@ -88,6 +220,7 @@ export function StepperRow({
   plusDisabled,
 }: {
   label: string;
+  description?: string;
   display: string;
   onMinus: () => void;
   onPlus: () => void;
@@ -96,7 +229,7 @@ export function StepperRow({
 }) {
   return (
     <View className="flex-row items-center justify-between py-2">
-      <Text className="font-sans text-body-md text-primary-text">{label}</Text>
+      <RowLabel label={label} description={description} />
       <View className="flex-row items-center gap-2">
         <Pressable
           onPress={onMinus}
@@ -124,13 +257,15 @@ export function StepperRow({
 
 /** Continuous numeric row backed by a real native slider.
  *
- * @expo/ui's Slider is linear (min/max/step), so this is only for ranges
- * where linear travel works — GPU layers and CPU threads. Context size
- * (512..131072) and batch (1..8192) keep the stepper, because one pixel of
- * a linear track spans ~1000 tokens and the thumb can never land on 4096.
+ * @expo/ui's Slider is linear (min/max/step), so this suits ranges where
+ * linear travel works. Two things are NOT sliders: context size
+ * (512..131072, where one pixel spans ~1000 tokens and the thumb can never
+ * land on 4096) and any value typed rather than swept — both are text
+ * fields, via TextFieldRow.
  */
 export function SliderRow({
   label,
+  description,
   display,
   value,
   min,
@@ -139,6 +274,7 @@ export function SliderRow({
   onChange,
 }: {
   label: string;
+  description?: string;
   display: string;
   value: number;
   min: number;
@@ -149,21 +285,256 @@ export function SliderRow({
   return (
     <View className="py-2">
       <View className="flex-row items-center justify-between">
-        <Text className="font-sans text-body-md text-primary-text">{label}</Text>
+        <RowLabel label={label} description={description} />
         <Text className="font-sans text-body-md text-primary-text">{display}</Text>
       </View>
       <View className="mt-2">
-        <Host matchContents={{ horizontal: true }}>
-          <Slider
-            value={value}
-            min={min}
-            max={max}
-            step={step}
-            onValueChange={onChange}
-            testID={`slider-${label}`}
-          />
-        </Host>
+        {/* @expo/ui's COMMUNITY Slider — a drop-in for
+         * @react-native-community/slider (PocketPal's choice), which wraps
+         * its own Host. That Host takes no seedColor from outside, so any
+         * theme-painted part lands in the device wallpaper palette — which
+         * is what put teal dots on the track. `step` is therefore NOT
+         * passed: Material draws ticks for stepped sliders, and the board's
+         * slider is a clean track, so the row runs continuous and rounds
+         * back to its step (the original row's own formula). Tints carry
+         * the brand: Signal Blue thumb and active track, Mist inactive. */}
+        <Slider
+          value={value}
+          minimumValue={min}
+          maximumValue={max}
+          onValueChange={(v) =>
+            onChange(step > 0 ? Math.round((v - min) / step) * step + min : v)
+          }
+          thumbTintColor={colors.primary}
+          minimumTrackTintColor={colors.primary}
+          maximumTrackTintColor={colors.surface2}
+        />
       </View>
+    </View>
+  );
+}
+
+/** Inline multi-choice control (the .seg BEM block). Used where a native
+ *  picker would be overkill because every option stays visible. */
+export function Segmented<T extends string | number>({
+  label,
+  description,
+  value,
+  options,
+  displayFor,
+  onPick,
+}: {
+  label: string;
+  description?: string;
+  value: T;
+  options: readonly T[];
+  displayFor?: (value: T) => string;
+  onPick: (value: T) => void;
+}) {
+  const show = displayFor ?? ((v: T) => String(v));
+  return (
+    <View className="py-2">
+      <RowLabel label={label} description={description} />
+      <View className="mt-2 flex-row gap-2">
+        {options.map((o) => (
+          <Pressable
+            key={String(o)}
+            onPress={() => onPick(o)}
+            className={o === value ? "seg seg--active" : "seg"}
+            accessibilityRole="radio"
+            accessibilityLabel={show(o)}
+            accessibilityState={{ selected: o === value }}
+          >
+            <Text className={o === value ? "seg-label seg-label--active" : "seg-label"}>
+              {show(o)}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** Numeric text field row, debounced.
+ *
+ * For ranges a slider physically cannot serve: context size spans
+ * 512..131072, where one pixel of a linear track is ~1000 tokens and the
+ * thumb can never land on 4096. Typing can. (PocketPal solves the same
+ * problem the same way.)
+ */
+export function TextFieldRow({
+  label,
+  description,
+  value,
+  min,
+  placeholder,
+  invalidMessage,
+  onCommit,
+}: {
+  label: string;
+  description?: string;
+  value: number;
+  min?: number;
+  placeholder?: string;
+  /** Shown instead of the value when the typed text is out of range. */
+  invalidMessage?: string;
+  onCommit: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(`${value}`);
+  const [invalid, setInvalid] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const committed = useRef(value);
+
+  // Adopt an external change (a reset), but never our own echo: the setters
+  // clamp, so without this, typing "1" and pausing would rewrite the field to
+  // 512 mid-word.
+  useEffect(() => {
+    if (value === committed.current) return;
+    committed.current = value;
+    setDraft(`${value}`);
+    setInvalid(false);
+  }, [value]);
+
+  function handleChange(text: string): void {
+    setDraft(text);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      const parsed = Number(text);
+      if (text.trim() === "" || !Number.isFinite(parsed)) {
+        setInvalid(true);
+        return;
+      }
+      if (min !== undefined && parsed < min) {
+        setInvalid(true);
+        return;
+      }
+      setInvalid(false);
+      committed.current = parsed;
+      onCommit(Math.round(parsed));
+    }, 500);
+  }
+
+  return (
+    <View className="py-2">
+      <RowLabel label={label} description={description} />
+      <TextInput
+        value={draft}
+        onChangeText={handleChange}
+        keyboardType="numeric"
+        placeholder={placeholder}
+        placeholderTextColor={colors.secondaryText}
+        accessibilityLabel={label}
+        className={`mt-2 rounded-lg border px-5 py-3 font-sans text-body-md ${
+          invalid ? "border-error text-primary-text" : "border-border"
+        }`}
+      />
+      {invalid && invalidMessage ? (
+        <Text className="mt-1 font-sans text-body-sm text-error">{invalidMessage}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** A row whose control is an action — a button, not a value.
+ *
+ * Consent and secrets both belong here: consent is a one-way
+ * acknowledgement, so a switch that silently flips both ways is the wrong
+ * control, and a key sitting on the screen is worse than one behind a
+ * button you dismiss.
+ */
+export function ActionRow({
+  label,
+  description,
+  buttonLabel,
+  onPress,
+  variant = "primary",
+}: {
+  label: string;
+  description?: string;
+  buttonLabel: string;
+  onPress: () => void;
+  /** Whole-string literals, never interpolated: Uniwind compiles className
+   *  from literals, and `btn--${variant}` is the failure mode AGENTS.md
+   *  calls out. */
+  variant?: "primary" | "secondary" | "ghost";
+}) {
+  return (
+    <View className="py-3">
+      <RowLabel label={label} description={description} />
+      <Pressable
+        onPress={onPress}
+        className={
+          variant === "primary"
+            ? "btn btn--primary mt-2 self-start"
+            : variant === "ghost"
+              ? "btn btn--ghost mt-2 self-start"
+              : "btn btn--secondary mt-2 self-start"
+        }
+        accessibilityRole="button"
+        accessibilityLabel={buttonLabel}
+      >
+        <Text
+          className={
+            variant === "primary"
+              ? "font-sans-semibold text-body-md text-on-primary"
+              : "font-sans text-body-md text-primary"
+          }
+        >
+          {buttonLabel}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/** Collapsed by default: power-user tuning is not what a first run reads
+ *  past, and a screen with 28 visible rows is a wall (DESIGN.md, Settings). */
+export function AdvancedGroup({
+  label,
+  description,
+  children,
+}: {
+  label: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <View>
+      <Pressable
+        onPress={() => setOpen((v) => !v)}
+        className="flex-row items-center justify-between py-2"
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={label}
+      >
+        <RowLabel label={label} description={description} />
+        {/* Glyph swap, not a transform: a style-rotated lucide icon
+            rendered INVISIBLE on device (the closed group showed no chevron
+            at all). Right when closed, down when open — the affordance
+            DESIGN.md specifies: "rotates to point down when open". */}
+        {open ? (
+          <ChevronDown size={16} color={colors.secondaryText} />
+        ) : (
+          <ChevronRight size={16} color={colors.secondaryText} />
+        )}
+      </Pressable>
+      {/* The children are wrapped here, not at each call site: .row is what
+          carries the 16px inset, the 48dp floor and the divider, and rows
+          written bare lose all three. */}
+      {open
+        ? Children.toArray(children).map((child, index) => (
+            // The index, because it is the only key guaranteed unique among
+            // siblings — and safe here: this list is a fixed, unfiltered set
+            // of children that holds no per-row state, so a reordering key
+            // buys nothing. (The previous version synthesised one from
+            // String(child), which is always "[object Object]" and so
+            // collapsed to a single key for every row — a crash.)
+            <View className="row" key={index}>
+              {child}
+            </View>
+          ))
+        : null}
     </View>
   );
 }

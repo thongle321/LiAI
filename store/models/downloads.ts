@@ -105,7 +105,7 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       resume !== null && file.size > 0
         ? Math.round((partialBytes / file.size) * 100)
         : 0;
-    const auth = token ?? get().hfToken ?? undefined;
+    const auth = get().activeHfToken(token) ?? undefined;
 
     const job: DownloadJob = {
       id: `download-${generateId()}`,
@@ -272,7 +272,11 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       const spec = get().getModel(specId);
       const file = spec?.files[0];
       if (!spec || !file) return;
-      await get().startSpecDownload(spec, file, get().hfToken ?? undefined);
+      await get().startSpecDownload(
+      spec,
+      file,
+      get().activeHfToken() ?? undefined,
+    );
     } catch {
       // Best-effort: the row keeps its state, tapping retries.
     }

@@ -2,20 +2,28 @@
 name: LiAI
 description: A calm mind. A smarter everyday.
 colors:
-  signal-blue: "#3882F6"
-  deep-signal: "#2563EB"
+  # Signal Blue is ONE hue carried by two steps — never two colours.
+  # `signal` carries anything read or filled; `signal-mark` is the board's
+  # original #3882F6, kept for non-text marks. See The Two-Step Rule.
+  signal: "#2563EB"
+  signal-mark: "#3882F6"
+  # Hover and pressed — a third step, darker still. Never an accent of its own.
+  deep-signal: "#1D4ED8"
   coolant-cyan: "#06B6D4"
   surface-tint: "#EFF6FF"
   jade: "#10B981"
   amber: "#F59E0B"
-  alert-red: "#EF4444"
+  # Same two-step split as the signal: `alert-red-mark` is the border/dot
+  # value, `alert-red` the one that carries text and solid fills.
+  alert-red: "#B91C1C"
+  alert-red-mark: "#EF4444"
   cool-paper: "#F8FAFC"
   clean-white: "#FFFFFF"
   mist: "#F1F5F9"
   hairline: "#E2E8F0"
   hairline-strong: "#CBD5E1"
   ink: "#0F172A"
-  slate: "#64748B"
+  slate: "#475569"
   alert-tint: "rgba(239, 68, 68, 0.12)"
   scrim: "rgba(15, 23, 42, 0.6)"
 typography:
@@ -68,7 +76,7 @@ spacing:
   "12": "48px"
 components:
   button-solid:
-    backgroundColor: "{colors.signal-blue}"
+    backgroundColor: "{colors.signal}"
     textColor: "{colors.clean-white}"
     rounded: "{rounded.default}"
     padding: "10px 20px"
@@ -77,13 +85,13 @@ components:
     backgroundColor: "{colors.deep-signal}"
   button-outline:
     backgroundColor: "{colors.clean-white}"
-    textColor: "{colors.signal-blue}"
+    textColor: "{colors.signal}"
     rounded: "{rounded.default}"
     padding: "10px 20px"
     typography: "{typography.body}"
   button-ghost:
     backgroundColor: "transparent"
-    textColor: "{colors.signal-blue}"
+    textColor: "{colors.signal}"
     rounded: "{rounded.default}"
     padding: "10px 20px"
     typography: "{typography.body}"
@@ -100,13 +108,13 @@ components:
     padding: "10px 20px"
     typography: "{typography.body}"
   icon-button-primary:
-    backgroundColor: "{colors.signal-blue}"
+    backgroundColor: "{colors.signal}"
     textColor: "{colors.clean-white}"
     rounded: "999px"
     size: "48px"
   icon-button-secondary:
     backgroundColor: "{colors.surface-tint}"
-    textColor: "{colors.signal-blue}"
+    textColor: "{colors.signal}"
     rounded: "999px"
     size: "48px"
   input-default:
@@ -136,15 +144,12 @@ components:
   tab-bar:
     backgroundColor: "{colors.clean-white}"
     textColor: "{colors.slate}"
-    height: "64px"
+    height: "69px"
   tab-active:
-    backgroundColor: "{colors.surface-tint}"
-    textColor: "{colors.signal-blue}"
-    rounded: "{rounded.large}"
-    size: "40px"
+    textColor: "{colors.signal}"
   ai-listening:
     backgroundColor: "{colors.surface-tint}"
-    textColor: "{colors.signal-blue}"
+    textColor: "{colors.signal}"
     rounded: "999px"
     size: "56px"
 ---
@@ -157,15 +162,15 @@ components:
 
 > *Inferred, not confirmed.* You declined the North Star and voice questions, so this is derived from the board's own words — the tagline "A calm mind. A smarter everyday." and the stated intent "a subtle sci-fi aesthetic that feels advanced, not overwhelming… Realistic, not overly stylized." Rename it freely; nothing downstream depends on the specific words.
 
-LiAI is a light system with exactly one loud thing in it. A single blue (`#3882F6`) does all the signalling — the live tab, the focused field, the one primary action, the active step — and everything else is a near-white plane separated by 1px hairlines. The restraint is the point. Where most AI products reach for gradients, glass, and glow to feel futuristic, this one earns "sci-fi" from 2px line icons, corner brackets, and a dot trail. Nothing emits light.
+LiAI is a light system with exactly one loud thing in it. A single blue hue does all the signalling — the live tab, the focused field, the one primary action, the active step — carried in two steps of that one hue, and everything else is a near-white plane separated by 1px hairlines. The restraint is the point. Where most AI products reach for gradients, glass, and glow to feel futuristic, this one earns "sci-fi" from 2px line icons, corner brackets, and a dot trail. Nothing emits light.
 
 The density is conversational, not dashboard. Space is generous — a 4px scale with a 20px screen gutter and 20px card padding — because a phone screen held one-handed for conversation should breathe. Structure comes from alignment and hairlines, never from enclosure: cards are open white rectangles, not boxes. Type does the heavy lifting, with a six-step Inter scale where Display (32/40) is reserved for one moment per screen and Caption (12/16) is the floor.
 
-**This file is the authority, and the code is behind it.** The current build implements a retired v0 world — a near-black dystopian palette with a lime `#D8E87D` accent, Raleway, soft surface elevation, and clipped octagonal panel corners. Every one of those is a rejected direction. See *Do's and Don'ts*.
+**This file is the authority, and the code now implements it.** The build used to trail this file by a whole world — near-black surfaces, a lime accent, Raleway, soft elevation, clipped octagonal corners — and that world has since been retired out of the codebase entirely. What remains is to hold the line: see *Do's and Don'ts* for the guardrails that keep it retired.
 
 **Key Characteristics:**
 
-- **One signal.** Signal Blue marks exactly one live, selected, or actionable element per screen. Never two.
+- **One signal.** Signal Blue marks exactly one live, selected, or actionable element per screen. Never two. It is one hue in two steps — see *Colors*.
 - **No shadows, no glow, no gradients.** Depth is a 1px hairline (`#E2E8F0`) or a single step between three near-white surfaces.
 - **Inter only.** Six sizes, three weights (400/500/600). Nothing renders below 12px.
 - **4px grid, no exceptions.** Every margin, padding, and gap is a multiple of 4.
@@ -178,18 +183,22 @@ A light, cool-neutral palette built from three near-white planes and one confide
 
 ### Primary
 
-- **Signal Blue** (`#3882F6`): the system's only voice. It marks the one thing that is live, selected, focused, or primary-actionable on any screen — the active tab, the focused input border, the solid button, the running tool step, the send arrow. Because it is the only saturated colour in normal use, its scarcity is what makes it read as a signal.
-- **Deep Signal** (`#2563EB`): the hover and pressed state of Signal Blue, and the correct choice for a solid button's `:active`. It is a darker step of the same hue, not a second colour. Use it to make an already-blue element feel pressed; never introduce it as an independent accent.
+Signal Blue is **one hue in two steps**, and which step you pick is a contrast decision, not a preference. The board specified a single value; measured against real surfaces it could not do both jobs. A colour used as text or under a white label needs 4.5:1; the same colour used as a border, focus ring, icon or dot needs only 3:1. The board's value clears the second and fails the first at 3.69:1, so it became the mark step and a darker step of the same hue took the text and fill work.
+
+- **Signal** (`#2563EB`): the system's voice, and the step that carries anything read or filled — the solid button, the active tab's icon and label, the ghost and outline button labels, a streaming dot, the send arrow. 5.17:1 on Clean White, and it holds 4.5:1 on all four grounds, which is why it is the fill step and not the board's original.
+- **Signal Mark** (`#3882F6`): the board's original blue, kept for everything non-text — focus rings, input borders, chevrons, corner brackets, the active tab's mark, the Listening ring. 3.69:1 clears the 3:1 non-text floor, which is all a border or an icon is ever held to.
+- **Deep Signal** (`#1D4ED8`): hover and pressed, and a third step darker still. It makes an already-blue element feel pressed; it is never an independent accent and never carries text.
 
 ### Secondary
 
-- **Coolant Cyan** (`#06B6D4`): the secondary hue, reserved for **machine-in-the-loop moments** — the Thinking and Vision Active states, streaming indicators, and anything where the *system* (not the user) is the actor. It never styles a user-reachable control. If a component could plausibly use either blue, it uses Signal Blue.
+- **Coolant Cyan** (`#06B6D4`): the secondary hue, reserved for **machine-in-the-loop moments** — the Thinking and Vision Active states, streaming indicators, and anything where the *system* (not the user) is the actor. It never styles a user-reachable control. If a component could plausibly use either blue, it uses Signal.
 
 ### Status
 
 - **Jade** (`#10B981`): success and completion only. Pairs with a check glyph — never colour alone.
 - **Amber** (`#F59E0B`): warning and degraded states: a paused download, a missing permission, a slow connection.
-- **Alert Red** (`#EF4444`): error and destructive action. Destructive *buttons* take a solid fill; inline error text takes the colour on a Clean White or Cool Paper ground, never on a tint.
+- **Alert Red** (`#B91C1C`): error and destructive action, and the step that carries text and solid fills. It is the only one of the reds that clears 4.5:1 on all four grounds — Clean White, Cool Paper, Mist and Surface Tint — so it is what a destructive button's fill and an inline error sentence use.
+- **Alert Red Mark** (`#EF4444`): the border and dot step. A 1px error border, a destructive icon, a status dot — 3.76:1 is enough for all three, and it keeps Alert Red reading as one colour in the two places it appears.
 
 ### Neutral
 
@@ -199,25 +208,31 @@ A light, cool-neutral palette built from three near-white planes and one confide
 - **Hairline** (`#E2E8F0`): the default 1px border. The workhorse separator.
 - **Hairline Strong** (`#CBD5E1`): a hovered or emphasised border. Use to answer "is this row tappable?" without lifting it.
 - **Ink** (`#0F172A`): all body and heading text. Primary text is always Ink, never a muted grey.
-- **Slate** (`#64748B`): secondary text only — timestamps, hints, counts, placeholders, unit labels. Slate is never used for a heading and never for a control label.
+- **Slate** (`#475569`): secondary text only — timestamps, hints, counts, placeholders, unit labels, row descriptions. Slate is never used for a heading and never for a control label. One step darker than the board's `#64748B`, which passed on Clean White at 4.76:1 but failed on the two recessed grounds — 4.34 on Mist and 4.37 on Surface Tint — and a description is exactly the kind of text that lands on a tint.
 - **Scrim** (`rgba(15, 23, 42, 0.6)`): modal and sheet backdrops.
 
 ### Tints
 
 Two tints exist, and they exist for a specific reason: a selected element needs a ground to sit on.
 
-- **Surface Tint** (`#EFF6FF`): the 50-step of Signal Blue's own hue. It is the fill of the user's message bubble, the assistant message card, the active tab pill, and the Listening ring. It is a *ground*, never a border, an icon colour, or a text colour.
-- **Alert Tint** (`rgba(239, 68, 68, 0.12)`): Alert Red at 12% over Clean White. The fill of destructive icon buttons and error chips.
+- **Surface Tint** (`#EFF6FF`): the 50-step of Signal Blue's own hue. It is the fill of the user's message bubble, the assistant message card, and the Listening ring. It is a *ground*, never a border, an icon colour, or a text colour.
+- **Alert Tint** (`rgba(239, 68, 68, 0.12)`): Alert Red Mark at 12% over Clean White. The fill of destructive icon buttons and error chips. It tracks the mark step, not the fill step, because a tint is a ground and never carries text.
 
 > **Unresolved.** The board shows a green-tinted success card, a red-tinted error card, and a violet-tinted Speaking waveform, but its palette panel does not specify those three values. They are deliberately absent here rather than invented. Derive them the same way as the two tints above (a low-alpha step of the documented status hue) and add them as tokens when you settle them — do not let each component pick its own.
 
 ### Named Rules
 
-**The One Signal Rule.** Signal Blue marks exactly one thing per screen — the single live, selected, or actionable element. If a second element needs blue, one of them is wrong.
+**The One Signal Rule.** Signal Blue marks exactly one thing per screen — the single live, selected, or actionable element. If a second element needs blue, one of them is wrong. This is a rule about the *hue* and its scarcity, not about a step: both steps of Signal Blue are that one signal.
+
+**The Two-Step Rule.** Every accent hue that does two jobs carries two steps of one hue, never one value and never two hues. The **mark step** is for anything non-text — borders, focus rings, icons, dots, chevrons — and is held to 3:1. The **signal step** is for anything read or filled, and is held to 4.5:1. Collapsing the two into one value is what put eighty-eight text sites and every primary button below AA; it is invisible in a screenshot, which is exactly why it has to be measured.
+
+**The Measured Contrast Rule.** Contrast is arithmetic and is checked, never eyeballed. Text 4.5:1, marks 3:1, and the check runs against the real token values in `tests/color-contrast.test.ts`, which also fails if `themes/tokens.ts` drifts from `global.css`. A new colour is not finished until it passes there. Hairline dividers are the one documented exemption: a separator that carries no information of its own is decorative structure, not a control, icon or focus indicator, and at 1.23:1 it could never clear the non-text floor.
+
+**The Native Palette Rule.** Switches, dropdown menus and sliders are real platform components, seeded from the signal step so they land in this system's world rather than the platform default. Seeded is not exact: they carry Material's tonal palette rather than these tokens, and their type is fixed at the system scale rather than following the user's type size. Treat the seed as an approximation of this system, never as a fourth colour and never as licence to hand-tune a native control's palette.
 
 **The Tint Rule.** Tints are grounds for a selected element, nothing else. No tinted border, no tinted icon, no tinted text. If you want a selected element to read as selected, tint the surface it sits on and leave the border Hairline.
 
-**The Scrim Rule.** Backdrops are near-black at 60% (`rgba(15, 23, 42, 0.6)`) and never take a hue. A tinted scrim turns a system dialog into a product statement.
+**The Scrim Rule.** Backdrops are near-black at 60% (`rgba(15, 23, 42, 0.6)`) and never take a hue. A tinted scrim turns a system dialog into a product statement. **Recorded exception:** the hand-rolled sheet in `components/Sheet.tsx` paints this scrim, and the four Material sheets cannot — `@expo/ui`'s community bottom sheet accepts no scrim prop, so those four use the platform default. The rule stands for anything the app draws; where the platform owns the backdrop, the platform wins, and the trade is recorded here rather than hidden.
 
 **The Ink-and-Slate Rule.** Text is Ink or Slate, never blue, never a status colour, and never a third grey. Status colour lives in the icon or the surface, not in the sentence.
 
@@ -246,17 +261,23 @@ Two tints exist, and they exist for a specific reason: a selected element needs 
 
 **The Caption Means Metadata Rule.** Caption labels things that happened or things that are counted — a time, a token total, a file size, a state name. It never carries a sentence a user is expected to act on.
 
+**The Fluid Type Rule.** The scale above is authoritative at a **375dp base**; rendered sizes may drift from it by the device width, nowhere else. The drift is `1 + (width / 375 − 1) × 0.5`, clamped to **[0.9, 1.1]** and rounded to whole px, applied as `--text-*` overrides at the root (`themes/textScale.ts`, consumed by `hooks/useFluidTextScale.ts` through Uniwind's `ScopedVariables`). `themes/tokens.ts` and the contrast tests keep base values — the drift is presentation, not a second system, and no call site applies it by hand. The system accessibility scale composes on top of it. Where geometry is pinned, the system scale is capped so the pinned dimension never moves: the tab bar labels at **1.2**, header titles at **1.5**. Everything else — settings rows, chat, sheets, empty states — is uncapped and grows freely; that is the "dynamic type support" the accessibility floor asks for.
+
 ## Layout
 
 The spatial model is a 4px scale — 4, 8, 12, 16, 20, 24, 32, 40, 48 — with **no off-scale values**. On Uniwind/Tailwind this scale is already the default (`p-1` through `p-12`), so no custom spacing configuration is needed; the discipline is in *choosing* from it, not in defining it.
 
+**Token names are descriptive here and terse in code.** This file names colours and type steps by role — Signal, Signal Mark, Slate, Body Small — because that is what an agent should reach for. `global.css` and `themes/tokens.ts` mirror the same values under short names for use in class strings, and the two are the code mirror of this file, not a second system. Display, Headline, Title, Body, Body Small and Caption are `h1`, `h2`, `h3`, `h4`, `body-lg`, `body-md` and `body-sm`; Signal, Signal Mark, Deep Signal, Ink, Slate, Clean White, Cool Paper, Mist and Surface Tint are `primary`, `primary-mark`, `primary-hover`, `primary-text`, `secondary-text`, `surface-1`, `base`, `surface-2` and `surface-3`. The values are identical in all three places, and a test fails if the CSS and TypeScript mirrors drift apart.
+
 **Gutters and padding.** The screen gutter is one `5` step (20px) on every edge, including horizontal insets for cards, list rows, and form fields. Cards carry 20px (`5`) internal padding — generous, because a card is a small plane, not a dense module. Fields sit at 12px/16px (`3`/`4`) vertical/horizontal. Message bubbles sit at 12px/16px (`3`/`4`).
+
+**The gutter does not apply to a full-bleed field.** A field docked to a screen edge takes no horizontal inset at all: its own 12px/16px padding *is* the whole inset, so its value sits 16px from the edge. This is not a stacked gutter — it is the gutter deliberately absent, which is what lets the element be the edge. The chat composer is the only such field today.
 
 **Vertical rhythm.** Between a section heading and its first row: 8px (`2`). Between a heading block and the section below it: 24px (`6`). Icon-to-label inside a row: 8px (`2`) for icon buttons, 10–12px for the larger row icons. Never let a gap be a value you cannot name on the scale.
 
 **Containers.** Surfaces are full-bleed or inset by the gutter; there is no centred max-width column. Chat is the one exception to horizontal rhythm — message bubbles are edge-anchored (user right, assistant left) and capped at roughly 75% of viewport width, because a chat reads as a column of alternating edges, not a stack of equal cards.
 
-**Navigation geometry.** The header is 56px tall, sits on Clean White with a 1px Hairline bottom border, and holds a leading control, the wordmark, and trailing controls in slots of **equal width, sized to hold the wider of the two groups** — equal slots alone do not centre the wordmark if one group overflows its slot. The tab bar is 64px plus the device's bottom safe-area inset, with a 1px Hairline top border; the inset is applied once, at the bar, and screens opt out of it rather than double-applying it.
+**Navigation geometry.** The header is 56px tall, sits on Clean White with a 1px Hairline bottom border, and holds a leading control, the wordmark, and trailing controls in slots of **equal width, sized to hold the wider of the two groups** — equal slots alone do not centre the wordmark if one group overflows its slot. The tab bar is 69px plus the device's bottom safe-area inset, with a 1px Hairline top border; the inset is applied once, at the bar, and screens opt out of it rather than double-applying it.
 
 **Gutters are owned by one layer.** A screen gutter is applied once, at the outermost container of a column. A child that also insets itself stacks the gutter; that is the defect, not a style choice.
 
@@ -268,7 +289,7 @@ The spatial model is a 4px scale — 4, 8, 12, 16, 20, 24, 32, 40, 48 — with *
 
 **This system uses no shadows.** There is no `box-shadow`, no `elevation`, no blur, and no glow anywhere in the product. Depth is communicated two ways only:
 
-1. **Hairline borders.** A 1px line in Hairline (`#E2E8F0`) separates nearly everything. Hover steps it to Hairline Strong (`#CBD5E1`); focus steps it to Signal Blue (`#3882F6`).
+1. **Hairline borders.** A 1px line in Hairline (`#E2E8F0`) separates nearly everything. Hover steps it to Hairline Strong (`#CBD5E1`); focus steps it to Signal Mark (`#3882F6`).
 2. **Surface value steps.** Three near-white planes stack in a fixed order: Cool Paper (`#F8FAFC`) is the page, Clean White (`#FFFFFF`) is the raised element, Mist (`#F1F5F9`) is the recessed element. A card is white on paper. A track inside a card is mist on white. That is the entire depth model.
 
 Modals and sheets add a third, separate layer: the Scrim (`rgba(15, 23, 42, 0.6)`) over everything, with the sheet itself on Clean White.
@@ -291,6 +312,8 @@ Corners are soft but never round. The radius scale has five named steps and they
 - **Large** (12px): message bubbles, segmented controls, sheets, prominent icon-button wells.
 - **X-Large** (16px): modal cards and the largest single surfaces. Reserve it — if everything is x-large, nothing is.
 
+**Among rectangular elements, radius 0 is the one value outside the scale, and only on a full-bleed element.** An element that bleeds to a screen edge takes square corners, because a rounded corner there notches the surface away and exposes whatever is behind it — a visible defect, not a preference. Every inset rectangle uses one of the five steps above. (The 999px circle form below is a separate form language and is not a rectangle; this exception is about corners on a rectangle.) The chat composer is the only full-bleed element today.
+
 **Fully circular controls (999px) are a separate form language, not a sixth step.** They are permitted for exactly two things: things you press (icon buttons, avatars, the FAB) and things that listen (the mic control). Rectangular controls are never fully circular.
 
 **Borders are always 1px and always Hairline.** There is no 2px border and no 3px border, with one exception: the vision corner brackets, which are drawn as four separate L-shaped corner marks rather than as a border, because a frame is a HUD element, not a container.
@@ -312,45 +335,58 @@ Corners are soft but never round. The radius scale has five named steps and they
 Confident and flat. Buttons never lift, never glow, and never animate their own geometry.
 
 - **Shape:** Default radius (8px), 44px minimum height, 10px/20px (`2`/`5`) internal padding, Body (16/24) labels.
-- **Solid (primary):** Signal Blue fill, Clean White label. **The default choice.** One per screen.
-- **Solid hover/pressed:** Deep Signal (`#2563EB`) fill on hover; Deep Signal plus a 2% scale-down on press.
-- **Outline (secondary):** Clean White fill, 1px Signal Blue border, Signal Blue label. Hover steps the border to Deep Signal. Use for the second action of equal importance.
-- **Ghost (tertiary):** transparent fill, no border, Signal Blue label. Use for the third-and-beyond action, and for destructive-adjacent actions that should not compete with a solid red.
-- **Destructive:** Alert Red fill, Clean White label. Reserved for irreversible actions — delete, wipe, revoke. If a screen has both a solid primary and a destructive action, the destructive one is Outline with an Alert Red border and label, not a second solid.
+- **Solid (primary):** Signal (`#2563EB`) fill, Clean White label. **The default choice.** One per screen.
+- **Solid hover/pressed:** Deep Signal (`#1D4ED8`) fill on hover; Deep Signal plus a 2% scale-down on press.
+- **Outline (secondary):** Clean White fill, 1px Signal Mark border, Signal label. Hover steps the border to Deep Signal. Use for the second action of equal importance.
+- **Ghost (tertiary):** transparent fill, no border, Signal label. Use for the third-and-beyond action, and for destructive-adjacent actions that should not compete with a solid red.
+- **Destructive:** Alert Red (`#B91C1C`) fill, Clean White label. Reserved for irreversible actions — delete, wipe, revoke. If a screen has both a solid primary and a destructive action, the destructive one is Outline with an Alert Red Mark border and label, not a second solid.
 - **Disabled:** Mist fill, Slate label, no border, no shadow. Disabled is a *fill and label* change, never opacity on a live element — the element must still be legible enough to be found.
 
 ### Icon Buttons
 
 - **Shape:** Fully circular (999px), 40px (`10`) diameter, 2px stroke icon centred at 20px.
-- **Primary:** Signal Blue fill, Clean White icon. Reserve for the single most important action in a surface — the send arrow, the primary add.
-- **Secondary:** Surface Tint fill, Signal Blue icon. The default for every other icon-only control.
-- **Destructive:** Alert Tint fill, Alert Red icon.
+- **Primary:** Signal (`#2563EB`) fill, Clean White icon. Reserve for the single most important action in a surface — the send arrow, the primary add.
+- **Secondary:** Surface Tint fill, Signal icon. The default for every other icon-only control.
+- **Destructive:** Alert Tint fill, Alert Red Mark icon.
 - **Touch target:** the visual circle is 40px; the touch target is 48×48dp minimum. Pad the hit area, not the circle. A control whose visual is already the target (the voice mic) takes its target straight from the visual.
 - **Every icon-only button carries an accessibility label.** No exceptions, including destructive and decorative-adjacent controls.
 
 ### Inputs / Fields
 
 - **Style:** Clean White fill, 1px Hairline border, Default radius (8px), 12px/16px (`3`/`4`) padding, Body (16/24) value in Ink. Placeholder text is Slate.
+- **Docked to a screen edge:** a field pinned to the bottom of the screen is full-bleed — Clean White fill, radius 0, a 1px Hairline **top** border only (none on left, right or bottom), and no outer gutter, per *Layout*. Its value therefore sits 16px from the screen edge rather than 36px. See *Chat Messages* for the composer, the only such field.
 - **Hover:** border steps to Hairline Strong.
-- **Focus:** border steps to Signal Blue — 1px, not 2px, and no outer ring. The colour *is* the focus indicator; there is no glow and no halo. On native, pair the border change with the platform focus behaviour so keyboard and switch-control users get a visible state too.
-- **Error:** 1px Alert Red border, Alert Red helper text directly beneath the field (`8px` gap, Body Small). The field keeps its Clean White fill — it does not go red.
+- **Focus:** border steps to Signal Mark — 1px, not 2px, and no outer ring. The colour *is* the focus indicator; there is no glow and no halo. On native, pair the border change with the platform focus behaviour so keyboard and switch-control users get a visible state too.
+- **Error:** 1px Alert Red Mark border, Alert Red helper text directly beneath the field (`8px` gap, Body Small). The field keeps its Clean White fill — it does not go red.
 - **Labels:** field labels are Body Small in Slate, sitting `8px` above the field. Placeholder text is a *hint*, never a label substitute.
-- **The composer is an input, not a custom control.** It is a multiline field with a trailing send icon button, using this same spec. It does not get its own visual language.
+- **The composer is an input, not a custom control.** It is a multiline field with a leading attach control and a trailing send icon button, using this same spec. It does not get its own visual language — with exactly one documented exception, the docked full-bleed variant above, which changes its fill, radius, border and inset but not its anatomy.
 
 ### Cards / Containers
 
 - **Corner style:** Default radius (8px). X-Large (16px) only for modal cards.
 - **Background:** Clean White on Cool Paper. Use Mist for a card that is *inside* another surface, never as a top-level card.
 - **Shadow strategy:** none — see *Elevation & Depth*. Separation is the 1px Hairline border, always present on a card.
-- **Border:** 1px Hairline, on all four sides. A card without a border is a mistake unless it is Mist-on-Mist.
+- **Border:** 1px Hairline, on all four sides — except a full-bleed element, whose left and right edges coincide with the screen edge and so take a top divider only (the composer is the only such element today). A card without a border is a mistake unless it is Mist-on-Mist.
 - **Internal padding:** 20px (`5`) on all sides. 16px for a card that contains a list of rows rather than prose.
 - **Row cards** (settings, model list, session history) drop the internal padding to 0 and let a 16px horizontal / 12px vertical row padding define the rhythm, so the divider lines run edge to edge.
 
+### Settings
+
+A settings screen is a stack of **titled row cards** on Cool Paper, grouped by subject rather than by screen. This grouping came from PocketPal's Material 3 settings screen; it is rebuilt here in Uniwind against this file's tokens, and it borrows the *structure* only — no `react-native-paper`, no second design language, and nothing here overrides a rule above.
+
+- **Section:** a Title (20/28, 500) label in Ink, then one Clean White row card beneath it with a 1px Hairline border and Default radius. Sections are spaced 24px (`6`) apart.
+- **Row:** 48–56px minimum, 16px horizontal / 12px vertical padding, dividers running edge to edge between rows (never around the card's outside edge).
+- **Every row carries a description.** The label is Body (16/24) Ink; the line under it is Body Small (14/20) Slate and says what the value does or what happens if you change it. A row with no description available does not ship — a bare label tells the user nothing about the consequence.
+- **Controls sit right-aligned**; the label block takes the remaining width. A value that needs explaining beyond the description is a picker, not a wider label.
+- **Trailing chevron means "this opens something."** A row that navigates carries one; a row that edits in place does not. The one exception is the Advanced group, which expands in place and so carries the chevron that says so. Chevrons are 2px stroke at 16px in Slate.
+- **"Advanced" is a collapsed group by default** and renders as a full-width row with a chevron that rotates to point down when open. A screen with more than ~8 visible rows uses one; the tuning a power user wants is not what a first-run user should read past.
+- **A row with no effect is a defect.** Every control here is wired to real behaviour. A toggle that does nothing is worse than a missing one.
+
 ### Navigation
 
-- **Header (56px, Clean White, 1px Hairline bottom):** a leading control (menu or back), the wordmark in Headline (600, 24/32) Ink, and trailing controls. Leading and trailing slots are **fixed width and equal** so the wordmark stays optically centred no matter how many trailing icons appear. Icons are 2px stroke at 20px in Ink; a header control that opens something live takes Signal Blue.
-- **Tab bar (64px + safe-area inset, Clean White, 1px Hairline top):** items are icon-over-label, 2px stroke icon at 24px, Caption label. Inactive is Slate. Active is Signal Blue on both icon and label, sitting on a Surface Tint pill (Large radius) with a 2px Signal Blue indicator bar above the label. Exactly one tab is active.
-- **The active pill is always mounted.** Swap its fill and its indicator's opacity; do not mount and unmount it. Mounting on selection changes the row's height and makes the whole bar jump.
+- **Header (56px, Clean White, 1px Hairline bottom):** a leading control (menu or back), the wordmark in Headline (600, 24/32) Ink, and trailing controls. Leading and trailing slots are **fixed width and equal** so the wordmark stays optically centred no matter how many trailing icons appear. Icons are 2px stroke at 20px in Ink; a header control that opens something live takes Signal.
+- **Tab bar (69px + safe-area inset, Clean White, 1px Hairline top):** items are icon-over-label, 2px stroke icon at 24px, Caption label. Inactive is Slate. Active is Signal on both icon and label, and **colour is the only active signal** — no pill, no indicator bar. Exactly one tab is active.
+- **Colour is the whole active state.** The Surface Tint pill and the 2px indicator bar were removed: a square behind the icon read as a shape rather than a state. The 40x40 icon box stays because it is the touch target, not decoration.
 - **Predictive Back and transitions.** Predictive Back is enabled so the system gesture animates the pop. The "transitions do not animate" rule governs the app's own JS navigator — tab and screen switches cut, and shared chrome (tab bar, composer) never moves. The OS back gesture is a platform affordance, not an app transition.
 - **Nav chrome is static.** No fade, no slide, no scale on the bar itself — only the content behind it may transition.
 
@@ -364,27 +400,31 @@ The product's centre of gravity, and the one place the system is allowed to feel
 - **Tail corners:** one corner of each bubble takes Small radius (4px) — the corner facing the speaker's edge — so the two bubble types mirror each other. This is the only asymmetric radius in the system.
 - **Message states**, each carrying an icon *and* a word so colour is never the only signal:
   - **Normal** — no indicator.
-  - **Streaming** — a Signal Blue dot trail, animated once per token, never looping while idle.
+  - **Streaming** — a Signal dot trail, animated once per token, never looping while idle.
   - **Thinking** — a Slate dot trail with the word "Thinking" in Caption.
-  - **Error** — an Alert Red exclamation on an Alert Tint ground, with a retry affordance and the reason in Body Small.
+  - **Error** — an Alert Red Mark exclamation on an Alert Tint ground, with a retry affordance and the reason in Body Small.
 - **Link previews** are Mist-filled cards at Default radius with a 1px Hairline border, a 48px square image at Small radius, a Body Small title, and the domain in Caption Slate. The domain is the only link-blue text permitted.
-- **The composer** sits pinned to the bottom on Cool Paper with a 1px Hairline top border: a multiline input per the *Inputs / Fields* spec, a leading attach control, and a trailing send icon button in its Primary state. It is disabled — Secondary, not dimmed — when the input is empty.
+- **The composer is the field.** It sits pinned to the bottom edge to edge — full-bleed, Clean White, radius 0, a 1px Hairline top border — with **no Cool Paper bar behind it and no surrounding container**. It is a multiline input per the *Inputs / Fields* spec with a leading attach control and a trailing send icon button in its Primary state, disabled — Secondary, not dimmed — when the input is empty.
+  - **Rows the field owns stack inside it** — the attach preview, the voice and attach issue lines — so the field's measured height is exactly what the message list reserves, and the newest message can never sit behind them.
+  - **Chrome that is not part of the field floats above it** as overlays with their own fill — the sending indicator, the suggested-prompt chips, the usage line. Overlays are opaque, because they sit over message content rather than over a bar. They move with the field so the keyboard cannot strand them.
+  - **With no model loaded** the field's placeholder says so, and nothing else does. There is deliberately **no in-composer prompt, banner or button** for it: the models screen is reached from the header wordmark, and the empty thread has its own card with a button. A prompt floating over the conversation is the thing this layout is built to avoid — it either covers the newest message or forces the list to reserve space for something that is not content.
+  - The composer and the tab bar are both Clean White, so with the keyboard down they read as one white plane split by a hairline. That is intended, not a missing surface.
 
 ### AI States
 
 Machine-in-the-loop feedback. These are the only places Coolant Cyan is allowed.
 
-- **Listening:** a Surface Tint circle with concentric Signal Blue rings, one 2px stroke icon at the centre. Rings expand once on entry and hold. The word "Listening" sits in Caption beneath.
-- **Speaking:** a waveform of vertical bars, tinted a violet that the board shows but does not specify — **unresolved, see *Colors*.** Until it is settled, render it in Signal Blue rather than inventing a fifth hue. The word "Speaking" in Caption beneath.
+- **Listening:** a Surface Tint circle with concentric Signal rings, one 2px stroke icon at the centre. Rings expand once on entry and hold. The word "Listening" sits in Caption beneath.
+- **Speaking:** a waveform of vertical bars, tinted a violet that the board shows but does not specify — **unresolved, see *Colors*.** Until it is settled, render it in Signal rather than inventing a fifth hue. The word "Speaking" in Caption beneath.
 - **Thinking:** three Slate dots in sequence with the word "Thinking" in Caption.
 - **Vision Active:** four Signal Blue corner brackets around the camera glyph, with a trailing dot animation. The brackets are drawn marks, not a border.
 - **Every state pairs a glyph with a word.** A user who cannot distinguish the colours still knows what the app is doing.
 
 ### Feedback States
 
-- **Loading:** a Signal Blue spinner with the word "Loading" in Body Small Slate. Spinners are the only looping animation in the system, and they stop the moment there is a result.
+- **Loading:** a Signal spinner with the word "Loading" in Body Small Slate. Spinners are the only looping animation in the system, and they stop the moment there is a result.
 - **Success:** a Jade check in a circle, with the confirmation word in Body ("Saved"). Jade never appears without the check.
-- **Error:** an Alert Red exclamation on an Alert Tint ground, a short plain-language sentence ("Something went wrong"), and a retry action. Never a stack trace, never an error code as the headline.
+- **Error:** an Alert Red Mark exclamation on an Alert Tint ground, a short plain-language sentence ("Something went wrong"), and a retry action. Never a stack trace, never an error code as the headline.
 - **Empty state:** a soft glyph at 999px in Mist, a Title (20, 500) headline naming the situation ("No messages yet"), one Body Small Slate line naming the next move, and one primary button. An empty state always offers a way forward.
 
 ## Do's and Don'ts
@@ -392,11 +432,10 @@ Machine-in-the-loop feedback. These are the only places Coolant Cyan is allowed.
 ### Do:
 
 - **Do** let Signal Blue mark exactly one thing per screen. Scan any screen and count the blue elements; if the count exceeds one live/selected/actionable element, something is competing.
-- **Do** separate with a 1px Hairline border or one step between Cool Paper, Clean White, and Mist. That is the whole depth model.
-- **Do** keep every value on the 4px spacing scale and every radius on the five-step scale. If a number is not on a scale, it does not ship.
-- **Do** meet the accessibility floor on every screen: 4.5:1 text contrast, 48×48dp touch targets, 16px minimum body text, dynamic type support, and reduced-motion honoured.
-- **Do** pair every status colour with a glyph and a word — check, exclamation, dot trail, word. Colour is never the only indicator.
-- **Do** use Coolant Cyan only for machine-in-the-loop states (thinking, vision, streaming) and Signal Blue everywhere else.
+- **Do** separate with a 1px Hairline border or one step between Cool Paper, Clean White, and Mist. That is the whole depth model.- **Do** keep every value on the 4px spacing scale and every radius on the five-step scale — the sole exception being radius 0 on a full-bleed rectangle (the 999px circle form is a separate language, not a scale step). If a number is not on a scale, it does not ship.
+- **Do** meet the accessibility floor on every screen: 4.5:1 text contrast, 48×48dp touch targets, 16px minimum body text, dynamic type support, and reduced-motion honoured. Contrast is machine-checked against the real token values (`tests/color-contrast.test.ts`); touch targets and the type floor are held in the BEM blocks in `global.css`, not at call sites.
+- **Do** pair every status colour with a glyph and a word — check, exclamation, dot trail, word. Colour is never the only indicator. The one documented exception is the bottom tab bar, where the active tab is tint alone (see Navigation).
+- **Do** use Coolant Cyan only for machine-in-the-loop states (thinking, vision, streaming) and Signal everywhere else.
 - **Do** keep nav chrome and the composer static. Only the content behind them transitions.
 - **Do** apply safe-area insets exactly once per edge, at the component that owns that edge.
 - **Do** use Inter, and gate first paint on the font resolving so nothing flashes in the system typeface.
@@ -407,9 +446,9 @@ Machine-in-the-loop feedback. These are the only places Coolant Cyan is allowed.
 - **Don't** add a shadow, a glow, a blur, or a decorative gradient. There is no such token, and adding one means this file is out of date.
 - **Don't** use a second typeface or a monospace exception. Inter carries code and metadata.
 - **Don't** render text below Caption (12px), and don't drop reading text below Body Small (14px) to make a layout fit.
-- **Don't** use colour as the only signal. Every state carries a glyph and a word.
+- **Don't** use colour as the only signal. Every *status* carries a glyph and a word. Selection state in platform-native navigation (the active bottom tab) is the exception, and it is tint alone.
 - **Don't** let two status colours appear in one component. One component, one status.
 - **Don't** tint a border, an icon, or a label. Tints are grounds for selected surfaces only.
 - **Don't** animate loopingly or decoratively, and don't exceed 300ms. State changes and feedback only; honour the reduced-motion system setting by collapsing durations to zero.
-- **Don't** animate the tab bar, the header, or the composer, and don't mount/unmount the active tab indicator — a bar that changes height under the user's thumb is a bug, not a transition.
+- **Don't** animate the tab bar, the header, or the composer, and don't let the bar's height change under the user's thumb — a bar that shifts is a bug, not a transition.
 - **Don't** invent a colour that isn't in this file. If a design needs one, add the token here first, with a reason.

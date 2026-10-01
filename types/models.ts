@@ -19,6 +19,8 @@ export interface ModelFile {
   size: number;
   downloadUrl: string;
   sha256?: string;
+  /** LFS content id — how a bookmark recognizes its own file. */
+  oid?: string;
 }
 
 export interface ModelSpec {
@@ -78,7 +80,12 @@ export interface HFModelSearchResult {
   tags: string[];
   downloads: number;
   likes: number;
-  private: boolean;
+  /** Hub's "requires token" flag (what PocketPal calls gated). */
+  gated: boolean;
+  /** ISO date, for the "Updated 3 days ago" chips. */
+  lastModified?: string;
+  /** >20 earns the trending flame in the details header. */
+  trendingScore?: number;
   ggufFiles: HFModelFile[];
 }
 
@@ -87,6 +94,8 @@ export interface HFModelFile {
   size: number;
   path: string; // Path in the repo
   downloadUrl: string;
+  /** LFS content id — the identity a bookmark is remembered by. */
+  oid?: string;
 }
 
 export interface DownloadJob {

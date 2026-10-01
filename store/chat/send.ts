@@ -8,8 +8,7 @@
 import type { ApiError } from "../../types/api.ts";
 import type { ChatMessage } from "../../types/chat.ts";
 import { newId } from "../../lib/chat/messages.ts";
-import { draftKey } from "../../lib/chat/drafts.ts";
-import { SESSION_KEY } from "./types.ts";
+import type { SessionStore } from "../../lib/chat/session-store.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
 function llmError(message: string): ApiError {
@@ -35,7 +34,16 @@ export function createSendSlice(
   function adoptSession(id: string): void {
     if (get().sessionId !== id) {
       set({ sessionId: id });
-      void ctx.storage.setItem(SESSION_KEY, id).catch(() => {});
+      void ctx
+        .getStore()
+        .then((store: SessionStore | null) => {
+          // Only write if this is STILL the active session: a slow store
+          // must not resurrect a pointer for a conversation the user has
+          // already navigated away from.
+          if (get().sessionId !== id) return undefined;
+          return store?.setActiveSessionId(id);
+        })
+        .catch(() => {});
     }
   }
 
@@ -156,10 +164,11 @@ export function createSendSlice(
         clearOnFirst: false,
       });
       // The text now lives in its bubble (or its error retry): the
-      // composer draft is spent — clear memory and the stored key.
+      // composer draft is spent — clear memory and the stored draft.
       set({ draft: "" });
       try {
-        await ctx.storage.removeItem(draftKey(sid));
+        const store: SessionStore | null = await ctx.getStore();
+        await store?.clearDraft(sid);
       } catch {
         // Non-critical: an empty string overwrites it next persist.
       }

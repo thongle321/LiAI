@@ -10,12 +10,15 @@ export function ReadyModels({
   open,
   onToggle,
   onOpenSettings,
+  onNavigateToChat,
   hfOnly = false,
 }: {
   open: boolean;
   /** Receives the Collapsible's next state, not a bare toggle. */
   onToggle: (next: boolean) => void;
   onOpenSettings: (modelId: string) => void;
+  /** Called after a model is activated, so the screen can jump to chat. */
+  onNavigateToChat?: () => void;
   /** PocketPal `hf` filter: HuggingFace-origin downloads only, no remotes. */
   hfOnly?: boolean;
 }) {
@@ -58,7 +61,10 @@ export function ReadyModels({
           key={item.id}
           item={item}
           isActive={activeModelId === item.id}
-          onActivate={() => setActiveModel(item.id, "local")}
+          onActivate={() => {
+            setActiveModel(item.id, "local");
+            onNavigateToChat?.();
+          }}
           onDeactivate={() => {
             setActiveModel(null);
             releaseEngine();

@@ -1,13 +1,14 @@
 /** Bottom tabs (JavaScript tabs per the Expo Router tabs guide).
  *
- * Chat + voice share one router-owned bar — the existing BottomNav
- * design, unchanged. Vision stays a standalone Stack screen with no
- * bar; selecting it pushes the vision route over the tabs.
+ * Chat + voice + vision share one router-owned bar — the existing
+ * BottomNav design, unchanged. The bar hides only for the keyboard;
+ * vision shows it like every other tab.
  */
 
 import { View } from "react-native";
 import { router, Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useKeyboardState } from "react-native-keyboard-controller";
 
 import { BottomNav, type ChatTab } from "../../../components/BottomNav.tsx";
 
@@ -23,6 +24,7 @@ export default function TabLayout() {
     >
       <Tabs.Screen name="chat" />
       <Tabs.Screen name="voice" />
+      <Tabs.Screen name="vision" />
     </Tabs>
   );
 }
@@ -32,15 +34,27 @@ export default function TabLayout() {
  */
 function TabBar({ state }: { state: { index: number; routeNames: string[] } }) {
   const insets = useSafeAreaInsets();
-  const focused = state.routeNames[state.index] ?? "chat";
-  const active: ChatTab = focused === "voice" ? "voice" : "chat";
+  const keyboardVisible = useKeyboardState((s) => s.isVisible);
+  // Hidden on the keyboard only: it would sit directly on top of it and
+  // steal height from whatever input opened it. Hidden here rather than
+  // via screenOptions.tabBarHideOnKeyboard because this app supplies a
+  // custom tabBar, and React Navigation only applies that option inside
+  // its own BottomTabBar.
+  const focusedRoute = state.routeNames[state.index] ?? "chat";
+  if (keyboardVisible) return null;
+  const active: ChatTab =
+    focusedRoute === "voice"
+      ? "voice"
+      : focusedRoute === "vision"
+        ? "vision"
+        : "chat";
 
   return (
     <View className="bg-surface-1" style={{ paddingBottom: insets.bottom }}>
       <BottomNav
         active={active}
         onSelect={(t) => {
-          if (t === "vision") router.push("/vision");
+          if (t === "vision") router.navigate("/vision");
           else if (t !== active) router.navigate(t === "voice" ? "/voice" : "/chat");
         }}
       />

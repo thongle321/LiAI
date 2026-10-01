@@ -1,7 +1,8 @@
-/** Models-screen UI state: section visibility + group expansion, persisted.
+/** Models-screen UI state: group expansion + filters, persisted.
  *
  * Factory takes storage so tests inject memory (see chat.ts pattern).
  * Persist-only-what-exists: filters and expansions that already render.
+ * There is no section-visibility state: both sections always render.
  */
 
 import { create } from "zustand";
@@ -25,29 +26,28 @@ export type ModelsUiSection = "ready" | "available";
 export type ModelsUiFilter = "downloadedOnly" | "hfOnly" | "grouped";
 
 export interface ModelsUiState {
-  readyVisible: boolean;
-  availableVisible: boolean;
   readyOpen: boolean;
   availableOpen: boolean;
   downloadedOnly: boolean;
   hfOnly: boolean;
   grouped: boolean;
+  autoNavigateToChat: boolean;
   loaded: boolean;
   load: () => Promise<void>;
-  setVisible: (section: ModelsUiSection, visible: boolean) => void;
   setOpen: (section: ModelsUiSection, open: boolean) => void;
   setAllOpen: (open: boolean) => void;
   setFilter: (filter: ModelsUiFilter, value: boolean) => void;
+  setAutoNavigateToChat: (value: boolean) => void;
 }
 
 const DEFAULTS = {
-  readyVisible: true,
-  availableVisible: true,
   readyOpen: true,
   availableOpen: true,
   downloadedOnly: false,
   hfOnly: false,
   grouped: true,
+  /** Jump to the chat after activating a model, so you can start typing. */
+  autoNavigateToChat: true,
 };
 
 function parseUiState(raw: string | null): typeof DEFAULTS {
@@ -59,14 +59,13 @@ function parseUiState(raw: string | null): typeof DEFAULTS {
     const flag = (k: string, dflt: boolean) =>
       typeof r[k] === "boolean" ? (r[k] as boolean) : dflt;
     return {
-      readyVisible: flag("readyVisible", true),
-      availableVisible: flag("availableVisible", true),
       readyOpen: flag("readyOpen", true),
       availableOpen: flag("availableOpen", true),
       // Old payloads predate filters: fall back to defaults (compat).
       downloadedOnly: flag("downloadedOnly", false),
       hfOnly: flag("hfOnly", false),
       grouped: flag("grouped", true),
+      autoNavigateToChat: flag("autoNavigateToChat", true),
     };
   } catch {
     return { ...DEFAULTS };
@@ -77,25 +76,23 @@ export function createModelsUiStore(storage: KeyValueStorage) {
   return create<ModelsUiState>()((set, get) => {
     async function persist(): Promise<void> {
       const {
-        readyVisible,
-        availableVisible,
         readyOpen,
         availableOpen,
         downloadedOnly,
         hfOnly,
         grouped,
+        autoNavigateToChat,
       } = get();
       try {
         await storage.setItem(
           UI_STATE_KEY,
           JSON.stringify({
-            readyVisible,
-            availableVisible,
             readyOpen,
             availableOpen,
             downloadedOnly,
             hfOnly,
             grouped,
+            autoNavigateToChat,
           }),
         );
       } catch {
@@ -110,10 +107,6 @@ export function createModelsUiStore(storage: KeyValueStorage) {
         const parsed = parseUiState(await storage.getItem(UI_STATE_KEY));
         set({ ...parsed, loaded: true });
       },
-      setVisible: (section, visible) => {
-        set(section === "ready" ? { readyVisible: visible } : { availableVisible: visible });
-        void persist();
-      },
       setOpen: (section, open) => {
         set(section === "ready" ? { readyOpen: open } : { availableOpen: open });
         void persist();
@@ -124,6 +117,10 @@ export function createModelsUiStore(storage: KeyValueStorage) {
       },
       setFilter: (filter, value) => {
         set({ [filter]: value });
+        void persist();
+      },
+      setAutoNavigateToChat: (value) => {
+        set({ autoNavigateToChat: value });
         void persist();
       },
     };

@@ -6,6 +6,10 @@ Supersedes: ADR-003 (backend-owned inference), ADR-006 (backend GGUF runtime)
 
 ## Context
 
+> Superseded in part by ADR-0012: chat history is now stored on the device
+> (TinyBase + SQLite), not in Supabase. The rest of this record stands as
+> written — the reasoning is the point, the storage choice is not.
+
 LiAI's chat, agent loop, talents, search, and GGUF serving all run in the
 Python/FastAPI backend; the app is a presentation client that cannot function
 without the server (ADR-003, ADR-005, ADR-006, ADR-007). The goal is a

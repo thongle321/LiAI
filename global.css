@@ -8,16 +8,33 @@
    on native). Light-locked: one theme, no switcher. */
 
 @theme {
-  /* One signal. Signal Blue marks the single live/selected/primary element. */
-  --color-primary: #3882f6;
-  --color-primary-hover: #2563eb;
-  --color-primary-pressed: #2563eb;
+  /* One signal. Signal Blue marks the single live/selected/primary element.
+   *
+   * ROLE SPLIT (contrast). The board's Signal Blue #3882F6 measures 3.69:1
+   * on white — legal as a MARK (icons, borders, focus rings, dots, which
+   * clear the 3:1 non-text floor) but illegal as TEXT and as a fill under a
+   * white label, which need 4.5:1. So the hue is carried by two steps of the
+   * same colour, never two hues:
+   *   primary      #2563EB  text, icon+label fills, anything read
+   *   primary-mark #3882F6  borders, focus rings, non-text marks
+   * Using one value for both roles is what put 88 `text-primary` sites and
+   * every primary button below AA. */
+  --color-primary: #2563eb;
+  --color-primary-mark: #3882f6;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-pressed: #1d4ed8;
   --color-on-primary: #ffffff;
   /* Coolant cyan is reserved for machine-in-the-loop states (thinking, vision, streaming). */
   --color-info: #06b6d4;
   --color-success: #10b981;
   --color-warning: #f59e0b;
-  --color-error: #ef4444;
+  /* Same split as the signal: #ef4444 is a mark (3.76:1, clears the 3:1
+     non-text floor on borders and dots); #b91c1c is the step that carries
+     text and fills — it is the only one of the three reds that clears 4.5:1
+     on every surface, including Mist (5.91) and Surface Tint (5.95), which
+     #dc2626 failed at 4.41 and 4.44. */
+  --color-error: #b91c1c;
+  --color-error-mark: #ef4444;
 
   /* The three-plane depth model: paper is the page, white is raised,
      mist is recessed. No shadows, no glow, no gradients. */
@@ -28,8 +45,10 @@
   --color-surface-3: #eff6ff;
   --color-border: #e2e8f0;
 
-  /* Ink for anything read, Slate for anything merely counted. */
-  --color-secondary-text: #64748b;
+  /* Slate for anything merely counted. One step darker than the board's
+     #64748b, which passed on white (4.76) but failed on the two recessed
+     grounds — 4.34 on Mist and 4.37 on Surface Tint. */
+  --color-secondary-text: #475569;
   --color-primary-text: #0f172a;
   --color-inverse-text: #ffffff;
 
@@ -71,8 +90,8 @@
       --color-foreground: #0f172a;
       --color-card: #ffffff;
       --color-border: #e2e8f0;
-      --color-muted: #64748b;
-      --color-primary: #3882f6;
+      --color-muted: #475569;
+      --color-primary: #2563eb;
       --color-danger: #ef4444;
       --color-success: #10b981;
     }
@@ -81,8 +100,8 @@
       --color-foreground: #0f172a;
       --color-card: #ffffff;
       --color-border: #e2e8f0;
-      --color-muted: #64748b;
-      --color-primary: #3882f6;
+      --color-muted: #475569;
+      --color-primary: #2563eb;
       --color-danger: #ef4444;
       --color-success: #10b981;
     }
@@ -107,23 +126,24 @@
   min-height: 48px;
 }
 .btn--primary {
-  background-color: #3882f6;
+  background-color: #2563eb;
   color: #ffffff;
 }
 .btn--secondary {
   background-color: #ffffff;
   border-width: 1px;
   border-style: solid;
+  /* Border is a mark: Signal Blue clears the 3:1 non-text floor at 3.69. */
   border-color: #3882f6;
-  color: #3882f6;
+  color: #2563eb;
 }
 .btn--destructive {
-  background-color: #ef4444;
+  background-color: #b91c1c;
   color: #ffffff;
 }
 .btn--ghost {
   background-color: transparent;
-  color: #3882f6;
+  color: #2563eb;
 }
 .btn--circle {
   width: 48px;
@@ -226,7 +246,7 @@
   color: #64748b;
 }
 .seg-label--active {
-  color: #3882f6;
+  color: #2563eb;
 }
 
 /* Status dots: .status-dot + .status-dot--online | --warning | --error | --info | --offline */

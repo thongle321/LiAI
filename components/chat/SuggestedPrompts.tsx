@@ -18,7 +18,11 @@ export function SuggestedPrompts({
   onPick: (prompt: string) => void;
 }) {
   return (
-    <View className="flex-row flex-wrap gap-2 px-5 pb-2">
+    // No horizontal padding: the overlay group above the composer owns the
+    // screen inset, so a second one here would stack the gutter. These chips
+    // carry their own fill because they sit over message content, not over a
+    // bar.
+    <View className="flex-row flex-wrap gap-2 pb-2">
       {PROMPTS.map((prompt) => (
         <Pressable
           key={prompt}

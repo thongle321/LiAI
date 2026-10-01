@@ -1,7 +1,8 @@
 /** "Available to download" group: preset cards with their quantization files. */
 
-import { memo, useCallback, useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { getFreeDiskStorageAsync } from "expo-file-system/legacy";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
@@ -16,6 +17,7 @@ import { presetSpecId } from "../../lib/models/huggingface.ts";
 import { isPresetDownloaded, presetCardState, presetFileState } from "../../lib/models/file-state.ts";
 import type { PresetModel, PresetModelFile } from "../../types/models";
 import { ModelAccordion } from "./ModelAccordion.tsx";
+import { ModelCard } from "./ModelCard.tsx";
 import {
   CancelDownloadButton,
   DownloadButton,
@@ -25,7 +27,7 @@ import {
   isProgressVisible,
 } from "./ModelBits.tsx";
 
-function PresetModelCardInner({
+export function PresetModelCard({
   preset,
   onDownload,
 }: {
@@ -152,37 +154,56 @@ function PresetModelCardInner({
   );
 }
 
-/** memo so a parent re-render (accordion open/close, search) skips cards
- * whose props are unchanged; each card still re-renders on its own store
- * progress (via useModelStore below). */
-export const PresetModelCard = memo(PresetModelCardInner);
-
 export function AvailableModels({
   open,
   onToggle,
   onDownload,
+  onOpenSettings,
   grouped = true,
 }: {
   open: boolean;
   /** Receives the Collapsible's next state, not a bare toggle. */
   onToggle: (next: boolean) => void;
   onDownload: (modelId: string, file: PresetModelFile) => void;
+  onOpenSettings: (modelId: string) => void;
   /** PocketPal `grouped` filter: tier headers on, or one flat preset list. */
   grouped?: boolean;
 }) {
   const presets = useModelStore((s) => s.presets);
   const models = useModelStore((s) => s.models);
+  const startSpecDownload = useModelStore((s) => s.startSpecDownload);
+  const activeHfToken = useModelStore((s) => s.activeHfToken);
   // Finished presets live in Ready: hide them here (PocketPal parity).
   const visible = presets.filter((p) => !isPresetDownloaded(models, p));
+  // PocketPal splits its groups on isDownloaded alone, so an HF bookmark
+  // sits in this section beside the presets, not in Ready.
+  const bookmarks = models.filter(
+    (m) => m.origin === "huggingface" && m.downloadStatus !== "completed",
+  );
   const guard = useLoadGuard();
   const tiers = TIERS;
+  const [freeBytes, setFreeBytes] = useState<number | null>(null);
 
-  const onGuardedDownload = useCallback(
-    (modelId: string, file: PresetModelFile) => {
-      guard(file.size, () => onDownload(modelId, file));
-    },
-    [guard, onDownload],
-  );
+  // Read once for the whole section, not per card: a dozen cards asking
+  // the filesystem the same question is a dozen round trips.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void getFreeDiskStorageAsync()
+      .then((free) => {
+        if (!cancelled) setFreeBytes(free);
+      })
+      .catch(() => {
+        // Unknown free space must never disable a download button.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  function onGuardedDownload(modelId: string, file: PresetModelFile): void {
+    guard(file.size, () => onDownload(modelId, file));
+  }
 
   const cards = (items: PresetModel[]) =>
     items.map((item) => (
@@ -192,10 +213,40 @@ export function AvailableModels({
   return (
     <ModelAccordion
       title="Available to download"
-      count={visible.length}
+      count={visible.length + bookmarks.length}
       open={open}
       onToggle={onToggle}
     >
+      {bookmarks.length > 0 ? (
+        <View className="mb-4">
+          {bookmarks.map((bookmark) => (
+            <ModelCard
+              key={bookmark.id}
+              item={bookmark}
+              isActive={false}
+              onDownload={() => {
+                const file = bookmark.files[0];
+                if (!file) return;
+                guard(file.size, () =>
+                  // A gated repo's file needs the token attached, exactly
+                  // as the search sheet does it; without it the download
+                  // 401s halfway.
+                  void startSpecDownload(bookmark, file, activeHfToken() ?? undefined),
+                );
+              }}
+              outOfSpace={
+                freeBytes !== null &&
+                bookmark.files.reduce((sum, f) => sum + f.size, 0) > freeBytes
+              }
+              /* The pending branch renders Download instead of Load/Unload,
+                 so neither callback is reachable from a bookmark. */
+              onActivate={() => {}}
+              onDeactivate={() => {}}
+              onSettings={() => onOpenSettings(bookmark.id)}
+            />
+          ))}
+        </View>
+      ) : null}
       {grouped ? (
         tiers.map((tier) => {
           const tierPresets = visible.filter((p) => tier.presetIds.includes(p.id));

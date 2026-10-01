@@ -15,6 +15,7 @@ function spec(over: Partial<ModelSpec> = {}): ModelSpec {
     id: "preset-smollm-135m-SmolLM-135M-Q4_K_M.gguf",
     name: "SmolLM-135M-Q4_K_M.gguf",
     author: "HuggingFaceTB",
+    description: "Test fixture",
     origin: "preset",
     type: "llm",
     downloadStatus: "completed",

@@ -18,7 +18,10 @@ export function speakReply(text: string, cbs: SpeakCallbacks = {}): void {
   const { voiceId, rate, pitch } = useVoice.getState();
   try {
     Speech.speak(text, {
-      language: "en-US",
+      // Only pin a language when no voice is chosen: forcing "en-US" beside
+      // a picked voice fights it, and the voice already carries its own
+      // language. With no voice this is exactly what it did before.
+      language: voiceId ? undefined : "en-US",
       voice: voiceId ?? undefined,
       rate,
       pitch,

@@ -14,7 +14,7 @@
  * (Switch, Picker, Slider, BottomSheet) — just not for a disclosure.
  */
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 
@@ -34,11 +34,16 @@ export function ModelAccordion({
   onToggle: (next: boolean) => void;
   children: ReactNode;
 }) {
+  const [pressed, setPressed] = useState(false);
   return (
     <View className="mb-6">
       <Pressable
         onPress={() => onToggle(!open)}
-        className="min-h-12 flex-row items-center justify-between mb-3"
+        onPressIn={() => setPressed(true)}
+        onPressOut={() => setPressed(false)}
+        className={`min-h-12 flex-row items-center justify-between mb-3 rounded-lg px-3 ${
+          pressed ? "bg-surface-3" : ""
+        }`}
         accessibilityRole="button"
         accessibilityLabel={title}
         accessibilityState={{ expanded: open }}

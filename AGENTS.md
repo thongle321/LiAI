@@ -34,7 +34,7 @@ The mobile application is responsible for:
 
 - TypeScript
 
-- Expo Router (typedRoutes on — hrefs are compile-time checked)
+- Expo Router
 
 - Uniwind
 
@@ -42,36 +42,35 @@ The mobile application is responsible for:
 
 - AsyncStorage
 
-- llama.rn (on-device GGUF inference, approved)
+- llama.rn
 
-- @supabase/supabase-js (chat session persistence, approved)
+- tinybase + expo-sqlite
 
-- react-native-marked + react-native-code-highlighter (chat markdown + code, approved)
+- react-native-marked + react-native-code-highlighter
 
-- expo-clipboard (copy message/transcript, approved)
+- expo-clipboard
 
-- VisionCamera (preview + snapshots + Worklet Frame Processor at 2fps;
-  needs `enableFrameProcessors` and a dev-client binary — not Expo Go)
+- VisionCamera
 
-- lucide-react-native (+ react-native-svg peer, approved)
+- lucide-react-native + react-native-svg
 
-- expo-speech-recognition (voice input, approved)
-- expo-speech (voice output, approved)
+- expo-speech-recognition
+- expo-speech
 
-- expo-font + @expo-google-fonts/raleway (Raleway type scale, approved)
+- expo-font + @expo-google-fonts/inter
 
-- react-native-reanimated (+ worklets peer, motion, approved)
-- react-native-worklets-core (frame-processor JS bridge for vision-camera 4.x, approved)
+- react-native-reanimated
+- react-native-worklets-core
 
-- expo-file-system (+ legacy API, model files/downloads/uploads, approved)
-- expo-document-picker (local model import, approved)
-- expo-secure-store (user-provided secret keys, approved)
-- expo-image-picker (in-chat camera/gallery attach, approved Wave 4 — needs dev-client rebuild)
-- expo-device (RAM-based model tier recommendation in onboarding, approved Wave 5)
-- link-preview-js via the `link-preview-js/mobile` entrypoint (uncredentialed public previews, the one ADR-004 exception, approved)
+- expo-file-system
+- expo-document-picker
+- expo-secure-store
+- expo-image-picker
+- expo-device
+- link-preview-js
 
-- expo-linking + expo-constants (settings deep-link, app metadata)
-- react-native-gesture-handler (navigator drawer gestures, approved; drawer-layout itself stays transitive inside expo-router per the Expo drawer guide)
+- expo-linking + expo-constants
+- react-native-gesture-handler
 
 ### Dependency Policy
 
@@ -113,12 +112,7 @@ Use this folder structure:
 
 ```
  
-app/  (routes + _layout.tsx; (drawer)/ owns the navigator drawer,
-  chat/voice live in (drawer)/(tabs)/)
-
- (drawer)/  (Drawer layout; drawerContent reuses AppDrawer UI)
-
- (drawer)/(tabs)/  (bottom tabs: chat + voice, bar in (tabs)/_layout.tsx)
+app/
 
 components/
 
@@ -136,6 +130,8 @@ types/
 
 assets/
 
+models/
+
 tests/
 
 ```
@@ -143,18 +139,11 @@ tests/
 **app/** is for routes and screens only. Screens compose components and
 call hooks or stores. They should not contain large reusable UI blocks
 or business logic.
-**components/** is for reusable UI. Create a component when it is
-reused in multiple places, when it makes a screen easier to read, or
-when it represents a clear UI concept. Examples for this app:
-ChatScreen, ChatInput, ModelCard, AvailableModels, HFModelSearch,
-InferenceSettings. Do not create components too early.
-**assets/device-tiers.json** holds bundled content (RAM-tier model
-recommendations). Keep it typed (see `lib/models/device-tiers.ts`).
-**store/** holds Zustand stores. Examples of state to keep here:
-activeModelId, download jobs/progress, chat sessions/drafts,
-inference params, voice state. Persist with AsyncStorage when needed.
-**lib/** holds external service helpers (inference/, models/,
-chat/, supabase.ts, secrets.ts).
+**components/** is for reusable UI. Do not create
+components too early.
+**assets/device-tiers.json** Keep it typed (see `lib/models/device-tiers.ts`).
+**store/** holds Zustand stores.
+**lib/** holds external service helpers.
 Never expose secret keys here.
 ---
 

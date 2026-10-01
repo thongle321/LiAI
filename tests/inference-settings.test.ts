@@ -10,8 +10,29 @@ import {
   MIN_CONTEXT,
   parseInferenceParams,
 } from "../store/inference.ts";
+import { DEFAULT_SAMPLER } from "../lib/inference/sampler.ts";
 import { EngineManager } from "../lib/inference/manager.ts";
-import { memoryStorage } from "./fakes.ts";
+import type { KeyValueStorage } from "../lib/storage.ts";
+
+// Inference params are a preference, not chat state: they live in
+// AsyncStorage, so this suite carries its own storage fake (as the
+// models-ui, search-settings and voice-settings suites do) rather than
+// borrowing one from the chat fakes.
+function memoryStorage(seed: Record<string, string> = {}): KeyValueStorage & {
+  data: Record<string, string>;
+} {
+  const data: Record<string, string> = { ...seed };
+  return {
+    data,
+    getItem: async (k: string) => data[k] ?? null,
+    setItem: async (k: string, v: string) => {
+      data[k] = v;
+    },
+    removeItem: async (k: string) => {
+      delete data[k];
+    },
+  };
+}
 
 describe("inference store", () => {
   let storage: ReturnType<typeof memoryStorage>;
@@ -41,10 +62,43 @@ describe("inference store", () => {
         specDraftCacheK: s.specDraftCacheK,
         specDraftCacheV: s.specDraftCacheV,
         thinkingEnabled: s.thinkingEnabled,
+        sampler: s.sampler,
+        useHexagonNpu: s.useHexagonNpu,
+        useWeightRepacking: s.useWeightRepacking,
+        imageMaxTokens: s.imageMaxTokens,
+        draftModelId: s.draftModelId,
+        autoOffload: s.autoOffload,
       },
       { ...DEFAULT_INFERENCE },
     );
     assert.equal(s.loaded, true);
+  });
+
+  it("patches the sampler, clamps it, and survives a reload", async () => {
+    const useStore = createInferenceStore(storage);
+    await useStore.getState().load();
+    useStore.getState().setSampler({ temperature: 0.15, topP: 9 });
+    await new Promise((r) => setTimeout(r, 0));
+    const s = useStore.getState();
+    assert.equal(s.sampler.temperature, 0.15);
+    assert.equal(s.sampler.topP, 1, "clamped on the way in");
+
+    const raw = storage.data[INFERENCE_KEY];
+    assert.ok(raw);
+    const reloaded = createInferenceStore(memoryStorage({ [INFERENCE_KEY]: raw }));
+    await reloaded.getState().load();
+    assert.equal(reloaded.getState().sampler.temperature, 0.15);
+    assert.equal(reloaded.getState().sampler.topP, 1);
+  });
+
+  it("fills a missing or corrupt sampler from an older save", () => {
+    const noSampler = parseInferenceParams(JSON.stringify({ nCtx: 8192 }));
+    assert.equal(noSampler.nCtx, 8192, "the rest of the payload still loads");
+    assert.deepEqual(noSampler.sampler, DEFAULT_SAMPLER);
+    const badSampler = parseInferenceParams(
+      JSON.stringify({ sampler: { temperature: "hot" } }),
+    );
+    assert.equal(badSampler.sampler.temperature, DEFAULT_SAMPLER.temperature);
   });
 
   it("clamps context and gpu layers into range", async () => {
@@ -153,6 +207,7 @@ describe("engine manager init key", () => {
       spec_draft_n_gpu_layers: 99,
       spec_draft_cache_type_k: "q8_0" as const,
       spec_draft_cache_type_v: "q8_0" as const,
+      no_extra_bufts: true,
     };
     await manager.ensure(source, undefined, base);
     await manager.ensure(source, undefined, base);

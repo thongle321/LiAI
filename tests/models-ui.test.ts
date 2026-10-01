@@ -29,40 +29,40 @@ describe("models ui store", () => {
     storage = memoryStorage();
   });
 
-  it("starts with everything visible and open", async () => {
+  it("starts with both sections open", async () => {
     const useStore = createModelsUiStore(storage);
     await useStore.getState().load();
     const s = useStore.getState();
-    assert.equal(s.readyVisible, true);
-    assert.equal(s.availableVisible, true);
     assert.equal(s.readyOpen, true);
     assert.equal(s.availableOpen, true);
     assert.equal(s.loaded, true);
   });
 
-  it("persists visibility and expansion, restores on load", async () => {
+  it("persists expansion and restores it on load", async () => {
     const useStore = createModelsUiStore(storage);
     await useStore.getState().load();
-    useStore.getState().setVisible("ready", false);
+    useStore.getState().setOpen("ready", false);
     useStore.getState().setOpen("available", false);
     // persist() is async; wait a tick.
     await new Promise((r) => setTimeout(r, 0));
 
     const saved = JSON.parse(storage.data[UI_STATE_KEY]);
-    assert.equal(saved.readyVisible, false);
+    assert.equal(saved.readyOpen, false);
     assert.equal(saved.availableOpen, false);
+    // No section-visibility state survives: both sections always render.
+    assert.equal("readyVisible" in saved, false);
+    assert.equal("availableVisible" in saved, false);
 
     const useStore2 = createModelsUiStore(storage);
     await useStore2.getState().load();
-    assert.equal(useStore2.getState().readyVisible, false);
+    assert.equal(useStore2.getState().readyOpen, false);
     assert.equal(useStore2.getState().availableOpen, false);
-    assert.equal(useStore2.getState().availableVisible, true);
   });
 
   it("falls back to defaults on corrupt payload", async () => {
     const bad = createModelsUiStore(memoryStorage({ [UI_STATE_KEY]: "not json" }));
     await bad.getState().load();
-    assert.equal(bad.getState().readyVisible, true);
+    assert.equal(bad.getState().readyOpen, true);
     assert.equal(bad.getState().loaded, true);
   });
 
@@ -118,7 +118,9 @@ describe("models ui store", () => {
     const useStore = createModelsUiStore(legacy);
     await useStore.getState().load();
     const s = useStore.getState();
-    assert.equal(s.readyVisible, false);
+    // Obsolete visibility keys in a stored payload are ignored, and neither
+    // section is suppressed because of them.
+    assert.equal(s.readyOpen, true);
     assert.equal(s.availableOpen, false);
     assert.equal(s.downloadedOnly, false);
     assert.equal(s.hfOnly, false);

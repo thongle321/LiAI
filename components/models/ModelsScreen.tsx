@@ -24,15 +24,12 @@ export function ModelsScreen() {
   const router = useRouter();
   const importLocalModel = useLocalModelImport();
   const {
-    readyVisible,
-    availableVisible,
     readyOpen,
     availableOpen,
     downloadedOnly,
     hfOnly,
     grouped,
     load: loadUi,
-    setVisible,
     setOpen,
     setAllOpen,
     setFilter,
@@ -54,13 +51,9 @@ export function ModelsScreen() {
         title="Models"
         right={
           <ModelsHeaderRight
-            readyVisible={readyVisible}
-            availableVisible={availableVisible}
             downloadedOnly={downloadedOnly}
             hfOnly={hfOnly}
             grouped={grouped}
-            onToggleReady={() => setVisible("ready", !readyVisible)}
-            onToggleAvailable={() => setVisible("available", !availableVisible)}
             onToggleFilter={(filter) => {
               const current = { downloadedOnly, hfOnly, grouped };
               setFilter(filter, !current[filter]);
@@ -76,22 +69,20 @@ export function ModelsScreen() {
               FAB_STACK_HEIGHT, and a dynamically-composed Uniwind class has
               failed to resolve on device before (see ModelsHeaderRight). */}
           <ContentColumn className="p-5" style={{ paddingBottom: FAB_STACK_HEIGHT }}>
-            {readyVisible && (
-              <ReadyModels
-                open={readyOpen}
-                onToggle={(next) => setOpen("ready", next)}
-                onOpenSettings={setSettingsModelId}
-                // "Auto-Navigate to Chat": activating a model should land
-                // you somewhere you can type, not back on a list you now
-                // have to leave again.
-                onNavigateToChat={
-                  autoNavigateToChat ? () => router.push("/chat") : undefined
-                }
-                hfOnly={hfOnly}
-              />
-            )}
+            <ReadyModels
+              open={readyOpen}
+              onToggle={(next) => setOpen("ready", next)}
+              onOpenSettings={setSettingsModelId}
+              // "Auto-Navigate to Chat": activating a model should land
+              // you somewhere you can type, not back on a list you now
+              // have to leave again.
+              onNavigateToChat={
+                autoNavigateToChat ? () => router.push("/chat") : undefined
+              }
+              hfOnly={hfOnly}
+            />
             {/* downloadedOnly (PocketPal `downloaded`): only Ready renders. */}
-            {availableVisible && !downloadedOnly && (
+            {!downloadedOnly && (
               <AvailableModels
                 open={availableOpen}
                 onToggle={(next) => setOpen("available", next)}
@@ -100,7 +91,7 @@ export function ModelsScreen() {
                 grouped={grouped}
               />
             )}
-            </ContentColumn>
+          </ContentColumn>
         </ScrollView>
 
         <FABGroup

@@ -1,4 +1,4 @@
-/** Models header filter menu: section toggles + expand/collapse all.
+/** Models header filter menu: filters + expand/collapse all.
  *
  * The dropdown anchors under the filter icon via measureInWindow, so it
  * sits correctly on every device (a fixed top offset overlapped the
@@ -74,24 +74,16 @@ function ToggleRow({
 }
 
 export function ModelsHeaderRight({
-  readyVisible,
-  availableVisible,
   downloadedOnly,
   hfOnly,
   grouped,
-  onToggleReady,
-  onToggleAvailable,
   onToggleFilter,
   onExpandAll,
   onCollapseAll,
 }: {
-  readyVisible: boolean;
-  availableVisible: boolean;
   downloadedOnly: boolean;
   hfOnly: boolean;
   grouped: boolean;
-  onToggleReady: () => void;
-  onToggleAvailable: () => void;
   onToggleFilter: (filter: ModelsUiFilter) => void;
   onExpandAll: () => void;
   onCollapseAll: () => void;
@@ -173,13 +165,6 @@ export function ModelsHeaderRight({
               icon={<Layers size={16} color={colors.secondaryText} />}
               on={grouped}
               onPress={() => run(() => onToggleFilter("grouped"))}
-            />
-            <GroupLabel label="Sections" />
-            <ToggleRow label="Ready to use" on={readyVisible} onPress={() => run(onToggleReady)} />
-            <ToggleRow
-              label="Available to download"
-              on={availableVisible}
-              onPress={() => run(onToggleAvailable)}
             />
             <View className="h-px bg-border mx-4" />
             <Pressable

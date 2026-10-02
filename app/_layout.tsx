@@ -12,6 +12,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ScopedVariables, Uniwind } from "uniwind";
 
 import { colors } from "../themes/tokens.ts";
+import { SnackbarProvider } from "../components/Snackbar.tsx";
 import { useEngineOffload } from "../hooks/useEngineOffload.ts";
 import { useFluidTextVariables } from "../hooks/useFluidTextScale.ts";
 
@@ -54,6 +55,7 @@ export default function RootLayout() {
             launch. (An earlier comment here claimed they were what made the
             keyboard height correct. That was a guess, and it was wrong.) */}
         <KeyboardProvider>
+          <SnackbarProvider>
           <Stack
             screenOptions={{
               headerShown: false,
@@ -67,6 +69,7 @@ export default function RootLayout() {
             <Stack.Screen name="(drawer)" options={{ animation: "none" }} />
             <Stack.Screen name="onboarding" />
           </Stack>
+          </SnackbarProvider>
         </KeyboardProvider>
         </GestureHandlerRootView>
       </ScopedVariables>

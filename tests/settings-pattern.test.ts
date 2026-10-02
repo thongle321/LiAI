@@ -163,17 +163,25 @@ describe("settings card pattern", () => {
     // the status bar. Android's own snap points are only half/full, so a
     // snapped sheet can never stop just below the status bar.
     //
-    // This replaces an earlier guard that required snapPoints on a sheet of
-    // sampler rows. It was green through the whole outage because it
-    // encoded the mechanism that was GUESSED, not the one that broke.
+    // EXCEPTION: the HF search and details sheets legitimately need
+    // snapPoints because they host a FlatList that must fill the screen.
+    // PocketParity: search at 92%, details at 90%. These are the only
+    // sheets that may use snapPoints.
+    const ALLOWED = new Set([
+      "components/models/HFModelSearch.tsx",
+    ]);
     const offenders = screenFiles().filter((file) => {
       const source = read(file);
-      return /<BottomSheet/.test(source) && /snapPoints=/.test(source);
+      if (!/<BottomSheet/.test(source)) return false;
+      // Only flag literal snapPoint values, not the wrapper's passthrough.
+      if (!/snapPoints=\{[\s]*["']/.test(source)) return false;
+      const rel = path.relative(ROOT, file).replace(/\\/g, "/");
+      return !ALLOWED.has(rel);
     });
     assert.deepEqual(
       offenders,
       [],
-      "a sheet must not use snapPoints; omit it so the sheet fits its content",
+      "only the HF search sheets may use snapPoints; all others must fit content",
     );
   });
 
@@ -192,7 +200,7 @@ describe("settings card pattern", () => {
     // no renderer in this repo, so a layout assertion is not available; the
     // device check is what covers that gap.
     const sheet = read("components/Sheet.tsx");
-    const body = sheet.match(/<ScrollView[\s\S]*?>/);
+    const body = sheet.match(/<(?:KeyboardAware)?ScrollView[\s\S]*?>/);
     assert.ok(body, "the sheet's body must be a scroll view");
     assert.match(
       body[0],
@@ -307,17 +315,49 @@ describe("settings card pattern", () => {
     // one-word-per-line column. The floor belongs on the MENU, not the
     // anchor: a minimum lets long device voice names grow it instead of
     // truncating, and leaves the settings row its own compact width.
-    const source = read("components/SettingsRows.tsx");
+    // The popup lives in PickerMenu.android.tsx since the platform split;
+    // the shared PickerRow must not grow Compose code back.
+    const android = read("components/PickerMenu.android.tsx");
     // Match the WHOLE element, not just up to the first ">": the props carry
     // `onDismissRequest={() => ...}`, whose ">" would end a non-greedy
     // opening-tag match before `modifiers` is ever reached.
-    const menu = source.match(/<ExposedDropdownMenu[\s\S]*?<\/ExposedDropdownMenu>/);
+    const menu = android.match(/<ExposedDropdownMenu[\s\S]*?<\/ExposedDropdownMenu>/);
     assert.ok(menu, "the picker must render an ExposedDropdownMenu");
     assert.match(
       menu[0],
       /defaultMinSize\(\{\s*minWidth:/,
       "the menu needs a minWidth floor or its options wrap to a single column",
     );
+    const shared = read("components/SettingsRows.tsx");
+    assert.doesNotMatch(
+      shared,
+      /ExposedDropdownMenu|jetpack-compose/,
+      "the Compose popup lives in the android file, not the shared row",
+    );
+  });
+
+  it("keeps platform-only Expo UI imports on their own platform", () => {
+    // Compose views have no iOS twin and SwiftUI views have no Android
+    // twin. A jetpack-compose import evaluated on iOS (or swift-ui on
+    // Android) is a crash waiting on a render, so each may only appear in
+    // its platform file. Universal (`@expo/ui`) and community imports are
+    // cross-platform and stay shared.
+    for (const file of [
+      "components/PickerMenu.ios.tsx",
+      "components/SnackbarOverlay.ios.tsx",
+    ]) {
+      assert.doesNotMatch(
+        read(file),
+        /jetpack-compose/,
+        `${file} must not import Compose views`,
+      );
+    }
+    for (const file of [
+      "components/PickerMenu.android.tsx",
+      "components/SnackbarOverlay.android.tsx",
+    ]) {
+      assert.doesNotMatch(read(file), /swift-ui/, `${file} must not import SwiftUI views`);
+    }
   });
 
   it("never repeats a section title as a row label", () => {

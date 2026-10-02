@@ -2,7 +2,7 @@
  *
  * The visual bottom of the list while tokens arrive: avatar + bubble
  * with three looping dots. Dots run on the UI thread with staggered
- * delays; reduced motion renders them static. No token count or elapsed
+ * delays and always animate, like PocketPal. No token count or elapsed
  * readout — the store holds usage only on settle and no turn-start stamp,
  * so there is nothing honest to display (add with store turn stats).
  */
@@ -11,7 +11,6 @@ import { useEffect } from "react";
 import { View } from "react-native";
 import Animated, {
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withDelay,
   withRepeat,
@@ -20,15 +19,13 @@ import Animated, {
 
 import { APP_NAME } from "../../constants/app.ts";
 import { AssistantAvatar } from "./AssistantAvatar.tsx";
-import { fadeEntering, fadeExiting, useMotionDuration } from "../../lib/motion.ts";
+import { MOTION_DURATION_MS, fadeEntering, fadeExiting } from "../../lib/motion.ts";
 
 function Dot({ delayMs }: { delayMs: number }) {
-  const reduced = useReducedMotion();
   const opacity = useSharedValue(0.3);
   useEffect(() => {
-    if (reduced) return;
     opacity.value = withDelay(delayMs, withRepeat(withTiming(1, { duration: 500 }), -1, true));
-  }, [opacity, delayMs, reduced]);
+  }, [opacity, delayMs]);
   const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return (
     <Animated.View
@@ -39,7 +36,7 @@ function Dot({ delayMs }: { delayMs: number }) {
 }
 
 export function PendingIndicator() {
-  const duration = useMotionDuration();
+  const duration = MOTION_DURATION_MS;
   return (
     <Animated.View
       entering={fadeEntering(duration)}

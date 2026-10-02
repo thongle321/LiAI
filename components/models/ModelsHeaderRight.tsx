@@ -5,9 +5,10 @@
  * header on notched phones).
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Dimensions, Modal, Pressable, Text, View } from "react-native";
+import Animated from "react-native-reanimated";
 import {
   Check,
   ChevronsDownUp,
@@ -18,6 +19,12 @@ import {
   SlidersHorizontal,
 } from "lucide-react-native";
 
+import {
+  MENU_DURATION_MS,
+  menuEnteringFade,
+  menuEnteringZoom,
+  menuExiting,
+} from "../../lib/motion.ts";
 import { colors } from "../../themes/tokens.ts";
 import type { ModelsUiFilter } from "../../store/modelsUi.ts";
 
@@ -89,8 +96,27 @@ export function ModelsHeaderRight({
   onCollapseAll: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  // RN tears a modal down the instant `visible` flips false, which would
+  // swallow the closing fade; `shown` outlives `open` by exactly the exit
+  // duration so paper's fade-out actually plays before the menu unmounts.
+  const [shown, setShown] = useState(false);
   const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
   const btnRef = useRef<View>(null);
+  // PocketPal parity: the menu always plays, ignoring the OS reduce-motion
+  // setting (paper hardcodes its durations the same way). Doubles as the
+  // close lag — `shown` outlives `open` by exactly the exit duration so the
+  // fade-out finishes before the Modal unmounts.
+  const menuMs = MENU_DURATION_MS;
+
+  // The Modal mounts synchronously with `open` (see toggle()), and the menu
+  // itself mounts with it: `entering` fires on mount, so the reveal cannot
+  // start before the view exists. On close the menu unmounts at once and
+  // `exiting` plays while the Modal lingers for the lag above.
+  useEffect(() => {
+    if (open) return;
+    const t = setTimeout(() => setShown(false), menuMs);
+    return () => clearTimeout(t);
+  }, [open, menuMs]);
 
   function close(): void {
     setOpen(false);
@@ -102,17 +128,26 @@ export function ModelsHeaderRight({
       return;
     }
     const fallback = { top: 100, right: 16 };
+    // One opening per tap. measureInWindow is async on some hosts, so a
+    // 100ms fallback also fires — and it reads the captured `open`, which is
+    // always the stale `false`. Without this flag, a menu dismissed inside
+    // 100ms of opening got re-opened by its own fallback.
+    let opened = false;
     btnRef.current?.measureInWindow((x, y, w, h) => {
+      if (opened) return;
+      opened = true;
       const screenWidth = Dimensions.get("window").width;
       setAnchor({ top: y + h + 4, right: Math.max(8, screenWidth - (x + w)) });
       setOpen(true);
+      setShown(true);
     });
     // measureInWindow is async on some hosts; never leave the menu shut.
     setTimeout(() => {
-      if (!open) {
-        setAnchor((a) => a ?? fallback);
-        setOpen(true);
-      }
+      if (opened) return;
+      opened = true;
+      setAnchor((a) => a ?? fallback);
+      setOpen(true);
+      setShown(true);
     }, 100);
   }
 
@@ -135,9 +170,12 @@ export function ModelsHeaderRight({
         <SlidersHorizontal size={18} color={colors.primary} />
       </Pressable>
 
-      <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
+      <Modal visible={shown} transparent animationType="none" onRequestClose={close}>
         <Pressable className="flex-1" onPress={close}>
-          <View
+          {open && (
+          <Animated.View
+            entering={menuEnteringFade(menuMs)}
+            exiting={menuExiting(menuMs)}
             style={{
               position: "absolute",
               top: anchor?.top ?? 100,
@@ -146,6 +184,12 @@ export function ModelsHeaderRight({
             }}
             className="bg-surface-1 border border-border rounded-lg overflow-hidden"
           >
+            {/* Scale half of the reveal, pinned to the opening corner. No
+                exiting: paper never reverses the scale, only the fade. */}
+            <Animated.View
+              entering={menuEnteringZoom(menuMs)}
+              style={{ transformOrigin: "right top" }}
+            >
             <GroupLabel label="Filters" />
             <ToggleRow
               label="Downloaded only"
@@ -199,7 +243,9 @@ export function ModelsHeaderRight({
                 <ChevronsDownUp size={16} color={colors.secondaryText} />
               </View>
             </Pressable>
-          </View>
+            </Animated.View>
+          </Animated.View>
+          )}
         </Pressable>
       </Modal>
     </View>

@@ -18,17 +18,10 @@ import { Children, useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { Host, Switch } from "@expo/ui";
 import Slider from "@expo/ui/community/slider";
-import {
-  DropdownMenuItem,
-  ExposedDropdownMenu,
-  ExposedDropdownMenuBox,
-  Row,
-  Text as ComposeText,
-} from "@expo/ui/jetpack-compose";
-import { defaultMinSize, menuAnchor } from "@expo/ui/jetpack-compose/modifiers";
 import { ChevronDown, ChevronRight, Minus, Plus } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
+import { PickerMenu } from "./PickerMenu";
 
 /** Label + optional description, the left half of every row. */
 function RowLabel({ label, description }: { label: string; description?: string }) {
@@ -98,18 +91,20 @@ export function ToggleRow({
           Material You wallpaper — which is exactly what turned every switch
           teal. colorScheme="light" keeps the light lock when the device is
           dark (DESIGN.md, Native Palette Rule). */}
-      <Host matchContents colorScheme="light" seedColor={colors.primary}>
+      <Host matchContents ignoreSafeArea="keyboard" colorScheme="light" seedColor={colors.primary}>
         <Switch value={on} onValueChange={onPress} testID={`toggle-${label}`} />
       </Host>
     </View>
   );
 }
 
-/** Single-selection native picker (SwiftUI Menu / Compose menu).
+/** Single-selection native picker row: label left, native popup right.
  *
- * Best for a closed set that does not fit inline — voices, providers. The
- * root Host seeds it with Signal Blue, so the native menu lands in the
- * app's world rather than the platform's default tint.
+ * The popup is the one surface in this file that @expo/ui cannot supply
+ * cross-platform: iOS gets the SwiftUI Menu, Android the Compose dropdown
+ * (the universal Picker anchors on a 56dp M3 TextField on Android). Metro
+ * picks `PickerMenu.ios.tsx` / `.android.tsx`; the row chrome and API
+ * stay shared here.
  */
 export function PickerRow<T extends string>({
   label,
@@ -128,84 +123,10 @@ export function PickerRow<T extends string>({
   displayFor?: (value: T) => string;
 }) {
   const show = displayFor ?? ((v: T) => String(v));
-  const [open, setOpen] = useState(false);
   return (
     <View className="flex-row items-center justify-between py-2">
       <RowLabel label={label} description={description} />
-      {/* NOT @expo/ui's Picker component. On Android that renders a Material
-       * 3 ExposedDropdownMenuBox whose anchor is a TextField, and an M3 text
-       * field carries a 56dp minimum height — which made this settings row
-       * ~56dp tall with dead space above and below the control. The
-       * `appearance` prop we used to pass, asking for a menu, is ignored on
-       * Android outright ("Material 3 has no wheel-style picker").
-       * @expo/ui's own docs say the anchor may be "e.g. TextField or Text",
-       * so we use a Text: same native popup, same seeded Material colours, no
-       * minimum height, and the row goes back to being sized by its own
-       * label. */}
-      <Pressable
-        onPress={() => setOpen((o) => !o)}
-        className="min-h-12 flex-row items-center justify-end gap-1"
-        accessibilityRole="button"
-        accessibilityLabel={`${label}: ${show(value)}`}
-        accessibilityHint="Opens a list of choices"
-        accessibilityState={{ expanded: open }}
-      >
-        <Host matchContents colorScheme="light" seedColor={colors.primary}>
-          <ExposedDropdownMenuBox expanded={open} onExpandedChange={setOpen}>
-            {/* The anchor the popup positions against, and the only thing
-                Compose draws in the row. */}
-            <Row
-              verticalAlignment="center"
-              horizontalArrangement="end"
-              modifiers={[menuAnchor()]}
-            >
-              {/* maxLines={1} + ellipsis: device voice names run long
-                  ("Microsoft Zira Desktop - English (United States)"). Without
-                  a cap the anchor wraps and the whole row grows, which is the
-                  same class of defect as the 56dp text field this replaced.
-                  The MENU items below stay unwrapped — that is where the user
-                  actually reads a long name. */}
-              <ComposeText
-                color={colors.secondaryText}
-                style={{ fontSize: 14 }}
-                maxLines={1}
-                overflow="ellipsis"
-              >
-                {show(value)}
-              </ComposeText>
-            </Row>
-                <ExposedDropdownMenu
-                  expanded={open}
-                  onDismissRequest={() => setOpen(false)}
-                  // A Material 3 ExposedDropdownMenu sizes itself to its
-                  // anchor, and this anchor is a short value ("Tavily"). That
-                  // left the popup a few characters wide and wrapped every
-                  // option into a one-word-per-line column. The floor is set on
-                  // the menu rather than the anchor so the row keeps its own
-                  // compact width; long names still grow it, because this is a
-                  // minimum, not a fixed size.
-                  modifiers={[defaultMinSize({ minWidth: 200 })]}
-                >
-              {options.map((option) => (
-                <DropdownMenuItem
-                  key={option}
-                  onClick={() => {
-                    onChange(option);
-                    setOpen(false);
-                  }}
-                >
-                  <DropdownMenuItem.Text>
-                    <ComposeText color={colors.primaryText} style={{ fontSize: 14 }}>
-                      {show(option)}
-                    </ComposeText>
-                  </DropdownMenuItem.Text>
-                </DropdownMenuItem>
-              ))}
-            </ExposedDropdownMenu>
-          </ExposedDropdownMenuBox>
-        </Host>
-        <ChevronDown size={16} color={colors.secondaryText} />
-      </Pressable>
+      <PickerMenu label={label} options={options} value={value} onChange={onChange} show={show} />
     </View>
   );
 }

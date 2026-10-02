@@ -433,7 +433,7 @@ Machine-in-the-loop feedback. These are the only places Coolant Cyan is allowed.
 
 - **Do** let Signal Blue mark exactly one thing per screen. Scan any screen and count the blue elements; if the count exceeds one live/selected/actionable element, something is competing.
 - **Do** separate with a 1px Hairline border or one step between Cool Paper, Clean White, and Mist. That is the whole depth model.- **Do** keep every value on the 4px spacing scale and every radius on the five-step scale — the sole exception being radius 0 on a full-bleed rectangle (the 999px circle form is a separate language, not a scale step). If a number is not on a scale, it does not ship.
-- **Do** meet the accessibility floor on every screen: 4.5:1 text contrast, 48×48dp touch targets, 16px minimum body text, dynamic type support, and reduced-motion honoured. Contrast is machine-checked against the real token values (`tests/color-contrast.test.ts`); touch targets and the type floor are held in the BEM blocks in `global.css`, not at call sites.
+- **Do** meet the accessibility floor on every screen: 4.5:1 text contrast, 48×48dp touch targets, 16px minimum body text and dynamic type support. Motion always plays at full PocketPal timing — the OS reduce-motion setting is deliberately not honoured. Contrast is machine-checked against the real token values (`tests/color-contrast.test.ts`); touch targets and the type floor are held in the BEM blocks in `global.css`, not at call sites.
 - **Do** pair every status colour with a glyph and a word — check, exclamation, dot trail, word. Colour is never the only indicator. The one documented exception is the bottom tab bar, where the active tab is tint alone (see Navigation).
 - **Do** use Coolant Cyan only for machine-in-the-loop states (thinking, vision, streaming) and Signal everywhere else.
 - **Do** keep nav chrome and the composer static. Only the content behind them transitions.
@@ -449,6 +449,6 @@ Machine-in-the-loop feedback. These are the only places Coolant Cyan is allowed.
 - **Don't** use colour as the only signal. Every *status* carries a glyph and a word. Selection state in platform-native navigation (the active bottom tab) is the exception, and it is tint alone.
 - **Don't** let two status colours appear in one component. One component, one status.
 - **Don't** tint a border, an icon, or a label. Tints are grounds for selected surfaces only.
-- **Don't** animate loopingly or decoratively, and don't exceed 300ms. State changes and feedback only; honour the reduced-motion system setting by collapsing durations to zero.
+- **Don't** animate loopingly or decoratively, and don't exceed 300ms. State changes and feedback only; motion always plays (PocketPal parity — no reduce-motion branch).
 - **Don't** animate the tab bar, the header, or the composer, and don't let the bar's height change under the user's thumb — a bar that shifts is a bug, not a transition.
 - **Don't** invent a colour that isn't in this file. If a design needs one, add the token here first, with a reason.

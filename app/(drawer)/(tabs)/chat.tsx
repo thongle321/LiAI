@@ -26,9 +26,9 @@ import { colors } from "../../../themes/tokens.ts";
 import { filterMessages } from "../../../lib/chat/filter.ts";
 import { buildRows, type ChatRow } from "../../../lib/chat/rows.ts";
 import {
+  MOTION_DURATION_MS,
   fadeEntering,
   fadeExiting,
-  useMotionDuration,
   usePressFeedback,
 } from "../../../lib/motion.ts";
 import { APP_NAME } from "../../../constants/app.ts";
@@ -102,7 +102,7 @@ export default function ChatRoute() {
   const emptyState = messages.length === 0 && query.trim() === "";
   const showPlaceholder = !ready && emptyState;
 
-  const motionDuration = useMotionDuration();
+  const motionDuration = MOTION_DURATION_MS;
   const navigation = useNavigation<{ openDrawer: () => void }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -284,7 +284,7 @@ export default function ChatRoute() {
           keyboard opens. The library's guide is also explicit that
           KeyboardAvoidingView is the wrong tool for chat, so there is no KAV
           on this screen. */}
-      <View style={{ flex: 1 }}>
+      <View className="flex-1">
         <View
           className="flex-1"
           onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}

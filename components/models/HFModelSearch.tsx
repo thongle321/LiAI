@@ -1,8 +1,8 @@
 /** Add a model from Hugging Face.
  *
- * PocketParity with PocketPal's HFModelSearch + DetailsView: one sheet
- * whose content switches between the result list and a model's file
- * detail, a search bar carrying its own sort and author filter sheets,
+ * PocketParity with PocketPal's HFModelSearch + DetailsView: two stacked
+ * sheets — search underneath, file detail on top — a search bar carrying
+ * its own sort and author filter sheets,
  * paging from the Hub's Link header, per-file bookmarks, storage-gated
  * downloads and the four warning chips.
  *
@@ -18,6 +18,7 @@ import {
   Alert,
   FlatList,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -25,19 +26,19 @@ import {
 import { getFreeDiskStorageAsync } from "expo-file-system/legacy";
 import {
   ArrowLeft,
-  ArrowUpDown,
   Bookmark,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Flame,
   Lock,
   Search,
   SlidersHorizontal,
-  User,
   X,
 } from "lucide-react-native";
 
 import { Sheet } from "../Sheet.tsx";
+import { useSnackbar } from "../Snackbar.tsx";
 import { colors } from "../../themes/tokens.ts";
 import { useModelStore } from "../../store/modelStore";
 import { hfSpecId } from "../../lib/models/huggingface.ts";
@@ -113,26 +114,17 @@ function WarningSnackbar({
   warnings: string[];
   onDone: () => void;
 }) {
+  const { showSnackbar } = useSnackbar();
   useEffect(() => {
+    showSnackbar(warnings.join("\n"), {
+      type: "warning",
+      duration: 1000 + 2000 * warnings.length,
+    });
     const t = setTimeout(onDone, 1000 + 2000 * warnings.length);
     return () => clearTimeout(t);
-  }, [warnings, onDone]);
+  }, [warnings, onDone, showSnackbar]);
 
-  return (
-    <View
-      className="absolute left-0 right-0 bottom-0 rounded-lg bg-surface-3 border border-border p-4"
-      accessibilityLiveRegion="polite"
-    >
-      {warnings.map((warning, i) => (
-        <Text
-          key={warning}
-          className="font-sans text-body-sm text-primary-text"
-        >
-          {`${i + 1}. ${warning}`}
-        </Text>
-      ))}
-    </View>
-  );
+  return null;
 }
 
 function SortSheet({
@@ -532,65 +524,25 @@ export function HFModelSearch({
     </Pressable>
   );
 
+  // Two stacked sheets, PocketPal's HFModelSearch shape on our Sheet: the
+  // search sheet stays mounted underneath — query, results and scroll
+  // intact — while the details sheet covers it. Back arrow closes details
+  // only; the search X closes everything.
   return (
-    <Sheet
-      visible={visible}
-      onClose={selected ? closeDetails : onClose}
-      title={selected ? extractHFModelTitle(selected.modelId) : "Add from Hugging Face"}
-      titleEllipsize={selected !== null}
-      scrollable={false}
-      testID="hf-search-sheet"
-    >
-      {selected ? (
+    <>
+      <Sheet
+        visible={visible}
+        onClose={onClose}
+        title="Add from Hugging Face"
+        scrollable={false}
+        fullHeight
+        testID="hf-search-sheet"
+      >
         <View className="grow">
-          {/* Fixed header above the list, PocketParity's DetailsView. */}
-          <View className="pb-2">
-            <View className="flex-row items-center gap-2">
-              <Pressable
-                onPress={closeDetails}
-                className="h-12 w-12 items-center justify-center -ml-3"
-                accessibilityRole="button"
-                accessibilityLabel="Back to search results"
-              >
-                <ArrowLeft size={20} color={colors.secondaryText} />
-              </Pressable>
-              <Text className="flex-1 font-sans text-body-sm text-secondary-text/70">
-                {selected.author}
-              </Text>
-              {isVision ? <Chip label="Vision" /> : null}
-            </View>
-            <View className="flex-row flex-wrap items-center gap-2 mt-2">
-              {selected.lastModified ? (
-                <StatChip label={timeAgo(selected.lastModified, Date.now(), true)} />
-              ) : null}
-              <StatChip label={`${formatNumber(selected.downloads)} downloads`} />
-              <StatChip label={`${formatNumber(selected.likes)} likes`} />
-              {selected.trendingScore && selected.trendingScore > 20 ? (
-                <StatChip label="Trending" trending />
-              ) : null}
-            </View>
-            <Text className="font-sans-semibold text-body-md text-primary-text mt-3 mb-1">
-              Files
-            </Text>
-          </View>
-          {filesLoading ? (
-            <View className="flex-row items-center justify-center py-4">
-              <ActivityIndicator size="small" color={colors.primary} />
-            </View>
-          ) : (
-            <FlatList
-              className="grow"
-              data={visibleFiles}
-              keyExtractor={(f) => f.name}
-              renderItem={renderFile}
-              keyboardShouldPersistTaps="handled"
-            />
-          )}
-        </View>
-      ) : (
-        <View className="grow">
-          <View className="flex-row items-center gap-2 pb-3">
-            <View className="flex-1 flex-row items-center gap-2 bg-surface-1 border border-border rounded-lg px-4">
+          {/* PocketPal EnhancedSearchBar layout: search pill on top, filter
+              chips (author + sort) in a horizontal scroll below. */}
+          <View className="pb-3">
+            <View className="flex-row items-center gap-2 bg-surface-1 border border-border rounded-full px-4">
               <Search size={16} color={colors.secondaryText} />
               <TextInput
                 value={query}
@@ -611,25 +563,38 @@ export function HFModelSearch({
                 </Pressable>
               ) : null}
             </View>
-            <Pressable
-              onPress={() => setAuthorOpen(true)}
-              className="h-12 w-12 items-center justify-center rounded-lg border border-border"
-              accessibilityRole="button"
-              accessibilityLabel={`Filter by author${searchFilters.author ? `, ${searchFilters.author}` : ""}`}
-            >
-              <User
-                size={18}
-                color={searchFilters.author ? colors.primary : colors.secondaryText}
-              />
-            </Pressable>
-            <Pressable
-              onPress={() => setSortOpen(true)}
-              className="h-12 w-12 items-center justify-center rounded-lg border border-border"
-              accessibilityRole="button"
-              accessibilityLabel="Sort results"
-            >
-              <ArrowUpDown size={18} color={colors.secondaryText} />
-            </Pressable>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="pt-2">
+              <Pressable
+                onPress={() => setAuthorOpen(true)}
+                className={`flex-row items-center gap-1 rounded-full px-3 py-1.5 ${
+                  searchFilters.author
+                    ? " bg-surface-3"
+                    : " border border-border"
+                }`}
+                accessibilityRole="button"
+                accessibilityLabel={`Filter by author${searchFilters.author ? `, ${searchFilters.author}` : ""}`}
+              >
+                <Text className={`font-sans text-body-sm ${
+                  searchFilters.author ? "text-primary font-sans-medium" : "text-secondary-text"
+                }`}>
+                  {searchFilters.author || "Author"}
+                </Text>
+                <ChevronDown size={14} color={searchFilters.author ? colors.primary : colors.secondaryText} />
+              </Pressable>
+              <Pressable
+                onPress={() => setSortOpen(true)}
+                className={`ml-2 flex-row items-center gap-1 rounded-full px-3 py-1.5 ${
+                  "border border-border"
+                }`}
+                accessibilityRole="button"
+                accessibilityLabel="Sort results"
+              >
+                <Text className="font-sans text-body-sm text-secondary-text">
+                  {SORT_OPTIONS.find((o) => o.value === searchFilters.sortBy)?.label ?? "Sort"}
+                </Text>
+                <ChevronDown size={14} color={colors.secondaryText} />
+              </Pressable>
+            </ScrollView>
           </View>
 
           {searchError ? (
@@ -679,24 +644,79 @@ export function HFModelSearch({
             />
           )}
         </View>
-      )}
-
-      {snackWarnings ? (
-        <WarningSnackbar warnings={snackWarnings} onDone={() => setSnackWarnings(null)} />
-      ) : null}
-
-      <SortSheet
-        visible={sortOpen}
-        active={searchFilters.sortBy}
-        onClose={() => setSortOpen(false)}
-        onPick={(sortBy) => applyFilters({ sortBy })}
-      />
-      <AuthorSheet
-        visible={authorOpen}
-        author={searchFilters.author}
-        onClose={() => setAuthorOpen(false)}
-        onApply={(author) => applyFilters({ author })}
-      />
-    </Sheet>
+        <SortSheet
+          visible={sortOpen}
+          active={searchFilters.sortBy}
+          onClose={() => setSortOpen(false)}
+          onPick={(sortBy) => applyFilters({ sortBy })}
+        />
+        <AuthorSheet
+          visible={authorOpen}
+          author={searchFilters.author}
+          onClose={() => setAuthorOpen(false)}
+          onApply={(author) => applyFilters({ author })}
+        />
+      </Sheet>
+      <Sheet
+        visible={visible && selected !== null}
+        onClose={closeDetails}
+        title={selected ? extractHFModelTitle(selected.modelId) : ""}
+        titleEllipsize
+        scrollable={false}
+        fullHeight
+        testID="hf-details-sheet"
+      >
+        {selected ? (
+          <View className="grow">
+            {/* Fixed header above the list, PocketPal's DetailsView. */}
+            <View className="pb-2">
+              <View className="flex-row items-center gap-2">
+                <Pressable
+                  onPress={closeDetails}
+                  className="h-12 w-12 items-center justify-center -ml-3"
+                  accessibilityRole="button"
+                  accessibilityLabel="Back to search results"
+                >
+                  <ArrowLeft size={20} color={colors.secondaryText} />
+                </Pressable>
+                <Text className="flex-1 font-sans text-body-sm text-secondary-text/70">
+                  {selected.author}
+                </Text>
+                {isVision ? <Chip label="Vision" /> : null}
+              </View>
+              <View className="flex-row flex-wrap items-center gap-2 mt-2">
+                {selected.lastModified ? (
+                  <StatChip label={timeAgo(selected.lastModified, Date.now(), true)} />
+                ) : null}
+                <StatChip label={`${formatNumber(selected.downloads)} downloads`} />
+                <StatChip label={`${formatNumber(selected.likes)} likes`} />
+                {selected.trendingScore && selected.trendingScore > 20 ? (
+                  <StatChip label="Trending" trending />
+                ) : null}
+              </View>
+              <Text className="font-sans-semibold text-body-md text-primary-text mt-3 mb-1">
+                Files
+              </Text>
+            </View>
+            {filesLoading ? (
+              <View className="flex-row items-center justify-center py-4">
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : (
+              <FlatList
+                className="grow"
+                data={visibleFiles}
+                keyExtractor={(f) => f.name}
+                renderItem={renderFile}
+                keyboardShouldPersistTaps="handled"
+              />
+            )}
+          </View>
+        ) : null}
+        {snackWarnings ? (
+          <WarningSnackbar warnings={snackWarnings} onDone={() => setSnackWarnings(null)} />
+        ) : null}
+      </Sheet>
+    </>
   );
 }

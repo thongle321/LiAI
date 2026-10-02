@@ -84,7 +84,11 @@ describe("message list stability", () => {
     );
     const pending = read("components/chat/PendingIndicator.tsx");
     assert.match(pending, /withRepeat\(withTiming/);
-    assert.match(pending, /useReducedMotion/, "reduced motion renders static dots");
+    assert.doesNotMatch(
+      pending,
+      /useReducedMotion|ReducedMotion/,
+      "dots always animate like PocketPal: no OS reduce-motion branch",
+    );
   });
 
   it("tracks the end with STICK/LEAVE hysteresis from one source", () => {

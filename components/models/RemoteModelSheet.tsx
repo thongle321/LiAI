@@ -3,7 +3,6 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   Text,
   TextInput,
@@ -33,12 +32,16 @@ export function RemoteModelSheet({
     "custom_openai",
   );
   const [validating, setValidating] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [validationWarning, setValidationWarning] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!name || !baseUrl || !modelName) {
-      Alert.alert("Error", "Please fill in all required fields");
+      setFormError("Please fill in all required fields");
       return;
     }
+    setFormError(null);
+    setValidationWarning(null);
 
     setValidating(true);
     const provider: RemoteApiProvider = {
@@ -53,7 +56,7 @@ export function RemoteModelSheet({
 
     const isValid = await validateAndRecord(provider);
     if (!isValid) {
-      Alert.alert("Warning", "Could not validate API endpoint. Adding anyway.");
+      setValidationWarning("Could not validate API endpoint. Adding anyway.");
     }
 
     addRemoteApi(provider);
@@ -113,6 +116,12 @@ export function RemoteModelSheet({
       testID="remote-model-sheet"
     >
       <View className="flex-col gap-4">
+        {formError ? (
+          <Text className="font-sans text-body-sm text-error">{formError}</Text>
+        ) : null}
+        {validationWarning ? (
+          <Text className="font-sans text-body-sm text-warning">{validationWarning}</Text>
+        ) : null}
         {!privacyAcknowledged && (
           <Text className="font-sans text-body-sm text-secondary-text">
             API keys stay on this device in encrypted storage.

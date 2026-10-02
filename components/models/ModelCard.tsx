@@ -8,9 +8,9 @@ import { ChevronDown, ChevronRight, Power, Settings, Trash2, X } from "lucide-re
 import { colors } from "../../themes/tokens.ts";
 import { useModelStore } from "../../store/modelStore";
 import {
+  MOTION_DURATION_MS,
   fadeEntering,
   fadeExiting,
-  useMotionDuration,
 } from "../../lib/motion.ts";
 import type { ModelSpec, RemoteApiProvider } from "../../types/models";
 import { Chip, CancelDownloadButton, DownloadButton, ModelTypeIcon, StatusDot, formatBytes, isProgressVisible } from "./ModelBits.tsx";
@@ -60,10 +60,9 @@ export function ModelCard({
   // "751 MB" reads as two competing sizes for one model.
   const fileBytes = item.files.reduce((sum, f) => sum + f.size, 0);
   // Detail expand: chevron state only — the region itself mounts with
-  // the shared fade preset (reduced motion collapses the duration to 0
-  // inside useMotionDuration, so no second path is needed here).
+  // the shared fade preset.
   const [expanded, setExpanded] = useState(false);
-  const duration = useMotionDuration();
+  const duration = MOTION_DURATION_MS;
 
   return (
     <View className="mb-3 overflow-hidden rounded-lg border border-border bg-surface-1">

@@ -19,9 +19,9 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 import { colors } from "../../themes/tokens.ts";
 import { formatTime } from "../../lib/format.ts";
 import {
+  MOTION_DURATION_MS,
   bubbleEntering,
   fadeExiting,
-  useMotionDuration,
   usePressFeedback,
 } from "../../lib/motion.ts";
 import type { MessageRow } from "../../lib/chat/rows.ts";
@@ -42,7 +42,7 @@ export function MessageListItem({
   onRegenerate: (() => void) | null;
 }) {
   const { message, grouped, showAvatar, status } = row;
-  const duration = useMotionDuration();
+  const duration = MOTION_DURATION_MS;
   const entering = bubbleEntering(duration);
   const exiting = fadeExiting(duration);
   const press = usePressFeedback();

@@ -32,10 +32,13 @@ function menuLabels(): string[] {
 }
 
 describe("chat menu", () => {
-  it("keeps PocketPal's order", () => {
+  it("keeps PocketPal's order, with Search heading the session group", () => {
+    // PocketPal has no chat search at all; its slot is ours, agreed in
+    // grilling: first among the session-gated rows.
     assert.deepEqual(menuLabels(), [
       "Generation settings",
       "Model",
+      "Search",
       "Duplicate chat history",
       "Rename",
       "Delete",
@@ -125,7 +128,8 @@ describe("chat header", () => {
   it("wires the menu's first item to the generation sheet", () => {
     assert.match(
       CHAT,
-      /<ChatMenu onOpenGeneration=\{\(\) => setGenerationOpen\(true\)\} \/>/,
+      /<ChatMenu\s+onOpenGeneration=\{\(\) => setGenerationOpen\(true\)\}\s+onOpenSearch=\{/,
+      "both menu callbacks are wired (generation + search)",
     );
     assert.doesNotMatch(
       CHAT,

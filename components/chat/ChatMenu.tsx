@@ -30,6 +30,7 @@ import {
   LayoutGrid,
   MoreVertical,
   Pencil,
+  Search,
   Settings,
   Share,
   Trash,
@@ -104,8 +105,12 @@ function MenuRow({
 
 export function ChatMenu({
   onOpenGeneration,
+  onOpenSearch,
 }: {
   onOpenGeneration: () => void;
+  /** Opens the in-conversation search bar fresh (menu can't reflect
+   *  toggle state, so the row is a plain "open"). */
+  onOpenSearch: () => void;
 }) {
   const btnRef = useRef<View | null>(null);
   const [open, setOpen] = useState(false);
@@ -257,6 +262,11 @@ export function ChatMenu({
                 {hasSession ? (
                   <>
                     <View className="h-px bg-border mx-4" />
+                    <MenuRow
+                      label="Search"
+                      icon={<Search size={16} color={colors.secondaryText} />}
+                      onPress={() => run(onOpenSearch)}
+                    />
                     <MenuRow
                       label="Duplicate chat history"
                       icon={<Copy size={16} color={colors.secondaryText} />}

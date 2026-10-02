@@ -1,5 +1,6 @@
-/** New conversation moved: drawer row -> (attempted) chat header -> now
- * the drawer's Chat tab, pocketpal-style (Q1=A).
+/** New conversation's HOME moved: drawer row -> header + -> drawer Chat
+ * tab, with the pocketpal pen as the in-header entry (Q1=A + "Yes all").
+ * The chat HEADER is pinned by tests/chat-header-menu.test.ts, not here.
  * Run: node --test tests/drawer-nav.test.ts */
 
 import { describe, it } from "node:test";
@@ -12,7 +13,6 @@ function read(path: string): string {
 
 const SESSION_LIST = "components/chat/SessionList.tsx";
 const DRAWER = "components/AppDrawer.tsx";
-const CHAT = "app/(drawer)/(tabs)/chat.tsx";
 
 describe("drawer has no new-conversation row", () => {
   it("SessionList dropped the row and its onNew prop", () => {
@@ -32,15 +32,6 @@ describe("drawer has no new-conversation row", () => {
     assert.doesNotMatch(source, /onNew/);
     // newConversation IS present — as the Chat tab's action (Q1=A),
     // asserted by the suite below; what is gone is the SessionList row.
-  });
-});
-
-describe("chat route stays free of the affordance", () => {
-  it("header has no new-conversation button", () => {
-    const source = read(CHAT);
-    assert.doesNotMatch(source, /accessibilityLabel="New conversation"/);
-    assert.doesNotMatch(source, /MessageSquarePlus/);
-    assert.doesNotMatch(source, /newConversation/);
   });
 });
 

@@ -20,7 +20,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRouter } from "expo-router";
 import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
-import { Menu, Search, X } from "lucide-react-native";
+import { Menu, SquarePen } from "lucide-react-native";
 
 import { colors } from "../../../themes/tokens.ts";
 import { filterMessages } from "../../../lib/chat/filter.ts";
@@ -57,6 +57,7 @@ export default function ChatRoute() {
   const send = useChatStore((s) => s.send);
   const retry = useChatStore((s) => s.retry);
   const regenerate = useChatStore((s) => s.regenerate);
+  const newConversation = useChatStore((s) => s.newConversation);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -166,7 +167,7 @@ export default function ChatRoute() {
     });
   }, [streaming, listHeight, blankSpace, motionDuration]);
   const menuPress = usePressFeedback();
-  const searchPress = usePressFeedback();
+  const penPress = usePressFeedback();
   const [generationOpen, setGenerationOpen] = useState(false);
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
@@ -213,32 +214,34 @@ export default function ChatRoute() {
           </Text>
         </Pressable>
         <View className="w-36 flex-row items-center justify-end">
-          {/* The overflow menu carries generation settings as its first
-              item, so the trailing group stays at three controls and the
-              w-36 slot is unchanged. */}
-          <ChatMenu onOpenGeneration={() => setGenerationOpen(true)} />
-          <Animated.View style={searchPress.animatedStyle}>
+          {/* Pen (pocketpal's reset-button) leads, the kebab trails —
+              their HeaderRight order. The slot stays w-36. */}
+          <Animated.View style={penPress.animatedStyle}>
             <Pressable
               onPress={() => {
-                setSearchOpen((o) => !o);
+                // The pen starts a fresh chat; a stale search bar must
+                // not outlive the conversation it was filtering.
+                setSearchOpen(false);
                 setQuery("");
+                void newConversation();
               }}
-              onPressIn={searchPress.onPressIn}
-              onPressOut={searchPress.onPressOut}
+              onPressIn={penPress.onPressIn}
+              onPressOut={penPress.onPressOut}
               className="h-12 w-12 items-center justify-center"
               hitSlop={4}
               accessibilityRole="button"
-              accessibilityLabel={searchOpen ? "Close search" : "Search this conversation"}
+              accessibilityLabel="New conversation"
             >
-              {searchOpen ? (
-                <X size={20} color={colors.primary} />
-              ) : (
-                // Ink, like the menu and kebab beside it: DESIGN.md,
-                // Navigation — "Icons are 2px stroke at 20px in Ink".
-                <Search size={20} color={colors.primaryText} />
-              )}
+              <SquarePen size={20} color={colors.primaryText} />
             </Pressable>
           </Animated.View>
+          <ChatMenu
+            onOpenGeneration={() => setGenerationOpen(true)}
+            onOpenSearch={() => {
+              setSearchOpen(true);
+              setQuery("");
+            }}
+          />
         </View>
       </View>
       {searchOpen && (

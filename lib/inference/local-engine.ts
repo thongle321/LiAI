@@ -39,6 +39,9 @@ export interface LlamaCompletionParams extends Partial<LlamaSamplerParams> {
   tools?: unknown;
   media_paths?: string[];
   enable_thinking?: boolean;
+  /** Flat top-level sibling like enable_thinking — never nested: llama.rn's
+   *  converter drops unknown keys. */
+  jinja?: boolean;
   // The sampler's 16 fields arrive as FLAT, top-level siblings here — they
   // extend from LlamaSamplerParams rather than being restated, so the names
   // are defined once. They are NOT nested under a key: llama.rn's converter
@@ -100,6 +103,7 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
           ...(request.enableThinking !== undefined
             ? { enable_thinking: request.enableThinking }
             : {}),
+          ...(request.jinja !== undefined ? { jinja: request.jinja } : {}),
           // Flat, top-level, and NOT nested under a key: llama.rn's
           // NativeCompletionParams takes these as siblings (types.d.ts), and
           // the JSI converter drops unknown keys. Nesting them under

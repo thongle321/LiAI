@@ -1,20 +1,32 @@
 /** Generation settings sheet, opened from a control in the chat screen's
- * header.
+ * header — PocketPal's ChatGenerationSettingsSheet shape (grilling Q1-Q6).
  *
  * Two levels, mirroring PocketPal's split. The PRESET is the global default
  * every conversation starts from; a SESSION overrides it field by field,
  * so one conversation can be tuned without moving the others. Precedence is
  * session value, then preset — which is what defaultSampler() resolves.
  *
- * Sampling is per conversation here and nowhere else: there is no sampler
- * card in Settings, and a model settings sheet holds no sampler.
+ * Interaction parity (Q4): edits BUFFER in a local draft; the footer is
+ * PocketPal's actions row — Reset (left; a dropdown of both destinations
+ * for sessions), Save as preset (sessions), Save. X / swipe / scrim all
+ * land on onClose, which discards the draft by never committing it.
+ *
+ * Validation (Q6=C): Save re-checks the two typed fields (custom N PREDICT,
+ * SEED — the ones whose live checks are min-only) and fires BOTH layers:
+ * a summary Alert with the offending bullets AND an inline red mark on the
+ * field (TextFieldRow's external `error`).
+ *
+ * Q5a departure, recorded: PocketPal's "INCLUDE THINKING IN CONTEXT" is
+ * history-time filtering of persisted reasoning parts
+ * (useChatSession.ts:118-121); this app never captures `reasoning_content`
+ * (zero references outside the pocketpal folder), so their switch has
+ * nothing to filter here. Our "Show thinking" is generation-time
+ * `enable_thinking` and stays what it says it is. JINJA (Q5b) IS built —
+ * a real per-turn llama.rn flag, threaded store → turn → engine.
  */
 
 import { useEffect, useState } from "react";
-import { Pressable, Text, View, useWindowDimensions } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { X } from "lucide-react-native";
-import BottomSheet, { BottomSheetScrollView } from "@expo/ui/community/bottom-sheet";
+import { Alert, Pressable, Text, View } from "react-native";
 
 import {
   DEFAULT_SAMPLER,
@@ -24,11 +36,31 @@ import {
 import { useInference } from "../../store/inference.ts";
 import { useChatStore, defaultGetStore } from "../../store/chat";
 import { SamplerRows } from "../SamplerRows.tsx";
-import { sheetMaxHeight } from "../../lib/sheet.ts";
-import { colors } from "../../themes/tokens.ts";
-import { ActionRow, SettingsSection, Segmented } from "../SettingsRows.tsx";
+import { Sheet } from "../Sheet.tsx";
+import { ResetMenu } from "../ResetMenu.tsx";
+import { Segmented, SettingsSection } from "../SettingsRows.tsx";
 
 type Mode = "session" | "preset";
+
+/** Save-time bounds for the typed fields: their live checks cover the floor
+ *  only (n-predict) or nothing at all (seed), so over-max values can reach
+ *  the draft. The slider fields clamp by construction. */
+function validateTyped(sampler: SamplerParams): Partial<Record<"seed" | "nPredict", string>> {
+  const errors: Partial<Record<"seed" | "nPredict", string>> = {};
+  if (sampler.nPredict !== -1 && (sampler.nPredict < 1 || sampler.nPredict > 8192)) {
+    errors.nPredict = "Custom length must be between 1 and 8192 tokens.";
+  }
+  if (sampler.seed !== -1 && (sampler.seed < 0 || !Number.isSafeInteger(sampler.seed))) {
+    errors.seed = "Seed must be -1 (random) or a whole number 0 and up.";
+  }
+  return errors;
+}
+
+interface Draft {
+  sampler: SamplerParams;
+  thinking: boolean;
+  jinja: boolean;
+}
 
 export function GenerationSettingsSheet({
   visible,
@@ -41,12 +73,16 @@ export function GenerationSettingsSheet({
   const {
     sampler: preset,
     thinkingEnabled,
+    jinjaEnabled,
     setSampler,
     setThinkingEnabled,
+    setJinjaEnabled,
     load,
   } = useInference();
   const [mode, setMode] = useState<Mode>("session");
   const [override, setOverride] = useState<Partial<SamplerParams> | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [errors, setErrors] = useState<Partial<Record<"seed" | "nPredict", string>>>({});
 
   useEffect(() => {
     void load();
@@ -74,159 +110,187 @@ export function GenerationSettingsSheet({
   const hasSession = sessionId !== null;
   const availableModes: Mode[] = hasSession ? ["session", "preset"] : ["preset"];
   const isSession = hasSession && mode === "session";
-  const resolved = isSession
-    ? resolveSampler(preset, override)
-    : { ...preset };
-
-  function apply(patch: Partial<SamplerParams>): void {
-    if (!isSession) {
-      setSampler(patch);
-      return;
-    }
-    const next = { ...(override ?? {}), ...patch };
-    setOverride(next);
-    void (async () => {
-      const store = await defaultGetStore().catch(() => null);
-      if (store && sessionId) {
-        await store.setSessionSampler(sessionId, next).catch(() => null);
-      }
-    })();
-  }
-
-  function reset(): void {
-    if (!isSession) {
-      setSampler(DEFAULT_SAMPLER);
-      return;
-    }
-    setOverride(null);
-    void (async () => {
-      const store = await defaultGetStore().catch(() => null);
-      if (store && sessionId) {
-        await store.setSessionSampler(sessionId, null).catch(() => null);
-      }
-    })();
-  }
-
-  const overrideCount = override ? Object.keys(override).length : 0;
-  // Read outside the sheet: the sheet is its own native window.
-  const insets = useSafeAreaInsets();
-  const { height: winHeight } = useWindowDimensions();
   const title = isSession
     ? "Chat Generation Settings (Session)"
     : "Chat Generation Settings (Preset)";
 
+  // Buffer a fresh draft whenever the sheet opens or the source switches
+  // (PocketPal reloads settings on source change too — edits on the old
+  // source are abandoned, not merged).
+  useEffect(() => {
+    if (!visible) return;
+    setErrors({});
+    setDraft({
+      sampler: isSession ? resolveSampler(preset, override) : { ...preset },
+      thinking: thinkingEnabled,
+      jinja: jinjaEnabled,
+    });
+  }, [visible, mode, isSession, preset, override, thinkingEnabled, jinjaEnabled]);
+
+  /** Validate, commit the draft to the stores, close-worthy. False = the
+   *  validation alert is showing and the sheet stays open. */
+  function commitDraft(): boolean {
+    if (!draft) return false;
+    const current = draft;
+    const errs = validateTyped(current.sampler);
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      Alert.alert(
+        "Invalid values",
+        "Please correct:\n" +
+          Object.entries(errs)
+            .map(([key, msg]) => `• ${key}: ${msg}`)
+            .join("\n"),
+        [{ text: "OK" }],
+      );
+      return false;
+    }
+    if (isSession) {
+      void (async () => {
+        const store = await defaultGetStore().catch(() => null);
+        if (store && sessionId) {
+          await store.setSessionSampler(sessionId, current.sampler).catch(() => null);
+        }
+      })();
+    } else {
+      setSampler(current.sampler);
+    }
+    // Both flags are globals: committing them in either mode is correct
+    // (session mode hides the thinking row, so that write is a no-op).
+    setThinkingEnabled(current.thinking);
+    setJinjaEnabled(current.jinja);
+    return true;
+  }
+
+  function handleSave(): void {
+    if (commitDraft()) onClose();
+  }
+
+  function handleSaveAsPreset(): void {
+    if (!commitDraft()) return;
+    // PocketPal order: save the session, apply the same values to the
+    // preset, then confirm.
+    if (draft) setSampler(draft.sampler);
+    onClose();
+    Alert.alert(
+      "Saved as preset",
+      "These settings now start every new conversation.",
+      [{ text: "OK" }],
+    );
+  }
+
+  /** Draft-only edits: nothing here may reach a store before Save. */
+  function apply(patch: Partial<SamplerParams>): void {
+    setDraft((d) => (d ? { ...d, sampler: { ...d.sampler, ...patch } } : d));
+    // A field the user just corrected stops being marked: the Save-time
+    // error lives on until its own field changes.
+    setErrors((e) => {
+      if (!("nPredict" in patch) && !("seed" in patch)) return e;
+      const next = { ...e };
+      if ("nPredict" in patch) delete next.nPredict;
+      if ("seed" in patch) delete next.seed;
+      return next;
+    });
+  }
+
+  function setDraftThinking(on: boolean): void {
+    setDraft((d) => (d ? { ...d, thinking: on } : d));
+  }
+
+  function setDraftJinja(on: boolean): void {
+    setDraft((d) => (d ? { ...d, jinja: on } : d));
+  }
+
+  // Resets touch the DRAFT only — PocketPal's reset buttons edit the form,
+  // Save commits it.
+  function resetToPreset(): void {
+    setDraft((d) => (d ? { ...d, sampler: { ...preset } } : d));
+  }
+
+  function resetToDefault(): void {
+    setDraft((d) => (d ? { ...d, sampler: { ...DEFAULT_SAMPLER } } : d));
+  }
+
   return (
-    // @expo/ui's COMMUNITY sheet, not the universal one. The universal sheet
-    // put children straight into a Compose Dialog with no RN RootView, so an
-    // RN ScrollView there crashed on touch (RootViewUtil.getRootView). This
-    // one hosts children in an RNHostView whose TouchDispatchingRootViewGroup
-    // implements RootView + NestedScrollingChild3, so RN scroll views work.
-    //
-    // No snapPoints on purpose: that is what makes it fitToContents, so the
-    // sheet wraps the child's capped height instead of going fillMaxSize and
-    // covering the status bar. Capping the child is what puts the top edge at
-    // insets.top + 16.
-    <BottomSheet
-      index={visible ? 0 : -1}
-      onChange={(i) => {
-        if (i === -1) onClose();
-      }}
+    <Sheet
+      visible={visible}
       onClose={onClose}
-      enablePanDownToClose
-      backgroundStyle={{ backgroundColor: colors.surface1 }}
-    >
-      <View
-        // A DEFINITE height, not maxHeight. This view is the sheet's only
-        // lever on its own height (the community BottomSheet has no
-        // maxHeight / maxDynamicContentSize / topInset, and never forwards
-        // `modifiers`), and the native side sizes the surface from the
-        // child's measured size via RNHostView's requiredSize(childSize).
-        // maxHeight is an at-most box, so that measurement starts at zero and
-        // the surface falls back to the full dialog. A definite height closes
-        // the loop on the first pass, which is what puts the top edge at
-        // insets.top + 16. This is the same arithmetic PocketPal gets from
-        // gorhom's maxDynamicContentSize.
-        style={{ height: sheetMaxHeight(winHeight, insets.top) }}
-        className="rounded-t-xl"
-      >
-        <View className="flex-row items-center justify-between px-4 pb-2 pt-4">
-          <Text className="flex-1 mr-2 font-sans-semibold text-h3 text-primary-text">
-            {title}
-          </Text>
-          <Pressable
-            onPress={onClose}
-            className="h-12 w-12 items-center justify-center"
-            hitSlop={4}
-            accessibilityRole="button"
-            accessibilityLabel="Close generation settings"
-          >
-            <X size={20} color={colors.secondaryText} />
-          </Pressable>
-        </View>
-
-        <BottomSheetScrollView
-          // flex-1 is safe here and grow is not: the parent now has a
-          // definite height, so flexBasis 0 has a box to resolve against.
-          className="flex-1"
-          contentContainerClassName="px-4 pb-4"
-          keyboardShouldPersistTaps="handled"
-        >
-          <Text className="mb-4 font-sans text-body-md text-secondary-text">
-            {isSession
-              ? overrideCount === 0
-                ? "This conversation follows the preset."
-                : `${overrideCount} value${overrideCount === 1 ? "" : "s"} overridden. Everything else follows the preset.`
-              : "The default every conversation starts from, unless it overrides it."}
-          </Text>
-
-          <SettingsSection>
-            <View className="row">
-              <Segmented<Mode>
-                label="Settings source"
-                description={
-                  hasSession
-                    ? undefined
-                    : "Start a conversation to give it its own settings. Until then these are the preset."
-                }
-                value={isSession ? "session" : "preset"}
-                options={availableModes}
-                displayFor={(m) => (m === "session" ? "Session" : "Preset")}
-                onPick={setMode}
-              />
-            </View>
-          </SettingsSection>
-
-          <SettingsSection>
-            <SamplerRows
-              sampler={resolved}
-              thinkingEnabled={thinkingEnabled}
-              showThinking={!isSession}
-              onChange={apply}
-              onThinkingChange={setThinkingEnabled}
+      title={title}
+      footer={
+        <View className="flex-row items-center justify-between">
+          {isSession ? (
+            <ResetMenu
+              items={[
+                { label: "Reset to preset", onPress: resetToPreset },
+                { label: "Reset to System Defaults", onPress: resetToDefault },
+              ]}
             />
-          </SettingsSection>
-        </BottomSheetScrollView>
-
-        {!isSession || overrideCount > 0 ? (
-          <View className="px-4 pt-2" style={{ paddingBottom: 10 + insets.bottom }}>
-            <SettingsSection>
-              <View className="row">
-                <ActionRow
-                  label="Reset"
-                  description={
-                    isSession
-                      ? "Drop this conversation's overrides; it follows the preset again."
-                      : "Return every value to its shipped default, for this and every conversation."
-                  }
-                  buttonLabel={isSession ? "Reset to Preset" : "Reset to System Defaults"}
-                  variant="secondary"
-                  onPress={reset}
-                />
-              </View>
-            </SettingsSection>
+          ) : (
+            <Pressable
+              onPress={resetToDefault}
+              className="min-h-12 justify-center"
+              accessibilityRole="button"
+              accessibilityLabel="Reset to System Defaults"
+            >
+              <Text className="font-sans text-body-md text-primary">
+                Reset to System Defaults
+              </Text>
+            </Pressable>
+          )}
+          <View className="flex-row items-center gap-2">
+            {isSession ? (
+              <Pressable
+                onPress={handleSaveAsPreset}
+                className="btn btn--secondary"
+                accessibilityRole="button"
+                accessibilityLabel="Save as preset"
+              >
+                <Text className="font-sans text-body-md text-primary">Save as preset</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={handleSave}
+              className="btn btn--primary"
+              accessibilityRole="button"
+              accessibilityLabel="Save"
+            >
+              <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
+            </Pressable>
           </View>
-        ) : null}
+        </View>
+      }
+    >
+      {/* PocketPal: the source control sits ABOVE the card, not inside it
+          (styles.settingsSourceContainer: horizontal margin, 16 below). */}
+      <View className="px-3 mb-4">
+        <Segmented<Mode>
+          label="Settings source"
+          description={
+            hasSession
+              ? undefined
+              : "Start a conversation to give it its own settings. Until then these are the preset."
+          }
+          value={isSession ? "session" : "preset"}
+          options={availableModes}
+          displayFor={(m) => (m === "session" ? "Session" : "Preset")}
+          onPick={setMode}
+        />
       </View>
-    </BottomSheet>
+      {/* One divider-less card, 24px rhythm — CompletionSettings' shape. */}
+      <SettingsSection plain>
+        {draft ? (
+          <SamplerRows
+            sampler={draft.sampler}
+            thinkingEnabled={draft.thinking}
+            showThinking={!isSession}
+            jinjaEnabled={draft.jinja}
+            errors={errors}
+            onChange={apply}
+            onThinkingChange={setDraftThinking}
+            onJinjaChange={setDraftJinja}
+          />
+        ) : null}
+      </SettingsSection>
+    </Sheet>
   );
 }

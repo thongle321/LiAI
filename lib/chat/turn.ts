@@ -47,6 +47,8 @@ export interface TurnDeps {
   getSystemPrompt(): Promise<string | undefined>;
   /** Local-only thinking preference; omitted keeps the native default. */
   getThinking?: () => Promise<boolean>;
+  /** Local-only jinja template preference; omitted keeps the native default. */
+  getJinja?: () => Promise<boolean>;
   /** Local-only sampling params for THIS session, already resolved
    *  session-vs-preset; null falls back to the native default. Takes the
    *  id rather than reading the active pointer, because a turn that mints
@@ -103,6 +105,7 @@ export function createTurnRunner(deps: TurnDeps) {
     const search = await deps.getSearch().catch(() => null);
     const systemPrompt = await deps.getSystemPrompt().catch(() => undefined);
     const thinking = await deps.getThinking?.().catch(() => undefined);
+    const jinja = await deps.getJinja?.().catch(() => undefined);
     const sampler = await deps.getSampler?.(sessionId).catch(() => null);
     let imagePaths: string[] | undefined;
     if (paths.image) {
@@ -117,6 +120,7 @@ export function createTurnRunner(deps: TurnDeps) {
       // Local reads imagePaths (llama media_paths); remote stays text-only.
       ...(imagePaths ? { imagePaths } : {}),
       ...(thinking !== undefined ? { enableThinking: thinking } : {}),
+      ...(jinja !== undefined ? { jinja } : {}),
     ...(sampler ? { sampler } : {}),
       fetchImpl: fetch,
       search,

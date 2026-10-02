@@ -7,11 +7,10 @@
 
 import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import BottomSheet from "@expo/ui/community/bottom-sheet";
-import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
 import { colors } from "../themes/tokens.ts";
 import { useModelStore } from "../store/modelStore";
+import { Sheet } from "./Sheet.tsx";
 import { ActionRow, SettingsSection, ToggleRow } from "./SettingsRows.tsx";
 
 function HfTokenSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -24,30 +23,15 @@ function HfTokenSheet({ open, onClose }: { open: boolean; onClose: () => void })
   }, [open]);
 
   return (
-    // The COMMUNITY sheet, not the universal one. The universal sheet puts
-    // children straight into a Compose Dialog that holds no RN RootView, so
-    // the KeyboardAwareScrollView below crashed the app on any drag
-    // (RootViewUtil.getRootView asserts). This one hosts children in an
-    // RNHostView whose TouchDispatchingRootViewGroup implements RootView.
-    // No snapPoints: that is what keeps it content-sized.
-    <BottomSheet
-      index={open ? 0 : -1}
-      onChange={(i) => {
-        if (i === -1) onClose();
-      }}
+    // Short sheet on the shared Sheet: TrueSheet's auto detent sizes to
+    // the content, and keyboard avoidance comes from the wrapper.
+    <Sheet
+      visible={open}
       onClose={onClose}
-      enablePanDownToClose
-      backgroundStyle={{ backgroundColor: colors.surface1 }}
+      title="Hugging Face"
+      testID="hf-token-sheet"
     >
-      <KeyboardAwareScrollView
-        testID="hf-token-sheet"
-        className="flex-col px-5 py-5"
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text className="mb-1 font-sans-semibold text-h3 text-primary-text">
-          Hugging Face
-        </Text>
-        <Text className="mb-4 font-sans text-body-md text-secondary-text">
+      <Text className="mb-4 font-sans text-body-md text-secondary-text">
           {hfToken
             ? "Token is set. Required for accessing gated models."
             : "Set a token to access gated models from Hugging Face."}
@@ -87,8 +71,7 @@ function HfTokenSheet({ open, onClose }: { open: boolean; onClose: () => void })
             <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
           </Pressable>
         </View>
-      </KeyboardAwareScrollView>
-    </BottomSheet>
+    </Sheet>
   );
 }
 

@@ -47,6 +47,7 @@ export interface InferenceParams {
   specDraftCacheK: CacheType;
   specDraftCacheV: CacheType;
   thinkingEnabled: boolean;
+  jinjaEnabled: boolean;
   /** Sampling params, nested so one setter covers the whole group. */
   sampler: SamplerParams;
   /** Opt into Android's Hexagon NPU. False leaves `devices` unset, which
@@ -83,6 +84,7 @@ export interface InferenceState extends InferenceParams {
   setSpecDraftCacheK: (v: CacheType) => void;
   setSpecDraftCacheV: (v: CacheType) => void;
   setThinkingEnabled: (on: boolean) => void;
+  setJinjaEnabled: (on: boolean) => void;
   /** Patch any subset; each value is clamped by the sampler module. */
   setSampler: (patch: Partial<SamplerParams>) => void;
   setUseHexagonNpu: (on: boolean) => void;
@@ -108,6 +110,7 @@ export const DEFAULT_INFERENCE: InferenceParams = {
   specDraftCacheK: "q8_0",
   specDraftCacheV: "q8_0",
   thinkingEnabled: true,
+  jinjaEnabled: true,
   sampler: { ...DEFAULT_SAMPLER },
   useHexagonNpu: false,
   // Repacking on by default, matching PocketPal's Android default: it makes
@@ -159,6 +162,7 @@ function asParams(value: unknown): InferenceParams {
     specDraftCacheK: cache("specDraftCacheK", DEFAULT_INFERENCE.specDraftCacheK),
     specDraftCacheV: cache("specDraftCacheV", DEFAULT_INFERENCE.specDraftCacheV),
     thinkingEnabled: flag("thinkingEnabled", DEFAULT_INFERENCE.thinkingEnabled),
+    jinjaEnabled: flag("jinjaEnabled", DEFAULT_INFERENCE.jinjaEnabled),
     sampler: parseSampler(v.sampler),
     useHexagonNpu: flag("useHexagonNpu", DEFAULT_INFERENCE.useHexagonNpu),
     useWeightRepacking: flag("useWeightRepacking", DEFAULT_INFERENCE.useWeightRepacking),
@@ -200,6 +204,7 @@ export function createInferenceStore(storage: KeyValueStorage) {
         specDraftCacheK,
         specDraftCacheV,
         thinkingEnabled,
+        jinjaEnabled,
         sampler,
         useHexagonNpu,
         useWeightRepacking,
@@ -226,6 +231,7 @@ export function createInferenceStore(storage: KeyValueStorage) {
             specDraftCacheK,
             specDraftCacheV,
             thinkingEnabled,
+            jinjaEnabled,
             sampler,
             useHexagonNpu,
             useWeightRepacking,
@@ -324,6 +330,10 @@ export function createInferenceStore(storage: KeyValueStorage) {
       },
       setThinkingEnabled: (on) => {
         set({ thinkingEnabled: on });
+        void persist();
+      },
+      setJinjaEnabled: (on) => {
+        set({ jinjaEnabled: on });
         void persist();
       },
       setSampler: (patch) => {

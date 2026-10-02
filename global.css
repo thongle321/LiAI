@@ -193,6 +193,20 @@
   border-radius: 8px;
   overflow: hidden;
 }
+/* Modifier: parameter cards (pocketpal's CompletionSettings shape) carry
+   16px padding with 24px between items and NO dividers — rhythm comes
+   from margin, not borders. Children keep their own py-2 (8px), so the
+   margin fills the rest: 8 + 8 + 8 = 24. */
+.rows--plain {
+  padding: 16px;
+}
+.rows--plain > * {
+  margin-bottom: 8px;
+}
+.rows--plain > *:last-child {
+  margin-bottom: 0;
+}
+
 .row {
   padding-left: 16px;
   padding-right: 16px;

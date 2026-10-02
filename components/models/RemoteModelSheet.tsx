@@ -70,18 +70,10 @@ export function RemoteModelSheet({
   };
 
   return (
-    // ACCEPTED RISK, agreed rather than overlooked: this file used
-    // KeyboardAwareScrollView precisely because "with four fields in a
-    // full-height sheet the keyboard covers the lower ones". The shared
-    // Sheet uses a plain ScrollView and relies on app.json's
-    // softwareKeyboardLayoutMode: resize. So:
-    //   - Android: the window resizes and the body scrolls, and the pinned
-    //     footer keeps Add and Cancel reachable.
-    //   - iOS: resize does not apply, so the keyboard covers the lower
-    //     fields AND the pinned footer, putting Add out of reach. The fix
-    //     is a KeyboardAvoidingView on the card, or a keyboardAware opt-in
-    //     on Sheet. Not built: no iOS target, and no one has yet observed
-    //     the Android case failing.
+    // Short sheet on the shared Sheet: TrueSheet's auto detent sizes to
+    // the content, and keyboard avoidance comes from the wrapper. This
+    // also resolves the accepted iOS risk above: TrueSheet owns the
+    // keyboard natively instead of relying on window resize.
     <Sheet
       visible={visible}
       onClose={onClose}

@@ -535,7 +535,6 @@ export function HFModelSearch({
         onClose={onClose}
         title="Add from Hugging Face"
         scrollable={false}
-        fullHeight
         testID="hf-search-sheet"
       >
         <View className="grow">
@@ -663,7 +662,6 @@ export function HFModelSearch({
         title={selected ? extractHFModelTitle(selected.modelId) : ""}
         titleEllipsize
         scrollable={false}
-        fullHeight
         testID="hf-details-sheet"
       >
         {selected ? (

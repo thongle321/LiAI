@@ -60,6 +60,8 @@ export interface CompletionRequest {
   imagePaths?: string[];
   /** Local-only: jinja thinking blocks on/off (native default true). */
   enableThinking?: boolean;
+  /** Local-only: jinja chat template on/off (native default true). */
+  jinja?: boolean;
   /** Local-only: sampling params. Remote engines ignore them — an OpenAI-
    *  compatible endpoint has its own defaults and no equivalent for the
    *  llama-only knobs (typical-p, XTC, mirostat). */

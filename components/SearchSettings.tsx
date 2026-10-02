@@ -9,8 +9,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import BottomSheet from "@expo/ui/community/bottom-sheet";
-import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
 import { colors } from "../themes/tokens.ts";
 import {
@@ -20,6 +18,7 @@ import {
   type SearchProviderId,
 } from "../lib/search-providers.ts";
 import { useSearch } from "../store/search.ts";
+import { Sheet } from "./Sheet.tsx";
 import {
   ActionRow,
   PickerRow,
@@ -73,27 +72,14 @@ function ProviderKeySheet({
   }
 
   return (
-    // The COMMUNITY sheet, not the universal one: the universal sheet holds no
-    // RN RootView in its Compose Dialog, so dragging this KeyboardAware
-    // ScrollView crashed the app (RootViewUtil.getRootView). See
-    // HfTokenSettings for the same swap.
-    <BottomSheet
-      index={providerId !== null ? 0 : -1}
-      onChange={(i) => {
-        if (i === -1) onClose();
-      }}
+    // Short sheet on the shared Sheet: TrueSheet's auto detent sizes to
+    // the content, and keyboard avoidance comes from the wrapper.
+    <Sheet
+      visible={providerId !== null}
       onClose={onClose}
-      enablePanDownToClose
-      backgroundStyle={{ backgroundColor: colors.surface1 }}
+      title={providerId === null ? "" : providerName(providerId)}
+      testID="search-key-sheet"
     >
-      <KeyboardAwareScrollView
-        testID="search-key-sheet"
-        className="flex-col px-5 py-5"
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text className="mb-1 font-sans-semibold text-h3 text-primary-text">
-          {providerId === null ? "" : providerName(providerId)}
-        </Text>
         <Text className="mb-4 font-sans text-body-md text-secondary-text">
           {hasKey ? "A key is saved for this provider." : "No key set for this provider."}
         </Text>
@@ -129,10 +115,9 @@ function ProviderKeySheet({
             accessibilityLabel="Save key"
           >
             <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
-          </Pressable>
-        </View>
-      </KeyboardAwareScrollView>
-    </BottomSheet>
+        </Pressable>
+      </View>
+    </Sheet>
   );
 }
 

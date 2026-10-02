@@ -43,7 +43,12 @@ describe("settings card pattern", () => {
   it("owns the row card in exactly one place", () => {
     // `.rows` is the card (Clean White, hairline, dividers edge to edge);
     // `.row` is a row inside one. Only SettingsSection may build the card.
-    const owners = screenFiles().filter((f) => /className="rows[ "]/.test(read(f)));
+    // Matches both the plain literal and the plain-modifier ternary
+    // (`className={plain ? "rows rows--plain" : "rows"}`) — the card
+    // class may not appear anywhere else, however it is composed.
+    const owners = screenFiles().filter((f) =>
+      /className=(?:"rows[ "]|\{[^}]*"rows)/.test(read(f)),
+    );
     assert.deepEqual(
       owners.map((f) => path.relative(ROOT, f).replace(/\\/g, "/")),
       ["components/SettingsRows.tsx"],

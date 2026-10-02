@@ -48,6 +48,8 @@ export interface AgentRunOptions {
   imagePaths?: string[];
   /** Local-only: jinja thinking blocks on/off for every loop turn. */
   enableThinking?: boolean;
+  /** Local-only: jinja chat template on/off for every loop turn. */
+  jinja?: boolean;
   /** Local-only: resolved sampling params for every loop turn. */
   sampler?: SamplerParams;
   fetchImpl: typeof fetch;
@@ -120,6 +122,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
             ...(options.enableThinking !== undefined
               ? { enableThinking: options.enableThinking }
               : {}),
+            ...(options.jinja !== undefined ? { jinja: options.jinja } : {}),
             ...(options.sampler ? { sampler: options.sampler } : {}),
           },
           {

@@ -42,10 +42,14 @@ export function SettingsSection({
   title,
   description,
   children,
+  plain = false,
 }: {
   title?: string;
   description?: string;
   children: ReactNode;
+  /** PocketPal's param card: 16px padding, 24px rhythm, NO dividers (the
+   *  `.row` class is what draws them, so plain children skip it). */
+  plain?: boolean;
 }) {
   return (
     <View className="mb-6">
@@ -59,7 +63,7 @@ export function SettingsSection({
           {description}
         </Text>
       ) : null}
-      <View className="rows">{children}</View>
+      <View className={plain ? "rows rows--plain" : "rows"}>{children}</View>
     </View>
   );
 }
@@ -203,13 +207,64 @@ export function SliderRow({
   step?: number;
   onChange: (value: number) => void;
 }) {
+  // PocketPal's InputSlider arrangement: label → description → [slider | inline
+  // numeric input]. The input mirrors the slider live while dragging and
+  // commits on blur/submit; slider commits debounce 300ms like theirs.
+  const [text, setText] = useState(display);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const committed = useRef(value);
+
+  function echo(v: number): string {
+    return step >= 1 ? `${Math.round(v)}` : v.toFixed(2);
+  }
+
+  function clampTo(v: number): number {
+    const c = Math.min(max, Math.max(min, v));
+    return step > 0 ? Math.round((c - min) / step) * step + min : c;
+  }
+
+  // Adopt an external change (a reset, a Save reload), never our own echo:
+  // the setters clamp, so without the guard typing would rewrite the field
+  // mid-word — the same guard TextFieldRow carries.
+  useEffect(() => {
+    if (value === committed.current) return;
+    committed.current = value;
+    setText(display);
+  }, [value, display]);
+
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+
+  function handleSlide(v: number): void {
+    const next = clampTo(v);
+    setText(echo(next));
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      committed.current = next;
+      onChange(next);
+    }, 300);
+  }
+
+  function commitTyped(): void {
+    if (timer.current) clearTimeout(timer.current);
+    const parsed = Number(text);
+    if (text.trim() === "" || !Number.isFinite(parsed)) {
+      // Junk in the box: restore what the value says, commit nothing.
+      setText(echo(committed.current));
+      return;
+    }
+    const next = clampTo(parsed);
+    committed.current = next;
+    setText(echo(next));
+    onChange(next);
+  }
+
   return (
     <View className="py-2">
-      <View className="flex-row items-center justify-between">
-        <RowLabel label={label} description={description} />
-        <Text className="font-sans text-body-md text-primary-text">{display}</Text>
-      </View>
-      <View className="mt-2">
+      <Text className="font-sans text-body-lg text-primary-text">{label}</Text>
+      <Text className="mt-1 font-sans text-body-md text-secondary-text">{description}</Text>
+      <View className="mt-2 flex-row items-center gap-2">
         {/* @expo/ui's COMMUNITY Slider — a drop-in for
          * @react-native-community/slider (PocketPal's choice), which wraps
          * its own Host. That Host takes no seedColor from outside, so any
@@ -223,12 +278,25 @@ export function SliderRow({
           value={value}
           minimumValue={min}
           maximumValue={max}
-          onValueChange={(v) =>
-            onChange(step > 0 ? Math.round((v - min) / step) * step + min : v)
-          }
+          onValueChange={handleSlide}
           thumbTintColor={colors.primary}
           minimumTrackTintColor={colors.primary}
           maximumTrackTintColor={colors.surface2}
+          // flex via style: the slider is a third-party native component
+          // with no className (the AGENTS.md exception).
+          style={{ flex: 1 }}
+        />
+        <TextInput
+          value={text}
+          onChangeText={setText}
+          onBlur={commitTyped}
+          onEndEditing={commitTyped}
+          keyboardType="numeric"
+          accessibilityLabel={`${label} value`}
+          selectTextOnFocus
+          placeholder={display}
+          placeholderTextColor={colors.secondaryText}
+          className="w-24 rounded-lg border border-border px-3 py-2 text-right font-sans text-body-md text-primary-text"
         />
       </View>
     </View>
@@ -290,6 +358,7 @@ export function TextFieldRow({
   min,
   placeholder,
   invalidMessage,
+  error,
   onCommit,
 }: {
   label: string;
@@ -299,6 +368,9 @@ export function TextFieldRow({
   placeholder?: string;
   /** Shown instead of the value when the typed text is out of range. */
   invalidMessage?: string;
+  /** External (Save-time) validation mark: shows regardless of what the
+   *  field itself detected while typing — Q6=C's inline layer. */
+  error?: string;
   onCommit: (value: number) => void;
 }) {
   const [draft, setDraft] = useState(`${value}`);
@@ -346,11 +418,15 @@ export function TextFieldRow({
         placeholderTextColor={colors.secondaryText}
         accessibilityLabel={label}
         className={`mt-2 rounded-lg border px-5 py-3 font-sans text-body-md ${
-          invalid ? "border-error text-primary-text" : "border-border"
+          invalid || error !== undefined
+            ? "border-error text-primary-text"
+            : "border-border"
         }`}
       />
-      {invalid && invalidMessage ? (
-        <Text className="mt-1 font-sans text-body-sm text-error">{invalidMessage}</Text>
+      {invalid || error !== undefined ? (
+        <Text className="mt-1 font-sans text-body-sm text-error">
+          {error ?? invalidMessage}
+        </Text>
       ) : null}
     </View>
   );

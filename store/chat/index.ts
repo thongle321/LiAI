@@ -199,6 +199,16 @@ async function defaultThinking(): Promise<boolean> {
   }
 }
 
+/** Local-only jinja preference from the inference store. */
+async function defaultJinja(): Promise<boolean> {
+  try {
+    const { useInference } = await import("../inference.ts");
+    return useInference.getState().jinjaEnabled;
+  } catch {
+    return true;
+  }
+}
+
 /** Resolved sampling params for one conversation, or null for a remote
  *  engine (an OpenAI-compatible endpoint keeps its own defaults and has no
  *  equivalent for typical-p, XTC or mirostat, so sending ours would be
@@ -256,6 +266,7 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
       },
       getSystemPrompt: () => defaultSystemPrompt(),
       getThinking: () => defaultThinking(),
+      getJinja: () => defaultJinja(),
     getSampler: (sid) => defaultSampler(sid),
       saveImage: (uri: string) => defaultSaveImage(uri),
     });

@@ -20,7 +20,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRouter } from "expo-router";
 import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
-import { Menu, MessageSquarePlus, Search, X } from "lucide-react-native";
+import { Menu, Search, X } from "lucide-react-native";
 
 import { colors } from "../../../themes/tokens.ts";
 import { filterMessages } from "../../../lib/chat/filter.ts";
@@ -57,7 +57,6 @@ export default function ChatRoute() {
   const send = useChatStore((s) => s.send);
   const retry = useChatStore((s) => s.retry);
   const regenerate = useChatStore((s) => s.regenerate);
-  const newConversation = useChatStore((s) => s.newConversation);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -168,7 +167,6 @@ export default function ChatRoute() {
   }, [streaming, listHeight, blankSpace, motionDuration]);
   const menuPress = usePressFeedback();
   const searchPress = usePressFeedback();
-  const newPress = usePressFeedback();
   const [generationOpen, setGenerationOpen] = useState(false);
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
@@ -239,24 +237,6 @@ export default function ChatRoute() {
                 // Navigation — "Icons are 2px stroke at 20px in Ink".
                 <Search size={20} color={colors.primaryText} />
               )}
-            </Pressable>
-          </Animated.View>
-          <Animated.View style={newPress.animatedStyle}>
-            <Pressable
-              onPress={() => {
-                // A fresh conversation must not open on a stale search.
-                setSearchOpen(false);
-                setQuery("");
-                void newConversation();
-              }}
-              onPressIn={newPress.onPressIn}
-              onPressOut={newPress.onPressOut}
-              className="h-12 w-12 items-center justify-center"
-              hitSlop={4}
-              accessibilityRole="button"
-              accessibilityLabel="New conversation"
-            >
-              <MessageSquarePlus size={20} color={colors.primary} />
             </Pressable>
           </Animated.View>
         </View>

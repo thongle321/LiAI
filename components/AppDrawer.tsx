@@ -12,6 +12,7 @@ import { router } from "expo-router";
 import Constants from "expo-constants";
 import {
   CircleHelp,
+  MessageCircle,
   Settings,
   X,
   Download,
@@ -29,12 +30,13 @@ const VERSION = Constants.expoConfig?.version ?? "0.1.0";
 export function AppDrawerContent({ onClose }: { onClose: () => void }) {
   const sessionId = useChatStore((s) => s.sessionId);
   const sessions = useChatStore((s) => s.sessions);
+  const newConversation = useChatStore((s) => s.newConversation);
   const switchSession = useChatStore((s) => s.switchSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
   const renameSession = useChatStore((s) => s.renameSession);
   const setPinned = useChatStore((s) => s.setPinned);
 
-  function go(path: "/settings" | "/about" | "/models" | "/voice-settings"): void {
+  function go(path: "/chat" | "/settings" | "/about" | "/models" | "/voice-settings"): void {
     // ONE navigation, no closeDrawer(): every destination is a screen of
     // the drawer navigator, and its router closes the panel as part of the
     // same state transition as the swap (DrawerRouter getStateForAction /
@@ -84,6 +86,16 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
         </View>
 
         <View className="border-t border-border">
+          {/* Pocketpal's drawer leads its menu with Chat; ours routes it
+              AND starts fresh (Q1=A) — the new-conversation entry point. */}
+          <DrawerItem
+            Icon={MessageCircle}
+            label="Chat"
+            onPress={() => {
+              void newConversation();
+              go("/chat");
+            }}
+          />
           <DrawerItem Icon={Download} label="Models" onPress={() => go("/models")} />
           <DrawerItem Icon={Mic} label="Voice" onPress={() => go("/voice-settings")} />
           <DrawerItem Icon={Settings} label="Settings" onPress={() => go("/settings")} />

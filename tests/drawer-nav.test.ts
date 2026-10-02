@@ -1,4 +1,5 @@
-/** New conversation moved from the drawer row to the chat header (Q1=A).
+/** New conversation moved: drawer row -> (attempted) chat header -> now
+ * the drawer's Chat tab, pocketpal-style (Q1=A).
  * Run: node --test tests/drawer-nav.test.ts */
 
 import { describe, it } from "node:test";
@@ -26,22 +27,36 @@ describe("drawer has no new-conversation row", () => {
     assert.match(source, /"New conversation" \? |=== "" \? "New conversation"/);
   });
 
-  it("AppDrawer no longer wires the action", () => {
+  it("AppDrawer no longer wires the old row action", () => {
     const source = read(DRAWER);
     assert.doesNotMatch(source, /onNew/);
+    // newConversation IS present — as the Chat tab's action (Q1=A),
+    // asserted by the suite below; what is gone is the SessionList row.
+  });
+});
+
+describe("chat route stays free of the affordance", () => {
+  it("header has no new-conversation button", () => {
+    const source = read(CHAT);
+    assert.doesNotMatch(source, /accessibilityLabel="New conversation"/);
+    assert.doesNotMatch(source, /MessageSquarePlus/);
     assert.doesNotMatch(source, /newConversation/);
   });
 });
 
-describe("chat route owns the affordance", () => {
-  it("header carries a new-conversation button", () => {
-    const source = read(CHAT);
+describe("drawer owns a Chat tab like pocketpal", () => {
+  it("leads the footer nav, navigates to chat, and starts fresh (Q1=A)", () => {
+    const source = read(DRAWER);
+    assert.match(source, /label="Chat"/, "the Chat item exists");
+    assert.match(source, /go\("\/chat"\)/, "it navigates to the chat route");
+    assert.match(source, /newConversation\(\)/, "it starts a fresh conversation");
+    assert.match(source, /MessageCircle/, "lucide icon");
+    // First in the footer group: Chat leads the menu order.
     assert.match(
       source,
-      /accessibilityLabel="New conversation"/,
-      "the chat header button exists",
+      /label="Chat"[\s\S]*?label="Models"/,
+      "Chat precedes Models",
     );
-    assert.match(source, /newConversation\(\)/, "it runs the store action");
-    assert.match(source, /MessageSquarePlus/, "lucide icon, not a text glyph");
+    assert.doesNotMatch(source, /onNew/);
   });
 });

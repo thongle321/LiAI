@@ -35,6 +35,8 @@ describe("sampler defaults", () => {
       mirostatEta: 0.1,
       seed: -1,
       nPredict: -1,
+      // PocketPal's defaultCompletionParams carries this app-only key too.
+      includeThinkingInContext: true,
     });
   });
 

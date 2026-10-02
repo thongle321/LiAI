@@ -33,6 +33,8 @@ export interface TurnSessionStore {
 
 export interface TurnOutcome {
   reply: string;
+  /** Last non-empty reasoning, when the model emitted any. */
+  reasoning?: string;
   sessionId: string;
   steps: AgentStep[];
   promptTokens: number;
@@ -62,6 +64,7 @@ function toAgentMessages(
   history: ChatMessage[],
   text: string,
   systemPrompt: string | undefined,
+  includeThinking: boolean,
 ): CompletionMessage[] {
   const messages: CompletionMessage[] = [];
   if (systemPrompt && systemPrompt.trim() !== "") {
@@ -71,7 +74,16 @@ function toAgentMessages(
     if ((m.role !== "user" && m.role !== "assistant") || m.text.trim() === "") {
       continue;
     }
-    messages.push({ role: m.role, content: m.text });
+    messages.push({
+      role: m.role,
+      content: m.text,
+      // include_thinking_in_context: prior reasoning goes back as
+      // reasoning_content, read by llama.cpp's chat parser and dropped
+      // again when the flag is off — user turns never carry it.
+      ...(m.role === "assistant" && includeThinking && m.reasoning
+        ? { reasoning_content: m.reasoning }
+        : {}),
+    });
   }
   messages.push({ role: "user", content: text });
   return messages;
@@ -92,6 +104,7 @@ export function createTurnRunner(deps: TurnDeps) {
       retry?: boolean;
     },
     onToken?: (text: string) => void,
+    onReasoning?: (cumulative: string) => void,
   ): Promise<TurnOutcome> => {
     const trimmed = text.trim();
     if (trimmed === "") throw new Error("empty message");
@@ -115,7 +128,13 @@ export function createTurnRunner(deps: TurnDeps) {
 
     const result = await runLocalAgent({
       engine,
-      messages: toAgentMessages(paths.history, trimmed, systemPrompt),
+      messages: toAgentMessages(
+        paths.history,
+        trimmed,
+        systemPrompt,
+        // A missing sampler means no override — default to including.
+        sampler?.includeThinkingInContext !== false,
+      ),
       tools: talentDefinitions(),
       // Local reads imagePaths (llama media_paths); remote stays text-only.
       ...(imagePaths ? { imagePaths } : {}),
@@ -127,6 +146,9 @@ export function createTurnRunner(deps: TurnDeps) {
       userTexts: userTextsOf(paths.history),
       onEvent: (event) => {
         if (event.type === "token" && event.text !== "") onToken?.(event.text);
+        if (event.type === "reasoning" && event.text !== "") {
+          onReasoning?.(event.text);
+        }
       },
     });
 
@@ -158,6 +180,7 @@ export function createTurnRunner(deps: TurnDeps) {
         await store.append(sessionId, {
           role: "assistant",
           content: result.text,
+          ...(result.reasoning !== undefined ? { reasoning: result.reasoning } : {}),
           type: "text",
           usage,
           steps,
@@ -168,6 +191,7 @@ export function createTurnRunner(deps: TurnDeps) {
     }
     return {
       reply: result.text,
+      ...(result.reasoning !== undefined ? { reasoning: result.reasoning } : {}),
       sessionId,
       steps,
       promptTokens: result.promptTokens,

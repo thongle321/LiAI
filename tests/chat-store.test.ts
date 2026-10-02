@@ -270,6 +270,42 @@ describe("chat store turns", () => {
     ]);
   });
 
+  it("keeps streamed reasoning on the bubble and clears it on regenerate", async () => {
+    const replies: Array<{ reply: string; reasoning?: string }> = [
+      { reply: "one", reasoning: "why not" },
+      { reply: "two" },
+    ];
+    let call = 0;
+    const runTurn = async (
+      _text: string,
+      _paths: unknown,
+      _onToken?: (t: string) => void,
+      onReasoning?: (c: string) => void,
+    ) => {
+      const r = replies[call++];
+      if (r.reasoning !== undefined) onReasoning?.(r.reasoning);
+      return {
+        reply: r.reply,
+        ...(r.reasoning !== undefined ? { reasoning: r.reasoning } : {}),
+        sessionId: "s-new",
+        steps: [],
+        promptTokens: 1,
+        completionTokens: 1,
+      };
+    };
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+    });
+    await useStore.getState().send("hi");
+    assert.equal(useStore.getState().messages[1].reasoning, "why not");
+    // Regenerate must not resurrect old reasoning when the rerun emits
+    // none (clearOnFirst resets the bubble).
+    const id = useStore.getState().messages[1].id;
+    await useStore.getState().regenerate(id);
+    assert.equal(useStore.getState().messages[1].reasoning, undefined);
+  });
+
   it("marks the bubble when the runner fails", async () => {
     const { runTurn } = fakeRunTurn([{ fail: "boom" }]);
     const useStore = createChatStore({

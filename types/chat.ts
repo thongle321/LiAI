@@ -41,6 +41,8 @@ export interface ChatMessage {
   error?: ApiError;
   /** Tool calls behind this reply, in order. */
   steps?: AgentStep[];
+  /** Parsed reasoning behind this reply, when the model emitted any. */
+  reasoning?: string;
   usage?: MessageUsage;
   /** True while tokens are still arriving. */
   streaming?: boolean;

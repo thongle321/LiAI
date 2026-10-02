@@ -18,6 +18,8 @@ import type {
 export interface LlamaTokenData {
   token?: string;
   content?: string;
+  /** Cumulative parsed reasoning (present only with reasoning_format). */
+  reasoning_content?: string;
   tool_calls?: Array<{
     id?: string;
     function?: { name?: string; arguments?: string };
@@ -28,6 +30,7 @@ export interface LlamaTokenData {
 export interface LlamaCompletionResult {
   text?: string;
   content?: string;
+  reasoning_content?: string;
   tool_calls?: LlamaTokenData["tool_calls"];
   tokens_predicted?: number;
   tokens_evaluated?: number;
@@ -35,10 +38,17 @@ export interface LlamaCompletionResult {
 
 /** Params the wrapper forwards (messages/tools/media/thinking/sampler). */
 export interface LlamaCompletionParams extends Partial<LlamaSamplerParams> {
-  messages: Array<{ role: string; content: string }>;
+  messages: Array<{
+    role: string;
+    content: string;
+    reasoning_content?: string;
+  }>;
   tools?: unknown;
   media_paths?: string[];
   enable_thinking?: boolean;
+  /** Always sent as 'auto' — extracts reasoning into reasoning_content
+   *  instead of leaking raw think/channel markers into the answer text. */
+  reasoning_format?: "none" | "auto" | "deepseek";
   /** Flat top-level sibling like enable_thinking — never nested: llama.rn's
    *  converter drops unknown keys. */
   jinja?: boolean;
@@ -88,12 +98,23 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
       callbacks: CompletionCallbacks,
     ): Promise<CompletionOutcome> {
       const seen: EngineToolCall[] = [];
+      // llama.rn emits ACCUMULATED content/reasoning (a parse of everything
+      // so far), while our chain appends deltas — so the router tracks the
+      // last seen accumulation and slices. A revision (parser retracted a
+      // prefix) restarts from the new accumulation; the final result
+      // replaces the bubble text anyway.
+      let seenContent = "";
+      let seenReasoning = "";
       const result = await ctx.completion(
         {
           messages: request.messages.map((m) => ({
             role: m.role,
             content: m.content,
+            ...(m.reasoning_content !== undefined && m.reasoning_content !== ""
+              ? { reasoning_content: m.reasoning_content }
+              : {}),
           })),
+          reasoning_format: "auto",
           ...(request.tools && request.tools.length > 0
             ? { tools: request.tools }
             : {}),
@@ -112,8 +133,25 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
           ...(request.sampler ? toLlamaSampler(request.sampler) : {}),
         },
         (data) => {
-          const delta = data.content ?? data.token ?? "";
-          if (delta !== "") callbacks.onToken(delta);
+          const reasoning = data.reasoning_content ?? "";
+          if (reasoning !== "" && reasoning !== seenReasoning) {
+            seenReasoning = reasoning;
+            callbacks.onReasoning?.(reasoning);
+          }
+          const content = data.content;
+          if (content !== undefined && content !== "") {
+            const delta = content.startsWith(seenContent)
+              ? content.slice(seenContent.length)
+              : content;
+            seenContent = content;
+            if (delta !== "") callbacks.onToken(delta);
+          } else if (seenReasoning === "") {
+            // No parser extraction at all (nothing parsed yet): raw tokens
+            // ARE the answer. With reasoning present and no content field,
+            // the token is thinking — it must not leak into the answer.
+            const delta = data.token ?? "";
+            if (delta !== "") callbacks.onToken(delta);
+          }
           const calls = toEngineCalls(data.tool_calls);
           if (calls.length > 0) {
             seen.push(...calls);
@@ -127,6 +165,7 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
           : seen;
       return {
         text: result.content ?? result.text ?? "",
+        reasoning: result.reasoning_content ?? "",
         toolCalls,
         promptTokens: asNumber(result.tokens_evaluated),
         completionTokens: asNumber(result.tokens_predicted),

@@ -13,6 +13,9 @@ import type { SamplerParams } from "./sampler.ts";
 /** Token deltas stream here; the runner feeds bubbles directly. */
 export interface CompletionCallbacks {
   onToken: (text: string) => void;
+  /** Cumulative reasoning so far (mirrors llama.rn's reasoning_content,
+   *  which arrives accumulated, not as a delta). */
+  onReasoning?: (cumulative: string) => void;
   /** Tool calls the model emitted alongside (or instead of) text. */
   onToolCalls?: (calls: EngineToolCall[]) => void;
 }
@@ -27,6 +30,8 @@ export interface EngineToolCall {
 /** Result of one finished completion (plain text + tool calls + usage). */
 export interface CompletionOutcome {
   text: string;
+  /** Final parsed reasoning; "" when the model emitted none. */
+  reasoning?: string;
   toolCalls: EngineToolCall[];
   promptTokens: number;
   completionTokens: number;
@@ -37,6 +42,10 @@ export interface CompletionOutcome {
 export interface CompletionMessage {
   role: "user" | "assistant" | "tool" | "system";
   content: string;
+  /** Assistant reasoning, read back by llama.cpp's chat parser and
+   *  re-serialized into the template JSON (chat.cpp:464). Sent only when
+   *  include_thinking_in_context says so. */
+  reasoning_content?: string;
   tool_calls?: EngineToolCall[];
   tool_call_id?: string;
   name?: string;

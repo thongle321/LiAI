@@ -16,13 +16,13 @@
  * a summary Alert with the offending bullets AND an inline red mark on the
  * field (TextFieldRow's external `error`).
  *
- * Q5a departure, recorded: PocketPal's "INCLUDE THINKING IN CONTEXT" is
- * history-time filtering of persisted reasoning parts
- * (useChatSession.ts:118-121); this app never captures `reasoning_content`
- * (zero references outside the pocketpal folder), so their switch has
- * nothing to filter here. Our "Show thinking" is generation-time
- * `enable_thinking` and stays what it says it is. JINJA (Q5b) IS built —
- * a real per-turn llama.rn flag, threaded store → turn → engine.
+ * Q7=B, recorded: INCLUDE THINKING IN CONTEXT is BUILT — this app now
+ * captures `reasoning_content` (reasoning_format auto), persists it per
+ * assistant turn, renders a reasoning block, and the switch gates whether
+ * it travels back to the model. The enable-thinking control has no row
+ * here (PocketPal keeps it as a chat-input pill); `thinkingEnabled` still
+ * threads through untouched. JINJA (Q5b) remains a per-turn llama.rn
+ * flag, threaded store → turn → engine.
  */
 
 import { useEffect, useState } from "react";
@@ -58,7 +58,6 @@ function validateTyped(sampler: SamplerParams): Partial<Record<"seed" | "nPredic
 
 interface Draft {
   sampler: SamplerParams;
-  thinking: boolean;
   jinja: boolean;
 }
 
@@ -72,10 +71,8 @@ export function GenerationSettingsSheet({
   const sessionId = useChatStore((s) => s.sessionId);
   const {
     sampler: preset,
-    thinkingEnabled,
     jinjaEnabled,
     setSampler,
-    setThinkingEnabled,
     setJinjaEnabled,
     load,
   } = useInference();
@@ -122,10 +119,9 @@ export function GenerationSettingsSheet({
     setErrors({});
     setDraft({
       sampler: isSession ? resolveSampler(preset, override) : { ...preset },
-      thinking: thinkingEnabled,
       jinja: jinjaEnabled,
     });
-  }, [visible, mode, isSession, preset, override, thinkingEnabled, jinjaEnabled]);
+  }, [visible, mode, isSession, preset, override, jinjaEnabled]);
 
   /** Validate, commit the draft to the stores, close-worthy. False = the
    *  validation alert is showing and the sheet stays open. */
@@ -155,9 +151,9 @@ export function GenerationSettingsSheet({
     } else {
       setSampler(current.sampler);
     }
-    // Both flags are globals: committing them in either mode is correct
-    // (session mode hides the thinking row, so that write is a no-op).
-    setThinkingEnabled(current.thinking);
+    // JINJA is a global and commits in either mode. The include-thinking
+    // flag needs no work here: it lives INSIDE the sampler object the
+    // branches above commit, so it follows the session/preset routing.
     setJinjaEnabled(current.jinja);
     return true;
   }
@@ -191,10 +187,6 @@ export function GenerationSettingsSheet({
       if ("seed" in patch) delete next.seed;
       return next;
     });
-  }
-
-  function setDraftThinking(on: boolean): void {
-    setDraft((d) => (d ? { ...d, thinking: on } : d));
   }
 
   function setDraftJinja(on: boolean): void {
@@ -281,12 +273,9 @@ export function GenerationSettingsSheet({
         {draft ? (
           <SamplerRows
             sampler={draft.sampler}
-            thinkingEnabled={draft.thinking}
-            showThinking={!isSession}
             jinjaEnabled={draft.jinja}
             errors={errors}
             onChange={apply}
-            onThinkingChange={setDraftThinking}
             onJinjaChange={setDraftJinja}
           />
         ) : null}

@@ -58,6 +58,7 @@ interface MessageRow {
   type: string;
   at: number;
   seq: number;
+  reasoning?: string;
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
@@ -76,6 +77,9 @@ function messageRowFrom(raw: unknown): MessageRow | null {
     type: str(raw["type"], "text"),
     at: num(raw["at"]),
     seq: num(raw["seq"]),
+    ...(typeof raw["reasoning"] === "string" && raw["reasoning"] !== ""
+      ? { reasoning: raw["reasoning"] }
+      : {}),
     promptTokens: usage("promptTokens"),
     completionTokens: usage("completionTokens"),
     totalTokens: usage("totalTokens"),
@@ -158,6 +162,7 @@ export class TinyBaseSessionStore implements SessionStore {
       type: turn.type ?? "text",
       at: turn.at ?? Date.now(),
       seq,
+      ...(turn.reasoning !== undefined ? { reasoning: turn.reasoning } : {}),
       ...(turn.usage !== undefined
         ? {
             promptTokens: turn.usage.promptTokens,
@@ -186,6 +191,7 @@ export class TinyBaseSessionStore implements SessionStore {
       content: row.content,
       type: row.type,
       at: row.at,
+      ...(row.reasoning !== undefined ? { reasoning: row.reasoning } : {}),
       ...(row.promptTokens !== undefined &&
       row.completionTokens !== undefined &&
       row.totalTokens !== undefined
@@ -347,13 +353,15 @@ export class TinyBaseSessionStore implements SessionStore {
       return null;
     }
     if (!isRecord(parsed)) return null;
-    // Only finite numbers count as an override: a half-written save
-    // degrades to "this session follows the global preset" rather than
-    // pinning a value the user cannot see.
-    const out: Record<string, number> = {};
+    // Finite numbers AND booleans count as an override: a boolean flag
+    // (includeThinkingInContext) is a real per-session choice, and a
+    // number-only filter would silently drop `false` and fall back to the
+    // preset. A half-written save still degrades the same way.
+    const out: Record<string, number | boolean> = {};
     for (const key of Object.keys(DEFAULT_SAMPLER)) {
       const v = parsed[key];
       if (typeof v === "number" && Number.isFinite(v)) out[key] = v;
+      else if (typeof v === "boolean") out[key] = v;
     }
     return Object.keys(out).length > 0 ? (out as Partial<SamplerParams>) : null;
   }

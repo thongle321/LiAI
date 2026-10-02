@@ -6,12 +6,11 @@
  * `.row` class draws the hairline dividers PocketPal's param card does not
  * have, and `.rows--plain` carries the 16px/24px rhythm instead.
  *
- * One deliberate departure remains, agreed: the thinking row is NOT
- * "INCLUDE THINKING IN CONTEXT". That setting keeps reasoning text in the
- * context for the next turn; ours turns reasoning generation on and off
- * (`enable_thinking`), so the label says what it does rather than what
- * PocketPal's does. (PocketPal's setting needs reasoning capture our chat
- * pipeline does not have — see the sheet's header comment.)
+ * INCLUDE THINKING IN CONTEXT is PocketPal's own row (Q7=B), second
+ * after N PREDICT: it gates whether prior reasoning travels back to the
+ * model as `reasoning_content`. The enable-thinking control has no row
+ * here — PocketPal keeps it as a chat-input pill, which LiAI has not
+ * built yet; `thinkingEnabled` still threads through untouched.
  *
  * JINJA is built (grilling Q5): a per-turn llama.rn completion flag that
  * defaults to on; the switch pins it either way, threaded through
@@ -41,24 +40,16 @@ function fixed(value: number, places = 2): string {
 
 export function SamplerRows({
   sampler,
-  thinkingEnabled,
-  showThinking,
   jinjaEnabled,
   errors,
   onChange,
-  onThinkingChange,
   onJinjaChange,
 }: {
   sampler: SamplerParams;
-  thinkingEnabled: boolean;
-  /** The thinking switch is one global, not per conversation, so it belongs
-   *  to the Preset sheet only. */
-  showThinking: boolean;
   jinjaEnabled: boolean;
   /** Save-time validation marks (Q6=C) for the typed fields. */
   errors?: Partial<Record<"seed" | "nPredict", string>>;
   onChange: (patch: Partial<SamplerParams>) => void;
-  onThinkingChange: (on: boolean) => void;
   onJinjaChange: (on: boolean) => void;
 }) {
   return (
@@ -83,14 +74,16 @@ export function SamplerRows({
           onCommit={(nPredict) => onChange({ nPredict })}
         />
       ) : null}
-      {showThinking ? (
-        <ToggleRow
-          label="Show thinking"
-          description="Reasoning models show their working before the answer. Off skips the reasoning pass — faster, and the model answers directly."
-          on={thinkingEnabled}
-          onPress={() => onThinkingChange(!thinkingEnabled)}
-        />
-      ) : null}
+      <ToggleRow
+        label="INCLUDE THINKING IN CONTEXT"
+        description="Include AI thinking/reasoning parts in the context sent to the model. Disabling this can save context space. It might impact performance."
+        on={sampler.includeThinkingInContext ?? true}
+        onPress={() =>
+          onChange({
+            includeThinkingInContext: !(sampler.includeThinkingInContext ?? true),
+          })
+        }
+      />
       <SliderRow
         label="TEMPERATURE"
         description="Lower is more focused and repeatable, higher is more varied."

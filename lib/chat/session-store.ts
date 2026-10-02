@@ -32,6 +32,8 @@ export interface StoredTurn {
   type?: string;
   /** Display timestamp (ms). */
   at?: number;
+  /** Parsed reasoning behind an assistant reply (Q7=B). */
+  reasoning?: string;
   usage?: MessageUsage;
   /** Tool calls behind this reply, in call order (`position` orders them:
    * the child table is an unordered map). */

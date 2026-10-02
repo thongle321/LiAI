@@ -29,6 +29,7 @@ import { AssistantAvatar } from "./AssistantAvatar.tsx";
 import { MarkdownView } from "./MarkdownView.tsx";
 import { MessageActions } from "./MessageActions.tsx";
 import { LinkPreviewCard } from "./LinkPreview.tsx";
+import { ReasoningBlock } from "./ReasoningBlock.tsx";
 
 export function MessageListItem({
   row,
@@ -115,6 +116,12 @@ export function MessageListItem({
             </Text>
           </View>
         )}
+        {message.reasoning ? (
+          <ReasoningBlock
+            text={message.reasoning}
+            autoCollapse={settled || message.text.trim() !== ""}
+          />
+        ) : null}
         <View className={`border border-border bg-surface-1 px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-tl-sm"}`}>
           <MarkdownView text={message.text} />
           {settled && <LinkPreviewCard text={message.text} />}

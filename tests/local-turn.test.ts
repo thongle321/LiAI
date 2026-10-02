@@ -35,7 +35,13 @@ function scriptedEngine(reply: string): CompletionEngine {
 }
 
 function memoryStore() {
-  const turns: Array<{ session: string; role: string; content: string; metadata: unknown }> = [];
+  const turns: Array<{
+    session: string;
+    role: string;
+    content: string;
+    reasoning?: string;
+    metadata: unknown;
+  }> = [];
   const titles: Record<string, string> = {};
   return {
     turns,
@@ -45,9 +51,20 @@ function memoryStore() {
     },
     async append(
       sessionId: string,
-      turn: { role: "user" | "assistant"; content: string; metadata?: Record<string, unknown> | null },
+      turn: {
+        role: "user" | "assistant";
+        content: string;
+        reasoning?: string;
+        metadata?: Record<string, unknown> | null;
+      },
     ) {
-      turns.push({ session: sessionId, role: turn.role, content: turn.content, metadata: turn.metadata ?? null });
+      turns.push({
+        session: sessionId,
+        role: turn.role,
+        content: turn.content,
+        ...(turn.reasoning !== undefined ? { reasoning: turn.reasoning } : {}),
+        metadata: turn.metadata ?? null,
+      });
     },
     async setTitleIfEmpty(sessionId: string, title: string) {
       if (!titles[sessionId]) titles[sessionId] = title;

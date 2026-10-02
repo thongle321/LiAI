@@ -30,6 +30,11 @@ export interface SamplerParams {
   mirostatEta: number;
   seed: number;
   nPredict: number;
+  /** Whether prior assistant reasoning goes back to the model as
+   *  `reasoning_content` (PocketPal's include_thinking_in_context).
+   *  Optional so older persisted settings parse; a missing value means
+   *  on, the same way PocketPal reads `!== false`. */
+  includeThinkingInContext?: boolean;
 }
 
 export const DEFAULT_SAMPLER: SamplerParams = {
@@ -49,6 +54,7 @@ export const DEFAULT_SAMPLER: SamplerParams = {
   mirostatEta: 0.1,
   seed: -1,
   nPredict: -1,
+  includeThinkingInContext: true,
 };
 
 /** Per-field ranges, taken from PocketPal's completionParams rather than
@@ -118,7 +124,15 @@ export function parseSampler(raw: unknown): SamplerParams {
     mirostatEta: num(v.mirostatEta, d.mirostatEta, ...RANGES.mirostatEta),
     seed: seedOf(v.seed, d.seed),
     nPredict: nPredictOf(v.nPredict, d.nPredict),
+    includeThinkingInContext: boolOf(
+      v.includeThinkingInContext,
+      d.includeThinkingInContext ?? true,
+    ),
   };
+}
+
+function boolOf(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
 }
 
 /** -1 means "let the library pick"; 0 is a legal seed, so this cannot be a

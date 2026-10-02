@@ -26,6 +26,27 @@ function newStoreRaw(): { store: TinyBaseSessionStore; tiny: ReturnType<typeof c
   return { store: new TinyBaseSessionStore(tiny), tiny };
 }
 
+it("keeps a boolean sampler override (include-thinking-in-context)", async () => {
+const store = newStore();
+const id = await store.create();
+await store.setSessionSampler(id, { includeThinkingInContext: false });
+assert.deepEqual(await store.getSessionSampler(id), {
+includeThinkingInContext: false,
+});
+});
+
+it("round-trips reasoning on an assistant turn", async () => {
+const store = newStore();
+const id = await store.create();
+await store.append(id, {
+role: "assistant",
+content: "done",
+reasoning: "user asked why",
+});
+const turns = await store.get(id);
+assert.equal(turns?.[0]?.reasoning, "user asked why");
+});
+
 describe("tool calls", () => {
   it("round-trips steps in call order and rounds the usage up", async () => {
     const store = newStore();

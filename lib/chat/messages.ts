@@ -41,6 +41,7 @@ export function toMessages(turns: StoredTurn[]): ChatMessage[] {
     ...(turn.steps !== undefined && turn.steps.length > 0
       ? { steps: turn.steps }
       : {}),
+    ...(turn.reasoning !== undefined ? { reasoning: turn.reasoning } : {}),
     ...(turn.usage !== undefined ? { usage: turn.usage } : {}),
   }));
 }

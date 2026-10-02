@@ -60,7 +60,12 @@ export function createSendSlice(
   }): Promise<void> {
     const gen = (ctx.streamGen += 1);
     if (opts.clearOnFirst) {
-      updateBubble(opts.assistantId, { text: "", steps: undefined, usage: undefined });
+      updateBubble(opts.assistantId, {
+        text: "",
+        reasoning: undefined,
+        steps: undefined,
+        usage: undefined,
+      });
     }
     try {
       const outcome = await ctx.runTurn(
@@ -75,10 +80,15 @@ export function createSendSlice(
           if (gen !== ctx.streamGen) return;
           updateBubble(opts.assistantId, (m) => ({ text: m.text + token }));
         },
+        (cumulative) => {
+          if (gen !== ctx.streamGen) return;
+          updateBubble(opts.assistantId, { reasoning: cumulative });
+        },
       );
       if (gen !== ctx.streamGen) return;
       updateBubble(opts.assistantId, {
         text: outcome.reply,
+        ...(outcome.reasoning !== undefined ? { reasoning: outcome.reasoning } : {}),
         streaming: false,
         at: Date.now(),
         ...(outcome.steps.length > 0 ? { steps: outcome.steps } : {}),

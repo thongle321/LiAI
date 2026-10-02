@@ -26,8 +26,11 @@ export interface TurnRunner {
     text: string,
     paths: TurnPaths,
     onToken?: (text: string) => void,
+    /** Cumulative reasoning so far — the bubble replaces, never appends. */
+    onReasoning?: (text: string) => void,
   ): Promise<{
     reply: string;
+    reasoning?: string;
     sessionId: string;
     steps: AgentStep[];
     promptTokens: number;

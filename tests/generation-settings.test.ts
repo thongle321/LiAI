@@ -132,6 +132,25 @@ describe("generation settings parity", () => {
     assert.doesNotMatch(rows, /\? -1 : 512/, "the old 512 default is gone");
   });
 
+  it("shows pocketpal's include-thinking row and no enable-thinking row (Q7)", () => {
+    const rows = read(ROWS);
+    assert.doesNotMatch(rows, /Show thinking/, "pocketpal's sheet has no enable-thinking row");
+    const at = rows.indexOf("INCLUDE THINKING IN CONTEXT");
+    assert.ok(at > 0, "the include-thinking switch exists");
+    assert.ok(
+      at < rows.indexOf("TEMPERATURE"),
+      "pocketpal puts it right after N PREDICT, before temperature",
+    );
+    assert.match(
+      rows,
+      /Include AI thinking\/reasoning parts in the context sent to the model/,
+      "pocketpal's description, verbatim",
+    );
+    assert.match(rows, /includeThinkingInContext/, "it binds the session/preset flag");
+    const gen = read(GEN);
+    assert.doesNotMatch(gen, /showThinking/, "the enable-thinking gating is gone");
+  });
+
   it("builds the JINJA switch and threads it to llama.rn (Q5b)", () => {
     const rows = read(ROWS);
     assert.match(rows, /"JINJA"/, "pocketpal's last row is the JINJA switch");

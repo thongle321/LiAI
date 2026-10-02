@@ -27,6 +27,7 @@ export interface AgentStep {
 export type AgentEvent =
   | { type: "run_started" }
   | { type: "token"; text: string }
+  | { type: "reasoning"; text: string }
   | { type: "tool_call_started"; call: EngineToolCall }
   | { type: "tool_call_finished"; outcome: { callId: string; tool: string; result: string } }
   | { type: "run_finished" }
@@ -34,6 +35,8 @@ export type AgentEvent =
 
 export interface AgentResult {
   text: string;
+  /** Last non-empty reasoning the completions reported (cumulative). */
+  reasoning?: string;
   steps: AgentStep[];
   promptTokens: number;
   completionTokens: number;
@@ -95,6 +98,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
   let promptTokens = 0;
   let completionTokens = 0;
   let text = "";
+  let reasoning = "";
 
   onEvent({ type: "run_started" });
 
@@ -130,6 +134,13 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
               turnText += delta;
               onEvent({ type: "token", text: delta });
             },
+            // Cumulative, like llama.rn's reasoning_content: the store
+            // replaces, never appends.
+            onReasoning: (cumulative) => {
+              if (cumulative === "") return;
+              reasoning = cumulative;
+              onEvent({ type: "reasoning", text: cumulative });
+            },
             onToolCalls: (calls) => {
               turnCalls = calls;
             },
@@ -146,6 +157,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
       completionTokens += outcome.completionTokens;
       // Outcome text wins (scripted engines); streamed tokens fill the gap.
       if (outcome.text) turnText = outcome.text;
+      if (outcome.reasoning) reasoning = outcome.reasoning;
       if (outcome.toolCalls.length > 0) turnCalls = outcome.toolCalls;
       text = turnText;
 
@@ -161,6 +173,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
         onEvent({ type: "run_finished" });
         return {
           text,
+          ...(reasoning !== "" ? { reasoning } : {}),
           steps,
           promptTokens,
           completionTokens,
@@ -208,6 +221,13 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
       type: "run_failed",
       error: err instanceof Error ? err.message : String(err),
     });
-    return { text, steps, promptTokens, completionTokens, hitMaxTurns: false };
+    return {
+      text,
+      ...(reasoning !== "" ? { reasoning } : {}),
+      steps,
+      promptTokens,
+      completionTokens,
+      hitMaxTurns: false,
+    };
   }
 }

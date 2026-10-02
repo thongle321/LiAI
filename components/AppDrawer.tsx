@@ -29,7 +29,6 @@ const VERSION = Constants.expoConfig?.version ?? "0.1.0";
 export function AppDrawerContent({ onClose }: { onClose: () => void }) {
   const sessionId = useChatStore((s) => s.sessionId);
   const sessions = useChatStore((s) => s.sessions);
-  const newConversation = useChatStore((s) => s.newConversation);
   const switchSession = useChatStore((s) => s.switchSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
   const renameSession = useChatStore((s) => s.renameSession);
@@ -77,10 +76,6 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
           <SessionList
             sessions={sessions}
             sessionId={sessionId}
-            onNew={() => {
-              void newConversation();
-              onClose();
-            }}
             onOpen={(id) => openSession(id)}
             onDelete={(id) => void deleteSession(id)}
             onRename={(id, title) => renameSession(id, title)}

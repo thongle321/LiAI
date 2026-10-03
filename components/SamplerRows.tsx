@@ -22,6 +22,7 @@
  */
 
 import {
+  RowSizeProvider,
   Segmented,
   SliderRow,
   TextFieldRow,
@@ -53,7 +54,9 @@ export function SamplerRows({
   onJinjaChange: (on: boolean) => void;
 }) {
   return (
-    <>
+    // PocketPal's CompletionSettings rungs: label 11 / description 12
+    // (CompletionSettings.tsx labelSmall + their styles.ts 12).
+    <RowSizeProvider label="text-xs" desc="text-body-sm">
       <Segmented<string>
         label="N PREDICT"
         description="Hard cap on generated tokens. Unlimited lets the model stop itself."
@@ -240,6 +243,6 @@ export function SamplerRows({
         on={jinjaEnabled}
         onPress={() => onJinjaChange(!jinjaEnabled)}
       />
-    </>
+    </RowSizeProvider>
   );
 }

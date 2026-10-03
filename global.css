@@ -56,9 +56,12 @@
   --font-sans-medium: 'Inter_500Medium';
   --font-sans-semibold: 'Inter_600SemiBold';
 
-  /* Inter only, six sizes. Class names are stable aliases onto that scale:
+  /* Inter only. Class names are stable aliases onto that scale:
      h1 display · h2 headline · h3 title · h4 body · body-lg body ·
-     body-md body-small · body-sm caption · caption caption. */
+     body-md body-small · body-sm caption · caption caption ·
+     title screen-title (pocketpal titleSmall) · xs label (labelSmall) ·
+     micro footer-meta. The last three joined for the pocketpal mirror
+     (docs/research/font-size-comparison.md). */
   --text-h1: 32px;
   --text-h1--line-height: 40px;
   --text-h2: 24px;
@@ -75,6 +78,12 @@
   --text-body-sm--line-height: 16px;
   --text-caption: 12px;
   --text-caption--line-height: 16px;
+  --text-title: 14px;
+  --text-title--line-height: 20px;
+  --text-xs: 11px;
+  --text-xs--line-height: 16px;
+  --text-micro: 10px;
+  --text-micro--line-height: 14px;
 
   /* Radius by role: micro 2 · small 4 · default 8 · large 12 · x-large 16.
      Default (8px) is the workhorse — buttons, inputs, cards, menus. */

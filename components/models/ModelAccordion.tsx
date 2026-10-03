@@ -49,7 +49,7 @@ export function ModelAccordion({
         accessibilityState={{ expanded: open }}
       >
         <View className="flex-row items-center gap-2">
-          <Text className="font-sans-semibold text-h4 text-primary-text">{title}</Text>
+          <Text className="font-sans-semibold text-title text-primary-text">{title}</Text>
           <View className="rounded bg-surface-2 px-2 py-0.5">
             <Text className="font-sans text-caption text-secondary-text">{count}</Text>
           </View>

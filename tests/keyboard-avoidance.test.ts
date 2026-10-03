@@ -433,7 +433,7 @@ describe("keyboard avoidance", () => {
       "the attach preview must stay in flow, or the measured height lies",
     );
     // The issue lines live here too, for the same reason.
-    assert.match(field, /px-4 pb-1 font-sans text-body-sm text-secondary-text/);
+    assert.match(field, /px-4 pb-1 font-sans text-xs text-secondary-text/);
     // ...and the banners must NOT, or they are overlays again.
     assert.doesNotMatch(field, /SuggestedPrompts|UsageStats/, "the banners are overlays");
   });

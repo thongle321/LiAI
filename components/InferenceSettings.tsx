@@ -130,7 +130,6 @@ export function ModelInitializationSettings() {
 
   return (
     <SettingsSection
-      title="Model Initialization Settings"
       description="Takes effect on the next reply — the model reloads automatically."
     >
       {availability?.hasHexagon ? (
@@ -330,7 +329,7 @@ export function MemorySettings() {
   }, []);
 
   return (
-    <SettingsSection title="Memory Settings">
+    <SettingsSection>
       <View className="row">
         <ToggleRow
           label="Use Memory Lock"
@@ -376,7 +375,7 @@ export function ModelLoadingSettings() {
   }, []);
 
   return (
-    <SettingsSection title="Model Loading Settings">
+    <SettingsSection>
       <View className="row">
         <ToggleRow
           label="Auto Offload/Load"

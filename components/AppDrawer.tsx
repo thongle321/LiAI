@@ -14,14 +14,12 @@ import {
   CircleHelp,
   MessageCircle,
   Settings,
-  X,
   Download,
   Mic,
   type LucideIcon,
 } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
-import { APP_NAME } from "../constants/app.ts";
 import { useChatStore } from "../store/chat.ts";
 import { SessionList } from "./chat/SessionList.tsx";
 
@@ -59,21 +57,8 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface1 }}>
       <View className="flex-1">
-        <View className="h-16 flex-row items-center border-b border-border px-5">
-          <Text className="flex-1 font-sans-semibold text-h2 text-primary-text">
-            {APP_NAME}
-          </Text>
-          <Pressable
-            onPress={onClose}
-            className="h-12 w-12 items-center justify-center"
-            accessibilityRole="button"
-            accessibilityLabel="Close menu"
-            hitSlop={4}
-          >
-            <X size={20} color={colors.secondaryText} />
-          </Pressable>
-        </View>
-
+        {/* No header row: pocketpal's sidebar starts at the menu (font-size
+            mirror Q5=A) — scrim, swipe and back all close the panel. */}
         <View className="flex-1">
           <SessionList
             sessions={sessions}

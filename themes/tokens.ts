@@ -66,6 +66,12 @@ export const typeScale = {
   bodyMd: { size: 14, lineHeight: 20, weight: "400" },
   bodySm: { size: 12, lineHeight: 16, weight: "400" },
   caption: { size: 12, lineHeight: 16, weight: "400" },
+  /** Screen titles — pocketpal titleSmall (font-size-comparison.md). */
+  title: { size: 14, lineHeight: 20, weight: "600" },
+  /** Labels and descriptions — pocketpal labelSmall. */
+  xs: { size: 11, lineHeight: 16, weight: "400" },
+  /** Assistant footer meta — pocketpal's timing text. */
+  micro: { size: 10, lineHeight: 14, weight: "400" },
 } as const;
 
 export const radius = {

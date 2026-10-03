@@ -102,7 +102,7 @@ export function ReasoningBlock({
           state === "partial" ? "h-[150px] overflow-hidden px-4 pb-4" : "px-4 pb-4"
         }
       >
-        <MarkdownView text={text} />
+        <MarkdownView text={text} dense />
         {state === "partial" ? (
           <Svg
             pointerEvents="none"

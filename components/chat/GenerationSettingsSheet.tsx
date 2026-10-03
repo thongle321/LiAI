@@ -38,7 +38,7 @@ import { useChatStore, defaultGetStore } from "../../store/chat";
 import { SamplerRows } from "../SamplerRows.tsx";
 import { Sheet } from "../Sheet.tsx";
 import { ResetMenu } from "../ResetMenu.tsx";
-import { Segmented, SettingsSection } from "../SettingsRows.tsx";
+import { RowSizeProvider, Segmented, SettingsSection } from "../SettingsRows.tsx";
 
 type Mode = "session" | "preset";
 
@@ -255,18 +255,22 @@ export function GenerationSettingsSheet({
       {/* PocketPal: the source control sits ABOVE the card, not inside it
           (styles.settingsSourceContainer: horizontal margin, 16 below). */}
       <View className="px-3 mb-4">
-        <Segmented<Mode>
-          label="Settings source"
-          description={
-            hasSession
-              ? undefined
-              : "Start a conversation to give it its own settings. Until then these are the preset."
-          }
-          value={isSession ? "session" : "preset"}
-          options={availableModes}
-          displayFor={(m) => (m === "session" ? "Session" : "Preset")}
-          onPick={setMode}
-        />
+        {/* Their settingsSource label is labelMedium 12 — one rung above
+            the card's 11, so this zone pins it separately. */}
+        <RowSizeProvider label="text-body-sm" desc="text-body-sm">
+          <Segmented<Mode>
+            label="Settings source"
+            description={
+              hasSession
+                ? undefined
+                : "Start a conversation to give it its own settings. Until then these are the preset."
+            }
+            value={isSession ? "session" : "preset"}
+            options={availableModes}
+            displayFor={(m) => (m === "session" ? "Session" : "Preset")}
+            onPick={setMode}
+          />
+        </RowSizeProvider>
       </View>
       {/* One divider-less card, 24px rhythm — CompletionSettings' shape. */}
       <SettingsSection plain>

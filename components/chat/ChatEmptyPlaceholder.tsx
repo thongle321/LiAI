@@ -52,7 +52,7 @@ export function ChatEmptyPlaceholder() {
         <Image source={images.glyph} className="h-20 w-20" />
       </View>
       <View className="mt-6">
-        <Text className="text-center font-sans-medium text-h3 text-primary-text">
+        <Text className="text-center font-sans-medium text-body-lg text-primary-text">
           {title}
         </Text>
         <Text className="mt-2 text-center font-sans text-body-sm text-secondary-text">

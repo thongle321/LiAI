@@ -38,8 +38,14 @@ test("the variables map carries every type token and its line height", () => {
   assert.equal(at414["--text-body-lg"], 17); // 16×1.052 = 16.83
   assert.equal(at414["--text-body-lg--line-height"], 25); // 24×1.052 = 25.25
 
-  // 8 tokens × (size + line height), no more, no less.
-  assert.equal(Object.keys(at414).length, 16);
+  // 11 tokens × (size + line height), no more, no less.
+  assert.equal(Object.keys(at414).length, 22);
+
+  // The pocketpal-mirror rungs scale like the rest (14×1.052 = 14.73→15):
+  assert.equal(at414["--text-title"], 15);
+  assert.equal(at414["--text-title--line-height"], 21);
+  assert.equal(at414["--text-xs"], 12); // 11×1.052 = 11.57
+  assert.equal(at414["--text-micro"], 11); // 10×1.052 = 10.52
 
   // At base width the map is the identity: tokens pass through untouched.
   const at375 = fluidTextVariables(375);

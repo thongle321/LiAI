@@ -42,6 +42,23 @@ typography:
     fontSize: "20px"
     fontWeight: 500
     lineHeight: "28px"
+  # The pocketpal mirror rungs (docs/research/font-size-comparison.md):
+  # screen titles, labels/descriptions, and interface meta.
+  screen-title:
+    fontFamily: "Inter"
+    fontSize: "14px"
+    fontWeight: 600
+    lineHeight: "20px"
+  label:
+    fontFamily: "Inter"
+    fontSize: "11px"
+    fontWeight: 400
+    lineHeight: "16px"
+  meta:
+    fontFamily: "Inter"
+    fontSize: "10px"
+    fontWeight: 400
+    lineHeight: "14px"
   body:
     fontFamily: "Inter"
     fontSize: "16px"
@@ -144,7 +161,7 @@ components:
   tab-bar:
     backgroundColor: "{colors.clean-white}"
     textColor: "{colors.slate}"
-    height: "69px"
+    height: "67px"
   tab-active:
     textColor: "{colors.signal}"
   ai-listening:
@@ -164,7 +181,7 @@ components:
 
 LiAI is a light system with exactly one loud thing in it. A single blue hue does all the signalling — the live tab, the focused field, the one primary action, the active step — carried in two steps of that one hue, and everything else is a near-white plane separated by 1px hairlines. The restraint is the point. Where most AI products reach for gradients, glass, and glow to feel futuristic, this one earns "sci-fi" from 2px line icons, corner brackets, and a dot trail. Nothing emits light.
 
-The density is conversational, not dashboard. Space is generous — a 4px scale with a 20px screen gutter and 20px card padding — because a phone screen held one-handed for conversation should breathe. Structure comes from alignment and hairlines, never from enclosure: cards are open white rectangles, not boxes. Type does the heavy lifting, with a six-step Inter scale where Display (32/40) is reserved for one moment per screen and Caption (12/16) is the floor.
+The density is conversational, not dashboard. Space is generous — a 4px scale with a 20px screen gutter and 20px card padding — because a phone screen held one-handed for conversation should breathe. Structure comes from alignment and hairlines, never from enclosure: cards are open white rectangles, not boxes. Type does the heavy lifting, with a nine-step Inter scale where Display (32/40) is reserved for one moment per screen, Screen title (14/20) carries every title, and Meta (10/14) is the floor.
 
 **This file is the authority, and the code now implements it.** The build used to trail this file by a whole world — near-black surfaces, a lime accent, Raleway, soft elevation, clipped octagonal corners — and that world has since been retired out of the codebase entirely. What remains is to hold the line: see *Do's and Don'ts* for the guardrails that keep it retired.
 
@@ -242,32 +259,35 @@ Two tints exist, and they exist for a specific reason: a selected element needs 
 **Body Font:** Inter
 **Label/Mono Font:** none — Inter carries metadata, labels, and code. There is no monospace family and no second typeface.
 
-**Character:** A single geometric grotesque doing every job, from 32px down to 12px. The personality comes from the weight and colour steps — Semibold headings in Ink, Regular body in Ink, Regular metadata in Slate — not from mixing families. Inter is specified with a fallback of any similar modern sans-serif; on native, load it through `expo-font` and gate first paint on the font resolving, so nothing flashes in the system typeface.
+**Character:** A single geometric grotesque doing every job, from 32px down to 10px. The personality comes from the weight and colour steps — Semibold headings in Ink, Regular body in Ink, Regular metadata in Slate — not from mixing families. Inter is specified with a fallback of any similar modern sans-serif; on native, load it through `expo-font` and gate first paint on the font resolving, so nothing flashes in the system typeface.
 
 ### Hierarchy
 
 - **Display** (600, 32/40): one per screen at most. Onboarding welcome, the "You're set" confirmation, the About wordmark. Never inside a list, a card, or a chat bubble.
-- **Headline** (600, 24/32): screen titles on pushed routes and the empty-state headline. A screen gets one.
-- **Title** (20, 500 Medium): card and section titles, modal titles, the assistant name in a message header. This is the most-used step after Body.
+- **Headline** (600, 24/32): large in-app titles on surfaces with no PocketPal counterpart — the Voice screen's title and the onboarding model screen — which deliberately keep the old rung. Screen titles are Screen title below.
+- **Screen title** (600, 14/20, `text-title`): every title in the app — the chat header wordmark, each ScreenHeader (Settings, Models, About), and model section headers. Mirrors PocketPal's `titleSmall` exactly; the numbers and per-section citations are in `docs/research/font-size-comparison.md`.
+- **Title** (20, 500 Medium): a reserved rung — the Voice screen's centred sub-headline. Modal and sheet titles moved to Body Large (pocketpal dialog / `titleMedium` parity); settings section titles were removed with them (recorded deviation below).
 - **Body** (400, 16/24): all reading text. Chat messages, descriptions, button labels, input values. On a 390pt-wide phone a full-width Body measure runs 34–40 characters; assistant bubbles cap at roughly 75% of viewport width so the line never exceeds that comfortable reading measure.
 - **Body Small** (400, 14/20): supporting text that is read but not acted on — field hints, empty-state descriptions, author bylines, link-preview descriptions.
-- **Caption** (400, 12/16): metadata only — timestamps, token counts, status labels, quantisation chips, download speeds. It is the floor; nothing is smaller.
+- **Caption** (400, 12/16): metadata — timestamps, session previews, status labels, quantisation chips, download speeds.
+- **Label** (400, 11/16, `text-xs`): interface furniture that names a value rather than a thought — settings descriptions, generation labels, composer hints, tab labels (pinned 11/14 at the bar). Never a sentence the user must act on.
+- **Meta** (400, 10/14, `text-micro`): the floor. Assistant footer counts and other passive telemetry.
 
 ### Named Rules
 
-**The 16px Floor Rule.** Reading text is Body (16/24) by default and never smaller than Body Small (14/20). Reaching for Caption to fit more words onto a line is a layout failure, not a type decision.
+**The 16px Floor Rule.** Reading text is Body (16/24) by default and never smaller than Body Small (14/20). Everything below 14 is Label (11) or Meta (10) — furniture that names a value, never prose. Reaching for Caption to fit more words onto a line is a layout failure, not a type decision.
 
 **The Single Family Rule.** One family, three weights. A second typeface or a monospace exception must be added to this file first, with a reason.
 
-**The Caption Means Metadata Rule.** Caption labels things that happened or things that are counted — a time, a token total, a file size, a state name. It never carries a sentence a user is expected to act on.
+**The Caption Means Metadata Rule.** Caption, Label and Meta label things that happened or things that are counted — a time, a token total, a file size, a state name. They never carry a sentence a user is expected to act on.
 
-**The Fluid Type Rule.** The scale above is authoritative at a **375dp base**; rendered sizes may drift from it by the device width, nowhere else. The drift is `1 + (width / 375 − 1) × 0.5`, clamped to **[0.9, 1.1]** and rounded to whole px, applied as `--text-*` overrides at the root (`themes/textScale.ts`, consumed by `hooks/useFluidTextScale.ts` through Uniwind's `ScopedVariables`). `themes/tokens.ts` and the contrast tests keep base values — the drift is presentation, not a second system, and no call site applies it by hand. The system accessibility scale composes on top of it. Where geometry is pinned, the system scale is capped so the pinned dimension never moves: the tab bar labels at **1.2**, header titles at **1.5**. Everything else — settings rows, chat, sheets, empty states — is uncapped and grows freely; that is the "dynamic type support" the accessibility floor asks for.
+**The Fluid Type Rule.** The scale above is authoritative at a **375dp base**; rendered sizes may drift from it by the device width, nowhere else. The drift is `1 + (width / 375 − 1) × 0.5`, clamped to **[0.9, 1.1]** and rounded to whole px, applied as `--text-*` overrides at the root (`themes/textScale.ts`, consumed by `hooks/useFluidTextScale.ts` through Uniwind's `ScopedVariables`). `themes/tokens.ts` and the contrast tests keep base values — the drift is presentation, not a second system, and no call site applies it by hand. The system accessibility scale composes on top of it. Where geometry is pinned, the system scale is capped so the pinned dimension never moves: the tab bar labels at **1.1**, header titles at **1.5**. Everything else — settings rows, chat, sheets, empty states — is uncapped and grows freely; that is the "dynamic type support" the accessibility floor asks for.
 
 ## Layout
 
 The spatial model is a 4px scale — 4, 8, 12, 16, 20, 24, 32, 40, 48 — with **no off-scale values**. On Uniwind/Tailwind this scale is already the default (`p-1` through `p-12`), so no custom spacing configuration is needed; the discipline is in *choosing* from it, not in defining it.
 
-**Token names are descriptive here and terse in code.** This file names colours and type steps by role — Signal, Signal Mark, Slate, Body Small — because that is what an agent should reach for. `global.css` and `themes/tokens.ts` mirror the same values under short names for use in class strings, and the two are the code mirror of this file, not a second system. Display, Headline, Title, Body, Body Small and Caption are `h1`, `h2`, `h3`, `h4`, `body-lg`, `body-md` and `body-sm`; Signal, Signal Mark, Deep Signal, Ink, Slate, Clean White, Cool Paper, Mist and Surface Tint are `primary`, `primary-mark`, `primary-hover`, `primary-text`, `secondary-text`, `surface-1`, `base`, `surface-2` and `surface-3`. The values are identical in all three places, and a test fails if the CSS and TypeScript mirrors drift apart.
+**Token names are descriptive here and terse in code.** This file names colours and type steps by role — Signal, Signal Mark, Slate, Body Small — because that is what an agent should reach for. `global.css` and `themes/tokens.ts` mirror the same values under short names for use in class strings, and the two are the code mirror of this file, not a second system. Display, Headline, Title, Body, Body Small and Caption are `h1`, `h2`, `h3`, `h4`, `body-lg`, `body-md` and `body-sm`; Screen title, Label and Meta are `title`, `xs` and `micro`; Signal, Signal Mark, Deep Signal, Ink, Slate, Clean White, Cool Paper, Mist and Surface Tint are `primary`, `primary-mark`, `primary-hover`, `primary-text`, `secondary-text`, `surface-1`, `base`, `surface-2` and `surface-3`. The values are identical in all three places, and a test fails if the CSS and TypeScript mirrors drift apart.
 
 **Gutters and padding.** The screen gutter is one `5` step (20px) on every edge, including horizontal insets for cards, list rows, and form fields. Cards carry 20px (`5`) internal padding — generous, because a card is a small plane, not a dense module. Fields sit at 12px/16px (`3`/`4`) vertical/horizontal. Message bubbles sit at 12px/16px (`3`/`4`).
 
@@ -277,7 +297,7 @@ The spatial model is a 4px scale — 4, 8, 12, 16, 20, 24, 32, 40, 48 — with *
 
 **Containers.** Surfaces are full-bleed or inset by the gutter; there is no centred max-width column. Chat is the one exception to horizontal rhythm — message bubbles are edge-anchored (user right, assistant left) and capped at roughly 75% of viewport width, because a chat reads as a column of alternating edges, not a stack of equal cards.
 
-**Navigation geometry.** The header is 56px tall, sits on Clean White with a 1px Hairline bottom border, and holds a leading control, the wordmark, and trailing controls in slots of **equal width, sized to hold the wider of the two groups** — equal slots alone do not centre the wordmark if one group overflows its slot. The tab bar is 69px plus the device's bottom safe-area inset, with a 1px Hairline top border; the inset is applied once, at the bar, and screens opt out of it rather than double-applying it.
+**Navigation geometry.** The header is 56px tall, sits on Clean White with a 1px Hairline bottom border, and holds a leading control, the wordmark, and trailing controls in slots of **equal width, sized to hold the wider of the two groups** — equal slots alone do not centre the wordmark if one group overflows its slot. The tab bar is 67px plus the device's bottom safe-area inset, with a 1px Hairline top border; the inset is applied once, at the bar, and screens opt out of it rather than double-applying it.
 
 **Gutters are owned by one layer.** A screen gutter is applied once, at the outermost container of a column. A child that also insets itself stacks the gutter; that is the defect, not a style choice.
 
@@ -372,11 +392,11 @@ Confident and flat. Buttons never lift, never glow, and never animate their own 
 
 ### Settings
 
-A settings screen is a stack of **titled row cards** on Cool Paper, grouped by subject rather than by screen. This grouping came from PocketPal's Material 3 settings screen; it is rebuilt here in Uniwind against this file's tokens, and it borrows the *structure* only — no `react-native-paper`, no second design language, and nothing here overrides a rule above.
+A settings screen is a stack of **row cards** on Cool Paper, grouped by subject rather than by screen. This grouping came from PocketPal's Material 3 settings screen; it is rebuilt here in Uniwind against this file's tokens, and it borrows the *structure* only — no `react-native-paper`, no second design language, and nothing here overrides a rule above. **Recorded deviation:** PocketPal's cards each carry a `Card.Title`; ours ship untitled — the section headings were removed deliberately (grilling Q6=B), and the card boundary plus its 24px gap is what delimits a group.
 
-- **Section:** a Title (20/28, 500) label in Ink, then one Clean White row card beneath it with a 1px Hairline border and Default radius. Sections are spaced 24px (`6`) apart.
+- **Section:** one Clean White row card with a 1px Hairline border and Default radius, no heading. Sections are spaced 24px (`6`) apart.
 - **Row:** 48–56px minimum, 16px horizontal / 12px vertical padding, dividers running edge to edge between rows (never around the card's outside edge).
-- **Every row carries a description.** The label is Body (16/24) Ink; the line under it is Body Small (14/20) Slate and says what the value does or what happens if you change it. A row with no description available does not ship — a bare label tells the user nothing about the consequence.
+- **Every row carries a description.** The label is Body (16/24) Ink; the line under it is Label (11/16) Slate and says what the value does or what happens if you change it. A row with no description available does not ship — a bare label tells the user nothing about the consequence.
 - **Controls sit right-aligned**; the label block takes the remaining width. A value that needs explaining beyond the description is a picker, not a wider label.
 - **Trailing chevron means "this opens something."** A row that navigates carries one; a row that edits in place does not. The one exception is the Advanced group, which expands in place and so carries the chevron that says so. Chevrons are 2px stroke at 16px in Slate.
 - **"Advanced" is a collapsed group by default** and renders as a full-width row with a chevron that rotates to point down when open. A screen with more than ~8 visible rows uses one; the tuning a power user wants is not what a first-run user should read past.
@@ -384,8 +404,9 @@ A settings screen is a stack of **titled row cards** on Cool Paper, grouped by s
 
 ### Navigation
 
-- **Header (56px, Clean White, 1px Hairline bottom):** a leading control (menu or back), the wordmark in Headline (600, 24/32) Ink, and trailing controls. Leading and trailing slots are **fixed width and equal** so the wordmark stays optically centred no matter how many trailing icons appear. Icons are 2px stroke at 20px in Ink; a header control that opens something live takes Signal.
-- **Tab bar (69px + safe-area inset, Clean White, 1px Hairline top):** items are icon-over-label, 2px stroke icon at 24px, Caption label. Inactive is Slate. Active is Signal on both icon and label, and **colour is the only active signal** — no pill, no indicator bar. Exactly one tab is active.
+- **Header (56px, Clean White, 1px Hairline bottom):** a leading control (menu or back), the wordmark in Screen title (600, 14/20) Ink, and trailing controls. Leading and trailing slots are **fixed width and equal** so the wordmark stays optically centred no matter how many trailing icons appear. Icons are 2px stroke at 20px in Ink; a header control that opens something live takes Signal.
+- **Tab bar (67px + safe-area inset, Clean White, 1px Hairline top):** items are icon-over-label, 2px stroke icon at 24px, Label (11/14, pinned) label. Inactive is Slate. Active is Signal on both icon and label, and **colour is the only active signal** — no pill, no indicator bar. Exactly one tab is active.
+- **The drawer has no title row.** Its panel opens straight onto the menu and history (pocketpal's sidebar has no header either); scrim, swipe and system back all close it. Recorded as Q5=A — our old row carried the wordmark and an X.
 - **Colour is the whole active state.** The Surface Tint pill and the 2px indicator bar were removed: a square behind the icon read as a shape rather than a state. The 40x40 icon box stays because it is the touch target, not decoration.
 - **Predictive Back and transitions.** Predictive Back is enabled so the system gesture animates the pop. The "transitions do not animate" rule governs the app's own JS navigator — tab and screen switches cut, and shared chrome (tab bar, composer) never moves. The OS back gesture is a platform affordance, not an app transition.
 - **Nav chrome is static.** No fade, no slide, no scale on the bar itself — only the content behind it may transition.

@@ -187,7 +187,7 @@ function AuthorSheet({
         autoCorrect={false}
         placeholderTextColor={colors.secondaryText}
         accessibilityLabel="Author name"
-        className="font-sans text-body-md text-primary-text bg-surface-1 border border-border rounded-lg px-5 py-3"
+        className="font-sans text-body-lg text-primary-text bg-surface-1 border border-border rounded-lg px-5 py-3"
       />
       <View className="flex-row gap-2 pt-4">
         <Pressable
@@ -549,7 +549,7 @@ export function HFModelSearch({
                 placeholder="Search models (e.g., llama, qwen, gemma)"
                 placeholderTextColor={colors.secondaryText}
                 accessibilityLabel="Search Hugging Face models"
-                className="flex-1 font-sans text-body-md text-primary-text py-3"
+                className="flex-1 font-sans text-body-lg text-primary-text py-3"
               />
               {query.length > 0 ? (
                 <Pressable

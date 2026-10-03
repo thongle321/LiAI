@@ -80,7 +80,7 @@ function MenuRow({
       {icon ? <View className="w-5 items-center">{icon}</View> : <View className="w-5" />}
       <Text
         numberOfLines={1}
-        className={`flex-1 mr-2 font-sans text-body-md ${
+        className={`flex-1 mr-2 font-sans text-body-lg ${
           disabled
             ? "text-secondary-text"
             : destructive

@@ -87,7 +87,7 @@ export function HfTokenSettings() {
   }, []);
 
   return (
-    <SettingsSection title="API Settings">
+    <SettingsSection>
       <View className="row">
         <ActionRow
           label="Hugging Face Token"

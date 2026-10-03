@@ -271,17 +271,17 @@ export function MessageInput({
             accessibilityRole="button"
             accessibilityLabel="Open voice settings"
           >
-            <Text className="px-4 font-sans text-body-sm text-primary">
+            <Text className="px-4 font-sans text-xs text-primary">
               {voiceIssue}
             </Text>
           </Pressable>
         ) : (
-          <Text className="px-4 pb-1 font-sans text-body-sm text-secondary-text">
+          <Text className="px-4 pb-1 font-sans text-xs text-secondary-text">
             {voiceIssue}
           </Text>
         ))}
       {attachIssue !== null && (
-        <Text className="px-4 pb-1 font-sans text-body-sm text-secondary-text">
+        <Text className="px-4 pb-1 font-sans text-xs text-secondary-text">
           {attachIssue}
         </Text>
       )}
@@ -291,7 +291,7 @@ export function MessageInput({
         // was a white card on the Cool Paper bar before the collapse.
         <View className="mx-4 mb-2 flex-row items-center gap-2 rounded-lg bg-surface-2 p-2">
           <RNImage source={{ uri: attached }} className="h-14 w-14 rounded" />
-          <Text className="flex-1 font-sans text-body-sm text-secondary-text">
+          <Text className="flex-1 font-sans text-xs text-secondary-text">
             Attached — sent with your message
           </Text>
           <Animated.View style={plusPress.animatedStyle}>
@@ -353,7 +353,7 @@ export function MessageInput({
           placeholderTextColor={colors.secondaryText}
           multiline
           editable={!sending}
-          className="flex-1 pt-2 font-sans text-body-md text-primary-text"
+          className="flex-1 pt-2 font-sans text-body-lg text-primary-text"
           accessibilityLabel="Message"
         // The no-model state must not be visual-only: the chip that routes to
         // Models is focus-gated, and a screen reader announces a field's label
@@ -430,7 +430,7 @@ function PlusItem({
   return (
     <Pressable onPress={onPress} className="flex-row items-center gap-3 px-5 py-2">
       <Icon size={18} color={colors.primary} />
-      <Text className="font-sans text-body-md text-primary-text">{label}</Text>
+      <Text className="font-sans text-body-sm text-primary-text">{label}</Text>
     </Pressable>
   );
 }

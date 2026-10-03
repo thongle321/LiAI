@@ -6,15 +6,25 @@
  * light scheme, so they land in the app's world rather than the platform's.
  *
  * The card is the .rows BEM block in global.css (Clean White, 1px Hairline,
- * dividers edge to edge, 48dp floor); SettingsSection owns the title and the
- * rhythm between groups, so no screen hand-rolls that again.
+ * dividers edge to edge, 48dp floor); SettingsSection owns the rhythm
+ * between groups (and, for now, the lead-in description), so no screen
+ * hand-rolls that again. Section TITLES are gone (font-size mirror Q6=B).
  *
  * Every row carries a description (DESIGN.md, Settings): a bare label says
  * nothing about what the value does, and a control whose effect the user
  * cannot predict is worse than no control at all.
  */
 
-import { Children, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Children,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { Host, Switch } from "@expo/ui";
 import Slider from "@expo/ui/community/slider";
@@ -23,13 +33,39 @@ import { ChevronDown, ChevronRight, Minus, Plus } from "lucide-react-native";
 import { colors } from "../themes/tokens.ts";
 import { PickerMenu } from "./PickerMenu";
 
+/** Type rungs a zone renders at (font-size mirror,
+ *  docs/research/font-size-comparison.md). Settings screens sit on the
+ *  defaults — pocketpal titleMedium label / labelSmall description (16/11);
+ *  the generation sheet wraps its rows in their tighter CompletionSettings
+ *  rungs (11/12) via RowSizeProvider. The values are whole class names:
+ *  Uniwind generates each from its --text-* theme token, so composing them
+ *  into a className compiles (the literals also live at every call site). */
+const RowSize = createContext<{ label: string; desc: string }>({
+  label: "text-body-lg",
+  desc: "text-xs",
+});
+
+export function RowSizeProvider({
+  label,
+  desc,
+  children,
+}: {
+  label: string;
+  desc: string;
+  children: ReactNode;
+}) {
+  const value = useMemo(() => ({ label, desc }), [label, desc]);
+  return <RowSize.Provider value={value}>{children}</RowSize.Provider>;
+}
+
 /** Label + optional description, the left half of every row. */
 function RowLabel({ label, description }: { label: string; description?: string }) {
+  const size = useContext(RowSize);
   return (
     <View className="flex-1 pr-4">
-      <Text className="font-sans text-body-lg text-primary-text">{label}</Text>
+      <Text className={`font-sans ${size.label} text-primary-text`}>{label}</Text>
       {description ? (
-        <Text className="mt-1 font-sans text-body-md text-secondary-text">
+        <Text className={`mt-1 font-sans ${size.desc} text-secondary-text`}>
           {description}
         </Text>
       ) : null}
@@ -39,12 +75,10 @@ function RowLabel({ label, description }: { label: string; description?: string 
 
 /** A titled group of rows. `children` are the .row-wrapped contents. */
 export function SettingsSection({
-  title,
   description,
   children,
   plain = false,
 }: {
-  title?: string;
   description?: string;
   children: ReactNode;
   /** PocketPal's param card: 16px padding, 24px rhythm, NO dividers (the
@@ -53,11 +87,6 @@ export function SettingsSection({
 }) {
   return (
     <View className="mb-6">
-      {title ? (
-        <Text className="mb-2 font-sans-semibold text-h3 text-primary-text">
-          {title}
-        </Text>
-      ) : null}
       {description ? (
         <Text className="mb-2 font-sans text-body-md text-secondary-text">
           {description}
@@ -210,6 +239,7 @@ export function SliderRow({
   // PocketPal's InputSlider arrangement: label → description → [slider | inline
   // numeric input]. The input mirrors the slider live while dragging and
   // commits on blur/submit; slider commits debounce 300ms like theirs.
+  const size = useContext(RowSize);
   const [text, setText] = useState(display);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const committed = useRef(value);
@@ -262,8 +292,8 @@ export function SliderRow({
 
   return (
     <View className="py-2">
-      <Text className="font-sans text-body-lg text-primary-text">{label}</Text>
-      <Text className="mt-1 font-sans text-body-md text-secondary-text">{description}</Text>
+      <Text className={`font-sans ${size.label} text-primary-text`}>{label}</Text>
+      <Text className={`mt-1 font-sans ${size.desc} text-secondary-text`}>{description}</Text>
       <View className="mt-2 flex-row items-center gap-2">
         {/* @expo/ui's COMMUNITY Slider — a drop-in for
          * @react-native-community/slider (PocketPal's choice), which wraps
@@ -296,7 +326,7 @@ export function SliderRow({
           selectTextOnFocus
           placeholder={display}
           placeholderTextColor={colors.secondaryText}
-          className="w-24 rounded-lg border border-border px-3 py-2 text-right font-sans text-body-md text-primary-text"
+          className="w-24 rounded-lg border border-border px-3 py-2 text-right font-sans text-body-lg text-primary-text"
         />
       </View>
     </View>
@@ -417,7 +447,7 @@ export function TextFieldRow({
         placeholder={placeholder}
         placeholderTextColor={colors.secondaryText}
         accessibilityLabel={label}
-        className={`mt-2 rounded-lg border px-5 py-3 font-sans text-body-md ${
+        className={`mt-2 rounded-lg border px-5 py-3 font-sans text-body-lg ${
           invalid || error !== undefined
             ? "border-error text-primary-text"
             : "border-border"

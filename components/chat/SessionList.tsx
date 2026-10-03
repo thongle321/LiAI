@@ -141,7 +141,7 @@ export function SessionList({
       >
         <View className="flex-1 items-center justify-center p-5" style={{ backgroundColor: scrim }}>
           <View className="w-full rounded-2xl border border-border bg-surface-1 p-5">
-            <Text className="mb-4 font-sans-semibold text-h3 text-primary-text">
+            <Text className="mb-4 font-sans-semibold text-body-lg text-primary-text">
               Rename conversation
             </Text>
             <TextInput

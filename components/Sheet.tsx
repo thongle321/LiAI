@@ -116,7 +116,7 @@ export function Sheet({
   const header = (
     <View className="flex-row items-center justify-between px-4 pb-2 pt-4">
       <Text
-        className="flex-1 mr-2 font-sans-semibold text-h3 text-primary-text"
+        className="flex-1 mr-2 font-sans-semibold text-body-lg text-primary-text"
         numberOfLines={titleEllipsize ? 1 : undefined}
         ellipsizeMode={titleEllipsize ? "middle" : undefined}
       >

@@ -61,7 +61,7 @@ export function MessageListItem({
         style={press.animatedStyle}
         className="card card--error self-start max-w-[80%] my-1"
       >
-        <Text className="font-sans text-body-md text-primary-text">
+        <Text className="font-sans text-body-lg text-primary-text">
           {message.text}
         </Text>
         <Text className="mt-1 font-sans text-body-sm text-error">
@@ -80,7 +80,7 @@ export function MessageListItem({
           />
         )}
         <View className={`px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-br-sm"} bg-surface-3`}>
-          <Text className="font-sans text-body-md text-primary-text">
+          <Text className="font-sans text-body-lg text-primary-text">
             {message.text}
           </Text>
         </View>
@@ -144,7 +144,7 @@ export function MessageListItem({
             </View>
           )}
         </View>
-        <Text className="mt-1 font-sans text-caption text-secondary-text">
+        <Text className="mt-1 font-sans text-micro text-secondary-text">
           {settled && message.usage ? `${message.usage.totalTokens} tokens` : ""}
         </Text>
         {onRegenerate !== null && settled && (

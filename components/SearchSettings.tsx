@@ -159,7 +159,6 @@ export function SearchSettings() {
 
   return (
     <SettingsSection
-      title="Internet Search"
       description="Searches leave this device. Bring your own key — we never hold it."
     >
       {hasConsented ? (

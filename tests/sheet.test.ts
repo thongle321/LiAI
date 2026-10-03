@@ -184,6 +184,34 @@ describe("sheet library", () => {
     );
   });
 
+  it("shrinks the body when the keyboard lifts the footer", () => {
+    // REGRESSION, device-observed: with the keyboard open, TrueSheet
+    // lifts the absolute FOOTER to the keyboard edge but does NOT
+    // shrink the body's box — tall content (HF sheet) kept flowing under
+    // the lifted Save Token button, which floated over the instructions
+    // card. Short content never reaches the footer zone, so the API-key
+    // sheet looked fine; the bound must hold for any content. The body
+    // tracks the keyboard and subtracts it (closed state keeps the
+    // original bound exactly).
+    const sheet = read("components/Sheet.tsx");
+    assert.doesNotMatch(sheet, /\[DEBUG-/, "no leftover debug instrumentation");
+    assert.match(
+      sheet,
+      /const \[keyboardHeight, setKeyboardHeight\] = useState\(0\)/,
+      "the sheet must track the live keyboard height",
+    );
+    assert.match(
+      sheet,
+      /const bodyMaxHeight = windowHeight - topInset - 16 - keyboardChrome/,
+      "bodyMaxHeight must subtract the keyboard (else content runs under the lifted footer)",
+    );
+    assert.match(
+      sheet,
+      /keyboardDidShow[\s\S]*?setKeyboardHeight\(e\.endCoordinates\.height\)/,
+      "the keyboard show event must feed the bound",
+    );
+  });
+
   it("bounds every body so tall content scrolls instead of clipping", () => {
     // With auto now measuring wrap-content (scrollable off), a body taller
     // than the surface would be clipped at the top with no way to reach it.

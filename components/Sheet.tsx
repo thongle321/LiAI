@@ -47,12 +47,17 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
-import { Pressable, ScrollView, StatusBar, Text, View, useWindowDimensions } from "react-native";
+import { Keyboard, Pressable, ScrollView, StatusBar, Text, View, useWindowDimensions } from "react-native";
 import { TrueSheet, type TrueSheet as TrueSheetType } from "@lodev09/react-native-true-sheet";
 import { X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors } from "../themes/tokens.ts";
+
+/** The sheet's grabber strip: window coords put the body's first pixel
+ *  ~18dp below the surface top (measured on device), so a keyboard-bound
+ *  box must reserve it or it overshoots the lifted footer. Rounded up. */
+const GRABBER_CHROME = 20;
 
 export function Sheet({
   visible,
@@ -97,12 +102,39 @@ export function Sheet({
   // Floor the safe-area top with StatusBar.currentHeight (Android): a
   // zero inset would grow bodies behind the status bar.
   const topInset = Math.max(insets.top, StatusBar.currentHeight ?? 0);
+  // Live keyboard height: the body bound below shrinks by it so content
+  // can never run under the footer TrueSheet lifts above the keyboard.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", (e) =>
+      setKeyboardHeight(e.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener("keyboardDidHide", () =>
+      setKeyboardHeight(0),
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
   // TrueSheet clamps the SURFACE to realScreenHeight - topInset natively;
   // this clamps the CONTENT to the same box (window <= screen in
   // edge-to-edge, plus the 16px gap), so wrap-content bodies stay at-or-
   // below the surface instead of being clipped at the top with no way to
   // scroll to it. At-most: short content still wraps to its own height.
-  const bodyMaxHeight = windowHeight - topInset - 16;
+  //
+  // The keyboard case (device-observed): TrueSheet lifts the absolute
+  // FOOTER to the keyboard edge but never shrinks the body's box — tall
+  // content (HF token sheet) kept flowing under the lifted footer, whose
+  // button floated over the instructions card; short content (API-key
+  // sheet) never reaches the footer zone and hid the defect. Subtracting
+  // the live keyboard plus the grabber strip lands the box's bottom where
+  // the lifted footer begins. Keyboard-closed: chrome is 0, so the
+  // original bound stays byte-for-byte (device-verified green).
+  const keyboardChrome =
+    keyboardHeight > 0 ? keyboardHeight + GRABBER_CHROME : 0;
+  const bodyMaxHeight = windowHeight - topInset - 16 - keyboardChrome;
   // v3's auto detent ignores the absolute footer, so the body reserves its
   // measured height; measured at runtime rather than guessed.
   const [footerHeight, setFooterHeight] = useState(0);

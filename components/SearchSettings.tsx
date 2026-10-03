@@ -133,40 +133,6 @@ function ProviderKeySheet({
       onClose={onClose}
       title="API key"
       testID="search-key-sheet"
-      footer={
-        <View className="flex-row items-center justify-between gap-2">
-          {hasKey ? (
-            <Pressable
-              onPress={() => void clear()}
-              disabled={busy !== null}
-              className={`btn btn--ghost flex-1${busy !== null ? " opacity-40" : ""}`}
-              accessibilityRole="button"
-              accessibilityLabel="Clear Key"
-            >
-              {busy === "clear" ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Text className="font-sans text-body-md text-primary">Clear Key</Text>
-              )}
-            </Pressable>
-          ) : null}
-          <Pressable
-            onPress={() => void save()}
-            disabled={!draft.trim() || busy !== null}
-            className={`btn btn--primary flex-1${
-              !draft.trim() || busy !== null ? " opacity-40" : ""
-            }`}
-            accessibilityRole="button"
-            accessibilityLabel="Set Key"
-          >
-            {busy === "save" ? (
-              <ActivityIndicator size="small" color={colors.surface1} />
-            ) : (
-              <Text className="font-sans-semibold text-body-md text-on-primary">Set Key</Text>
-            )}
-          </Pressable>
-        </View>
-      }
     >
       <Text className="mb-4 font-sans text-body-md text-primary-text">
         {/* Q8: their sentence, brand-swapped. */}
@@ -204,6 +170,40 @@ function ProviderKeySheet({
       {error !== null ? (
         <Text className="mt-2 font-sans text-body-sm text-error">{error}</Text>
       ) : null}
+      {/* Grill Q1/Q2: actions ride the scroll body, never the native
+          footer prop — the lifted footer overlaps scrolled content. */}
+      <View className="mt-4 flex-row items-center justify-between gap-2">
+        {hasKey ? (
+          <Pressable
+            onPress={() => void clear()}
+            disabled={busy !== null}
+            className={`btn btn--ghost flex-1${busy !== null ? " opacity-40" : ""}`}
+            accessibilityRole="button"
+            accessibilityLabel="Clear Key"
+          >
+            {busy === "clear" ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Text className="font-sans text-body-md text-primary">Clear Key</Text>
+            )}
+          </Pressable>
+        ) : null}
+        <Pressable
+          onPress={() => void save()}
+          disabled={!draft.trim() || busy !== null}
+          className={`btn btn--primary flex-1${
+            !draft.trim() || busy !== null ? " opacity-40" : ""
+          }`}
+          accessibilityRole="button"
+          accessibilityLabel="Set Key"
+        >
+          {busy === "save" ? (
+            <ActivityIndicator size="small" color={colors.surface1} />
+          ) : (
+            <Text className="font-sans-semibold text-body-md text-on-primary">Set Key</Text>
+          )}
+        </Pressable>
+      </View>
     </Sheet>
   );
 }

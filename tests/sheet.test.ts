@@ -167,25 +167,13 @@ describe("sheet library", () => {
     // dialog window already resizes above the keyboard natively; the body
     // must be a plain ScrollView keeping tap-to-persist. Strip comments
     // first: the regression story legitimately NAMES the old component.
-    // The package's STATE hook is deliberately allowed (see the keyboard
-    // bound test): it only reports height — it is the padding/scrolling
-    // COMPONENTS that voided auto-detent bodies.
     const sheet = read("components/Sheet.tsx")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/\/\/[^\n]*/g, "");
     assert.doesNotMatch(
       sheet,
-      /KeyboardAwareScrollView|KeyboardAvoidingView|KeyboardStickyView/,
-      "no keyboard-controller scrolling component: their padding voids auto-detent bodies",
-    );
-    const imports = [
-      ...sheet.matchAll(/import\s+\{([^}]+)\}\s+from\s+["']react-native-keyboard-controller["']/g),
-    ];
-    assert.equal(imports.length, 1, "exactly one keyboard-controller import");
-    assert.match(
-      imports[0][1],
-      /^\s*useKeyboardState\s*$/,
-      "only useKeyboardState may be imported — components are banned here",
+      /keyboard-controller|KeyboardAwareScrollView/,
+      "the shared Sheet must not use keyboard-controller: its padding voids auto-detent bodies",
     );
     const body = sheet.match(/<ScrollView[\s\S]*?>/);
     assert.ok(body, "the sheet's body must be a plain ScrollView");
@@ -196,42 +184,28 @@ describe("sheet library", () => {
     );
   });
 
-  it("shrinks the body when the keyboard lifts the footer", () => {
-    // REGRESSION, device-observed: with the keyboard open, TrueSheet
-    // lifts the absolute FOOTER to the keyboard edge but does NOT
-    // shrink the body's box — tall content (HF sheet) kept flowing under
-    // the lifted Save Token button, which floated over the instructions
-    // card. Short content never reaches the footer zone, so the API-key
-    // sheet looked fine; the bound must hold for any content. Height
-    // comes from react-native-keyboard-controller's provider: RN core's
-    // Keyboard module never fires for an input hosted in TrueSheet's
-    // dialog window — the first fix shipped with it and the bound stayed
-    // inert (device screenshot: label and input still rendered below the
-    // footer) — while KVC's channel demonstrably heard this dialog (the
-    // old KeyboardAwareScrollView padded and scrolled inside it).
-    // Closed state keeps the original bound byte-for-byte.
-    const sheet = read("components/Sheet.tsx");
-    assert.doesNotMatch(sheet, /\[DEBUG-/, "no leftover debug instrumentation");
-    assert.match(
-      sheet,
-      /useKeyboardState\(\(s\) => s\.height\)/,
-      "the sheet must read the keyboard height from keyboard-controller's state",
-    );
-    assert.doesNotMatch(
-      sheet,
-      /Keyboard\.addListener|keyboardDidShow/,
-      "RN core Keyboard does not hear dialog-window inputs — it kept the bound at 0",
-    );
-    assert.match(
-      sheet,
-      /const bodyMaxHeight = windowHeight - topInset - 16 - keyboardChrome/,
-      "bodyMaxHeight must subtract the keyboard (else content runs under the lifted footer)",
-    );
-    assert.match(
-      sheet,
-      /keyboardHeight > 0 \? keyboardHeight \+ GRABBER_CHROME : 0/,
-      "closed state keeps the original bound byte-for-byte",
-    );
+  it("keeps actions in the scroll body, never the native footer", () => {
+    // REGRESSION + grill decision Q1/Q2. TrueSheet lifts its absolute
+    // footer above the keyboard without shrinking the body, so an input
+    // sheet with a footer prop ends with actions floating over scrolled
+    // content (HF sheet: three blind fixes — no JS channel hears the
+    // dialog keyboard, so no bound can hold). Buttons therefore ride the
+    // scroll body — identical pixels when the keyboard is closed — in
+    // every sheet that hosts a text input.
+    for (const file of [
+      "components/HfTokenSettings.tsx",
+      "components/SearchSettings.tsx",
+      "components/chat/GenerationSettingsSheet.tsx",
+    ]) {
+      const source = read(file);
+      const tag = source.match(/<Sheet[\s\S]*?>/);
+      assert.ok(tag, `${file} must render through the shared Sheet`);
+      assert.doesNotMatch(
+        tag[0],
+        /footer=\{/,
+        `${file} must not pin actions in the native footer: it lifts without the body`,
+      );
+    }
   });
 
   it("bounds every body so tall content scrolls instead of clipping", () => {

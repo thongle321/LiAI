@@ -48,7 +48,15 @@ describe("hugging face token sheet (Q2 bundle)", () => {
     assert.match(src, /!draft\.trim\(\)/, "save disabled while empty");
     assert.match(src, /busy/, "busy cross-lock");
     assert.match(src, /ActivityIndicator/, "spinner while writing");
-    assert.match(src, /footer=\{/, "pinned footer like Sheet.Actions");
+    // Grill Q1/Q2: actions ride the scroll body (identical pixels when
+    // the keyboard is closed), never the native footer prop — TrueSheet
+    // lifts its absolute footer above the keyboard without shrinking the
+    // body, so a footer here floats over scrolled content.
+    assert.doesNotMatch(src, /footer=\{/);
+    assert.ok(
+      src.indexOf("Paste your token here") < src.indexOf(">Save Token<"),
+      "actions flow after the input in the scroll body",
+    );
   });
 
   it("feedback: snackbar after close on success, inline error on failure (Q3)", () => {

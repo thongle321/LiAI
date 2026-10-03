@@ -6,10 +6,12 @@
  * so one conversation can be tuned without moving the others. Precedence is
  * session value, then preset — which is what defaultSampler() resolves.
  *
- * Interaction parity (Q4): edits BUFFER in a local draft; the footer is
- * PocketPal's actions row — Reset (left; a dropdown of both destinations
- * for sessions), Save as preset (sessions), Save. X / swipe / scrim all
- * land on onClose, which discards the draft by never committing it.
+ * Interaction parity (Q4): edits BUFFER in a local draft; the actions row
+ * mirrors PocketPal's footer (Reset on the left — a dropdown of both
+ * destinations for sessions — Save as preset for sessions, Save) but rides
+ * the scroll body (grill Q1/Q2: TrueSheet's native footer lifts above the
+ * keyboard without shrinking the body). X / swipe / scrim all land on
+ * onClose, which discards the draft by never committing it.
  *
  * Validation (Q6=C): Save re-checks the two typed fields (custom N PREDICT,
  * SEED — the ones whose live checks are min-only) and fires BOTH layers:
@@ -208,49 +210,6 @@ export function GenerationSettingsSheet({
       visible={visible}
       onClose={onClose}
       title={title}
-      footer={
-        <View className="flex-row items-center justify-between">
-          {isSession ? (
-            <ResetMenu
-              items={[
-                { label: "Reset to preset", onPress: resetToPreset },
-                { label: "Reset to System Defaults", onPress: resetToDefault },
-              ]}
-            />
-          ) : (
-            <Pressable
-              onPress={resetToDefault}
-              className="min-h-12 justify-center"
-              accessibilityRole="button"
-              accessibilityLabel="Reset to System Defaults"
-            >
-              <Text className="font-sans text-body-md text-primary">
-                Reset to System Defaults
-              </Text>
-            </Pressable>
-          )}
-          <View className="flex-row items-center gap-2">
-            {isSession ? (
-              <Pressable
-                onPress={handleSaveAsPreset}
-                className="btn btn--secondary"
-                accessibilityRole="button"
-                accessibilityLabel="Save as preset"
-              >
-                <Text className="font-sans text-body-md text-primary">Save as preset</Text>
-              </Pressable>
-            ) : null}
-            <Pressable
-              onPress={handleSave}
-              className="btn btn--primary"
-              accessibilityRole="button"
-              accessibilityLabel="Save"
-            >
-              <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
-            </Pressable>
-          </View>
-        </View>
-      }
     >
       {/* PocketPal: the source control sits ABOVE the card, not inside it
           (styles.settingsSourceContainer: horizontal margin, 16 below). */}
@@ -284,6 +243,50 @@ export function GenerationSettingsSheet({
           />
         ) : null}
       </SettingsSection>
+      {/* Grill Q1/Q2: the actions row rides the scroll body, never the
+          native footer prop — the lifted footer overlaps scrolled
+          content. Identical pixels when the keyboard is closed. */}
+      <View className="mt-4 flex-row items-center justify-between">
+        {isSession ? (
+          <ResetMenu
+            items={[
+              { label: "Reset to preset", onPress: resetToPreset },
+              { label: "Reset to System Defaults", onPress: resetToDefault },
+            ]}
+          />
+        ) : (
+          <Pressable
+            onPress={resetToDefault}
+            className="min-h-12 justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Reset to System Defaults"
+          >
+            <Text className="font-sans text-body-md text-primary">
+              Reset to System Defaults
+            </Text>
+          </Pressable>
+        )}
+        <View className="flex-row items-center gap-2">
+          {isSession ? (
+            <Pressable
+              onPress={handleSaveAsPreset}
+              className="btn btn--secondary"
+              accessibilityRole="button"
+              accessibilityLabel="Save as preset"
+            >
+              <Text className="font-sans text-body-md text-primary">Save as preset</Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={handleSave}
+            className="btn btn--primary"
+            accessibilityRole="button"
+            accessibilityLabel="Save"
+          >
+            <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
+          </Pressable>
+        </View>
+      </View>
     </Sheet>
   );
 }

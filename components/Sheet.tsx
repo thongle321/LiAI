@@ -41,24 +41,27 @@
  *   range, which is exactly why the HF sheet "worked" and the API-key
  *   sheet did not.
  *
- * The footer rides TrueSheet's native `footer` prop, which absorbs the
- * bottom safe-area inset in the footer container. Footers must therefore
- * carry NO manual `insets.bottom` padding of their own, or it doubles up.
+ * - Actions live in the SCROLL BODY, never TrueSheet's native `footer`
+ *   (grill Q1/Q2): the native footer lifts above the keyboard without
+ *   shrinking the body (TrueSheetViewController.positionFooter), so a
+ *   footer floats over scrolled content — and no JS channel hears the
+ *   dialog keyboard, so no bound can hold. In-body buttons are
+ *   pixel-identical when the keyboard is closed.
+ *
+ * The shared `footer` prop stays wired to TrueSheet's native footer (the
+ * wrapper keeps its safe-area pad inside) for sheets without text
+ * inputs; every sheet that hosts an input keeps its actions in-body
+ * instead, and footer-less bodies reserve the safe-area bottom so those
+ * in-body actions always clear the nav bar.
  */
 
 import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
 import { Pressable, ScrollView, StatusBar, Text, View, useWindowDimensions } from "react-native";
-import { useKeyboardState } from "react-native-keyboard-controller";
 import { TrueSheet, type TrueSheet as TrueSheetType } from "@lodev09/react-native-true-sheet";
 import { X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors } from "../themes/tokens.ts";
-
-/** The sheet's grabber strip: window coords put the body's first pixel
- *  ~18dp below the surface top (measured on device), so a keyboard-bound
- *  box must reserve it or it overshoots the lifted footer. Rounded up. */
-const GRABBER_CHROME = 20;
 
 export function Sheet({
   visible,
@@ -103,33 +106,12 @@ export function Sheet({
   // Floor the safe-area top with StatusBar.currentHeight (Android): a
   // zero inset would grow bodies behind the status bar.
   const topInset = Math.max(insets.top, StatusBar.currentHeight ?? 0);
-  // Live keyboard height — read from keyboard-controller's provider, NOT
-  // RN core's Keyboard module: an input hosted in TrueSheet's dialog
-  // window never triggers the core module's listeners (the first fix
-  // shipped with them and the bound stayed inert — the device screenshot
-  // still showed label and input below the lifted footer), while this
-  // channel demonstrably hears the dialog: the old
-  // KeyboardAwareScrollView padded and scrolled inside it. The body
-  // bound below shrinks by it so content can never run under the footer
-  // TrueSheet lifts above the keyboard.
-  const keyboardHeight = useKeyboardState((s) => s.height);
   // TrueSheet clamps the SURFACE to realScreenHeight - topInset natively;
   // this clamps the CONTENT to the same box (window <= screen in
   // edge-to-edge, plus the 16px gap), so wrap-content bodies stay at-or-
   // below the surface instead of being clipped at the top with no way to
   // scroll to it. At-most: short content still wraps to its own height.
-  //
-  // The keyboard case (device-observed): TrueSheet lifts the absolute
-  // FOOTER to the keyboard edge but never shrinks the body's box — tall
-  // content (HF token sheet) kept flowing under the lifted footer, whose
-  // button floated over the instructions card; short content (API-key
-  // sheet) never reaches the footer zone and hid the defect. Subtracting
-  // the live keyboard plus the grabber strip lands the box's bottom where
-  // the lifted footer begins. Keyboard-closed: chrome is 0, so the
-  // original bound stays byte-for-byte (device-verified green).
-  const keyboardChrome =
-    keyboardHeight > 0 ? keyboardHeight + GRABBER_CHROME : 0;
-  const bodyMaxHeight = windowHeight - topInset - 16 - keyboardChrome;
+  const bodyMaxHeight = windowHeight - topInset - 16;
   // v3's auto detent ignores the absolute footer, so the body reserves its
   // measured height; measured at runtime rather than guessed.
   const [footerHeight, setFooterHeight] = useState(0);
@@ -220,7 +202,11 @@ export function Sheet({
           keyboardShouldPersistTaps="handled"
           style={{
             maxHeight: bodyMaxHeight,
-            paddingBottom: footer ? footerHeight : undefined,
+            // No footer in input sheets (grill Q1/Q2): the row at the
+            // body's end carries the actions, and this pad keeps them
+            // above the nav bar. Footer sheets keep their measured
+            // reserve instead.
+            paddingBottom: footer ? footerHeight : insets.bottom,
           }}
         >
           {header}

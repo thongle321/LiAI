@@ -30,6 +30,16 @@
  * - v3's auto detent does NOT include the absolute footer (only `peek`
  *   does: TrueSheetDetentCalculator.kt:51), so a body with a footer must
  *   reserve the footer's measured height as bottom padding.
+ * - Keyboard avoidance comes from the NATIVE side: the dialog resizes
+ *   above the keyboard (adjustResize), so the body must NOT pad or
+ *   scroll for the keyboard itself. A KeyboardAwareScrollView did both:
+ *   it added keyboard-height padding to the content, auto sized the sheet
+ *   to content+pad, and its scroll-to-focus landed inside that padding —
+ *   short bodies VOIDED (title, blurb, input all gone) the moment the
+ *   keyboard opened, and every keystroke re-measured pad+scroll (stutter
+ *   and flicker, device-observed). Tall bodies only scrolled within
+ *   range, which is exactly why the HF sheet "worked" and the API-key
+ *   sheet did not.
  *
  * The footer rides TrueSheet's native `footer` prop, which absorbs the
  * bottom safe-area inset in the footer container. Footers must therefore
@@ -37,9 +47,8 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
-import { Pressable, StatusBar, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, ScrollView, StatusBar, Text, View, useWindowDimensions } from "react-native";
 import { TrueSheet, type TrueSheet as TrueSheetType } from "@lodev09/react-native-true-sheet";
-import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -156,6 +165,13 @@ export function Sheet({
         footer ? (
           <View
             className="px-4 pt-2"
+            // Device-observed: TrueSheet's footer container did NOT clear
+            // this phone's 3-button nav bar — the pinned action rendered
+            // behind the system buttons and could not be tapped. The
+            // safe-area bottom is 0 under gesture nav, so this pads
+            // nothing there and cannot double with a future native inset
+            // on a device that reports one.
+            style={{ paddingBottom: insets.bottom }}
             onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
           >
             {footer}
@@ -170,7 +186,7 @@ export function Sheet({
       }}
     >
       {scrollable ? (
-        <KeyboardAwareScrollView
+        <ScrollView
           testID={testID}
           className="grow"
           contentContainerClassName="px-4 pb-4"
@@ -182,7 +198,7 @@ export function Sheet({
         >
           {header}
           {children}
-        </KeyboardAwareScrollView>
+        </ScrollView>
       ) : (
         <View
           testID={testID}

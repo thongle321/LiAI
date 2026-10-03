@@ -126,7 +126,8 @@ function ProviderKeySheet({
 
   return (
     // Short sheet on the shared Sheet: TrueSheet's auto detent sizes to
-    // the content, and keyboard avoidance comes from the wrapper.
+    // the content, and the dialog's native resize keeps it above the
+    // keyboard — the body never pads or scrolls for the keyboard itself.
     <Sheet
       visible={providerId !== null}
       onClose={onClose}

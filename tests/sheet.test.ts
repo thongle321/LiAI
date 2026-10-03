@@ -92,16 +92,18 @@ describe("sheet library", () => {
     assert.doesNotMatch(body[0], /\bflex-1\b/, "flex-1 is flexBasis 0% and collapses the sheet");
   });
 
-  it("pins footers through the native footer prop, never manual insets", () => {
-    // REGRESSION WAITING TO HAPPEN. TrueSheet's footer container absorbs
-    // the bottom safe-area inset natively (see Sheet.tsx's header); a
-    // footer that also pads `insets.bottom` doubles it. The shared Sheet
-    // strips that padding at the boundary, so no caller may pass it.
+  it("pins footers through the footer prop, never caller-side insets", () => {
+    // REGRESSION WAITING TO HAPPEN. The shared Sheet owns the footer's
+    // bottom spacing — the adapter pads the safe-area inset itself
+    // (device-observed: TrueSheet's native footer container did NOT clear
+    // this phone's 3-button nav, parking the pinned action behind the
+    // system buttons). A caller that ALSO pads insets.bottom would double
+    // it, so no caller may pass it; the wrapper's own pad is the one.
     const sheet = read("components/Sheet.tsx");
     assert.match(
       sheet,
       /footer=\{\s*footer \? \(\s*<View[\s\S]*?onLayout[\s\S]*?\{footer\}\s*<\/View>\s*\) : undefined\s*\}/,
-      "the shared Sheet must wrap the footer at the boundary (measured, no caller padding)",
+      "the shared Sheet must wrap the footer at the boundary (measured, owning the bottom inset)",
     );
     for (const file of SHEET_CALLERS) {
       assert.doesNotMatch(
@@ -151,6 +153,34 @@ describe("sheet library", () => {
       propsBlock,
       /\bscrollable\b/,
       "TrueSheet's own scrollable prop would make auto = fullscreen",
+    );
+  });
+
+  it("never scrolls the sheet body with keyboard-controller", () => {
+    // REGRESSION, device-observed. The KeyboardAwareScrollView added
+    // keyboard-height padding to the body's content — TrueSheet's auto
+    // detent then sized the sheet to content+pad, and its scroll-to-focus
+    // landed INSIDE that padding for short content: the whole body voided
+    // (title/blurb/input gone) the moment the keyboard opened, and every
+    // keystroke re-measured pad+scroll = stutter/flicker. Tall content
+    // (HF) only scrolled within range, which is why it "worked". The
+    // dialog window already resizes above the keyboard natively; the body
+    // must be a plain ScrollView keeping tap-to-persist. Strip comments
+    // first: the regression story legitimately NAMES the old component.
+    const sheet = read("components/Sheet.tsx")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/[^\n]*/g, "");
+    assert.doesNotMatch(
+      sheet,
+      /keyboard-controller|KeyboardAwareScrollView/,
+      "the shared Sheet must not use keyboard-controller: its padding voids auto-detent bodies",
+    );
+    const body = sheet.match(/<ScrollView[\s\S]*?>/);
+    assert.ok(body, "the sheet's body must be a plain ScrollView");
+    assert.match(
+      body[0],
+      /keyboardShouldPersistTaps="handled"/,
+      "the body must keep tap-to-persist so a tap outside the field dismisses the keyboard",
     );
   });
 

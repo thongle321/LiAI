@@ -365,18 +365,9 @@ describe("settings card pattern", () => {
     }
   });
 
-  it("never repeats a section title as a row label", () => {
-    // "Voice" over a row called "Voice" reads as a stutter, and the user
-    // reads it as two things that should be one.
-    for (const file of ["VoiceSettings.tsx", "SearchSettings.tsx", "HfTokenSettings.tsx"]) {
-      const source = read(`components/${file}`);
-      for (const m of source.matchAll(/title="([^"]+)"/g)) {
-        const title = m[1];
-        assert.ok(
-          !source.includes(`label="${title}"`),
-          `${file}: the section title "${title}" is repeated as a row label`,
-        );
-      }
-    }
-  });
+// "never repeats a section title as a row label" retired: Q6B removed
+// SettingsSection's title prop, so its target construct no longer exists.
+// A sheet title over a row label is pocketpal's own pattern (HF row →
+// "Hugging Face Token" sheet) and is pinned by tests/settings-sheets.test.ts;
+// section titles themselves are pinned gone by tests/font-scale.test.ts.
 });

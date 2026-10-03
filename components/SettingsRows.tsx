@@ -475,11 +475,15 @@ export function ActionRow({
   buttonLabel,
   onPress,
   variant = "primary",
+  disabled = false,
 }: {
   label: string;
   description?: string;
   buttonLabel: string;
   onPress: () => void;
+  /** Pocketpal gates the key row on consent (Q5): a consent gate you can
+   *  route around by tapping is theater. */
+  disabled?: boolean;
   /** Whole-string literals, never interpolated: Uniwind compiles className
    *  from literals, and `btn--${variant}` is the failure mode AGENTS.md
    *  calls out. */
@@ -489,14 +493,15 @@ export function ActionRow({
     <View className="py-3">
       <RowLabel label={label} description={description} />
       <Pressable
-        onPress={onPress}
-        className={
+        onPress={disabled ? undefined : onPress}
+        accessibilityState={{ disabled }}
+        className={`${
           variant === "primary"
-            ? "btn btn--primary mt-2 self-start"
+            ? "btn btn--primary"
             : variant === "ghost"
-              ? "btn btn--ghost mt-2 self-start"
-              : "btn btn--secondary mt-2 self-start"
-        }
+              ? "btn btn--ghost"
+              : "btn btn--secondary"
+        } mt-2 self-start${disabled ? " opacity-40" : ""}`}
         accessibilityRole="button"
         accessibilityLabel={buttonLabel}
       >

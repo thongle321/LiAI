@@ -5,72 +5,189 @@
  * that starts causing auth failures can be parked without deleting it.
  */
 
-import { useEffect, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Linking,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { Eye, EyeOff, ExternalLink } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 import { useModelStore } from "../store/modelStore";
+import { useSnackbar } from "./Snackbar.tsx";
 import { Sheet } from "./Sheet.tsx";
 import { ActionRow, SettingsSection, ToggleRow } from "./SettingsRows.tsx";
+
+/** Their four steps, verbatim (HFTokenSheet en.json:786-791). */
+const HF_STEPS = [
+  "Go to huggingface.co and sign in",
+  "Navigate to Settings > Access Tokens",
+  `Create a new token with "read" access`,
+  "Copy the token and paste it below",
+];
 
 function HfTokenSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const hfToken = useModelStore((s) => s.hfToken);
   const setHfToken = useModelStore((s) => s.setHfToken);
+  const { showSnackbar } = useSnackbar();
   const [draft, setDraft] = useState("");
+  const [secure, setSecure] = useState(true);
+  const [busy, setBusy] = useState<"save" | "reset" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Reset transient state only on the false->true OPEN transition: the
+  // store flips hfToken synchronously on save, so keying off hfToken alone
+  // would re-run this MID-WRITE — clearing the busy lock (double-save) and
+  // snapping the eye toggle back to hidden.
+  const wasOpen = useRef(false);
 
   useEffect(() => {
-    if (open) setDraft("");
-  }, [open]);
+    if (open && !wasOpen.current) {
+      // Q7: the saved secret prefills, masked — their open behavior.
+      setDraft(hfToken ?? "");
+      setSecure(true);
+      setError(null);
+      setBusy(null);
+    }
+    wasOpen.current = open;
+  }, [open, hfToken]);
+
+  async function save(): Promise<void> {
+    if (busy !== null) return;
+    setBusy("save");
+    setError(null);
+    try {
+      await setHfToken(draft.trim());
+      onClose();
+      showSnackbar("Token saved successfully", { duration: 3000 });
+    } catch {
+      setError("Error saving token");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function reset(): Promise<void> {
+    if (busy !== null) return;
+    setBusy("reset");
+    setError(null);
+    try {
+      await setHfToken(null);
+      onClose();
+      showSnackbar("Token removed successfully", { duration: 3000 });
+    } catch {
+      setError("Error saving token");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   return (
-    // Short sheet on the shared Sheet: TrueSheet's auto detent sizes to
-    // the content, and keyboard avoidance comes from the wrapper.
     <Sheet
       visible={open}
       onClose={onClose}
-      title="Hugging Face"
+      title="Hugging Face Token"
       testID="hf-token-sheet"
-    >
-      <Text className="mb-4 font-sans text-body-md text-secondary-text">
-          {hfToken
-            ? "Token is set. Required for accessing gated models."
-            : "Set a token to access gated models from Hugging Face."}
-        </Text>
-        <TextInput
-          value={draft}
-          onChangeText={setDraft}
-          placeholder={hfToken ? "Token saved — enter to replace" : "hf_..."}
-          secureTextEntry
-          autoCapitalize="none"
-          className="input font-sans text-body-md"
-          placeholderTextColor={colors.secondaryText}
-          accessibilityLabel="Hugging Face token"
-        />
-        <View className="mt-4 flex-row gap-2">
+      footer={
+        <View className="flex-row items-center justify-between gap-2">
           {hfToken ? (
             <Pressable
-              onPress={() => void setHfToken(null)}
-              className="btn btn--ghost flex-1"
+              onPress={() => void reset()}
+              disabled={busy !== null}
+              className={`btn btn--ghost flex-1${busy !== null ? " opacity-40" : ""}`}
               accessibilityRole="button"
-              accessibilityLabel="Clear token"
+              accessibilityLabel="Reset Token"
             >
-              <Text className="font-sans text-body-md text-primary">Clear</Text>
+              {busy === "reset" ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text className="font-sans text-body-md text-primary">Reset Token</Text>
+              )}
             </Pressable>
           ) : null}
           <Pressable
-            onPress={() => {
-              if (draft.trim() === "") return;
-              void setHfToken(draft.trim());
-              setDraft("");
-              onClose();
-            }}
-            className="btn btn--primary flex-1"
+            onPress={() => void save()}
+            disabled={!draft.trim() || busy !== null}
+            className={`btn btn--primary flex-1${
+              !draft.trim() || busy !== null ? " opacity-40" : ""
+            }`}
             accessibilityRole="button"
-            accessibilityLabel="Save token"
+            accessibilityLabel="Save Token"
           >
-            <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
+            {busy === "save" ? (
+              <ActivityIndicator size="small" color={colors.surface1} />
+            ) : (
+              <Text className="font-sans-semibold text-body-md text-on-primary">Save Token</Text>
+            )}
           </Pressable>
         </View>
+      }
+    >
+      <Text className="mb-4 font-sans text-body-md text-primary-text">
+        Required to access gated models
+      </Text>
+      {/* Their instructions card: Mist box, four numbered steps, live link. */}
+      <View className="bg-surface-2 p-4 rounded-lg">
+        <Text className="mb-2 font-sans-semibold text-body-md text-primary-text">
+          How to get a token:
+        </Text>
+        {HF_STEPS.map((step, index) => (
+          <Text
+            key={step}
+            className="mb-2 font-sans text-body-md text-primary-text"
+          >
+            {`${index + 1}. ${step}`}
+          </Text>
+        ))}
+        <Pressable
+          onPress={() =>
+            void Linking.openURL("https://huggingface.co/settings/tokens")
+          }
+          className="mt-1 self-start flex-row items-center gap-1"
+          accessibilityRole="link"
+          accessibilityLabel="Get a token from huggingface.co"
+        >
+          <Text className="font-sans text-body-md text-primary-text underline">
+            Get a token from huggingface.co
+          </Text>
+          <ExternalLink size={14} color={colors.primaryText} />
+        </Pressable>
+      </View>
+      <Text className="mt-6 mb-1 font-sans text-body-md text-primary-text">
+        Personal Access Token
+      </Text>
+      <View className="relative">
+        <TextInput
+          value={draft}
+          onChangeText={setDraft}
+          placeholder="Paste your token here"
+          secureTextEntry={secure}
+          autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
+          className="input font-sans text-body-md pr-12"
+          placeholderTextColor={colors.secondaryText}
+          accessibilityLabel="Personal Access Token"
+        />
+        <Pressable
+          onPress={() => setSecure((s) => !s)}
+          className="absolute right-0 top-0 h-12 w-12 items-center justify-center"
+          accessibilityRole="button"
+          accessibilityLabel={secure ? "Show token" : "Hide token"}
+        >
+          {secure ? (
+            <Eye size={24} color={colors.secondaryText} />
+          ) : (
+            <EyeOff size={24} color={colors.secondaryText} />
+          )}
+        </Pressable>
+      </View>
+      {error !== null ? (
+        <Text className="mt-2 font-sans text-body-sm text-error">{error}</Text>
+      ) : null}
     </Sheet>
   );
 }

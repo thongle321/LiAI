@@ -28,12 +28,15 @@ export const createSettingsSlice: StateCreator<ModelStore, [], [], SettingsSlice
   },
 
   setHfToken: async (token) => {
-    set({ hfToken: token });
+    // Persist FIRST, then flip the store: a failed write must not leave
+    // the store claiming a token that is not on disk — the sheet's error
+    // path (inline "Error saving token", sheet stays open) keys off this.
     if (token) {
       await writeSecret(HF_TOKEN_SS_KEY, token);
     } else {
       await deleteSecret(HF_TOKEN_SS_KEY);
     }
+    set({ hfToken: token });
   },
 
   setUseHfToken: async (on) => {

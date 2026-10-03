@@ -8,7 +8,14 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { Eye, EyeOff } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 import {
@@ -53,22 +60,68 @@ function ProviderKeySheet({
   const clearProviderKey = useSearch((s) => s.clearProviderKey);
   const [draft, setDraft] = useState("");
   const [hasKey, setHasKey] = useState(false);
+  const [secure, setSecure] = useState(true);
+  const [busy, setBusy] = useState<"save" | "clear" | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (providerId === null) return;
-    setDraft("");
+    // Stale guard: a slow read landing after close/reopen (or a provider
+    // switch) must not overwrite the newly opened field with the old key.
+    let stale = false;
+    setError(null);
+    setBusy(null);
+    setSecure(true);
+    // Q7: the saved key prefills, masked — their open behavior.
     getProviderKey(providerId).then(
-      (k) => setHasKey(k !== null && k !== ""),
-      () => setHasKey(false),
+      (k) => {
+        if (stale) return;
+        setDraft(k ?? "");
+        setHasKey(k !== null && k !== "");
+      },
+      () => {
+        if (stale) return;
+        setDraft("");
+        setHasKey(false);
+      },
     );
+    return () => {
+      stale = true;
+    };
   }, [providerId, getProviderKey]);
 
   async function save(): Promise<void> {
-    if (!providerId || draft.trim() === "") return;
-    await setProviderKey(providerId, draft.trim());
-    setDraft("");
-    setHasKey(true);
-    onChanged();
+    if (!providerId || busy !== null) return;
+    setBusy("save");
+    setError(null);
+    try {
+      await setProviderKey(providerId, draft.trim());
+      setHasKey(true);
+      onChanged();
+      onClose();
+    } catch {
+      // Their failure copy, inline: the sheet stays open (Q3 hybrid).
+      setError("Couldn't update the key. Please try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function clear(): Promise<void> {
+    if (!providerId || busy !== null) return;
+    setBusy("clear");
+    setError(null);
+    try {
+      await clearProviderKey(providerId);
+      setHasKey(false);
+      setDraft("");
+      onChanged();
+      onClose();
+    } catch {
+      setError("Couldn't update the key. Please try again.");
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
@@ -77,46 +130,79 @@ function ProviderKeySheet({
     <Sheet
       visible={providerId !== null}
       onClose={onClose}
-      title={providerId === null ? "" : providerName(providerId)}
+      title="API key"
       testID="search-key-sheet"
-    >
-        <Text className="mb-4 font-sans text-body-md text-secondary-text">
-          {hasKey ? "A key is saved for this provider." : "No key set for this provider."}
-        </Text>
-        <TextInput
-          value={draft}
-          onChangeText={setDraft}
-          placeholder={hasKey ? "Key saved — enter to replace" : "Enter API key"}
-          secureTextEntry
-          autoCapitalize="none"
-          className="input font-sans text-body-md"
-          placeholderTextColor={colors.secondaryText}
-          accessibilityLabel={`${providerId ?? ""} API key`}
-        />
-        <View className="mt-4 flex-row gap-2">
+      footer={
+        <View className="flex-row items-center justify-between gap-2">
           {hasKey ? (
             <Pressable
-              onPress={() => {
-                if (providerId) void clearProviderKey(providerId);
-                setHasKey(false);
-                onChanged();
-              }}
-              className="btn btn--ghost flex-1"
+              onPress={() => void clear()}
+              disabled={busy !== null}
+              className={`btn btn--ghost flex-1${busy !== null ? " opacity-40" : ""}`}
               accessibilityRole="button"
-              accessibilityLabel="Clear key"
+              accessibilityLabel="Clear Key"
             >
-              <Text className="font-sans text-body-md text-primary">Clear</Text>
+              {busy === "clear" ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text className="font-sans text-body-md text-primary">Clear Key</Text>
+              )}
             </Pressable>
           ) : null}
           <Pressable
             onPress={() => void save()}
-            className="btn btn--primary flex-1"
+            disabled={!draft.trim() || busy !== null}
+            className={`btn btn--primary flex-1${
+              !draft.trim() || busy !== null ? " opacity-40" : ""
+            }`}
             accessibilityRole="button"
-            accessibilityLabel="Save key"
+            accessibilityLabel="Set Key"
           >
-            <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
+            {busy === "save" ? (
+              <ActivityIndicator size="small" color={colors.surface1} />
+            ) : (
+              <Text className="font-sans-semibold text-body-md text-on-primary">Set Key</Text>
+            )}
+          </Pressable>
+        </View>
+      }
+    >
+      <Text className="mb-4 font-sans text-body-md text-primary-text">
+        {/* Q8: their sentence, brand-swapped. */}
+        {"Let the assistant search the web with its own tools. Bring your own API key — LiAI never holds your keys or routes your queries."}
+      </Text>
+      <Text className="mb-1 font-sans text-body-md text-primary-text">API key</Text>
+      <View className="relative">
+        <TextInput
+          value={draft}
+          onChangeText={setDraft}
+          placeholder={`Paste your ${
+            providerId === null ? "" : providerName(providerId)
+          } API key`}
+          secureTextEntry={secure}
+          autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
+          className="input font-sans text-body-md pr-12"
+          placeholderTextColor={colors.secondaryText}
+          accessibilityLabel={`${providerId ?? ""} API key`}
+        />
+        <Pressable
+          onPress={() => setSecure((s) => !s)}
+          className="absolute right-0 top-0 h-12 w-12 items-center justify-center"
+          accessibilityRole="button"
+          accessibilityLabel={secure ? "Show API key" : "Hide API key"}
+        >
+          {secure ? (
+            <Eye size={24} color={colors.secondaryText} />
+          ) : (
+            <EyeOff size={24} color={colors.secondaryText} />
+          )}
         </Pressable>
       </View>
+      {error !== null ? (
+        <Text className="mt-2 font-sans text-body-sm text-error">{error}</Text>
+      ) : null}
     </Sheet>
   );
 }
@@ -203,6 +289,7 @@ export function SearchSettings() {
           }
           buttonLabel={hasKey ? "Update Key" : "Set Key"}
           variant="secondary"
+          disabled={!hasConsented}
           onPress={() => setKeySheetFor(activeProviderId)}
         />
       </View>

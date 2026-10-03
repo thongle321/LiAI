@@ -47,7 +47,8 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
-import { Keyboard, Pressable, ScrollView, StatusBar, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, ScrollView, StatusBar, Text, View, useWindowDimensions } from "react-native";
+import { useKeyboardState } from "react-native-keyboard-controller";
 import { TrueSheet, type TrueSheet as TrueSheetType } from "@lodev09/react-native-true-sheet";
 import { X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -102,22 +103,16 @@ export function Sheet({
   // Floor the safe-area top with StatusBar.currentHeight (Android): a
   // zero inset would grow bodies behind the status bar.
   const topInset = Math.max(insets.top, StatusBar.currentHeight ?? 0);
-  // Live keyboard height: the body bound below shrinks by it so content
-  // can never run under the footer TrueSheet lifts above the keyboard.
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  useEffect(() => {
-    const show = Keyboard.addListener("keyboardDidShow", (e) =>
-      setKeyboardHeight(e.endCoordinates.height),
-    );
-    const hide = Keyboard.addListener("keyboardDidHide", () =>
-      setKeyboardHeight(0),
-    );
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
+  // Live keyboard height — read from keyboard-controller's provider, NOT
+  // RN core's Keyboard module: an input hosted in TrueSheet's dialog
+  // window never triggers the core module's listeners (the first fix
+  // shipped with them and the bound stayed inert — the device screenshot
+  // still showed label and input below the lifted footer), while this
+  // channel demonstrably hears the dialog: the old
+  // KeyboardAwareScrollView padded and scrolled inside it. The body
+  // bound below shrinks by it so content can never run under the footer
+  // TrueSheet lifts above the keyboard.
+  const keyboardHeight = useKeyboardState((s) => s.height);
   // TrueSheet clamps the SURFACE to realScreenHeight - topInset natively;
   // this clamps the CONTENT to the same box (window <= screen in
   // edge-to-edge, plus the 16px gap), so wrap-content bodies stay at-or-

@@ -167,13 +167,25 @@ describe("sheet library", () => {
     // dialog window already resizes above the keyboard natively; the body
     // must be a plain ScrollView keeping tap-to-persist. Strip comments
     // first: the regression story legitimately NAMES the old component.
+    // The package's STATE hook is deliberately allowed (see the keyboard
+    // bound test): it only reports height — it is the padding/scrolling
+    // COMPONENTS that voided auto-detent bodies.
     const sheet = read("components/Sheet.tsx")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/\/\/[^\n]*/g, "");
     assert.doesNotMatch(
       sheet,
-      /keyboard-controller|KeyboardAwareScrollView/,
-      "the shared Sheet must not use keyboard-controller: its padding voids auto-detent bodies",
+      /KeyboardAwareScrollView|KeyboardAvoidingView|KeyboardStickyView/,
+      "no keyboard-controller scrolling component: their padding voids auto-detent bodies",
+    );
+    const imports = [
+      ...sheet.matchAll(/import\s+\{([^}]+)\}\s+from\s+["']react-native-keyboard-controller["']/g),
+    ];
+    assert.equal(imports.length, 1, "exactly one keyboard-controller import");
+    assert.match(
+      imports[0][1],
+      /^\s*useKeyboardState\s*$/,
+      "only useKeyboardState may be imported — components are banned here",
     );
     const body = sheet.match(/<ScrollView[\s\S]*?>/);
     assert.ok(body, "the sheet's body must be a plain ScrollView");
@@ -190,15 +202,25 @@ describe("sheet library", () => {
     // shrink the body's box — tall content (HF sheet) kept flowing under
     // the lifted Save Token button, which floated over the instructions
     // card. Short content never reaches the footer zone, so the API-key
-    // sheet looked fine; the bound must hold for any content. The body
-    // tracks the keyboard and subtracts it (closed state keeps the
-    // original bound exactly).
+    // sheet looked fine; the bound must hold for any content. Height
+    // comes from react-native-keyboard-controller's provider: RN core's
+    // Keyboard module never fires for an input hosted in TrueSheet's
+    // dialog window — the first fix shipped with it and the bound stayed
+    // inert (device screenshot: label and input still rendered below the
+    // footer) — while KVC's channel demonstrably heard this dialog (the
+    // old KeyboardAwareScrollView padded and scrolled inside it).
+    // Closed state keeps the original bound byte-for-byte.
     const sheet = read("components/Sheet.tsx");
     assert.doesNotMatch(sheet, /\[DEBUG-/, "no leftover debug instrumentation");
     assert.match(
       sheet,
-      /const \[keyboardHeight, setKeyboardHeight\] = useState\(0\)/,
-      "the sheet must track the live keyboard height",
+      /useKeyboardState\(\(s\) => s\.height\)/,
+      "the sheet must read the keyboard height from keyboard-controller's state",
+    );
+    assert.doesNotMatch(
+      sheet,
+      /Keyboard\.addListener|keyboardDidShow/,
+      "RN core Keyboard does not hear dialog-window inputs — it kept the bound at 0",
     );
     assert.match(
       sheet,
@@ -207,8 +229,8 @@ describe("sheet library", () => {
     );
     assert.match(
       sheet,
-      /keyboardDidShow[\s\S]*?setKeyboardHeight\(e\.endCoordinates\.height\)/,
-      "the keyboard show event must feed the bound",
+      /keyboardHeight > 0 \? keyboardHeight \+ GRABBER_CHROME : 0/,
+      "closed state keeps the original bound byte-for-byte",
     );
   });
 

@@ -205,6 +205,10 @@ export interface ScriptedTurn {
 export interface FakeTurnCalls {
   texts: string[];
   sessions: (string | null)[];
+  /** The image actually handed to the engine, or undefined. G12's whole
+   *  claim is about what the MODEL receives, not what the user attached,
+   *  so it has to be observable here. */
+  images: (string | undefined)[];
 }
 
 /** Scripted TurnRunner: shifts one outcome per call, records inputs. */
@@ -212,11 +216,12 @@ export function fakeRunTurn(script: ScriptedTurn[]): {
   runTurn: TurnRunner;
   calls: FakeTurnCalls;
 } {
-  const calls: FakeTurnCalls = { texts: [], sessions: [] };
+  const calls: FakeTurnCalls = { texts: [], sessions: [], images: [] };
   const queue = script.map((s) => ({ ...s }));
   const runTurn: TurnRunner = async (text, paths, onToken) => {
     calls.texts.push(text);
     calls.sessions.push(paths.sessionId);
+    calls.images.push(paths.image);
     const next = queue.length > 0 ? queue.shift()! : {};
     if (next.fail !== undefined) throw new Error(next.fail);
     const reply = next.reply ?? `Echo ${text}`;
@@ -242,12 +247,13 @@ export function gatedRunTurn(): {
   release: (reply?: string) => void;
   calls: FakeTurnCalls;
 } {
-  const calls: FakeTurnCalls = { texts: [], sessions: [] };
+  const calls: FakeTurnCalls = { texts: [], sessions: [], images: [] };
   let release: (reply?: string) => void = () => {};
   const runTurn: TurnRunner = (text, paths, onToken) =>
     new Promise((resolve) => {
       calls.texts.push(text);
       calls.sessions.push(paths.sessionId);
+      calls.images.push(paths.image);
       release = (reply = `Echo ${text}`) => {
         onToken?.(reply);
         resolve({

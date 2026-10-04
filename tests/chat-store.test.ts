@@ -3,6 +3,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { createChatStore } from "../store/chat.ts";
 import {
@@ -780,6 +781,107 @@ describe("turn timing (G13)", () => {
       useStore.getState().turnStartedAt,
       null,
       "no stamp survives into a conversation with no turn",
+    );
+  });
+});
+
+describe("chat warnings (G7)", () => {
+  it("sets and clears the notice", () => {
+    const { getStore, runTurn } = storeWith([]);
+    const useStore = createChatStore({ getStore, runTurn });
+    assert.equal(useStore.getState().chatWarning, null, "quiet at rest");
+    useStore.getState().setChatWarning({
+      message: "something",
+      severity: "warning",
+      recoverable: false,
+    });
+    assert.equal(useStore.getState().chatWarning?.message, "something");
+    useStore.getState().setChatWarning(null);
+    assert.equal(useStore.getState().chatWarning, null);
+  });
+
+  it("does not follow the user into another conversation", async () => {
+    const { getStore, runTurn } = storeWith([]);
+    const useStore = createChatStore({ getStore, runTurn });
+    useStore.getState().setChatWarning({
+      message: "the image was dropped",
+      severity: "warning",
+      recoverable: false,
+    });
+    await useStore.getState().newConversation();
+    assert.equal(
+      useStore.getState().chatWarning,
+      null,
+      "a notice is only ever true of the turn that raised it",
+    );
+  });
+
+  it("every conversation-reset site clears it, not just the one above", () => {
+    // newConversation, switchSession, deleteSession and duplicateSession
+    // each replace the visible conversation. Missing one leaks the notice
+    // into a chat it has nothing to do with, so the count is pinned
+    // rather than trusting four separate call sites to be remembered.
+    const src = readFileSync("store/chat/sessions.ts", "utf8");
+    assert.equal(
+      src.split("chatWarning: null").length - 1,
+      4,
+      "newConversation, switchSession, deleteSession, duplicateSession",
+    );
+  });
+});
+
+describe("multimodal warning (G12)", () => {
+  it("sends the text, drops the image the model cannot see, and says so", async () => {
+    // PocketParity: useChatSession.ts:97-105 still sends the message as
+    // plain text when images ride a turn with no vision, and raises a
+    // warning. It does not block, and it does not fail the turn.
+    const { runTurn, calls } = fakeRunTurn([{ reply: "a text model" }]);
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+    });
+    await useStore.getState().send("what is this?", "data:image/jpeg;base64,AAAA");
+
+    assert.equal(calls.texts[0], "what is this?", "the text still went out");
+    assert.equal(
+      calls.images[0],
+      undefined,
+      "the engine was never handed an image it cannot read",
+    );
+    const w = useStore.getState().chatWarning;
+    assert.notEqual(w, null, "the user is told, rather than guessing");
+    assert.equal(w?.severity, "warning", "the turn went through, degraded");
+    assert.equal(w?.recoverable, false, "PocketPal's own multimodal warning");
+  });
+
+  it("stays quiet when no image is attached", async () => {
+    const { runTurn } = fakeRunTurn([{ reply: "ok" }]);
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+    });
+    await useStore.getState().send("hello");
+    assert.equal(
+      useStore.getState().chatWarning,
+      null,
+      "a text-only turn must not raise a multimodal notice",
+    );
+  });
+
+  it("the guard lives in runLocal, so every re-run path shares it", () => {
+    // send, retry, regenerate and edit all funnel through runLocal. A
+    // guard written per-caller would let one of them drift into handing a
+    // text-only model an image again -- so pin the shape, not four copies.
+    const src = readFileSync("store/chat/send.ts", "utf8");
+    assert.match(
+      src,
+      /const image = multimodalAvailable\(\) \? opts\.image : undefined;/,
+    );
+    // Exactly one place decides, so it cannot be bypassed downstream.
+    assert.equal(
+      src.split("multimodalAvailable()").length - 1,
+      2,
+      "one definition and one use -- no second caller to drift",
     );
   });
 });

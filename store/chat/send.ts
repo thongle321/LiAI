@@ -15,6 +15,22 @@ function llmError(message: string): ApiError {
   return { code: "llm_error", message };
 }
 
+/** Can the ACTIVE engine see an image this turn? (G12)
+ *
+ * PocketPal asks `modelStore.activeModelCaps.visionActive` -- whether a
+ * projector is loaded RIGHT NOW, not whether the model is declared
+ * vision-capable. We have no projector pairing at all
+ * (`components/models/HFModelSearch.tsx:393`: "LiAI cannot pair one"),
+ * and the remote engine is wired for text only, so this is false for
+ * every provider today. Kept as the one place that decides it, because
+ * projector pairing is exactly what flips it. */
+function multimodalAvailable(): boolean {
+  return false;
+}
+
+/** What PocketPal says when images ride a turn the model cannot see. */
+const MULTIMODAL_WARNING = "This model can't see images, so it was sent the text only.";
+
 export function createSendSlice(
   set: ChatSet,
   get: ChatGet,
@@ -23,6 +39,8 @@ export function createSendSlice(
   ChatState,
   | "sending"
   | "turnStartedAt"
+  | "chatWarning"
+  | "setChatWarning"
   | "send"
   | "stop"
   | "retry"
@@ -89,12 +107,35 @@ export function createSendSlice(
         outcome: undefined,
       });
     }
+    // G12 (PocketParity) -- do the same as PocketPal's useChatSession.
+    //
+    // PocketPal gates on whether a projector is actually loaded; when
+    // images ride a turn that cannot see them it STILL sends the message
+    // as plain text and raises a warning (useChatSession.ts:97-105). It
+    // does not block, and it does not fail the turn -- which is why the
+    // user gets a turn back instead of a raw engine error.
+    //
+    // The guard sits HERE, not in each caller: send, retry, regenerate and
+    // edit all route through runLocal, so one check covers every path and
+    // none of them can drift into disagreeing about it.
+    const image = multimodalAvailable() ? opts.image : undefined;
+    if (opts.image !== undefined && image === undefined) {
+      set({
+        chatWarning: {
+          message: MULTIMODAL_WARNING,
+          // PocketPal's createMultimodalWarning: not recoverable, because
+          // there is nothing to retry into until a projector can be paired.
+          severity: "warning",
+          recoverable: false,
+        },
+      });
+    }
     try {
       const outcome = await ctx.runTurn(
         opts.text,
         {
           sessionId: opts.sessionId,
-          ...(opts.image !== undefined ? { image: opts.image } : {}),
+          ...(image !== undefined ? { image } : {}),
           history: opts.history,
           ...(opts.retry ? { retry: true } : {}),
           // The bubble ids ARE the row ids: minted up front so there is
@@ -161,6 +202,8 @@ export function createSendSlice(
   return {
     sending: false,
     turnStartedAt: null,
+    chatWarning: null,
+    setChatWarning: (warning) => set({ chatWarning: warning }),
     editingTurnId: null,
 
     startEdit: (messageId: string): boolean => {

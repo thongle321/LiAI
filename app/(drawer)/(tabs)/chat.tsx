@@ -54,6 +54,7 @@ import { fillPercent } from "../../../lib/chat/context-fill.ts";
 import { pickableModels } from "../../../lib/chat/models.ts";
 import { useModelReady } from "../../../hooks/useModelReady.ts";
 import { GenerationSettingsSheet } from "../../../components/chat/GenerationSettingsSheet.tsx";
+import { ChatWarningSnackbar } from "../../../components/chat/ChatWarningSnackbar.tsx";
 import { ChatMenu } from "../../../components/chat/ChatMenu.tsx";
 
 export default function ChatRoute() {
@@ -75,6 +76,15 @@ export default function ChatRoute() {
   const editingTurnId = useChatStore((s) => s.editingTurnId);
   const cancelEdit = useChatStore((s) => s.cancelEdit);
   const turnStartedAt = useChatStore((s) => s.turnStartedAt);
+  const chatWarning = useChatStore((s) => s.chatWarning);
+  const setChatWarning = useChatStore((s) => s.setChatWarning);
+  // Stable identity matters here: the snackbar's auto-dismiss timer is
+  // keyed on its onDismiss, so an inline arrow would restart the dwell on
+  // every parent render and the notice would never expire.
+  const dismissWarning = useCallback(
+    () => setChatWarning(null),
+    [setChatWarning],
+  );
   const setActiveModel = useModelStore((s) => s.setActiveModel);
   const setActiveRemoteApi = useModelStore((s) => s.setActiveRemoteApi);
   const allModels = useModelStore((s) => s.models);
@@ -499,7 +509,13 @@ export default function ChatRoute() {
             coincide — send/retry/regenerate mint the streaming stub in the
             same set() — so a chip would be a second indicator for one
             state, overlapping the list instead of scrolling with it. */}
-        {contextFullShowing && (
+        {/* The transient notice outranks the persistent banner: it is about the
+    turn that just happened, while the banner is standing context. */}
+          <ChatWarningSnackbar
+            warning={chatWarning}
+            onDismiss={dismissWarning}
+          />
+          {contextFullShowing && (
           <ContextFullBanner
             fill={fillPercent(newestAssistant?.usage?.promptTokens, nCtx)}
             onMoreRoom={() => setLadderOpen(true)}

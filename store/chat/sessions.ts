@@ -133,12 +133,16 @@ export function createSessionsSlice(
       cancelActive();
       await quiet(get().persistDraft());
       const store = await storeOf(ctx);
-      if (store) await quiet(store.setActiveSessionId(null));
+if (store) await quiet(store.setActiveSessionId(null));
+      // A notice raised in the conversation you just left must not follow
+      // you into the next one — "the image was dropped" is only ever true
+      // of the turn that raised it.
       set({
         sessionId: null,
         messages: [],
         sending: false,
         turnStartedAt: null,
+        chatWarning: null,
         draft: await readDraftFor(ctx, null),
       });
     },
@@ -157,6 +161,7 @@ export function createSessionsSlice(
           sessionId: id,
           messages: toMessages(turns),
           draft: await readDraftFor(ctx, id),
+          chatWarning: null,
         });
         return true;
       } catch {
@@ -174,12 +179,13 @@ export function createSessionsSlice(
       set((s) => ({ sessions: s.sessions.filter((sess) => sess.id !== id) }));
       if (get().sessionId === id) {
         // The deleted session's text must not haunt the fresh composer:
-        // fall back to whatever is parked in the unsent slot.
+// fall back to whatever is parked in the unsent slot.
         set({
           sessionId: null,
           messages: [],
           sending: false,
           turnStartedAt: null,
+          chatWarning: null,
           draft: await readDraftFor(ctx, null),
         });
       }
@@ -213,6 +219,7 @@ export function createSessionsSlice(
       draft: await readDraftFor(ctx, copyId),
       sending: false,
       turnStartedAt: null,
+      chatWarning: null,
     });
     await quiet(get().refreshSessions());
     return true;

@@ -73,6 +73,18 @@ export interface ChatCtx {
   streamGen: number;
 }
 
+/** A transient chat notice (G7). Kept deliberately small: PocketPal's
+ *  ErrorState carries a stack and metadata, none of which this app has a
+ *  consumer for, and carrying fields nothing reads is how a warning
+ *  surface starts lying about what it knows. */
+export interface ChatWarning {
+  message: string;
+  /** `warning`: the turn sent, degraded. `error`: it did not send. */
+  severity: "warning" | "error";
+  /** Offers a Retry action, as PocketPal's does for recoverable faults. */
+  recoverable: boolean;
+}
+
 export interface ChatState {
   messages: ChatMessage[];
   sessionId: string | null;
@@ -83,6 +95,15 @@ export interface ChatState {
    *  show elapsed time — usage lands only on settle, and three anonymous
    *  dots are indistinguishable from a frozen screen. */
   turnStartedAt: number | null;
+  /** A transient chat notice, or null. Distinct from an errored message:
+   *  an errored message means the turn FAILED, while this means it went
+   *  through in a degraded state the user should know about. PocketParity
+   *  G7 -- PocketPal raises these via `uiStore.setChatWarning` and shows
+   *  them in an `ErrorSnackbar`; without a surface, a recoverable failure
+   *  is indistinguishable from a fatal one. */
+  chatWarning: ChatWarning | null;
+  /** Raise (or with null, clear) the chat notice. */
+  setChatWarning: (warning: ChatWarning | null) => void;
   sessions: ChatSession[];
   /** Composer draft for the active session (persisted on switch/send). */
   draft: string;

@@ -34,6 +34,7 @@ import {
   Settings,
   Share,
   Trash,
+  Download,
 } from "lucide-react-native";
 
 import { useChatStore, defaultGetStore } from "../../store/chat";
@@ -47,6 +48,7 @@ import {
   type ExportKind,
 } from "../../lib/chat/export.ts";
 import { usePressFeedback } from "../../lib/motion.ts";
+import { useChatImport } from "../../hooks/useChatImport.ts";
 import { shareExportedFile } from "../../lib/chat/share-export.ts";
 import { pickableModels } from "../../lib/chat/models.ts";
 import { colors } from "../../themes/tokens.ts";
@@ -131,6 +133,7 @@ export function ChatMenu({
   const activeModelId = useModelStore((s) => s.activeModelId);
   const setActiveModel = useModelStore((s) => s.setActiveModel);
   const setActiveRemoteApi = useModelStore((s) => s.setActiveRemoteApi);
+  const importChat = useChatImport();
 
   const hasSession = sessionId !== null;
   // One source for "which models exist", shared with each message's
@@ -302,10 +305,23 @@ export function ChatMenu({
                   label="Export"
                   icon={<Share size={16} color={colors.secondaryText} />}
                   chevron
-                  onPress={() => setPanel("export")}
+onPress={() => setPanel("export")}
                 />
               </>
             ) : null}
+            <MenuRow
+              label="Import"
+              icon={<Download size={16} color={colors.secondaryText} />}
+              // NOT gated on hasSession: restoring into an empty app is the
+              // main case, and it is exactly the one Export hides behind a
+              // session.
+              disabled={busy}
+              onPress={() => {
+                // Close first, or the picker opens behind the sheet.
+                close();
+                void importChat();
+              }}
+            />
 
             {panel === "model" ? (
               <>

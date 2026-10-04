@@ -5,6 +5,7 @@ import type { StoreApi } from "zustand";
 import type { SearchAuth } from "../../types/api.ts";
 import type { EngineSource } from "../../lib/inference/engine.ts";
 import type { SessionStore } from "../../lib/chat/session-store.ts";
+import type { ImportResult } from "../../lib/chat/import.ts";
 import type { AgentStep, ChatMessage, ChatSession, TurnOutcomeFlags } from "../../types/chat.ts";
 
 export type Connection = "unknown" | "up" | "down";
@@ -121,6 +122,10 @@ export interface ChatState {
   /** The user turn being edited, or null. Not an INDEX: the store is
    *  id-keyed, so the id survives the rewrite that committing performs. */
   editingTurnId: string | null;
+  /** Pull conversations back from an exported JSON backup (G10).
+   *  Validated before anything is written; ids are minted fresh, never
+   *  read from the file. */
+  importSessions: (raw: string) => Promise<ImportResult>;
   /** Enter edit mode on a user turn and seed the composer with its text.
    *  False for an assistant turn (that is regenerate), while a turn is
    *  running, or when nothing is persisted to rewind. */

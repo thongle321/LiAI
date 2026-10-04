@@ -435,6 +435,31 @@ partial-import count, list refresh). We export three ways and cannot read any of
 **Consequence:** a user who backs up the app has no supported restore path; the only recovery is
 the SQLite file.
 
+**SHIPPED.** New pure module `lib/chat/import.ts` validates a backup before anything is written;
+`store/chat/sessions.ts` gained `importSessions`, and `hooks/useChatImport.ts` does pick → read →
+validate → write, reporting a partial-import count like pocketpal.
+
+Three decisions, because this is a trust boundary and the file is untrusted:
+
+- **Nothing is trusted by shape.** Every field is checked and each turn is REBUILT field by field;
+  the parsed object is never spread through. There is no `...(turn as StoredTurn)` anywhere,
+  which is what makes "import mints fresh ids" true by construction rather than by a filter
+  someone can forget. A test smuggles an `id` into a turn and asserts it never lands.
+- **Everything is bounded.** Session count, turns per session, total turns, title and content
+  length are all capped, so a file claiming a million turns cannot exhaust memory on a phone
+  already holding several GB of GGUF.
+- **A bad turn is skipped, not fatal** — one malformed message must not cost the user the rest of
+  the backup. The skip count is surfaced, so a partial import is never indistinguishable from a
+  complete one.
+
+Markdown is deliberately **not** importable: it is lossy and human-facing, and importing it would
+invent data the file does not contain. JSON is the restore path.
+
+Note the menu item is deliberately **not** session-gated, unlike every other row in that panel —
+restoring into an empty app is the main case, and it is exactly the case Export hides behind a
+session. A first attempt put it inside the gate by accident; a test in `tests/chat-menu.test.ts`
+caught it.
+
 **G11 — Header shows the app name, not the conversation: MISSING.**
 `ChatHeaderTitle.tsx:13-33` renders the session title and the active model name. Ours renders
 `APP_NAME` (`chat.tsx:213`) — **the active model name appears nowhere on the chat screen.**

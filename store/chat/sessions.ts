@@ -2,6 +2,7 @@
 
 import { toMessages, toSession } from "../../lib/chat/messages.ts";
 import type { SessionStore } from "../../lib/chat/session-store.ts";
+import { parseImport } from "../../lib/chat/import.ts";
 import { readDraftFor } from "./draft.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
@@ -36,6 +37,7 @@ export function createSessionsSlice(
   | "duplicateSession"
   | "renameSession"
   | "setPinned"
+  | "importSessions"
   | "refreshSessions"
 > {
   function cancelActive(): void {
@@ -228,5 +230,33 @@ if (store) await quiet(store.setActiveSessionId(null));
   renameSession: (id: string, title: string) => patchSession(id, { title }),
 
   setPinned: (id: string, pinned: boolean) => patchSession(id, { pinned }),
+
+    // G10: read conversations back from our own JSON export. The file is
+    // untrusted, so validation happens BEFORE anything is written and a
+    // rejected file leaves the store untouched.
+    importSessions: async (raw: string) => {
+      const parsed = parseImport(raw);
+      if (!parsed.ok) {
+        return { ok: false, imported: 0, skipped: 0, error: parsed.error };
+      }
+      const store = await storeOf(ctx);
+      if (!store) {
+        return { ok: false, imported: 0, skipped: 0, error: "Storage isn't ready." };
+      }
+      let imported = 0;
+      for (const s of parsed.sessions) {
+        // A fresh id per session, and `append` is called WITHOUT an id, so
+        // the store mints fresh row ids. Importing the file's own ids
+        // would make a second import of the same backup collide with the
+        // first and overwrite it.
+        const id = await store.create();
+        await quiet(store.renameSession(id, s.title));
+        await quiet(store.setSessionPinned(id, s.pinned));
+        for (const turn of s.turns) await quiet(store.append(id, turn));
+        imported += 1;
+      }
+      await quiet(get().refreshSessions());
+      return { ok: true, imported, skipped: parsed.skipped };
+    },
   };
 }

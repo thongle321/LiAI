@@ -886,6 +886,57 @@ describe("multimodal warning (G12)", () => {
   });
 });
 
+describe("session import (G10)", () => {
+  const backup = (title: string, content: string) =>
+    JSON.stringify({
+      format: "liai-chat-session",
+      version: 1,
+      title,
+      turns: [
+        { role: "user", content, at: 1, type: "text" },
+        { role: "assistant", content: "reply", at: 2, type: "text" },
+      ],
+    });
+
+  it("writes a valid backup and mints FRESH ids", async () => {
+    // Fresh ids are the whole point: importing the file's own would make a
+    // second import of the same backup collide with the first.
+    const { getStore, runTurn } = storeWith([]);
+    const useStore = createChatStore({ getStore, runTurn });
+    const out = await useStore.getState().importSessions(backup("Restored", "hi"));
+    assert.equal(out.ok, true);
+    assert.equal(out.imported, 1);
+    assert.equal(out.skipped, 0);
+    await useStore.getState().refreshSessions();
+    const titles = useStore.getState().sessions.map((s) => s.title);
+    assert.ok(titles.includes("Restored"), `got ${titles.join(", ")}`);
+  });
+
+  it("refuses a bad file without writing anything", async () => {
+    const { getStore, runTurn } = storeWith([]);
+    const useStore = createChatStore({ getStore, runTurn });
+    const out = await useStore.getState().importSessions("not json");
+    assert.equal(out.ok, false);
+    assert.equal(out.imported, 0);
+    await useStore.getState().refreshSessions();
+    assert.equal(useStore.getState().sessions.length, 0, "nothing half-written");
+  });
+
+  it("importing the same backup twice yields two conversations", async () => {
+    const { getStore, runTurn } = storeWith([]);
+    const useStore = createChatStore({ getStore, runTurn });
+    const text = backup("Twice", "hello");
+    await useStore.getState().importSessions(text);
+    await useStore.getState().importSessions(text);
+    await useStore.getState().refreshSessions();
+    assert.equal(
+      useStore.getState().sessions.filter((s) => s.title === "Twice").length,
+      2,
+      "ids must not collide and overwrite",
+    );
+  });
+});
+
 describe("message identity", () => {
   it("gives every bubble the row id it was persisted under", async () => {
     // The one-identity contract (Q9): a bubble's id IS its row id, so a

@@ -33,6 +33,7 @@ import { MessageActions } from "./MessageActions.tsx";
 import { LinkPreviewCard } from "./LinkPreview.tsx";
 import { ReasoningBlock } from "./ReasoningBlock.tsx";
 import { MessageMenu } from "./MessageMenu.tsx";
+import { ToolErrorBlock } from "./ToolErrorBlock.tsx";
 import { ImageViewer } from "./ImageViewer.tsx";
 import type { PickableModel } from "../../lib/chat/models.ts";
 
@@ -200,17 +201,32 @@ export function MessageListItem({
               // the call finished, so the old "running" variant had no
               // writer. The key is the row id, not the array index.
               <View className="mt-2 flex-row flex-wrap items-center gap-2">
-                {message.steps.map((step) => (
-                  <View
-                    key={step.id}
-                    className="flex-row items-center gap-1 rounded-full border border-border bg-surface-2 px-2 py-0.5"
-                  >
-                    <Wrench size={11} color={colors.secondaryText} />
-                    <Text className="font-sans text-caption text-secondary-text">
-                      {step.tool}
-                    </Text>
-                  </View>
-                ))}
+                {message.steps.map((step) =>
+                  // Dispatch order, pinned by tests: an ERROR must never
+                  // fall through to the chip, which is precisely how a
+                  // failed tool came to look like a successful one.
+                  //
+                  // `ok === false` SPECIFICALLY. Undefined means "never
+                  // recorded" — a row written before the discriminant — and
+                  // that is not a failure, so it must not be styled as one.
+                  step.ok === false ? (
+                    <ToolErrorBlock
+                      key={step.id}
+                      tool={step.tool}
+                      message={step.result ?? ""}
+                    />
+                  ) : (
+                    <View
+                      key={step.id}
+                      className="flex-row items-center gap-1 rounded-full border border-border bg-surface-2 px-2 py-0.5"
+                    >
+                      <Wrench size={11} color={colors.secondaryText} />
+                      <Text className="font-sans text-caption text-secondary-text">
+                        {step.tool}
+                      </Text>
+                    </View>
+                  ),
+                )}
               </View>
             )}
           </View>,

@@ -23,6 +23,10 @@ export interface AgentStep {
   status: "done";
   input?: Record<string, unknown>;
   result?: string;
+  /** False when the talent could not do its job. Undefined is not the same
+   *  as true: absent means the row predates the discriminant, and renders
+   *  conservatively rather than claiming a success nobody recorded. */
+  ok?: boolean;
 }
 
 export type AgentEvent =
@@ -30,7 +34,7 @@ export type AgentEvent =
   | { type: "token"; text: string }
   | { type: "reasoning"; text: string }
   | { type: "tool_call_started"; call: EngineToolCall }
-  | { type: "tool_call_finished"; outcome: { callId: string; tool: string; result: string } }
+  | { type: "tool_call_finished"; outcome: { callId: string; tool: string; result: string; ok: boolean } }
   | { type: "run_finished" }
   | { type: "run_failed"; error: string };
 
@@ -185,8 +189,17 @@ promptTokens += outcome.promptTokens;
         : turnCalls.filter((c) => advertisedName(c, tools));
       const rejected = forcedFinal ? [] : turnCalls.filter((c) => !advertisedName(c, tools));
       for (const call of rejected) {
-        const result = `Talent "${call.name}" is not enabled for this run`;
-        steps.push({ id: call.id, tool: call.name, status: "done", result });
+        // A rejected call never ran, so it certainly did not succeed.
+        // Without `ok` here it reads as UNKNOWN and renders as a result,
+        // which is the exact bug this discriminant exists to kill.
+        const rejectedReason = `Talent "${call.name}" is not enabled for this run`;
+        steps.push({
+          id: call.id,
+          tool: call.name,
+          status: "done",
+          result: rejectedReason,
+          ok: false,
+        });
       }
       if (allowed.length === 0) {
         onEvent({ type: "run_finished" });
@@ -210,7 +223,7 @@ promptTokens += outcome.promptTokens;
       ];
       for (const call of allowed) {
         onEvent({ type: "tool_call_started", call });
-        const result = await runTalent(call.name, call.arguments, {
+const outcome = await runTalent(call.name, call.arguments, {
           fetchImpl,
           search,
           userTexts,
@@ -221,15 +234,21 @@ promptTokens += outcome.promptTokens;
           tool: call.name,
           status: "done",
           ...(input ? { input } : {}),
-          result,
+          result: outcome.content,
+          ok: outcome.ok,
         });
         onEvent({
           type: "tool_call_finished",
-          outcome: { callId: call.id, tool: call.name, result },
+          outcome: {
+                callId: call.id,
+                tool: call.name,
+                result: outcome.content,
+                ok: outcome.ok,
+          },
         });
         toolMessages.push({
           role: "tool",
-          content: result,
+          content: outcome.content,
           tool_call_id: call.id,
         });
       }

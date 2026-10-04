@@ -21,6 +21,10 @@ export interface AgentStep {
   tool: string;
   input?: Record<string, unknown>;
   result?: string;
+  /** False when the talent failed. ABSENT is not success: a row written
+   *  before the discriminant existed reads as undefined, and renders
+   *  conservatively rather than claiming a result nobody recorded. */
+  ok?: boolean;
   position: number;
 }
 

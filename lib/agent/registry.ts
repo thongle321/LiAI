@@ -24,6 +24,25 @@ export interface TalentContext {
   userTexts?: string[];
 }
 
+/** What a talent produced.
+ *
+ *  `ok: false` means the talent could not do its job — the content is the
+ *  reason. This is what makes a FAILED tool distinguishable from one that
+ *  succeeded: every talent used to return a bare string for both, so
+ *  `web_search: no results for "x"` looked like any other result and the
+ *  model answering around a failure was indistinguishable from the model
+ *  changing its mind.
+ *
+ *  A failure is an OUTCOME, never an exception. That contract is
+ *  unchanged — it is only the shape that gained a discriminant. */
+export interface TalentOutcome {
+  ok: boolean;
+  content: string;
+}
+
+const done = (content: string): TalentOutcome => ({ ok: true, content });
+const fail = (content: string): TalentOutcome => ({ ok: false, content });
+
 const MAX_TALENT_TURNS = 5;
 export const DEFAULT_MAX_TURNS = MAX_TALENT_TURNS;
 
@@ -104,14 +123,15 @@ function formatHit(hit: { title: string; url: string; snippet: string }): string
   return lines.join("\n");
 }
 
-/** Execute one talent by name; every outcome is a string, never a throw. */
+/** Execute one talent by name; every outcome is a TalentOutcome, never a
+ *  throw. */
 export async function runTalent(
   name: string,
   argsJson: string,
   ctx: TalentContext,
-): Promise<string> {
+): Promise<TalentOutcome> {
   if (name !== "datetime" && name !== "calculate" && name !== "web_search" && name !== "read_url") {
-    return `Talent "${name}" is not enabled for this run`;
+    return fail(`Talent "${name}" is not enabled for this run`);
   }
   let args: Record<string, unknown>;
   try {
@@ -121,22 +141,22 @@ export async function runTalent(
         ? (parsed as Record<string, unknown>)
         : {};
   } catch {
-    return `Error: invalid JSON arguments for ${name}`;
+    return fail(`Error: invalid JSON arguments for ${name}`);
   }
 
   if (name === "datetime") {
     const timezone = typeof args.timezone === "string" ? args.timezone : undefined;
-    return localTime(timezone ? { timezone } : {});
+    return done(localTime(timezone ? { timezone } : {}));
   }
   if (name === "calculate") {
     const expression = typeof args.expression === "string" ? args.expression : undefined;
-    return calculate(expression ? { expression } : {});
+    return done(calculate(expression ? { expression } : {}));
   }
   if (name === "web_search") {
     const query = typeof args.query === "string" ? args.query.trim() : "";
-    if (!query) return 'web_search: missing or empty "query" argument';
+    if (!query) return fail('web_search: missing or empty "query" argument');
     if (!ctx.search || ctx.search.key.trim() === "") {
-      return "web_search: provider not enabled — accept search and set a key first";
+      return fail("web_search: provider not enabled — accept search and set a key first");
     }
     // Seed user-written URLs once per run; search hits register below.
     if (ctx.userTexts) {
@@ -155,41 +175,44 @@ export async function runTalent(
         ctx.search.count,
       );
     } catch (err) {
-      return `web_search: ${err instanceof Error ? err.message : String(err)}`;
+      return fail(`web_search: ${err instanceof Error ? err.message : String(err)}`);
     }
     if (hits.length === 0) {
-      return `web_search: no results for "${query}". Try a shorter query.`;
+      // "no results" is an EMPTY result, not a failure. The search worked; the
+    // answer is that there was nothing to find. Collapsing the two would
+    // teach the user that a working search had broken.
+    return done(`web_search: no results for "${query}". Try a shorter query.`);
     }
     allowReadUrls(hits.map((h) => h.url));
     const menu = [
       `## Web search results for "${query}"`,
       ...hits.map(formatHit),
     ].join("\n");
-    return fenceUntrusted(menu);
+    return done(fenceUntrusted(menu));
   }
   // read_url
   const url = typeof args.url === "string" ? args.url.trim() : "";
-  if (!url) return 'read_url: missing or empty "url" argument';
+  if (!url) return fail('read_url: missing or empty "url" argument');
   if (!isHttpUrl(url)) {
-    return `cannot read ${JSON.stringify(url)}: only public http(s) pages are allowed.`;
+    return fail(`cannot read ${JSON.stringify(url)}: only public http(s) pages are allowed.`);
   }
   if (!isReadUrlAllowed(url)) {
-    return "read_url: this URL is not from a web_search result or a user message in this conversation. Run web_search first or copy the URL exactly.";
+    return fail("read_url: this URL is not from a web_search result or a user message in this conversation. Run web_search first or copy the URL exactly.");
   }
   try {
     // PocketPal reader strategy: keyless r.jina.ai default reader returns
     // clean plain text — no trafilatura equivalent needed on-device.
     const resp = await ctx.fetchImpl(`https://r.jina.ai/${url}`, { method: "GET" });
-    if (!resp.ok) return `read_url: request failed (${resp.status})`;
+    if (!resp.ok) return fail(`read_url: request failed (${resp.status})`);
     const raw = await resp.text();
     const text = raw
       .replace(/<[^>]*>/g, " ")
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 6000);
-    if (!text) return `read_url: no readable content at ${url}`;
-    return fenceUntrusted(text);
+    if (!text) return fail(`read_url: no readable content at ${url}`);
+    return done(fenceUntrusted(text));
   } catch (err) {
-    return `read_url: ${err instanceof Error ? err.message : String(err)}`;
+    return fail(`read_url: ${err instanceof Error ? err.message : String(err)}`);
   }
 }

@@ -212,6 +212,11 @@ export class TinyBaseSessionStore implements SessionStore {
         tool: step.tool,
         ...(step.input !== undefined ? { input: step.input } : {}),
         ...(step.result !== undefined ? { result: step.result } : {}),
+    // `ok: false` is the load-bearing value, so it is stored even when
+    // false -- unlike the turn outcome flags, which drop a false. Dropping
+    // it here would make every failure indistinguishable from a row
+    // written before the discriminant existed.
+    ...(step.ok !== undefined ? { ok: step.ok } : {}),
       });
     }
     this.touch(sessionId);
@@ -278,6 +283,10 @@ export class TinyBaseSessionStore implements SessionStore {
         position: num(raw["position"]),
         ...(isRecord(raw["input"]) ? { input: raw["input"] } : {}),
         ...(typeof raw["result"] === "string" ? { result: raw["result"] } : {}),
+    // Absent -> undefined -> UNKNOWN, which is not the same as true. A
+    // row written before the column reads as "never recorded", not as
+    // "succeeded", so it renders conservatively.
+    ...(typeof raw["ok"] === "boolean" ? { ok: raw["ok"] } : {}),
       });
     }
     return steps.sort((a, b) => a.position - b.position);

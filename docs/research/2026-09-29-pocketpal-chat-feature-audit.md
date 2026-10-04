@@ -4,6 +4,22 @@ Investigated: 2026-09-29.
 Reference: `pocketpal-ai/` (checked out at `D:\aivision\pocketpal-ai`, read-only).
 Ours: `D:\aivision` root app (`app/(drawer)/(tabs)/chat.tsx` + `components/chat/**` + `store/chat/**`).
 
+## Status (last updated 2026-10-04)
+
+| Gap | Status |
+|---|---|
+| G1–G4, G7, G10–G12, G14–G16 | **SHIPPED** |
+| G6 | Partial — pill ships; graded effort cycle deliberately absent |
+| G9 | Partial — placeholder ships; the haptic does not |
+| G13 | Partial — elapsed time ships; token count and "Stopping…" deliberately absent |
+| G5 — agent tool result UI | **OPEN** |
+| G8 — multi-image attach (up to 5) | **OPEN** |
+| G9 — send-with-no-model haptic | **OPEN** (the partial half) |
+| G17 — content / model-error reporting | **PARKED** — needs a backend; ADR-0012 is local-only |
+
+Every "PARTIALLY SHIPPED" above is deliberate, and the gap section says which half was
+dropped and why. Nothing is half-done by accident.
+
 ---
 
 ## 1. Scope & method
@@ -350,7 +366,7 @@ Status key: **Present** / **Partial** / **Missing**.
 
 ## 4. Gap list (ordered by user impact)
 
-**G1 — Context-full detection and recovery: MISSING.**
+**G1 — Context-full detection and recovery: SHIPPED.**
 PocketPal records a `contextFull` snapshot on every finished turn (`useChatSession.ts:244-262`,
 `:426-462`), string-matches the native `"Context is full"` throw (`:765-766`), and renders a
 sticky banner with a fill meter, `%`, "More room", "New chat" and "Dismiss"
@@ -363,13 +379,13 @@ the user gets one opaque red error card with an engine string and a "tap to retr
 identically forever. PocketPal names the problem, shows how full the context is, and offers two
 one-tap ways out.
 
-**G2 — Keep-awake during generation: MISSING.**
+**G2 — Keep-awake during generation: SHIPPED.**
 `utils/keepAwake.ts:5-19`, activated at send (`useChatSession.ts:557-561`) and released on
 completion (`:893-897`) or, deliberately earlier, on Stop (`:928-934`). We never take a wake
 lock. **Consequence:** on a long local generation the screen sleeps mid-answer; the user comes
 back to a half-rendered bubble and may not know whether the turn finished.
 
-**G3 — Long-press message menu (copy / regenerate / regenerate-with-model / edit / report): MISSING.**
+**G3 — Long-press message menu (copy / regenerate / regenerate-with-model / edit / report): SHIPPED** (Report is still parked — see G17.)
 `ChatView.tsx:664-742` builds the menu; `hooks/useMessageActions.ts:33-116` implements copy,
 edit, try-again and try-again-with-another-model; `store/ChatSessionStore.ts:1223-1305` supplies
 edit mode and history truncation. We have copy and regenerate as always-visible icons under
@@ -378,7 +394,7 @@ cross-model retry. **Consequence:** a user who wants to fix a typo in an earlier
 edit-and-resend — the only way to re-run an earlier question is to retype it. There is also no
 "regenerate with a different model", which is pocketpal's cheapest quality lever.
 
-**G4 — Turn observability (timings, interrupted/truncated, draft acceptance): MISSING.**
+**G4 — Turn observability (timings, interrupted/truncated, draft acceptance): SHIPPED** except speculative-draft acceptance, which is out of scope (the speculative-decoding path is untouched).
 `AssistantTurnFooter.tsx:56-128` renders ms/token, tokens/s, TTFT, speculative-draft acceptance
 and a distinct "Interrupted" / "Cut off" label; `useChatSession.ts:790-826` supplies the metadata.
 We render only a token count (`MessageListItem.tsx:148`, `MessageActions.tsx:72-75`), and
@@ -398,7 +414,7 @@ and then has to trust that the answer's citations came from somewhere. A failed 
 too: `registry.ts:129` returns `"web_search: no results for …"` as agent-facing text, and the
 bubble just looks like the model changed its mind.
 
-**G6 — In-composer thinking toggle and graded reasoning effort: MISSING.**
+**G6 — In-composer thinking toggle and graded reasoning effort: PARTIALLY SHIPPED.** The pill is built; the **graded effort cycle is deliberately absent** — LiAI has no effort concept anywhere, and inventing levels would ship a control with nothing behind it. See the note below.
 `ChatInput.tsx:588-640` renders the pill; `ChatScreen.tsx:196-236` cycles effort levels and
 persists them on both `enable_thinking` and a `reasoning` carrier so remote models honour OFF.
 We have the *state* (`store/inference.ts:49,332`) and it reaches the engine
@@ -408,7 +424,7 @@ the chat screen and find it in Settings, mid-conversation. Graded effort has no 
 anywhere. **Consequence:** a reasoning model burns 2–5× the tokens and seconds on every reply
 with no in-place escape, and users on slow hardware cannot trade quality for speed mid-thread.
 
-**G7 — No error snackbar surface on chat: MISSING.**
+**G7 — No error snackbar surface on chat: SHIPPED.**
 `ErrorSnackbar.tsx:26-124` gives every typed error an icon, a *recovery action* (Add Token,
 Report, Retry) and a severity-scaled duration; `ChatScreen.tsx:281-296` mounts two of them
 (chat warning + model-load error). We have one shape: a tappable error card with a single line of
@@ -460,19 +476,19 @@ restoring into an empty app is the main case, and it is exactly the case Export 
 session. A first attempt put it inside the gate by accident; a test in `tests/chat-menu.test.ts`
 caught it.
 
-**G11 — Header shows the app name, not the conversation: MISSING.**
+**G11 — Header shows the app name, not the conversation: SHIPPED.**
 `ChatHeaderTitle.tsx:13-33` renders the session title and the active model name. Ours renders
 `APP_NAME` (`chat.tsx:213`) — **the active model name appears nowhere on the chat screen.**
 **Consequence:** after switching models from the menu, nothing on screen confirms which model is
 answering; the user has to open the menu or leave for `/models`.
 
-**G12 — Multimodal-on-a-text-model warning: MISSING.**
+**G12 — Multimodal-on-a-text-model warning: SHIPPED.**
 `useChatSession.ts:92-97` raises `createMultimodalWarning` instead of failing. Our path writes
 the image and hands it to the engine regardless (`store/chat/index.ts:163-186`), and the engine
 error becomes a generic card. **Consequence:** a confusing engine error instead of "this model
 can't see images".
 
-**G13 — Pending indicator carries no progress signal: PARTIAL.**
+**G13 — Pending indicator carries no progress signal: PARTIALLY SHIPPED.** Elapsed seconds ship; the **token count and "Stopping…" state are deliberately absent** — see the note below for why each would be dishonest or harmful.
 `PendingIndicator.tsx:103-172` shows `"Building page · 1,240 tokens · 4s"`, and `"Stopping…"`
 while the runner winds down (`:139-141`). Ours is three dots (`PendingIndicator.tsx:41-58`), and
 `store/chat/send.ts:139-155` clears `sending` synchronously on stop so there is no stopping state
@@ -513,7 +529,7 @@ this has **no in-app producer**, because pocketpal's only producer is the pal li
 or Shortcut hands LiAI a `liai://chat?message=...`. Built on an explicit call rather than dropped
 as unused, but it remains a capability awaiting a caller.
 
-**G17 — Content / model-error reporting: MISSING and unreachable.**
+**G17 — Content / model-error reporting: MISSING and unreachable — PARKED BY DECISION 2026-09-29.** Not merely unbuilt: it POSTs to a backend, and ADR-0012 records this app as local-only (TinyBase + SQLite, no backend), so there is nowhere for it to go. Revisit only if a backend ever exists.
 `ContentReportSheet.tsx:46-224` and `ModelErrorReportSheet.tsx:33-286` both POST to their
 feedback endpoint behind Firebase App Check (`api/feedback.ts:62-88`, `:227-330`). ADR-0008
 retired the LiAI backend, so there is nowhere to post and no identity to attribute a report to.

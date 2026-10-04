@@ -84,13 +84,17 @@ export function fakeSessionStore(
       row.turns.push({ ...turn });
       calls.appends.push({ sessionId, turn: { ...turn } });
     },
-    listSessions: async (): Promise<SessionInfo[]> =>
-      [...sessions.entries()].map(([id, row]) => ({
-        id,
-        title: row.title,
-        pinned: row.pinned,
-        updatedAt: row.seq,
-      })),
+ listSessions: async (): Promise<SessionInfo[]> =>
+ // Mirrors the real store's drawer order: pinned first, insertion
+ // order otherwise (the fake seeds share one seq).
+ [...sessions.entries()]
+ .map(([id, row]) => ({
+ id,
+ title: row.title,
+ pinned: row.pinned,
+ updatedAt: row.seq,
+ }))
+ .sort((a, b) => (a.pinned === b.pinned ? 0 : a.pinned ? -1 : 1)),
     renameSession: async (id: string, title: string) => {
       const row = sessions.get(id);
       if (!row) return false;

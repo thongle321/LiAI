@@ -158,14 +158,37 @@ describe("chat store sessions", () => {
     assert.equal(useStore.getState().sessions[0].title, "Hi");
   });
 
-  it("setPinned toggles pin state through the store", async () => {
-    const { getStore, runTurn } = storeWith([{ id: "s1", title: "Hi" }], "s1");
-    const useStore = createChatStore({ getStore, runTurn });
-    await useStore.getState().loadSession();
-    assert.equal(useStore.getState().sessions[0].pinned, false);
-    assert.equal(await useStore.getState().setPinned("s1", true), true);
-    assert.equal(useStore.getState().sessions[0].pinned, true);
-  });
+ it("setPinned toggles pin state through the store", async () => {
+ const { getStore, runTurn } = storeWith([{ id: "s1", title: "Hi" }], "s1");
+ const useStore = createChatStore({ getStore, runTurn });
+ await useStore.getState().loadSession();
+ assert.equal(useStore.getState().sessions[0].pinned, false);
+ assert.equal(await useStore.getState().setPinned("s1", true), true);
+ assert.equal(useStore.getState().sessions[0].pinned, true);
+ });
+
+ it("pinning re-sorts from the store, not the stale position", async () => {
+ // patchSession must re-list: setCell bumps the sort key (touch), so
+ // an in-place title/pin patch would display the new value at the old
+ // position until the next refresh.
+ const { getStore, runTurn } = storeWith(
+ [{ id: "s1", title: "First" }, { id: "s2", title: "Second" }],
+ "s1",
+ );
+ const useStore = createChatStore({ getStore, runTurn });
+ await useStore.getState().loadSession();
+ assert.deepEqual(
+ useStore.getState().sessions.map((s) => s.id),
+ ["s1", "s2"],
+ );
+ // Pinning s2 must move it above s1 the way the drawer sorts
+ // (pinned first) — only a store re-list can know the new order.
+ assert.equal(await useStore.getState().setPinned("s2", true), true);
+ assert.deepEqual(
+ useStore.getState().sessions.map((s) => s.id),
+ ["s2", "s1"],
+ );
+ });
 
   it("deleteSession removes the session and clears the active view", async () => {
     const { getStore, runTurn, store, calls } = storeWith(

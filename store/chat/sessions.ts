@@ -48,6 +48,9 @@ export function createSessionsSlice(
     const store = await storeOf(ctx);
     if (!store) return;
     try {
+      // Full re-list, not an optimistic patch: setCell bumps the row's
+      // sort key (touch), so patching title/pinned in place would leave
+      // the drawer sorted by the pre-touch order until the next refresh.
       set({ sessions: (await store.listSessions()).map(toSession) });
     } catch {
       // best-effort: the drawer keeps whatever it has
@@ -66,11 +69,10 @@ export function createSessionsSlice(
           ? await store.renameSession(id, patch.title)
           : await store.setSessionPinned(id, patch.pinned ?? false);
       if (!ok) return false;
-      set((s) => ({
-        sessions: s.sessions.map((sess) =>
-          sess.id === id ? { ...sess, ...patch } : sess,
-        ),
-      }));
+      // Re-list instead of patching in place: setCell bumps the sort key
+      // (updatedAt/seq via touch), so an in-place patch would display the
+      // new title at the old position until the next refresh.
+      await quiet(refreshSessions());
       return true;
     } catch {
       return false;

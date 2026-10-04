@@ -89,8 +89,41 @@ test("a collapsed surface exposes its state and meets the touch floor", () => {
 });
 
 test("hits are read structured, never re-parsed out of the markdown", () => {
-  // The reason ticket 02 added `data` at all.
   const surfaces = read("components/chat/toolSurfaces.tsx");
   assert.match(surfaces, /step\.data\?\.hits/);
   assert.doesNotMatch(surfaces, /\bisVision|\\n-\s|## Web search results/);
+});
+
+test("all four talents have a registered surface, so none falls to the chip", () => {
+  const surfaces = read("components/chat/toolSurfaces.tsx");
+  for (const name of ["web_search", "read_url", "calculate", "datetime"]) {
+    assert.match(
+      surfaces,
+      new RegExp(`registerToolSurface\\("${name}"`),
+      `${name} has a surface`,
+    );
+  }
+});
+
+test("truncation is reported by the seam, never inferred from a length", () => {
+  // A renderer deciding `length === 6000` silently starts lying the day the
+  // cap moves, and the notice is the whole difference between a cut-off
+  // article and the whole thing.
+  const registry = read("lib/agent/registry.ts");
+  assert.match(registry, /truncated: cleaned\.length > READ_CAP/);
+  const surfaces = read("components/chat/toolSurfaces.tsx");
+  assert.match(surfaces, /step\.data\?\.truncated === true/);
+  // The CAP ITSELF must not appear here. A `//` comment explaining why we
+  // avoid this would otherwise trip it, so assert the literal is absent --
+  // which is the real rule: the renderer cannot know the cap.
+  assert.doesNotMatch(surfaces, /6000/, "the cap is not duplicated here");
+});
+
+test("ONE collapse control, shared by every surface", () => {
+  // The ticket's "one control rather than two" rule. A second divergent
+  // affordance beside the first is how they drift.
+  const surfaces = read("components/chat/toolSurfaces.tsx");
+  const controls = surfaces.split('accessibilityState={{ expanded }}').length - 1;
+  assert.equal(controls, 1, "exactly one expandable control definition");
+  assert.match(surfaces, /<Surface[\s\S]*?expanded=\{expanded\}/);
 });

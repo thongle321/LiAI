@@ -153,6 +153,52 @@ function WebSearchSurface({ step, expanded, onToggle }: ToolSurfaceProps) {
 // that decides a renderer exists.
 registerToolSurface("web_search", WebSearchSurface);
 
+/** A short, plain result. The whole value fits in the summary line, so
+ *  expanding only shows it again in full -- which is the point: ONE collapse
+ *  affordance for every surface, not a second control that drifts. */
+function PlainSurface({ step, expanded, onToggle }: ToolSurfaceProps) {
+  const text = step.result ?? "";
+  return (
+    <Surface
+      label={text === "" ? step.tool : `${step.tool} — ${text}`}
+      expanded={expanded}
+      onToggle={onToggle}
+    />
+  );
+}
+
+/** A fetched page. Long by nature -- up to the reader's cap -- so the
+ *  summary line carries only that a page was read, and the text itself lives
+ *  behind the control. */
+function ReadUrlSurface({ step, expanded, onToggle }: ToolSurfaceProps) {
+  const text = step.result ?? "";
+  // Reported by the seam, never inferred here: a renderer comparing
+  // the text length against the cap would silently start lying the day
+  // that cap moves. The notice is the difference between a cut-off
+  // article and the whole thing.
+  const truncated = step.data?.truncated === true;
+  return (
+    <Surface
+      label={truncated ? "read_url — page read, cut off" : "read_url — page read"}
+      expanded={expanded}
+      onToggle={onToggle}
+    >
+      <View className="px-2 pb-2">
+        {truncated && (
+          <Text className="mb-1 font-sans text-micro text-secondary-text">
+            Truncated — this is only the start of the page.
+          </Text>
+        )}
+        <Text className="font-sans text-caption text-secondary-text">{text}</Text>
+      </View>
+    </Surface>
+  );
+}
+
+registerToolSurface("read_url", ReadUrlSurface);
+registerToolSurface("calculate", PlainSurface);
+registerToolSurface("datetime", PlainSurface);
+
 /** The default (collapsed) state a bubble should mount surfaces with.
  *  Exported so the chat screen keeps one rule for it. */
 export const COLLAPSED_BY_DEFAULT = true;

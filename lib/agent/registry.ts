@@ -222,13 +222,20 @@ export async function runTalent(
     const resp = await ctx.fetchImpl(`https://r.jina.ai/${url}`, { method: "GET" });
     if (!resp.ok) return fail(`read_url: request failed (${resp.status})`);
     const raw = await resp.text();
-    const text = raw
+    const READ_CAP = 6000;
+    const cleaned = raw
       .replace(/<[^>]*>/g, " ")
       .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 6000);
-    if (!text) return fail(`read_url: no readable content at ${url}`);
-    return done(fenceUntrusted(text));
+      .trim();
+    if (!cleaned) return fail(`read_url: no readable content at ${url}`);
+    // Truncation is reported STRUCTURALLY. A renderer inferring it from
+    // `length === 6000` is exactly the inference that goes stale the day
+    // the cap moves, and the notice is the difference between a cut-off
+    // article and the whole thing.
+    return done(
+      fenceUntrusted(cleaned.slice(0, READ_CAP)),
+      { truncated: cleaned.length > READ_CAP, url },
+    );
   } catch (err) {
     return fail(`read_url: ${err instanceof Error ? err.message : String(err)}`);
   }

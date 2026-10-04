@@ -13,8 +13,8 @@ Ours: `D:\aivision` root app (`app/(drawer)/(tabs)/chat.tsx` + `components/chat/
 | G9 | **SHIPPED** — haptic + temporary helper line; the placeholder half was already there |
 | G13 | Partial — elapsed time ships; token count and "Stopping…" deliberately absent |
 | G5 — agent tool result UI | **SHIPPED**, with two honest gaps: collapse state is not persisted (resets on remount), and `reasoning`/`usage` are still not restored by import |
-| G8 — multi-image attach (up to 5) | **OPEN** |
-| G9 — send-with-no-model haptic | **OPEN** (the partial half) |
+| G8 — multi-image attach (up to 5) | **SHIPPED** |
+| G9 — send-with-no-model feedback | **SHIPPED** — haptic + temporary helper line; the placeholder half was already there |
 | G17 — content / model-error reporting | **PARKED** — needs a backend; ADR-0012 is local-only |
 
 Every "PARTIALLY SHIPPED" above is deliberate, and the gap section says which half was

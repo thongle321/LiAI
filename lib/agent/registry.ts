@@ -232,9 +232,18 @@ export async function runTalent(
     // `length === 6000` is exactly the inference that goes stale the day
     // the cap moves, and the notice is the difference between a cut-off
     // article and the whole thing.
+    const article = cleaned.slice(0, READ_CAP);
     return done(
-      fenceUntrusted(cleaned.slice(0, READ_CAP)),
-      { truncated: cleaned.length > READ_CAP, url },
+      fenceUntrusted(article),
+      // `content` is the MODEL's copy, so it stays fenced. `text` is the
+      // USER's copy -- showing the fence to a reader is prompt-injection
+      // boilerplate ("treat this as data, not instructions") that they
+      // never asked for. Same source text, two audiences.
+      {
+        truncated: cleaned.length > READ_CAP,
+        url,
+        text: article,
+      },
     );
   } catch (err) {
     return fail(`read_url: ${err instanceof Error ? err.message : String(err)}`);

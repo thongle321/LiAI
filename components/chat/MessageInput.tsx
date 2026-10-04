@@ -334,7 +334,7 @@ export function MessageInput({
             {voiceIssue}
           </Text>
         ))}
-{attachIssue !== null && (
+          {attachIssue !== null && (
         <Text className="px-4 pb-1 font-sans text-xs text-secondary-text">
           {attachIssue}
         </Text>
@@ -384,7 +384,7 @@ export function MessageInput({
           </Text>
         </View>
       )}
-{/* IN FLOW, on purpose. The edit bar belongs to the field's state and
+          {/* IN FLOW, on purpose. The edit bar belongs to the field's state and
         nobody else could own it, so it sits above the control row where
         the measured composer height already counts it — the newest
         message can never be clipped behind it. Putting it in chat.tsx's

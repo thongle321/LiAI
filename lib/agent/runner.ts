@@ -125,7 +125,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
               { role: "user", content: BUDGET_EXHAUSTED_NUDGE } as CompletionMessage,
             ]
           : messages;
-let turnText = "";
+      let turnText = "";
       let turnCalls: EngineToolCall[] = [];
       let outcome;
       try {
@@ -166,7 +166,7 @@ let turnText = "";
         });
         return { text, steps, promptTokens, completionTokens, hitMaxTurns: false };
       }
-promptTokens += outcome.promptTokens;
+      promptTokens += outcome.promptTokens;
       completionTokens += outcome.completionTokens;
       // The LAST turn's ending is this answer's ending. `hitMaxTurns` is
       // tracked separately: a forced final turn is a truncation too, but
@@ -223,7 +223,10 @@ promptTokens += outcome.promptTokens;
       ];
       for (const call of allowed) {
         onEvent({ type: "tool_call_started", call });
-const outcome = await runTalent(call.name, call.arguments, {
+        // Named `talent`, not `outcome`: the engine's `outcome` is already
+        // in scope from the loop above, and shadowing it is how two very
+        // different results get confused for each other.
+        const talent = await runTalent(call.name, call.arguments, {
           fetchImpl,
           search,
           userTexts,
@@ -234,24 +237,24 @@ const outcome = await runTalent(call.name, call.arguments, {
           tool: call.name,
           status: "done",
           ...(input ? { input } : {}),
-result: outcome.content,
-          ok: outcome.ok,
+          result: talent.content,
+          ok: talent.ok,
           // Rides to the store so a settled turn's renderer can draw the
           // structured shape instead of parsing the fenced markdown.
-          ...(outcome.data !== undefined ? { data: outcome.data } : {}),
+          ...(talent.data !== undefined ? { data: talent.data } : {}),
         });
         onEvent({
           type: "tool_call_finished",
           outcome: {
-                callId: call.id,
-                tool: call.name,
-                result: outcome.content,
-                ok: outcome.ok,
+            callId: call.id,
+            tool: call.name,
+            result: talent.content,
+            ok: talent.ok,
           },
         });
         toolMessages.push({
           role: "tool",
-          content: outcome.content,
+          content: talent.content,
           tool_call_id: call.id,
         });
       }

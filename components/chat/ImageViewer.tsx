@@ -15,6 +15,8 @@
 import { Image, Modal, Pressable, View } from "react-native";
 import { X } from "lucide-react-native";
 
+import { colors } from "../../themes/tokens.ts";
+
 export function ImageViewer({
   uri,
   onClose,
@@ -62,7 +64,7 @@ export function ImageViewer({
             accessibilityLabel="Close image"
             hitSlop={8}
           >
-            <X size={24} color="#FFFFFF" />
+            <X size={24} color={colors.inverseText} />
           </Pressable>
         </View>
       </View>

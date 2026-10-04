@@ -171,7 +171,13 @@ function PlainSurface({ step, expanded, onToggle }: ToolSurfaceProps) {
  *  summary line carries only that a page was read, and the text itself lives
  *  behind the control. */
 function ReadUrlSurface({ step, expanded, onToggle }: ToolSurfaceProps) {
-  const text = step.result ?? "";
+  // The ARTICLE, not the model's fenced copy. `step.result` is what the
+  // MODEL reads, so it carries an "untrusted content" banner; rendering
+  // that to a user means showing them prompt-injection instructions they
+  // never asked for. Falls back to `result` for an old row predating the
+  // split.
+  const text =
+    typeof step.data?.text === "string" ? step.data.text : (step.result ?? "");
   // Reported by the seam, never inferred here: a renderer comparing
   // the text length against the cap would silently start lying the day
   // that cap moves. The notice is the difference between a cut-off
@@ -198,7 +204,3 @@ function ReadUrlSurface({ step, expanded, onToggle }: ToolSurfaceProps) {
 registerToolSurface("read_url", ReadUrlSurface);
 registerToolSurface("calculate", PlainSurface);
 registerToolSurface("datetime", PlainSurface);
-
-/** The default (collapsed) state a bubble should mount surfaces with.
- *  Exported so the chat screen keeps one rule for it. */
-export const COLLAPSED_BY_DEFAULT = true;

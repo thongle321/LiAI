@@ -129,7 +129,7 @@ export function MessageListItem({
     return (
       <>
         <Animated.View entering={entering} exiting={exiting} className="my-1 max-w-[80%] self-end items-end">
-{message.images !== undefined && message.images.length > 0 && (
+            {message.images !== undefined && message.images.length > 0 && (
             // G8: one row of up to five, each independently tappable. Keyed
             // by position plus length: the list only ever shrinks, so a
             // content hash would be a re-render cost for nothing.

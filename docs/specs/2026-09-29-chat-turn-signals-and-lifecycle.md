@@ -158,14 +158,28 @@ The whole "More room" path is therefore: `setNContext(n)` → next send → auto
 **Skip the explicit release/reload/rollback machinery PocketPal needs.** If a reload fails
 it surfaces through the existing error path, which is honest and adequate.
 
-### Fit-status honesty
+### Fit-status honesty — DECIDED: no fit chip in V1
 
-PocketPal's fits/tight/won't-fit chip needs a memory model. We have
-`lib/models/memoryEstimator.ts` and it is already wired into context init — but the audit
-could not confirm it produces comparable tiers, nor whether we have their
-`largestSuccessfulLoad` calibration. **Do not ship a confidence the estimator cannot back.**
-V1 ships the ladder with RAM estimates and a fit chip only if `memoryEstimator` is verified
-to produce all three tiers; otherwise ship the ladder alone. Record which, in the PR.
+> **Correction (2026-09-29).** An earlier draft of this section claimed
+> `lib/models/memoryEstimator.ts` "is already wired into context init". **That was wrong,
+> and the error came from the audit report, which asserted the same thing.** Verified:
+>
+> - `estimateModelMemory` (`:134`) returns a **raw byte count**. There is no
+>   fits/tight/won't-fit verdict anywhere in the file, and it never reads device RAM.
+> - `ggufMetadata` is "never populated" per its own comment, so it always takes the
+>   fallback `(size + proj + draft) * 1.2` (`:166`).
+> - It has **exactly one caller**: `components/models/ModelCardDetails.tsx:91`, a model
+>   card. Nothing on the chat or context-init path calls it.
+> - Their `largestSuccessfulLoad` calibration has no analogue. Our
+>   `store/models/types.ts:86 largestSuccessfulBytes` records the largest **download**
+>   (`store/models/downloads.ts:202-203`), never a context length.
+
+**Decision: ship the ladder with RAM estimates only, no verdict chip.** A chip backed by
+a flat 1.2x multiplier over never-populated metadata is a confident-looking lie, and it
+is precisely the thing that costs trust when the model OOMs anyway.
+
+Populating `ggufMetadata` and building a real verdict is legitimate work — it just belongs
+in the model-metadata path, not smuggled in under a chat feature. Tracked separately.
 
 ### Non-goals
 
@@ -280,12 +294,14 @@ dependency approval.
   against the actual installed `.d.ts` on the build machine, and consider a runtime
   `typeof` guard rather than a hard dependency — `context_full` absent must degrade to
   "no banner", not crash.
-- **ADR-0011 is Accepted but unimplemented.** It commits to replacing `llama.rn` with
-  `@qvac/sdk` (`docs/adr/0011-qvac-replaces-llama-rn.md:4`, `:18-19`), but there is no
-  `lib/inference/qvac-engine.ts` and no `@qvac/sdk` in `package.json`. **Every field this
-  spec adds to `CompletionOutcome` is a field the QVAC engine will also have to populate.**
-  Building this against the seam rather than against `local-engine.ts` is the point — but
-  if QVAC lands first, step 2 doubles in size.
+- **The QvAC migration is NOT pending — it was reverted.** An earlier draft of this
+  section listed "ADR-0011 is Accepted but unimplemented" as a risk, implying the engine
+  seam was about to churn. Wrong, and understating the good news. `git log --all` shows
+  branch `spike/qvac-adapter`: `8801294 feat!: QVAC replaces llama.rn` →
+  `e97af21 revert!: drop QVAC spike, restore llama.rn`. The adapter, proof screen and
+  dependency were all removed; `local-engine.ts` was restored. **llama.rn is the engine
+  and there is no second implementation coming.** The fields below only need writing once.
+  ADR-0011 is corrected to match.
 - **The banner is over the list, not in it.** Any future refactor that moves the overlay
   row into the composer's flow reintroduces the "no models available section moves when the
   keyboard shows up" bug documented at `chat.tsx:96-102`. The existing test guard in
@@ -313,6 +329,8 @@ dependency approval.
    is noise. **Recommend clear on launch.**
 3. Is the fit chip honest enough to ship (§3)? Depends on `lib/models/memoryEstimator.ts`
    verification, which this pass did not do.
-4. Does the remote path's `finish_reason: "length"` reliably mean context-full, or can it
-   also mean `n_predict` was hit? If the latter, the banner would lie on servers with a
+3. Is the remote path's `finish_reason: "length"` reliable, and does it mean
+   context-full or `n_predict`? If the latter, the banner would lie on servers with a
    max-tokens cap. **Unverified.**
+4. The banner's RAM estimate has no verdict behind it (see §3 above) — what number is
+   honest to show when `estimateModelMemory` is never called on this path?

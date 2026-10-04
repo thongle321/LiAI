@@ -222,9 +222,7 @@ export function createSessionsSlice(
 
   deleteMessage: async (messageId: string) => {
     // Deleting into a live turn would truncate the branch the engine is
-    // still writing into. The `messages` index is also the store's turn
-    // index (switchSession builds it with toMessages over store.get),
-    // so one index serves both.
+    // still writing into.
     if (get().sending) return false;
     const index = get().messages.findIndex((m) => m.id === messageId);
     if (index < 0) return false;
@@ -239,10 +237,13 @@ export function createSessionsSlice(
     try {
       // Storage first: if the store refuses, in-memory state must not
       // move, or a later load would resurrect the deleted turns.
-      if (!(await store.truncateFrom(sid, index))) return false;
+      if (!(await store.truncateFrom(sid, messageId))) return false;
     } catch {
       return false;
     }
+    // The store is addressed by id, not index. `index` is used ONLY to
+    // slice render state, where the same array order applies — so the two
+    // cannot drift, because they are the same ids in the same order.
     set((s) => ({ messages: s.messages.slice(0, index) }));
     return true;
   },

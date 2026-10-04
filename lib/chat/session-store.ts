@@ -40,6 +40,18 @@ export interface StoredTurn {
   steps?: AgentStep[];
 }
 
+/** A stored turn AS READ BACK, carrying the row id it was persisted under.
+ *
+ *  Split from `StoredTurn` deliberately: `append` takes the write shape
+ *  (no id, because the store mints one) and `get` returns the read shape
+ *  (id always present). One type with `id?: string` would compile for
+ *  callers that omit the id and then silently produce a message that
+ *  cannot be addressed by regenerate / edit / delete — the exact bug the
+ *  split exists to prevent. */
+export interface StoredMessage extends StoredTurn {
+  id: string;
+}
+
 /** Row key for a session's composer draft. A conversation that has not
  *  been sent yet has no session id, so it gets a fixed slot of its own.
  *  Exported so the fake resolves the slot by the same rule as the store
@@ -51,10 +63,14 @@ export function draftSlot(sessionId: string | null): string {
 export interface SessionStore {
   /** Mint a session and return its id. */
   create(): Promise<string>;
-  /** Turns in call order, or null when the session does not exist. */
-  get(sessionId: string): Promise<StoredTurn[] | null>;
-  /** Append one turn, creating the session row if it is not there yet. */
-  append(sessionId: string, turn: StoredTurn): Promise<void>;
+  /** Turns in call order, or null when the session does not exist. Each
+   *  carries the row id it can be addressed by. */
+  get(sessionId: string): Promise<StoredMessage[] | null>;
+  /** Append one turn, creating the session row if it is not there yet.
+   *  Pass `id` to pin the row id — the chat slice mints it up front so a
+   *  bubble's id and its persisted id are the same string. Omit it and
+   *  the store mints one. */
+  append(sessionId: string, turn: StoredTurn, id?: string): Promise<void>;
   /** Every session, pinned first, then most recently updated. */
   listSessions(): Promise<SessionInfo[]>;
   /** False when the session does not exist. */
@@ -68,19 +84,20 @@ export interface SessionStore {
   /** Drop the trailing assistant turn, for regenerate. False when the
    *  last turn is not an assistant turn. */
   popLastAssistant(sessionId: string): Promise<boolean>;
-  /** Drop the turn at `turnIndex` and everything after it, cascading to
+  /** Drop the turn with `messageId` and everything after it, cascading to
    *  those turns' tool calls. This is what edit-and-resend and
    *  regenerate-from-the-middle need: re-running anything but the last
    *  turn is meaningless unless the branch it sits on can be deleted.
    *
-   *  `turnIndex` is the index into `get()`'s call order, so the caller
-   *  cannot drift from the store's own ordering. False when the session
-   *  does not exist or the index is out of range — an out-of-range index
-   *  drops nothing rather than guessing.
+   *  Keyed by the id `get()` hands back, not by an index — the same way
+   *  pocketpal deletes (`removeMessagesFromId(message.id, true)`), so the
+   *  call cannot drift if render state and storage ever disagree about
+   *  order. False when the session or the id does not exist — an unknown
+   *  id drops nothing rather than guessing.
    *
    *  Deliberately additive: `popLastAssistant` stays for the last-turn
    *  regenerate, which is cheaper and keeps its boolean contract. */
-  truncateFrom(sessionId: string, turnIndex: number): Promise<boolean>;
+  truncateFrom(sessionId: string, messageId: string): Promise<boolean>;
   /** Composer draft for a session, or "" when there is none. `null` is
    *  the slot for a conversation that has not been sent yet. */
   getDraft(sessionId: string | null): Promise<string>;

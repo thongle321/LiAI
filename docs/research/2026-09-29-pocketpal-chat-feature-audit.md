@@ -327,7 +327,7 @@ Status key: **Present** / **Partial** / **Missing**.
 |---|---|---|
 | Typed error snackbar with per-code icon/action/duration | **Missing** | Errors render as an in-list tappable card (`MessageListItem.tsx:57-73`) with one line of copy and no recovery action. There is no snackbar surface on the chat screen at all. |
 | Context warning / full banners with meter | **Missing** | No banner slot above the composer (`chat.tsx:388-398` holds only `SuggestedPrompts` and `UsageStats`). No percentage, no "More room", no "New chat", no dismissal. |
-| Increase-context sheet | **Missing** | Nothing. `store/inference.ts:276` `setNContext` exists but is only reachable from the inference settings screen, and nothing estimates whether a larger `n_ctx` fits the device. We do have `lib/models/memoryEstimator.ts` and `lib/chat/index.ts:117-134` wiring `n_ctx` into context init, so the *ingredients* exist. |
+| Increase-context sheet | **Missing** | Nothing. `store/inference.ts:276` `setNContext` exists but is only reachable from the inference settings screen, and nothing estimates whether a larger `n_ctx` fits the device. ~~We do have `lib/models/memoryEstimator.ts` and `lib/chat/index.ts:117-134` wiring `n_ctx` into context init, so the *ingredients* exist.~~ **Correction (2026-09-29): the ingredients do NOT exist.** `estimateModelMemory` (`lib/models/memoryEstimator.ts:134`) returns a raw byte count, never reads device RAM, and always takes the `(size+proj+draft)*1.2` fallback because `ggufMetadata` is never populated (`:166`). Its only caller is `components/models/ModelCardDetails.tsx:91`. `largestSuccessfulBytes` (`store/models/types.ts:86`) records download size, not a context length. **Decided: ship the ladder with RAM estimates, no fit chip.** |
 | Reload feedback snackbar | Missing | Follows from the above. |
 | Interrupted / truncated turn markers | **Missing** | `store/chat/send.ts:139-155` on stop keeps the partial text and stamps `at`, but records nothing that distinguishes "stopped" from "finished". |
 | Content report (long-press → Report) | **Missing** | No sheet. It is server-gated on their end too (`api/feedback.ts:62-88`), and ADR-0008 retired our backend, so this is Missing *and* deliberately out of reach. |
@@ -505,28 +505,34 @@ is not, and this document's §4 is the first place the remaining items are enume
 
 ## 6. Open questions
 
-1. **`contextFull` detection on our engine.** `lib/inference/engine.ts` `CompletionOutcome` does
-   not surface `context_full` / `truncated` / `stopped_limit`, so G1's first step is a question
-   for `lib/inference/local-engine.ts` (llama.rn/QVACK): does the underlying completion result
-   expose those flags, or would we have to string-match the throw the way pocketpal does
-   (`useChatSession.ts:765`)? The string-match route is known-fragile — pocketpal's own comment
-   labels it `LLAMARN-DEP`.
-2. **Does `n_ctx` reload mid-session actually work for us?** `store/chat/index.ts:110-160`
-   caches the loaded context in `EngineManager`, so `IncreaseContextSheet`'s release → setNContext →
-   re-init sequence would need a real release path there. `store/inference.ts:276` sets the value
-   but nothing reloads. Unverified.
-3. **Memory estimator fidelity.** `lib/models/memoryEstimator.ts` exists and is wired into context
-   init, but I did not verify it produces the same fits/tight/won't-fit tiers pocketpal's
-   `fitStatus.ts:15-45` needs, nor whether `largestSuccessfulLoad`-style calibration exists in our
-   model store at all. It may not, which would make the "fits" chip meaningless.
+1. ~~**`contextFull` detection on our engine.** ~~ **ANSWERED 2026-09-29 — yes, no
+   string-match needed.** `llama.rn@0.13.0-rc.5`'s `NativeCompletionResult`
+   (`node_modules/llama.rn/lib/typescript/types.d.ts:443-485`) already carries
+   `context_full: boolean` (`:477`), `truncated` (`:472`), `stopped_limit` (`:475`),
+   `interrupted: boolean` (`:478`) and `timings` (`:480`, incl. `prompt_ms` and
+   `predicted_per_second`). We drop them because `LlamaCompletionResult`
+   (`lib/inference/local-engine.ts:30-37`) is a structural slice declaring only the fields we
+   read. Proof the omission is a bug, not a choice: `stoppedEarly: false` is hardcoded at
+   `local-engine.ts:172`. Spec: `docs/specs/2026-09-29-chat-turn-signals-and-lifecycle.md`.
+2. ~~**Does `n_ctx` reload mid-session actually work for us?**~~ **ANSWERED — yes, with no
+   new code.** `EngineManager.ensure()` keys the single slot on `initKey(init)`, which includes
+   `init.n_ctx` (`lib/inference/manager.ts:28-33`), and `store/chat/index.ts:122` already builds
+   `n_ctx` from `params.nCtx`. Changing `nCtx` changes the key, so the next `ensure()` releases
+   and reloads transparently (`:78-82`). PocketPal's explicit release→re-init→roll-back
+   sequence is unnecessary here.
+3. ~~**Memory estimator fidelity.**~~ **ANSWERED — and negative.** See the corrected row in §3.9:
+   there is no fits/tight/won't-fit verdict and nothing calls it on the chat path. Decided: no
+   fit chip in V1.
 4. **Tool outcome shape.** G5's fix depends on whether we widen `AgentStep.result` from `string`
    to a typed union (`types/chat.ts:19-25`) or add a parallel field. `lib/chat/tinybase-store.ts`
    persists `toolRuns` rows, so a shape change has a migration cost I have not sized.
 5. **Long-press vs. always-visible actions.** PocketPal's copy/regenerate live behind a long-press
    menu; ours are always visible. If we add the menu, do we *move* the existing two into it, or
    keep both? That is a design call, not an audit finding.
-6. **Whether `expo-keep-awake` is a direct dependency.** It appears in `package-lock.json:4250`
-   but not in `package.json` — so G2 needs a dependency decision (it is first-party Expo, so
-   almost certainly fine, but `AGENTS.md` requires asking before adding anything).
+6. ~~**Whether `expo-keep-awake` is a direct dependency.**~~ **ANSWERED — added.**
+   `expo-keep-awake ~57.0.2` is now a direct dependency (`package.json`), approved and shipped
+   in `d2a245a`. The lockfile's root dependency mirror was hand-patched because
+   `npm install --package-lock-only` is blocked by an org policy (`EALLOWREMOTE`); the resolved
+   entry already existed at 57.0.2 with integrity.
 7. **Deep links are pal-keyed upstream.** I could not determine from code whether the prefill
    mechanism (G16) is worth extracting without the pal half, or whether it is inseparable.

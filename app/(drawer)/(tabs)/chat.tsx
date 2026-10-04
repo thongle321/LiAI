@@ -58,7 +58,6 @@ export default function ChatRoute() {
   const retry = useChatStore((s) => s.retry);
   const regenerate = useChatStore((s) => s.regenerate);
   const newConversation = useChatStore((s) => s.newConversation);
-  const deleteMessage = useChatStore((s) => s.deleteMessage);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -310,8 +309,6 @@ export default function ChatRoute() {
                 <MessageListItem
                   row={row}
                   onRetry={() => void retry(row.message.id)}
-                  onDelete={() => void deleteMessage(row.message.id)}
-                  sending={sending}
                   onRegenerate={
                     row.message.role === "assistant"
                       ? () => void regenerate(row.message.id)

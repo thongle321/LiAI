@@ -36,19 +36,12 @@ export function MessageListItem({
   row,
   onRetry,
   onRegenerate,
-  onDelete,
-  sending,
 }: {
   /** One adapter row: message plus its group/avatar/status flags. */
   row: MessageRow;
   onRetry: () => void;
   /** Null for user bubbles (nothing to regenerate). */
   onRegenerate: (() => void) | null;
-  /** Deletes this turn and everything after it. */
-  onDelete: () => void;
-  /** A turn is running: the store refuses to truncate mid-turn, so the
-   *  menu shows Delete as disabled rather than offering a dead action. */
-  sending: boolean;
 }) {
   const { message, grouped, showAvatar, status } = row;
   const duration = MOTION_DURATION_MS;
@@ -87,7 +80,7 @@ export function MessageListItem({
             className="w-40 h-[120px] rounded-xl mb-1"
           />
         )}
-        <MessageMenu text={message.text} settled={settled} disabled={sending} onDelete={onDelete}>
+        <MessageMenu text={message.text} settled={settled}>
           <View
             className={`px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-br-sm"} bg-surface-3`}
           >
@@ -134,7 +127,7 @@ export function MessageListItem({
             autoCollapse={settled || message.text.trim() !== ""}
           />
         ) : null}
-        <MessageMenu text={message.text} settled={settled} disabled={sending} onDelete={onDelete}>
+        <MessageMenu text={message.text} settled={settled}>
           <View
             className={`border border-border bg-surface-1 px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-tl-sm"}`}
           >

@@ -7,7 +7,11 @@
  * session store (ADR-0012).
  */
 
-import type { SessionStore, StoredTurn } from "../lib/chat/session-store.ts";
+import type {
+  SessionStore,
+  StoredMessage,
+  StoredTurn,
+} from "../lib/chat/session-store.ts";
 import { draftSlot } from "../lib/chat/session-store.ts";
 import type { SamplerParams } from "../lib/inference/sampler.ts";
 import type { AgentStep, SessionInfo } from "../types/chat.ts";
@@ -40,13 +44,17 @@ export function fakeSessionStore(
 } {
   const sessions = new Map<
     string,
-    { title: string; pinned: boolean; turns: StoredTurn[]; seq: number }
+    { title: string; pinned: boolean; turns: StoredMessage[]; seq: number }
   >();
+  // Row ids, like the real store mints on append. Seeded turns get
+  // stable, readable ids so a test can name one in a truncateFrom call.
+  let turnSeq = 0;
+  const mintId = (sessionId: string): string => `${sessionId}-t${(turnSeq += 1)}`;
   for (const seed of seeds) {
     sessions.set(seed.id, {
       title: seed.title ?? "",
       pinned: seed.pinned ?? false,
-      turns: (seed.turns ?? []).map((t) => ({ ...t })),
+      turns: (seed.turns ?? []).map((t, i) => ({ ...t, id: `${seed.id}-t${i + 1}` })),
       seq: 0,
     });
   }
@@ -75,13 +83,15 @@ export function fakeSessionStore(
           : {}),
       }));
     },
-    append: async (sessionId: string, turn: StoredTurn) => {
+    append: async (sessionId: string, turn: StoredTurn, id?: string) => {
       let row = sessions.get(sessionId);
       if (!row) {
         row = { title: "", pinned: false, turns: [], seq: 0 };
         sessions.set(sessionId, row);
       }
-      row.turns.push({ ...turn });
+      // Same rule as the real store: a caller-supplied id pins the row, so
+      // a bubble's id and its persisted id are one string.
+      row.turns.push({ ...turn, id: id ?? mintId(sessionId) });
       calls.appends.push({ sessionId, turn: { ...turn } });
     },
  listSessions: async (): Promise<SessionInfo[]> =>
@@ -130,21 +140,15 @@ popLastAssistant: async (id: string) => {
       row.turns.pop();
       return true;
     },
-    truncateFrom: async (id: string, turnIndex: number) => {
+    truncateFrom: async (id: string, messageId: string) => {
       const row = sessions.get(id);
       if (!row) return false;
-      // Same guards as the real store, so a test that passes here also
-      // passes there: an out-of-range index drops nothing.
-      if (
-        !Number.isInteger(turnIndex) ||
-        turnIndex < 0 ||
-        turnIndex >= row.turns.length
-      ) {
-        return false;
-      }
+      const index = row.turns.findIndex((t) => t.id === messageId);
+      // Unknown id drops nothing, same as the real store.
+      if (index < 0) return false;
       // The fake keeps `steps` inline on each turn, so splicing the tail
       // takes the tool calls with it — no separate cascade needed here.
-      row.turns.splice(turnIndex);
+      row.turns.splice(index);
       return true;
     },
     getDraft: async (sessionId) => drafts.get(draftSlot(sessionId)) ?? "",

@@ -450,6 +450,35 @@ describe("chat store turns", () => {
 });
 
 describe("chat store deleteMessage", () => {
+  it("gives every bubble the row id it was persisted under", async () => {
+    // The one-identity contract (Q9): a bubble's id IS its row id, so a
+    // bubble read back from storage is addressable by the same id it had
+    // live. Without this, `deleteMessage` below would only work by index.
+    const seeded = storeWith(
+      [
+        {
+          id: "s1",
+          title: "T",
+          turns: [
+            { role: "user", content: "q1", type: "text" },
+            { role: "assistant", content: "a1", type: "text" },
+          ],
+        },
+      ],
+      "s1",
+    );
+    const useStore = createChatStore({
+      getStore: seeded.getStore,
+      runTurn: seeded.runTurn,
+    });
+    await useStore.getState().loadSession();
+    const stored = await seeded.store.get("s1");
+    assert.deepEqual(
+      useStore.getState().messages.map((m) => m.id),
+      stored?.map((t) => t.id),
+    );
+    assert.ok(stored?.every((t) => typeof t.id === "string" && t.id !== ""));
+  });
   /** A loaded conversation of three turns: q1 a1 q2. */
   function loaded() {
     const seeded = storeWith(

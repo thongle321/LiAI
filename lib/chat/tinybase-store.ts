@@ -24,7 +24,11 @@
 import { createStore, type Store } from "tinybase";
 
 import type { AgentStep, SessionInfo } from "../../types/chat.ts";
-import type { SessionStore, StoredTurn } from "./session-store.ts";
+import type {
+  SessionStore,
+  StoredMessage,
+  StoredTurn,
+} from "./session-store.ts";
 import { draftSlot } from "./session-store.ts";
 import { DEFAULT_SAMPLER, type SamplerParams } from "../inference/sampler.ts";
 import { newId } from "./messages.ts";
@@ -132,7 +136,7 @@ export class TinyBaseSessionStore implements SessionStore {
     });
   }
 
-  async get(sessionId: string): Promise<StoredTurn[] | null> {
+  async get(sessionId: string): Promise<StoredMessage[] | null> {
     if (!this.store.hasRow("sessions", sessionId)) return null;
     return this.rowsOf(sessionId)
       .sort((a, b) => a.row.seq - b.row.seq)
@@ -149,13 +153,16 @@ export class TinyBaseSessionStore implements SessionStore {
     return out;
   }
 
-  async append(sessionId: string, turn: StoredTurn): Promise<void> {
+  async append(sessionId: string, turn: StoredTurn, id?: string): Promise<void> {
     if (!this.store.hasRow("sessions", sessionId)) {
       this.newSessionRow(sessionId, "");
     }
     const seq = this.nextSeq();
-    const id = rowId(seq);
-    this.store.setRow("messages", id, {
+    // The caller's id wins: the chat slice mints it before the bubble
+    // exists so a bubble's id and its row id are one string. Fall back to
+    // a fresh one for any caller that has no id to offer.
+    const rowKey = id ?? newId();
+    this.store.setRow("messages", rowKey, {
       sessionId,
       role: turn.role,
       content: turn.content,
@@ -173,7 +180,7 @@ export class TinyBaseSessionStore implements SessionStore {
     });
     for (const step of turn.steps ?? []) {
       this.store.setRow("toolRuns", step.id, {
-        messageId: id,
+        messageId: rowKey,
         position: step.position,
         tool: step.tool,
         ...(step.input !== undefined ? { input: step.input } : {}),
@@ -184,9 +191,12 @@ export class TinyBaseSessionStore implements SessionStore {
   }
 
   /** Row -> turn, reattaching the turn's tool calls in call order. */
-  private toTurn(messageId: string, row: MessageRow): StoredTurn {
+  private toTurn(messageId: string, row: MessageRow): StoredMessage {
     const steps = this.stepsFor(messageId);
     return {
+      // The row id travels with the turn, so callers can address it
+      // later without re-deriving an index.
+      id: messageId,
       role: row.role === "assistant" ? "assistant" : "user",
       content: row.content,
       type: row.type,
@@ -302,17 +312,15 @@ export class TinyBaseSessionStore implements SessionStore {
     }
   }
 
-  async truncateFrom(sessionId: string, turnIndex: number): Promise<boolean> {
+  async truncateFrom(sessionId: string, messageId: string): Promise<boolean> {
     if (!this.store.hasRow("sessions", sessionId)) return false;
-    // Same ordering `get()` hands the caller, so the index cannot drift.
     const ordered = this.rowsOf(sessionId).sort((a, b) => a.row.seq - b.row.seq);
-    // Out of range drops nothing rather than guessing at the caller's
-    // intent: a bad index is a bug to surface, not a conversation to
+    const index = ordered.findIndex((entry) => entry.id === messageId);
+    // Unknown id drops nothing rather than guessing at the caller's
+    // intent: a bad id is a bug to surface, not a conversation to
     // silently destroy.
-    if (!Number.isInteger(turnIndex) || turnIndex < 0 || turnIndex >= ordered.length) {
-      return false;
-    }
-    for (const { id } of ordered.slice(turnIndex)) {
+    if (index < 0) return false;
+    for (const { id } of ordered.slice(index)) {
       this.deleteStepsOf(id);
       this.store.delRow("messages", id);
     }

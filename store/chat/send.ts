@@ -51,6 +51,9 @@ export function createSendSlice(
    * stored question, so it skips the user append (no duplicate). */
   async function runLocal(opts: {
     assistantId: string;
+    /** Row id for the user turn. Undefined on retry/regenerate, which
+     *  re-answer an already-stored question. */
+    userId?: string;
     text: string;
     sessionId: string | null;
     image?: string;
@@ -79,6 +82,10 @@ export function createSendSlice(
           ...(opts.image !== undefined ? { image: opts.image } : {}),
           history: opts.history,
           ...(opts.retry ? { retry: true } : {}),
+          // The bubble ids ARE the row ids: minted up front so there is
+          // never a moment where a bubble exists but cannot be addressed.
+          ...(opts.userId !== undefined ? { userMessageId: opts.userId } : {}),
+          assistantMessageId: opts.assistantId,
         },
         (token) => {
           if (gen !== ctx.streamGen) return;
@@ -179,6 +186,7 @@ export function createSendSlice(
       }));
       await runLocal({
         assistantId,
+        userId,
         text: trimmed,
         sessionId: sid,
         ...(image !== undefined ? { image } : {}),

@@ -1,4 +1,4 @@
-/** Long-press menu on a message bubble: Copy and Delete.
+/** Long-press menu on a message bubble.
  *
  * Native on both platforms — `@expo/ui/community/menu` resolves to a
  * SwiftUI `ContextMenu` on iOS and a Compose `DropdownMenu` on Android
@@ -6,9 +6,18 @@
  * is no platform branch here. The menu anchors to its trigger child, so
  * the trigger is the bubble itself: long-press the text, get the menu.
  *
- * Step 3 of docs/specs/2026-09-29-chat-message-actions-menu.md. Edit,
- * Regenerate and Regenerate-with add actions here later; the store port
- * they need (`SessionStore.truncateFrom`) is already in place.
+ * Step 3 of docs/specs/2026-09-29-chat-message-actions-menu.md.
+ *
+ * **Copy only, deliberately.** PocketPal's menu is Copy · Regenerate ·
+ * Regenerate with… · Edit · Report (`pocketpal-ai/.../ChatView.tsx:673-741`)
+ * and has **no delete-message action at all** — its destructive branch
+ * truncation happens implicitly through edit and regenerate, both of
+ * which call `removeMessagesFromId(id, true)`. An earlier draft of this
+ * component shipped a Delete item; it was neither in pocketpal nor in
+ * the audit, so it was cut (decision Q5).
+ *
+ * Regenerate / Regenerate with… / Edit arrive in steps 4-6, reusing the
+ * `SessionStore.truncateFrom` port method that already exists.
  */
 
 import type { ReactNode } from "react";
@@ -22,26 +31,18 @@ import { useCopy } from "../../hooks/useCopy.ts";
  * every action MUST carry an explicit id — a renamed label must not
  * change what the handler dispatches on. */
 const COPY = "copy";
-const DELETE = "delete";
 
 export function MessageMenu({
   text,
   settled,
-  disabled,
-  onDelete,
   children,
 }: {
   /** Copied verbatim by Copy. */
   text: string;
   /** Streaming turns have no menu: their text is still arriving, so Copy
-   * would grab a prefix and Delete would race the turn. Previews and
-   * actions have always targeted settled turns only. */
+   * would grab a prefix. Previews and actions have always targeted
+   * settled turns only. */
   settled: boolean;
-  /** True while a turn is running: Delete is disabled, because the store
-   * refuses to truncate a branch mid-turn and a live-but-dead item is
-   * worse than an honest one. */
-  disabled: boolean;
-  onDelete: () => void;
   /** The bubble this menu wraps. */
   children: ReactNode;
 }) {
@@ -49,27 +50,15 @@ export function MessageMenu({
 
   if (!settled) return <View>{children}</View>;
 
-  const actions: MenuAction[] = [
-    { id: COPY, title: "Copy" },
-    { id: DELETE, title: "Delete", attributes: { destructive: true, disabled } },
-  ];
+  const actions: MenuAction[] = [{ id: COPY, title: "Copy" }];
 
   return (
     <MenuView
       shouldOpenOnLongPress
       actions={actions}
       onPressAction={(event) => {
-        switch (event.nativeEvent.event) {
-          case COPY:
-            void copy(text);
-            break;
-          case DELETE:
-            onDelete();
-            break;
-          default:
-            // An id this build does not know: ignore rather than guess.
-            break;
-        }
+        // An id this build does not know: ignore rather than guess.
+        if (event.nativeEvent.event === COPY) void copy(text);
       }}
     >
       {/* The haptic rides the trigger's own long-press. On Android both

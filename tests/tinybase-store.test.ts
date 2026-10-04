@@ -60,19 +60,23 @@ describe("tool calls", () => {
         { id: "s1", tool: "fetch", position: 1 },
       ],
     });
-    assert.deepEqual(await store.get(id), [
-      {
-        role: "assistant",
-        content: "done",
-        type: "text",
-        at: (await store.get(id))?.[0].at,
-        usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
-        steps: [
-          { id: "s0", tool: "search", position: 0, input: { q: "cats" }, result: "pics" },
-          { id: "s1", tool: "fetch", position: 1 },
-        ],
-      },
-    ]);
+    const read = await store.get(id);
+    // `id` is the row id and carries a timestamp, so it is compared by
+    // shape rather than by literal. Everything else must round-trip whole.
+    assert.equal(read?.length, 1);
+    const { id: rowId2, ...turn } = read![0];
+    assert.equal(typeof rowId2, "string");
+    assert.deepEqual(turn, {
+      role: "assistant",
+      content: "done",
+      type: "text",
+      at: read?.[0].at,
+      usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+      steps: [
+        { id: "s0", tool: "search", position: 0, input: { q: "cats" }, result: "pics" },
+        { id: "s1", tool: "fetch", position: 1 },
+      ],
+    });
   });
 
   it("orders by position, not by insertion", async () => {
@@ -254,27 +258,34 @@ describe("popLastAssistant", () => {
 });
 
 describe("truncateFrom", () => {
-  it("drops the turn at the index and everything after it", async () => {
+  /** Row ids embed a timestamp, so a test cannot predict one: read the
+   *  id back off `get()`, which is exactly how a caller gets it. */
+  const idsOf = async (store: TinyBaseSessionStore, sessionId: string) =>
+    (await store.get(sessionId))!.map((t) => t.id);
+
+  it("drops the named turn and everything after it", async () => {
     const store = newStore();
     const id = await store.create();
     await store.append(id, { role: "user", content: "q1" });
     await store.append(id, { role: "assistant", content: "a1" });
     await store.append(id, { role: "user", content: "q2" });
     await store.append(id, { role: "assistant", content: "a2" });
-    assert.equal(await store.truncateFrom(id, 1), true);
+    const ids = await idsOf(store, id);
+    assert.equal(await store.truncateFrom(id, ids[1]), true);
     assert.deepEqual(
       (await store.get(id))?.map((t) => t.content),
       ["q1"],
     );
   });
 
-  it("keeps the turns before the index untouched", async () => {
+  it("keeps the turns before the named one untouched", async () => {
     const store = newStore();
     const id = await store.create();
     await store.append(id, { role: "user", content: "keep 1" });
     await store.append(id, { role: "assistant", content: "keep 2" });
     await store.append(id, { role: "user", content: "drop" });
-    await store.truncateFrom(id, 2);
+    const ids = await idsOf(store, id);
+    assert.equal(await store.truncateFrom(id, ids[2]), true);
     assert.deepEqual(
       (await store.get(id))?.map((t) => t.content),
       ["keep 1", "keep 2"],
@@ -295,7 +306,8 @@ describe("truncateFrom", () => {
       content: "more steps",
       steps: [{ id: "s2", tool: "read_url", position: 0 }],
     });
-    await store.truncateFrom(id, 1);
+    const ids = await idsOf(store, id);
+    assert.equal(await store.truncateFrom(id, ids[1]), true);
     const left = await store.get(id);
     assert.equal(left?.length, 1);
     // The surviving turn must not have inherited a removed turn's tool
@@ -307,18 +319,18 @@ describe("truncateFrom", () => {
     const store = newStore();
     const id = await store.create();
     await store.append(id, { role: "user", content: "q" });
-    assert.equal(await store.truncateFrom(id, 0), true);
+    const ids = await idsOf(store, id);
+    assert.equal(await store.truncateFrom(id, ids[0]), true);
     assert.deepEqual(await store.get(id), []);
   });
 
-  it("refuses an out-of-range index and drops nothing", async () => {
+  it("refuses an unknown id and drops nothing", async () => {
     const store = newStore();
     const id = await store.create();
     await store.append(id, { role: "user", content: "q" });
     await store.append(id, { role: "assistant", content: "a" });
-    assert.equal(await store.truncateFrom(id, 2), false);
-    assert.equal(await store.truncateFrom(id, -1), false);
-    assert.equal(await store.truncateFrom(id, 1.5), false);
+    assert.equal(await store.truncateFrom(id, "not-a-real-id"), false);
+    assert.equal(await store.truncateFrom(id, ""), false);
     assert.deepEqual(
       (await store.get(id))?.map((t) => t.content),
       ["q", "a"],
@@ -328,8 +340,8 @@ describe("truncateFrom", () => {
   it("refuses on a missing session and on an empty one", async () => {
     const store = newStore();
     const id = await store.create();
-    assert.equal(await store.truncateFrom("ghost", 0), false);
-    assert.equal(await store.truncateFrom(id, 0), false);
+    assert.equal(await store.truncateFrom("ghost", "whatever"), false);
+    assert.equal(await store.truncateFrom(id, "whatever"), false);
   });
 
   it("leaves other sessions alone", async () => {
@@ -338,11 +350,35 @@ describe("truncateFrom", () => {
     const b = await store.create();
     await store.append(a, { role: "user", content: "a1" });
     await store.append(b, { role: "user", content: "b1" });
-    await store.truncateFrom(a, 0);
+    const ids = await idsOf(store, a);
+    assert.equal(await store.truncateFrom(a, ids[0]), true);
     assert.deepEqual(
       (await store.get(b))?.map((t) => t.content),
       ["b1"],
     );
+  });
+
+  it("truncates by the id it was given, not by position", async () => {
+    // The reason ids exist: a caller that holds an id from `get()` must
+    // not be able to mean the wrong turn. Append a second turn AFTER
+    // reading the ids, so a position-based implementation would shift.
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, { role: "user", content: "first" });
+    await store.append(id, { role: "assistant", content: "reply" });
+    const targetId = (await idsOf(store, id))[0];
+    await store.append(id, { role: "user", content: "later" });
+    assert.equal(await store.truncateFrom(id, targetId), true);
+    assert.deepEqual(await store.get(id), []);
+  });
+
+  it("honours an id pinned at append time", async () => {
+    // The one-identity contract: a bubble's id IS its row id, so an id
+    // supplied by the caller is the one `get()` hands back.
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, { role: "user", content: "q" }, "pinned-row-id");
+    assert.deepEqual(await idsOf(store, id), ["pinned-row-id"]);
   });
 });
 
@@ -634,12 +670,28 @@ describe("sessions", () => {
     const store = newStore();
     const id = await store.create();
     const at = Date.now();
-    await store.append(id, { role: "user", content: "hi", at });
+await store.append(id, { role: "user", content: "hi", at });
     await store.append(id, { role: "assistant", content: "hello", at });
-    assert.deepEqual(await store.get(id), [
-      { role: "user", content: "hi", type: "text", at },
-      { role: "assistant", content: "hello", type: "text", at },
-    ]);
+    // Ids are asserted separately: they embed a timestamp, so a literal
+    // in the deepEqual would be both unreadable and unstable.
+    const turns = await store.get(id);
+    assert.deepEqual(
+      turns?.map(({ role, content, type, at: seen }) => ({
+        role,
+        content,
+        type,
+        at: seen,
+      })),
+      [
+        { role: "user", content: "hi", type: "text", at },
+        { role: "assistant", content: "hello", type: "text", at },
+      ],
+    );
+    assert.ok(
+      turns?.every((t) => typeof t.id === "string" && t.id !== ""),
+      "every turn comes back addressable",
+    );
+    assert.notEqual(turns?.[0].id, turns?.[1].id, "and the ids differ");
   });
 
   it("keeps call order for turns that share a timestamp", async () => {

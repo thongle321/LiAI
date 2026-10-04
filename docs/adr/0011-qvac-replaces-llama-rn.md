@@ -1,8 +1,30 @@
 # ADR-0011: QVAC replaces llama.rn for on-device inference
 
 Date: 2026-09-25
-Status: Accepted
+Status: **Superseded — reverted 2026-09-29. llama.rn remains the engine.**
 Supersedes: ADR-0008 (llama.rn inference choice)
+
+> **This ADR was executed and then rolled back. It no longer describes the code.**
+>
+> Branch `spike/qvac-adapter` carried the replacement through
+> `8801294 feat!: QVAC replaces llama.rn`, then reverted it in
+> `e97af21 revert!: drop QVAC spike, restore llama.rn`. That revert deleted
+> `lib/inference/qvac-engine.ts` (~200 lines), `qvac-proof.ts`,
+> `qvac.config.json`, the Expo plugin entry and the `@qvac/sdk` dependency,
+> and restored `local-engine.ts`. `CONTEXT.md:11` reflects this: llama.rn.
+>
+> **Verified 2026-09-29:** `lib/inference/qvac-engine.ts` does not exist;
+> `@qvac` appears 0 times in `package.json` and `package-lock.json`.
+>
+> **What survives from this ADR is the seam, not the engine.** The
+> `CompletionEngine` boundary it reasoned about is exactly where
+> `docs/specs/2026-09-29-chat-turn-signals-and-lifecycle.md` adds
+> `context_full`/`interrupted`/`timings`. Because the engine is settled as
+> llama.rn, those fields only have to be written once.
+>
+> Kept as a record rather than deleted: the spike's findings — and the
+> fact that the swap was tried and abandoned — are worth the next person
+> considering it.
 
 ## Context
 

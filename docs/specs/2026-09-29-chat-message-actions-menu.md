@@ -1,8 +1,27 @@
 # Spec: Chat message actions (long-press menu, edit-and-resend, cross-model retry)
 
 Date: 2026-09-29
-Status: Draft — awaiting sign-off. **Step 1 shipped** (see §3.1).
+Status: Draft — awaiting sign-off. **Steps 1 and 3 shipped** (see §3.1, §3.5).
 Audit source: `docs/research/2026-09-29-pocketpal-chat-feature-audit.md` §4 (G3)
+
+> **Decisions taken 2026-09-29 (grilling session), which changed this spec:**
+>
+> - **Delete-message was CUT.** PocketPal's menu is Copy · Regenerate ·
+>   Regenerate with… · Edit · Report (`pocketpal-ai/src/components/ChatView/ChatView.tsx:673-741`)
+>   and has **no delete-message action at all**. Its destructive branch truncation
+>   happens implicitly through edit and regenerate, both calling
+>   `removeMessagesFromId(id, true)` (`hooks/useMessageActions.ts:75,105`), with no
+>   confirmation. An earlier draft of this spec added a Delete item that was neither in
+>   pocketpal nor in the audit; it shipped, then was removed.
+> - **Confirmation policy: none for branch truncation, yes for whole-session delete.**
+>   That is pocketpal's own pattern (`HeaderRight.tsx:75-90` confirms only session
+>   deletion). "Re-ask" verbs do not confirm, because discarding the branch there is the
+>   expected consequence.
+> - **The store port is now keyed by MESSAGE ID, not index** (Q6/Q9/Q11 below), matching
+>   pocketpal's `removeMessagesFromId`. `StoredTurn` (write, no id) and `StoredMessage`
+>   (read, id required) are split so the compiler rejects an unaddressable message.
+> - **Export strips row ids** — they are our TinyBase layout, not the user's data, and
+>   the exported format must stay what FORMAT_VERSION 1 defined.
 Scope: what a user can do **to one message** in a conversation. No app code was modified
 in this pass.
 

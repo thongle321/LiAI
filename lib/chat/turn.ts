@@ -9,6 +9,7 @@
 import type { AgentStep } from "../../types/chat.ts";
 import type { ChatMessage } from "../../types/chat.ts";
 import type { StoredTurn } from "./session-store.ts";
+import type { TurnPaths } from "../../store/chat/types.ts";
 import type {
   CompletionEngine,
   CompletionMessage,
@@ -27,7 +28,9 @@ export const SESSION_TITLE_LEN = 48;
  *  write contract has exactly one definition. */
 export interface TurnSessionStore {
   create(): Promise<string>;
-  append(sessionId: string, turn: StoredTurn): Promise<void>;
+  /** `id` lets the slice pin the row id to the bubble's, so the two are
+   *  one string. Optional here exactly as on `SessionStore.append`. */
+  append(sessionId: string, turn: StoredTurn, id?: string): Promise<void>;
   setTitleIfEmpty(sessionId: string, title: string): Promise<void>;
 }
 
@@ -97,12 +100,7 @@ function userTextsOf(history: ChatMessage[]): string[] {
 export function createTurnRunner(deps: TurnDeps) {
   return async (
     text: string,
-    paths: {
-      sessionId: string | null;
-      image?: string;
-      history: ChatMessage[];
-      retry?: boolean;
-    },
+    paths: TurnPaths,
     onToken?: (text: string) => void,
     onReasoning?: (cumulative: string) => void,
   ): Promise<TurnOutcome> => {
@@ -174,17 +172,25 @@ export function createTurnRunner(deps: TurnDeps) {
     try {
       if (store) {
         if (!paths.retry) {
-          await store.append(sessionId, { role: "user", content: trimmed, type: "text" });
+          await store.append(
+            sessionId,
+            { role: "user", content: trimmed, type: "text" },
+            paths.userMessageId,
+          );
           await store.setTitleIfEmpty(sessionId, trimmed.slice(0, SESSION_TITLE_LEN));
         }
-        await store.append(sessionId, {
-          role: "assistant",
-          content: result.text,
-          ...(result.reasoning !== undefined ? { reasoning: result.reasoning } : {}),
-          type: "text",
-          usage,
-          steps,
-        });
+        await store.append(
+          sessionId,
+          {
+            role: "assistant",
+            content: result.text,
+            ...(result.reasoning !== undefined ? { reasoning: result.reasoning } : {}),
+            type: "text",
+            usage,
+            steps,
+          },
+          paths.assistantMessageId,
+        );
       }
     } catch {
       // Reply already resolved; persistence retries on the next turn.

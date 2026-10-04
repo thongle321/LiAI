@@ -19,6 +19,14 @@ export interface TurnPaths {
   history: ChatMessage[];
   /** Re-answer: skip the user append (question already stored). */
   retry?: boolean;
+  /** Row id for the user turn the slice is about to show. Minted BEFORE
+   *  the bubble exists so the bubble and the persisted row are one id —
+   *  there is no window where a bubble exists but has no address. */
+  userMessageId?: string;
+  /** Row id for the assistant turn. On regenerate this is the EXISTING
+   *  bubble's id, so the rerun overwrites that row instead of appending
+   *  a second one. */
+  assistantMessageId?: string;
 }
 
 export interface TurnRunner {

@@ -18,7 +18,7 @@ import {
 } from "react-native";
 import { useIsFocused } from "expo-router";
 import { openSettings } from "expo-linking";
-import { Camera, Image as ImageIcon, Mic, Pencil, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
+import { Brain, Camera, Image as ImageIcon, Mic, Pencil, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -79,6 +79,21 @@ export function MessageInput({
   // button both start a turn that needs a live model, so they disable when
   // no model can actually answer.
   const modelReady = useModelReady();
+  // G6: the thinking toggle PocketPal keeps in the composer. Local only --
+  // `enableThinking` is a llama.rn jinja flag (lib/inference/engine.ts),
+  // so offering it under a remote API would promise something the remote
+  // engine cannot honour.
+  const thinkingEnabled = useInference((s) => s.thinkingEnabled);
+  const setThinkingEnabled = useInference((s) => s.setThinkingEnabled);
+  const thinkingLocal =
+    useModelStore((s) => s.activeProviderType) === "local";
+  // A switch's label names the THING, not the action: VoiceOver reads
+  // "label, switch, checked". An imperative label that flipped to
+  // "Disable thinking" announced "Disable thinking, switch, on" -- an
+  // instruction contradicting the state beside it. The blocked case goes
+  // in the hint instead, so the label never moves.
+  let thinkingHint: string | undefined;
+  if (!modelReady) thinkingHint = "Load a model to use thinking";
   const stop = useChatStore((s) => s.stop);
   const [plusOpen, setPlusOpen] = useState(false);
   // One attached photo per turn (the local turn takes a single data-uri);
@@ -392,6 +407,44 @@ export function MessageInput({
         accessibilityHint={modelReady ? undefined : composerPlaceholder}
         />
         <View className="flex-row items-center gap-2">
+          {thinkingLocal && (
+            // PocketPal's composer pill (ChatInput.tsx:588-640). State is
+            // carried by the fill AND the icon, per DESIGN.md's "pair every
+            // status colour with a glyph and a word" rule -- so it never
+            // depends on colour alone.
+            //
+            // NO effort cycle. PocketPal's pill double-taps through graded
+            // reasoning effort; LiAI has no effort concept anywhere, and
+            // inventing levels here would ship a control with nothing
+            // behind it.
+            <Pressable
+              onPress={modelReady ? () => setThinkingEnabled(!thinkingEnabled) : undefined}
+              disabled={!modelReady}
+              className={
+                thinkingEnabled
+                  ? "h-12 flex-row items-center gap-1.5 rounded-full bg-surface-2 pl-3.5 pr-3.5"
+                  : "h-12 flex-row items-center gap-1.5 rounded-full bg-surface-3 pl-3.5 pr-3.5"
+              }
+              accessibilityRole="switch"
+              accessibilityState={{ checked: thinkingEnabled, disabled: !modelReady }}
+              accessibilityLabel="Thinking"
+              accessibilityHint={thinkingHint}
+            >
+              <Brain
+                size={16}
+                color={thinkingEnabled ? colors.primary : colors.secondaryText}
+              />
+              <Text
+                className={
+                  thinkingEnabled
+                    ? "font-sans text-caption text-primary-text"
+                    : "font-sans text-caption text-secondary-text"
+                }
+              >
+                Think
+              </Text>
+            </Pressable>
+          )}
           <Animated.View style={micPress.animatedStyle}>
             <Pressable
               onPress={modelReady ? () => void toggleDictation() : undefined}

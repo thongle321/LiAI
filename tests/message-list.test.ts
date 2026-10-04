@@ -71,7 +71,11 @@ describe("message list stability", () => {
     // — send/retry/regenerate mint both in one set()) while overlapping
     // content instead of scrolling with it.
     const chat = read("app/(drawer)/(tabs)/chat.tsx");
-    assert.match(chat, /row\.kind === "pending" \? \(\s*<PendingIndicator \/>/);
+    // `\b` not `\/>`: the indicator takes a startedAt prop now (G13), so
+    // the self-closing form is gone. The intent here is WHERE the row
+    // renders -- in the list, not as an overlay chip -- and that is
+    // unaffected by the prop.
+    assert.match(chat, /row\.kind === "pending" \? \(\s*<PendingIndicator\b/);
     assert.match(
       chat,
       /import \{ PendingIndicator \} from "\.\.\/\.\.\/\.\.\/components\/chat\/PendingIndicator\.tsx"/,

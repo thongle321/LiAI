@@ -714,6 +714,76 @@ describe("chat store edit mode", () => {
     assert.deepEqual(calls.texts, ["new question"]);
   });
 });
+describe("turn timing (G13)", () => {
+  it("stamps the start of a turn and clears it when the turn settles", async () => {
+    // The pending row reads this to show elapsed time; three dots alone
+    // were indistinguishable from a frozen screen.
+    const { runTurn } = fakeRunTurn([{ reply: "ok" }]);
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+    });
+    assert.equal(useStore.getState().turnStartedAt, null, "nothing running at rest");
+    await useStore.getState().send("hi");
+    assert.equal(
+      useStore.getState().turnStartedAt,
+      null,
+      "cleared once the turn settled",
+    );
+  });
+
+  it("stamps while the turn is still in flight", async () => {
+    const gate = gatedRunTurn();
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn: gate.runTurn,
+    });
+    const sent = useStore.getState().send("hi");
+    const stamp = useStore.getState().turnStartedAt;
+    assert.equal(typeof stamp, "number", "stamped for the pending row to read");
+    gate.release("done");
+    await sent;
+    assert.equal(useStore.getState().turnStartedAt, null);
+  });
+
+  it("clears on Stop, so a stale stamp cannot outlive the turn", async () => {
+    const gate = gatedRunTurn();
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn: gate.runTurn,
+    });
+    const sent = useStore.getState().send("hi");
+    useStore.getState().stop();
+    assert.equal(useStore.getState().turnStartedAt, null);
+    gate.release("done");
+    await sent;
+    assert.equal(useStore.getState().turnStartedAt, null);
+  });
+
+  it("clears when a turn fails", async () => {
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn: async () => {
+        throw new Error("engine died");
+      },
+    });
+    await useStore.getState().send("hi");
+    assert.equal(useStore.getState().turnStartedAt, null);
+  });
+
+  it("clears on a new conversation", async () => {
+    const { getStore, runTurn } = storeWith([]);
+    const useStore = createChatStore({ getStore, runTurn });
+    useStore.setState({ turnStartedAt: 1234 });
+    await useStore.getState().newConversation();
+    assert.equal(
+      useStore.getState().turnStartedAt,
+      null,
+      "no stamp survives into a conversation with no turn",
+    );
+  });
+});
+
 describe("message identity", () => {
   it("gives every bubble the row id it was persisted under", async () => {
     // The one-identity contract (Q9): a bubble's id IS its row id, so a

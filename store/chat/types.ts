@@ -78,6 +78,11 @@ export interface ChatState {
   sessionId: string | null;
   connection: Connection;
   sending: boolean;
+  /** Wall clock for the running turn: set when it starts, cleared when it
+   *  settles, null when nothing is running. Exists so the pending row can
+   *  show elapsed time — usage lands only on settle, and three anonymous
+   *  dots are indistinguishable from a frozen screen. */
+  turnStartedAt: number | null;
   sessions: ChatSession[];
   /** Composer draft for the active session (persisted on switch/send). */
   draft: string;

@@ -58,6 +58,11 @@ import { ChatMenu } from "../../../components/chat/ChatMenu.tsx";
 
 export default function ChatRoute() {
   const messages = useChatStore((s) => s.messages);
+  // The header names the conversation and the model answering it; both
+  // live here (G11 — the active model was otherwise invisible on this
+  // screen after a switch from the menu).
+  const sessionId = useChatStore((s) => s.sessionId);
+  const sessions = useChatStore((s) => s.sessions);
   const connection = useChatStore((s) => s.connection);
   const sending = useChatStore((s) => s.sending);
   const loadSession = useChatStore((s) => s.loadSession);
@@ -66,10 +71,10 @@ export default function ChatRoute() {
   const retry = useChatStore((s) => s.retry);
   const regenerate = useChatStore((s) => s.regenerate);
   const newConversation = useChatStore((s) => s.newConversation);
-  // ---- G3: per-message actions -----------------------------------------
   const startEdit = useChatStore((s) => s.startEdit);
   const editingTurnId = useChatStore((s) => s.editingTurnId);
   const cancelEdit = useChatStore((s) => s.cancelEdit);
+  const turnStartedAt = useChatStore((s) => s.turnStartedAt);
   const setActiveModel = useModelStore((s) => s.setActiveModel);
   const setActiveRemoteApi = useModelStore((s) => s.setActiveRemoteApi);
   const allModels = useModelStore((s) => s.models);
@@ -97,6 +102,19 @@ export default function ChatRoute() {
     },
     [menuModels, setActiveModel, setActiveRemoteApi],
   );
+  const activeModelLabel = useMemo(() => {
+    const m = menuModels.find((x) => x.active);
+    if (m === undefined) return null;
+    // Same `name (host)` shape the menus use. Dropping the host here
+    // would reintroduce the exact ambiguity G11 exists to remove: two
+    // providers offering "qwen" would be indistinguishable in the one
+    // place whose job is saying which model is answering.
+    return m.host === undefined ? m.name : `${m.name} (${m.host})`;
+  }, [menuModels]);
+  const activeSessionTitle = useMemo(
+    () => sessions.find((s) => s.id === sessionId)?.title ?? null,
+    [sessions, sessionId],
+  );
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -123,11 +141,13 @@ export default function ChatRoute() {
 
   // PocketPal parity: the composer is always visible. With no model the send
   // button disables and the field's placeholder names it. There is
-  // deliberately NO in-composer prompt or button: the models screen is reached
-  // from the header wordmark, and the empty thread has its own card with a
-  // button. `ready` is only the transport health check; the engine-accurate
-  // gate (useModelReady) is what the composer's own affordances key off, inside
-  // MessageInput. Do not confuse the two when editing either side.
+  // deliberately NO in-composer prompt or button: the models screen is
+  // reached from the header title, which names the conversation and the
+  // model answering it, and the empty thread has its own card with a
+  // button. `ready` is only the transport health check; the
+  // engine-accurate gate (useModelReady) is what the composer's own
+  // affordances key off, inside MessageInput. Do not confuse the two
+  // when editing either side.
   const ready = connection === "up";
   // The empty placeholder ("Activate Model To Get Started" / "No Models
   // Available") is NOT scroll content, despite pocketpal-ai putting it in
@@ -258,10 +278,17 @@ export default function ChatRoute() {
         </View>
         <Pressable
           onPress={() => router.navigate("/models")}
-          className="flex-1"
+          className="flex-1 items-center"
           accessibilityRole="button"
-          accessibilityLabel="Open models"
+          accessibilityLabel={
+            activeModelLabel === null ? "Open models" : `Open models — ${activeModelLabel}`
+          }
         >
+          {/* Two lines, like PocketPal's ChatHeaderTitle: the conversation,
+              then the model answering it. Without the second line, a model
+              switched from the menu was invisible until the answer came
+              back wrong. The wordmark only stands in until a session
+              exists, so an unsent chat still reads as the app's own. */}
           <Text
             numberOfLines={1}
             // Capped like ScreenHeader's title: DESIGN pins the
@@ -269,8 +296,17 @@ export default function ChatRoute() {
             maxFontSizeMultiplier={1.5}
             className="text-center font-sans-semibold text-title text-primary-text"
           >
-            {APP_NAME}
+            {activeSessionTitle ?? APP_NAME}
           </Text>
+          {activeModelLabel !== null && (
+            <Text
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.5}
+              className="text-center font-sans text-caption text-secondary-text"
+            >
+              {activeModelLabel}
+            </Text>
+          )}
         </Pressable>
         <View className="w-36 flex-row items-center justify-end">
           {/* Pen (pocketpal's reset-button) leads, the kebab trails —
@@ -363,7 +399,7 @@ export default function ChatRoute() {
               row.kind === "date" ? (
                 <DateHeader label={row.label} />
               ) : row.kind === "pending" ? (
-                <PendingIndicator />
+                <PendingIndicator startedAt={turnStartedAt} />
               ) : (
                 <MessageListItem
                   row={row}

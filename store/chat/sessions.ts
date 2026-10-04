@@ -138,6 +138,7 @@ export function createSessionsSlice(
         sessionId: null,
         messages: [],
         sending: false,
+        turnStartedAt: null,
         draft: await readDraftFor(ctx, null),
       });
     },
@@ -178,6 +179,7 @@ export function createSessionsSlice(
           sessionId: null,
           messages: [],
           sending: false,
+          turnStartedAt: null,
           draft: await readDraftFor(ctx, null),
         });
       }
@@ -210,6 +212,7 @@ export function createSessionsSlice(
       messages: toMessages(turns),
       draft: await readDraftFor(ctx, copyId),
       sending: false,
+      turnStartedAt: null,
     });
     await quiet(get().refreshSessions());
     return true;

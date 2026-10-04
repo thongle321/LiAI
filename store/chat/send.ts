@@ -22,6 +22,7 @@ export function createSendSlice(
 ): Pick<
   ChatState,
   | "sending"
+  | "turnStartedAt"
   | "send"
   | "stop"
   | "retry"
@@ -76,6 +77,7 @@ export function createSendSlice(
     // send/retry/regenerate funnels through here, so this is the one
     // place that has to know a turn started.
     ctx.keepAwake(true);
+    set({ turnStartedAt: Date.now() });
     if (opts.clearOnFirst) {
       updateBubble(opts.assistantId, {
         text: "",
@@ -124,7 +126,7 @@ export function createSendSlice(
         ...(outcome.outcome !== undefined ? { outcome: outcome.outcome } : {}),
       });
       adoptSession(outcome.sessionId);
-      set({ sending: false });
+      set({ sending: false, turnStartedAt: null });
       // Released with the turn. The `gen` guard above means a superseded
       // run never reaches this, so a NEW turn's lock is never stomped.
       ctx.keepAwake(false);
@@ -136,7 +138,7 @@ export function createSendSlice(
         streaming: false,
         error: llmError(message),
       });
-      set({ sending: false });
+      set({ sending: false, turnStartedAt: null });
       ctx.keepAwake(false);
     }
   }
@@ -158,6 +160,7 @@ export function createSendSlice(
 
   return {
     sending: false,
+    turnStartedAt: null,
     editingTurnId: null,
 
     startEdit: (messageId: string): boolean => {
@@ -198,6 +201,7 @@ export function createSendSlice(
       ctx.keepAwake(false);
       set((s) => ({
         sending: false,
+        turnStartedAt: null,
         messages: s.messages.map((m) =>
           m.streaming === true ? { ...m, streaming: false, at: Date.now() } : m,
         ),

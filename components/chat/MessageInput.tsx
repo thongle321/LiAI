@@ -34,7 +34,11 @@ import { useModelStore } from "../../store/modelStore";
 import { mergeDictation, VOICE_LISTEN_OPTS } from "../../lib/voiceListen.ts";
 import { ensureMicAccess } from "../../lib/micAccess.ts";
 import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../../lib/voiceStatus.ts";
-import { pickImage, type ImageSource } from "../../lib/chat/attachments.ts";
+import {
+  MAX_IMAGES,
+  pickImages,
+  type ImageSource,
+} from "../../lib/chat/attachments.ts";
 import { usePressFeedback } from "../../lib/motion.ts";
 import { useKeyboardLift } from "../../hooks/useKeyboardLift.ts";
 
@@ -50,7 +54,7 @@ export function MessageInput({
   sending: boolean;
   /** False with no loaded model: send disables (PocketPal parity). */
   ready: boolean;
-  onSend: (text: string, image?: string) => Promise<boolean>;
+  onSend: (text: string, images?: string[]) => Promise<boolean>;
   /** Where the caller wants this box to sit. The composer floats above the
    *  keyboard, so the chat route passes `absolute inset-x-0 bottom-0`. Note this
    *  component is the chat composer and not a generic input: the keyboard
@@ -97,9 +101,10 @@ export function MessageInput({
   if (!modelReady) thinkingHint = "Load a model to use thinking";
   const stop = useChatStore((s) => s.stop);
   const [plusOpen, setPlusOpen] = useState(false);
-  // One attached photo per turn (the local turn takes a single data-uri);
-  // text stays required — blank messages are rejected before the run.
-  const [attached, setAttached] = useState<string | null>(null);
+  // Photos attached to the NEXT message (G8: up to MAX_IMAGES). The camera
+  // adds one, the gallery several; text stays required — blank messages are
+  // rejected before the run.
+  const [attached, setAttached] = useState<string[]>([]);
   const [attachIssue, setAttachIssue] = useState<string | null>(null);
   // Dictation: mic fills the draft, the user presses Send. Interim
   // updates replace the dictated tail (draftBase keeps typed text).
@@ -252,12 +257,14 @@ export function MessageInput({
     // Android-only symptom: iOS does not report `background` for a picker.
     const resume = suspendBackgroundRelease();
     try {
-      const uri = await pickImage(source);
-      if (uri === null) {
+      const picked = await pickImages(source);
+      if (picked.length === 0) {
         setAttachIssue("Couldn't attach that photo — try again.");
         return;
       }
-      setAttached(uri);
+      // Append, and cap here too: picking again is additive, so without
+      // this the total would creep past MAX_IMAGES across two picks.
+      setAttached((current) => [...current, ...picked].slice(0, MAX_IMAGES));
     } finally {
       resume();
     }
@@ -268,8 +275,8 @@ export function MessageInput({
     // only stop an active dictate before sending.
     if (listening) safeStopDictation();
     // The store clears the draft once the text lives in its bubble.
-    await onSend(draft, attached ?? undefined);
-    setAttached(null);
+    await onSend(draft, attached.length > 0 ? attached : undefined);
+    setAttached([]);
   }
 
   return (
@@ -317,27 +324,39 @@ export function MessageInput({
           {attachIssue}
         </Text>
       )}
-      {attached !== null && (
+      {attached.length > 0 && (
         // Mist, not Clean White: this row sits INSIDE the white field now, and
         // the three-plane rule is "a track inside a card is mist on white". It
         // was a white card on the Cool Paper bar before the collapse.
-        <View className="mx-4 mb-2 flex-row items-center gap-2 rounded-lg bg-surface-2 p-2">
-          <RNImage source={{ uri: attached }} className="h-14 w-14 rounded" />
-          <Text className="flex-1 font-sans text-xs text-secondary-text">
-            Attached — sent with your message
+        //
+        // Per-image remove, as pocketpal's preview row does. Wrapping rather
+        // than a horizontal ScrollView: five thumbs fit in a bounded box, and
+        // a nested scroll inside the composer is a fight with the keyboard
+        // lift for no gain.
+        <View className="mx-4 mb-2 rounded-lg bg-surface-2 p-2">
+          <View className="flex-row flex-wrap items-center gap-2">
+            {attached.map((uri, i) => (
+              <View key={`${i}-${uri.length}`} className="relative">
+                <RNImage source={{ uri }} className="h-14 w-14 rounded" />
+                <Pressable
+                  onPress={() => setAttached((c) => c.filter((_, j) => j !== i))}
+                  className="absolute -right-2 -top-2 h-12 w-12 items-center justify-center"
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove photo ${i + 1} of ${attached.length}`}
+                  hitSlop={4}
+                >
+                  <View className="h-5 w-5 items-center justify-center rounded-full bg-surface-1">
+                    <X size={12} color={colors.primaryText} />
+                  </View>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+          <Text className="mt-1 font-sans text-xs text-secondary-text">
+            {attached.length === 1
+              ? "1 photo — sent with your message"
+              : `${attached.length} photos — sent with your message`}
           </Text>
-          <Animated.View style={plusPress.animatedStyle}>
-            <Pressable
-              onPress={() => setAttached(null)}
-              onPressIn={plusPress.onPressIn}
-              onPressOut={plusPress.onPressOut}
-              className="h-12 w-12 items-center justify-center"
-              accessibilityRole="button"
-              accessibilityLabel="Remove attachment"
-            >
-              <X size={18} color={colors.secondaryText} />
-            </Pressable>
-          </Animated.View>
         </View>
       )}
 {/* IN FLOW, on purpose. The edit bar belongs to the field's state and

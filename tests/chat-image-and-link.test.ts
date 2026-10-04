@@ -36,19 +36,20 @@ test("G15: the close control meets the touch-target floor", () => {
 });
 
 test("G15: tapping a message image opens it", () => {
-  assert.match(row, /setEnlarged\(message\.image \?\? null\)/, "tap sets the uri");
+  // One Pressable per photo (G8 allows several), each opening the viewer.
+  assert.match(row, /setEnlarged\(uri\)/, "tap sets the uri");
   assert.match(row, /<ImageViewer uri=\{enlarged\}/, "and the viewer is mounted");
 });
 
 test("G15: the image stays OUT of the long-press menu", () => {
-  // Tap-to-enlarge only works because the image is not wrapped by
-  // withMenu. Move it inside and the menu claims the gesture, or a
+  // Tap-to-enlarge only works because the images are not wrapped by
+  // withMenu. Move them inside and the menu claims the gesture, or a
   // long-press on the photo does nothing at all.
-  const imageAt = row.indexOf("source={{ uri: message.image }}");
+  const imageAt = row.indexOf("source={{ uri }}");
   const menuAt = row.indexOf("{withMenu(");
-  assert.ok(imageAt > -1, "the image renders");
+  assert.ok(imageAt > -1, "the images render");
   assert.ok(menuAt > -1, "the bubble goes through the menu");
-  assert.ok(imageAt < menuAt, "the image precedes the menu wrapper");
+  assert.ok(imageAt < menuAt, "the images precede the menu wrapper");
 });
 
 test("G16: the prefill reads ?message= and fills once", () => {

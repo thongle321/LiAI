@@ -122,19 +122,23 @@ export function MessageListItem({
     return (
       <>
         <Animated.View entering={entering} exiting={exiting} className="my-1 max-w-[80%] self-end items-end">
-          {message.image !== undefined && (
-            <Pressable
-              onPress={() => setEnlarged(message.image ?? null)}
-              className="mb-1"
-              accessibilityRole="button"
-              accessibilityLabel="Enlarge attached photo"
-              accessibilityHint="Opens the photo full screen"
-            >
-              <RNImage
-                source={{ uri: message.image }}
-                className="w-40 h-[120px] rounded-xl"
-              />
-            </Pressable>
+{message.images !== undefined && message.images.length > 0 && (
+            // G8: one row of up to five, each independently tappable. Keyed
+            // by position plus length: the list only ever shrinks, so a
+            // content hash would be a re-render cost for nothing.
+            <View className="mb-1 flex-row flex-wrap gap-1">
+              {message.images.map((uri, i) => (
+                <Pressable
+                    key={`${i}-${uri.length}`}
+                    onPress={() => setEnlarged(uri)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Enlarge attached photo"
+                    accessibilityHint="Opens the photo full screen"
+                >
+                    <RNImage source={{ uri }} className="h-[120px] w-40 rounded-xl" />
+                </Pressable>
+              ))}
+            </View>
           )}
           {withMenu(
             <View

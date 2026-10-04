@@ -15,7 +15,8 @@ export type ChatGet = StoreApi<ChatState>["getState"];
 
 export interface TurnPaths {
   sessionId: string | null;
-  image?: string;
+  /** Photos for this turn, as data-uris (G8: up to MAX_IMAGES). */
+  images?: string[];
   /** Current bubbles for agent context (user/assistant texts). */
   history: ChatMessage[];
   /** Re-answer: skip the user append (question already stored). */
@@ -112,7 +113,7 @@ export interface ChatState {
   persistDraft: () => Promise<void>;
   loadSession: () => Promise<void>;
   checkHealth: () => Promise<void>;
-  send: (text: string, image?: string) => Promise<boolean>;
+  send: (text: string, images?: string[]) => Promise<boolean>;
   /** Stop the live reply; the partial text stays in its bubble. */
   stop: () => void;
   /** Free the loaded model from memory (Unload); the next Load reloads. */

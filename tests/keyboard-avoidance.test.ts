@@ -420,9 +420,13 @@ describe("keyboard avoidance", () => {
 
     assert.match(
       field,
-      /mx-4 mb-2 flex-row items-center gap-2 rounded-lg bg-surface-2/,
-      "the attach preview is a row inside the field, and Mist on white",
+      /mx-4 mb-2 rounded-lg bg-surface-2/,
+      "the attach preview is a box inside the field, and Mist on white",
     );
+    // G8 moved the row onto an inner wrapping view (up to five thumbs), so
+    // the flex lives one level down now. The in-flow property is unchanged
+    // and is what the assertion below actually protects.
+    assert.match(field, /flex-row flex-wrap items-center gap-2/);
     // Being *written* inside the field is not enough: an `absolute` preview
     // would still be out of flow, still overlay the newest message, and still
     // be missing from the field's measured height. Proved by mutation — the

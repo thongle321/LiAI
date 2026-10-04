@@ -121,10 +121,17 @@ export function createTurnRunner(deps: TurnDeps) {
     const thinking = await deps.getThinking?.().catch(() => undefined);
     const jinja = await deps.getJinja?.().catch(() => undefined);
     const sampler = await deps.getSampler?.(sessionId).catch(() => null);
+// G8: every attached photo becomes a media path. One that fails to
+    // save is dropped rather than failing the turn -- the text still went,
+    // and losing a photo is better than losing the message.
     let imagePaths: string[] | undefined;
-    if (paths.image) {
-      const saved = await deps.saveImage(paths.image).catch(() => null);
-      if (saved) imagePaths = [saved];
+    if (paths.images !== undefined && paths.images.length > 0) {
+      const saved: string[] = [];
+      for (const dataUri of paths.images) {
+            const path = await deps.saveImage(dataUri).catch(() => null);
+            if (path !== null) saved.push(path);
+      }
+      if (saved.length > 0) imagePaths = saved;
     }
 
     const result = await runLocalAgent({

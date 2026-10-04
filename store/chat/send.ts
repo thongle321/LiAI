@@ -85,7 +85,8 @@ export function createSendSlice(
     userId?: string;
     text: string;
     sessionId: string | null;
-    image?: string;
+    /** Photos for this turn (G8). */
+    images?: string[];
     history: ChatMessage[];
     retry?: boolean;
     clearOnFirst: boolean;
@@ -118,8 +119,8 @@ export function createSendSlice(
     // The guard sits HERE, not in each caller: send, retry, regenerate and
     // edit all route through runLocal, so one check covers every path and
     // none of them can drift into disagreeing about it.
-    const image = multimodalAvailable() ? opts.image : undefined;
-    if (opts.image !== undefined && image === undefined) {
+    const images = multimodalAvailable() ? opts.images : undefined;
+    if (opts.images !== undefined && opts.images.length > 0 && images === undefined) {
       set({
         chatWarning: {
           message: MULTIMODAL_WARNING,
@@ -135,7 +136,7 @@ export function createSendSlice(
         opts.text,
         {
           sessionId: opts.sessionId,
-          ...(image !== undefined ? { image } : {}),
+          ...(images !== undefined ? { images } : {}),
           history: opts.history,
           ...(opts.retry ? { retry: true } : {}),
           // The bubble ids ARE the row ids: minted up front so there is
@@ -251,7 +252,7 @@ export function createSendSlice(
       }));
     },
 
-    send: async (text: string, image?: string) => {
+    send: async (text: string, images?: string[]) => {
       const trimmed = text.trim();
       if (trimmed === "" || get().sending) return false;
       const sid = get().sessionId;
@@ -299,7 +300,7 @@ export function createSendSlice(
             role: "user",
             text: trimmed,
             at: Date.now(),
-            ...(image !== undefined ? { image } : {}),
+            ...(images !== undefined ? { images } : {}),
           },
           { id: assistantId, role: "assistant", text: "", at: Date.now(), streaming: true },
         ],
@@ -309,7 +310,7 @@ export function createSendSlice(
         userId,
         text: trimmed,
         sessionId: sid,
-        ...(image !== undefined ? { image } : {}),
+        ...(images !== undefined ? { images } : {}),
         history,
         clearOnFirst: false,
       });
@@ -346,7 +347,7 @@ export function createSendSlice(
           assistantId,
           text: target.text,
           sessionId: sid,
-          ...(target.image !== undefined ? { image: target.image } : {}),
+          ...(target.images !== undefined ? { images: target.images } : {}),
           history,
           retry: true,
           clearOnFirst: false,
@@ -363,7 +364,7 @@ export function createSendSlice(
         assistantId: target.id,
         text: question.text,
         sessionId: sid,
-        ...(question.image !== undefined ? { image: question.image } : {}),
+        ...(question.images !== undefined ? { images: question.images } : {}),
         history: get().messages.filter((m) => m.id !== target.id),
         retry: true,
         clearOnFirst: true,
@@ -405,7 +406,7 @@ export function createSendSlice(
           assistantId: target.id,
           text: question.text,
           sessionId: sid,
-          ...(question.image !== undefined ? { image: question.image } : {}),
+          ...(question.images !== undefined ? { images: question.images } : {}),
           history: messages.filter((m) => m.id !== target.id),
           retry: true,
           clearOnFirst: true,
@@ -438,7 +439,7 @@ export function createSendSlice(
             role: "user",
             text: question.text,
             at: question.at,
-            ...(question.image !== undefined ? { image: question.image } : {}),
+            ...(question.images !== undefined ? { images: question.images } : {}),
           },
           // The bubble keeps its id, so the turn stays addressable across
           // the rewrite.
@@ -450,7 +451,7 @@ export function createSendSlice(
         userId: question.id,
         text: question.text,
         sessionId: sid,
-        ...(question.image !== undefined ? { image: question.image } : {}),
+        ...(question.images !== undefined ? { images: question.images } : {}),
         history: before,
         clearOnFirst: false,
       });

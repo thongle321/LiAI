@@ -278,7 +278,7 @@ Status key: **Present** / **Partial** / **Missing**.
 | **Thinking toggle pill / effort cycle in the composer** | **Missing** | `useInference` has `thinkingEnabled` and `setThinkingEnabled` (`store/inference.ts:49,112,332`) and it threads into the turn (`store/chat/index.ts:188-192`, `lib/chat/turn.ts:139-141`), but there is **no control in the chat UI** — `MessageInput.tsx`'s control row has only plus / field / mic / send-or-stop (`:344-405`). The only place it can be changed is the Settings screen. And there is no graded-effort concept anywhere (`reasoning_effort` has zero hits outside this doc). |
 | Model-aware placeholder | Present | `MessageInput.tsx:196-207`, pocketpal's strings verbatim. |
 | Image attach: camera + gallery | Present | `MessageInput.tsx:222-232`, `:305-330`; `lib/chat/attachments.ts`. |
-| **Multi-image attach (up to 5)** | **Missing** | `MessageInput.tsx:80` holds a single `attached: string \| null`; `lib/chat/turn.ts:124-127` builds at most one `imagePaths` entry; `types/chat.ts:45` has a single `image?: string`. `pickImage` returns one URI. |
+| **Multi-image attach (up to 5)** | **SHIPPED** | `lib/chat/attachments.ts` gained `pickImages` (returns up to `MAX_IMAGES` = pocketpal's `selectionLimit`); `ChatMessage.images`, `TurnPaths.images` and `send(text, images?)` are arrays; `lib/chat/turn.ts` maps every photo to a media path and drops one that fails to save rather than failing the turn; the composer shows a wrapping preview strip with per-image ✕. The bound is enforced at our seam, not trusted to the OS — `selectionLimit` is advisory. |
 | **Auto-release suspension around the picker** | **Missing** | pocketpal wraps camera/gallery in `disableAutoRelease` (`ChatInput.tsx:265-276`, `:326-349`) so a mid-pick model release can't happen. We have `hooks/useEngineOffload.ts` but the attach path never calls it — an Android model released between opening and returning from the picker would break the turn that follows. |
 | Edit mode (edit a sent message, rewind history) | **Missing** | No `isEditMode`, no `editingMessageId`, no `removeMessagesFromId` equivalent. `store/chat/send.ts` `regenerate` (`store/chat/send.ts:200-241`) pops only the last assistant turn (`popLastAssistant`), it cannot truncate an arbitrary point. |
 | Composer height driving three consumers | Present | `chat.tsx:141-153` measures once; consumed by the list padding, the jump overlay and the overlay row. |
@@ -432,7 +432,7 @@ copy and no action (`MessageListItem.tsx:57-73`). **Consequence:** recoverable f
 search key, multimodal on a text-only model, a transient engine fault) are indistinguishable
 from fatal ones, and the user is never offered the retry or the fix.
 
-**G8 — Multi-image attachment (up to 5): MISSING.**
+**G8 — Multi-image attachment (up to 5): SHIPPED.**
 `ChatInput.tsx:320` (`selectionLimit: 5`), preview strip at `:417-441`, and array content at
 `useChatSession.ts:74-102`. Ours is structurally single-image: `MessageInput.tsx:80` holds one
 `string | null`, `types/chat.ts:45` has one `image?`, `lib/chat/turn.ts:124-127` builds at most

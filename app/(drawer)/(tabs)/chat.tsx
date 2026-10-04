@@ -523,7 +523,7 @@ export default function ChatRoute() {
         ready={ready}
         editing={editingTurnId !== null}
         onCancelEdit={cancelEdit}
-        onSend={(text, image) => send(text, image)}
+        onSend={(text, images) => send(text, images)}
         onHeightChange={handleComposerHeight}
       />
       {/* Composer overlays: the chrome that is NOT part of the field and so

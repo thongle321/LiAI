@@ -840,7 +840,9 @@ describe("multimodal warning (G12)", () => {
       getStore: async () => fakeSessionStore([]).store,
       runTurn,
     });
-    await useStore.getState().send("what is this?", "data:image/jpeg;base64,AAAA");
+    await useStore.getState().send("what is this?", [
+      "data:image/jpeg;base64,AAAA",
+    ]);
 
     assert.equal(calls.texts[0], "what is this?", "the text still went out");
     assert.equal(
@@ -875,7 +877,7 @@ describe("multimodal warning (G12)", () => {
     const src = readFileSync("store/chat/send.ts", "utf8");
     assert.match(
       src,
-      /const image = multimodalAvailable\(\) \? opts\.image : undefined;/,
+      /const images = multimodalAvailable\(\) \? opts\.images : undefined;/,
     );
     // Exactly one place decides, so it cannot be bypassed downstream.
     assert.equal(

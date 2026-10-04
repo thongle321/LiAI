@@ -165,7 +165,7 @@ export function useVisionTurn(
       waited += 1;
     }
     const before = useChatStore.getState().messages.length;
-    const ok = await send(said, dataUri);
+    const ok = await send(said, [dataUri]);
     if (!aliveRef.current) return;
     if (!ok) {
       setIssue("Couldn't send that. Try again.");

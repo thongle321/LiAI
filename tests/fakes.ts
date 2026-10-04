@@ -205,10 +205,10 @@ export interface ScriptedTurn {
 export interface FakeTurnCalls {
   texts: string[];
   sessions: (string | null)[];
-  /** The image actually handed to the engine, or undefined. G12's whole
+  /** The images actually handed to the engine, or undefined. G12's whole
    *  claim is about what the MODEL receives, not what the user attached,
    *  so it has to be observable here. */
-  images: (string | undefined)[];
+  images: (string[] | undefined)[];
 }
 
 /** Scripted TurnRunner: shifts one outcome per call, records inputs. */
@@ -221,7 +221,7 @@ export function fakeRunTurn(script: ScriptedTurn[]): {
   const runTurn: TurnRunner = async (text, paths, onToken) => {
     calls.texts.push(text);
     calls.sessions.push(paths.sessionId);
-    calls.images.push(paths.image);
+    calls.images.push(paths.images);
     const next = queue.length > 0 ? queue.shift()! : {};
     if (next.fail !== undefined) throw new Error(next.fail);
     const reply = next.reply ?? `Echo ${text}`;
@@ -253,7 +253,7 @@ export function gatedRunTurn(): {
     new Promise((resolve) => {
       calls.texts.push(text);
       calls.sessions.push(paths.sessionId);
-      calls.images.push(paths.image);
+      calls.images.push(paths.images);
       release = (reply = `Echo ${text}`) => {
         onToken?.(reply);
         resolve({

@@ -169,7 +169,7 @@ describe("picker suspension (G14)", () => {
     assert.match(src, /const resume = suspendBackgroundRelease\(\)/);
     assert.match(
       src,
-      /try \{[\s\S]*?await pickImage\(source\)[\s\S]*?\} finally \{[\s\S]*?resume\(\);[\s\S]*?\}/,
+      /try \{[\s\S]*?await pickImages\(source\)[\s\S]*?\} finally \{[\s\S]*?resume\(\);[\s\S]*?\}/,
     );
   });
 });

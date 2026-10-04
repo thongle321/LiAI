@@ -5,7 +5,7 @@ import type { StoreApi } from "zustand";
 import type { SearchAuth } from "../../types/api.ts";
 import type { EngineSource } from "../../lib/inference/engine.ts";
 import type { SessionStore } from "../../lib/chat/session-store.ts";
-import type { AgentStep, ChatMessage, ChatSession } from "../../types/chat.ts";
+import type { AgentStep, ChatMessage, ChatSession, TurnOutcomeFlags } from "../../types/chat.ts";
 
 export type Connection = "unknown" | "up" | "down";
 
@@ -43,6 +43,7 @@ export interface TurnRunner {
     steps: AgentStep[];
     promptTokens: number;
     completionTokens: number;
+    outcome?: TurnOutcomeFlags;
   }>;
 }
 

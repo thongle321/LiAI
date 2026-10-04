@@ -35,6 +35,76 @@ includeThinkingInContext: false,
 });
 });
 
+describe("turn outcome flags", () => {
+it("round-trips contextFull and timings", async () => {
+    // The G1 banner and G4 footer read these off a RELOADED turn, so the
+    // round-trip is the feature: flags that only live in memory would make
+    // both surfaces vanish the moment the app restarts.
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, {
+      role: "assistant",
+      content: "cut off",
+      outcome: {
+        contextFull: true,
+        timings: { promptMs: 120, tokensPerSecond: 25, msPerToken: 40 },
+      },
+    });
+    assert.deepEqual((await store.get(id))?.[0].outcome, {
+      contextFull: true,
+      timings: { promptMs: 120, tokensPerSecond: 25, msPerToken: 40 },
+    });
+  });
+
+  it("round-trips interrupted on its own", async () => {
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, {
+      role: "assistant",
+      content: "partial",
+      outcome: { interrupted: true },
+    });
+    assert.deepEqual((await store.get(id))?.[0].outcome, { interrupted: true });
+  });
+
+  it("omits outcome entirely when the engine reported nothing", async () => {
+    // No empty object left behind: an unflagged turn must not look like
+    // one that reported "nothing happened".
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, { role: "assistant", content: "fine" });
+    assert.equal("outcome" in ((await store.get(id))?.[0] ?? {}), false);
+  });
+
+  it("drops flags that were false, rather than storing them", async () => {
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, {
+      role: "assistant",
+      content: "x",
+      outcome: { contextFull: false, interrupted: false },
+    });
+    assert.equal((await store.get(id))?.[0].outcome, undefined);
+  });
+
+  it("keeps timings even when every figure is zero", async () => {
+    // A very fast turn legitimately measures 0; dropping it would hide
+    // that we DID measure.
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, {
+      role: "assistant",
+      content: "x",
+      outcome: { timings: { promptMs: 0, tokensPerSecond: 0, msPerToken: 0 } },
+    });
+    assert.deepEqual((await store.get(id))?.[0].outcome?.timings, {
+      promptMs: 0,
+      tokensPerSecond: 0,
+      msPerToken: 0,
+    });
+  });
+});
+
 it("round-trips reasoning on an assistant turn", async () => {
 const store = newStore();
 const id = await store.create();

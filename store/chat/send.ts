@@ -72,6 +72,9 @@ export function createSendSlice(
         reasoning: undefined,
         steps: undefined,
         usage: undefined,
+        // A rerun replaces the turn's ending: keeping the old flags would
+        // claim the new answer finished the way the old one did.
+        outcome: undefined,
       });
     }
     try {
@@ -108,6 +111,7 @@ export function createSendSlice(
           completionTokens: outcome.completionTokens,
           totalTokens: outcome.promptTokens + outcome.completionTokens,
         },
+        ...(outcome.outcome !== undefined ? { outcome: outcome.outcome } : {}),
       });
       adoptSession(outcome.sessionId);
       set({ sending: false });

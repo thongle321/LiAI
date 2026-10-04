@@ -14,6 +14,7 @@ import type {
   AgentStep,
   MessageUsage,
   SessionInfo,
+  TurnOutcomeFlags,
 } from "../../types/chat.ts";
 import type { SamplerParams } from "../inference/sampler.ts";
 
@@ -38,6 +39,10 @@ export interface StoredTurn {
   /** Tool calls behind this reply, in call order (`position` orders them:
    * the child table is an unordered map). */
   steps?: AgentStep[];
+  /** How the turn ENDED. Persisted so a reloaded conversation still knows
+   *  why a reply looks truncated — the G1 context banner and the G4 footer
+   *  both read this, and neither can work off live state alone. */
+  outcome?: TurnOutcomeFlags;
 }
 
 /** A stored turn AS READ BACK, carrying the row id it was persisted under.

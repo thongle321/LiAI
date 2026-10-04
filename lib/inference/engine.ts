@@ -8,6 +8,10 @@
 
 import { buildRemoteModelSpec } from "../models/remote-api.ts";
 import type { ModelSpec, RemoteApiProvider } from "../../types/models.ts";
+// The timings shape is a DOMAIN type, defined once in types/chat.ts and
+// shared: the engine projects it, the store persists it, the footer reads
+// it. Restating it here would be a second definition waiting to drift.
+import type { TurnTimings } from "../../types/chat.ts";
 import type { SamplerParams } from "./sampler.ts";
 
 /** Token deltas stream here; the runner feeds bubbles directly. */
@@ -47,19 +51,7 @@ export interface CompletionOutcome {
   interrupted?: boolean;
   /** Wall-clock figures for the turn footer. Absent when the engine does
    *  not report them (most remote endpoints do not). */
-  timings?: CompletionTimings;
-}
-
-/** The subset of timings worth showing a reader. Names are ours, not the
- *  engine's: `tokens_per_second` becomes `tokensPerSecond` so the footer
- *  reads one vocabulary regardless of which engine answered. */
-export interface CompletionTimings {
-  /** Time to first token, ms. */
-  promptMs: number;
-  /** Generation rate; 0 when too fast to measure. */
-  tokensPerSecond: number;
-  /** Per-token generation cost, ms. */
-  msPerToken: number;
+  timings?: TurnTimings;
 }
 
 /** One chat turn in the engine's wire shape (llama + OpenAI compatible). */

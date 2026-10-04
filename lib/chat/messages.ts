@@ -49,5 +49,8 @@ export function toMessages(turns: StoredMessage[]): ChatMessage[] {
       : {}),
     ...(turn.reasoning !== undefined ? { reasoning: turn.reasoning } : {}),
     ...(turn.usage !== undefined ? { usage: turn.usage } : {}),
+    // Carried straight through: a reloaded reply must still know how it
+    // ended, or the context banner and turn footer lose their subject.
+    ...(turn.outcome !== undefined ? { outcome: turn.outcome } : {}),
   }));
 }

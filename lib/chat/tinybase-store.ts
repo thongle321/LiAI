@@ -66,6 +66,14 @@ interface MessageRow {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+  /** How the turn ended. TinyBase has one column space per table, so the
+   *  flags and timings are FLAT siblings, exactly as `usage` already is —
+   *  not a nested object. */
+  contextFull?: boolean;
+  interrupted?: boolean;
+  promptMs?: number;
+  tokensPerSecond?: number;
+  msPerToken?: number;
 }
 
 function messageRowFrom(raw: unknown): MessageRow | null {
@@ -87,6 +95,15 @@ function messageRowFrom(raw: unknown): MessageRow | null {
     promptTokens: usage("promptTokens"),
     completionTokens: usage("completionTokens"),
     totalTokens: usage("totalTokens"),
+    ...(raw["contextFull"] === true ? { contextFull: true } : {}),
+    ...(raw["interrupted"] === true ? { interrupted: true } : {}),
+    ...(typeof raw["promptMs"] === "number"
+      ? {
+          promptMs: raw["promptMs"],
+          tokensPerSecond: num(raw["tokensPerSecond"]),
+          msPerToken: num(raw["msPerToken"]),
+        }
+      : {}),
   };
 }
 
@@ -177,6 +194,16 @@ export class TinyBaseSessionStore implements SessionStore {
             totalTokens: turn.usage.totalTokens,
           }
         : {}),
+      // Flat, like usage: TinyBase has no nested cell.
+      ...(turn.outcome?.contextFull === true ? { contextFull: true } : {}),
+      ...(turn.outcome?.interrupted === true ? { interrupted: true } : {}),
+      ...(turn.outcome?.timings !== undefined
+        ? {
+            promptMs: turn.outcome.timings.promptMs,
+            tokensPerSecond: turn.outcome.timings.tokensPerSecond,
+            msPerToken: turn.outcome.timings.msPerToken,
+          }
+        : {}),
     });
     for (const step of turn.steps ?? []) {
       this.store.setRow("toolRuns", step.id, {
@@ -202,6 +229,27 @@ export class TinyBaseSessionStore implements SessionStore {
       type: row.type,
       at: row.at,
       ...(row.reasoning !== undefined ? { reasoning: row.reasoning } : {}),
+      // Rebuilt as the nested shape the port declares, from the flat
+      // columns. Omitted entirely when the engine reported nothing, so an
+      // old row simply has no `outcome` key.
+      ...(row.contextFull !== undefined || row.interrupted !== undefined
+      || row.promptMs !== undefined
+        ? {
+            outcome: {
+              ...(row.contextFull !== undefined ? { contextFull: row.contextFull } : {}),
+              ...(row.interrupted !== undefined ? { interrupted: row.interrupted } : {}),
+              ...(row.promptMs !== undefined && row.promptMs !== null
+                ? {
+                    timings: {
+                      promptMs: row.promptMs,
+                      tokensPerSecond: row.tokensPerSecond ?? 0,
+                      msPerToken: row.msPerToken ?? 0,
+                    },
+                  }
+                : {}),
+            },
+          }
+        : {}),
       ...(row.promptTokens !== undefined &&
       row.completionTokens !== undefined &&
       row.totalTokens !== undefined

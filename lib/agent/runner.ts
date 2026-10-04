@@ -14,6 +14,7 @@ import type {
   ToolDefinition,
 } from "../inference/engine.ts";
 import type { SamplerParams } from "../inference/sampler.ts";
+import type { TurnOutcomeFlags } from "../../types/chat.ts";
 import { runTalent, type TalentSearchAuth } from "./registry.ts";
 
 export interface AgentStep {
@@ -41,6 +42,10 @@ export interface AgentResult {
   promptTokens: number;
   completionTokens: number;
   hitMaxTurns: boolean;
+  /** How the turn ended. Taken from the LAST engine turn: an earlier turn
+   *  filling the context is not how THIS answer finished, and OR-ing
+   *  every turn would mark a turn that recovered as failed. */
+  outcome?: TurnOutcomeFlags;
 }
 
 export interface AgentRunOptions {
@@ -99,6 +104,10 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
   let completionTokens = 0;
   let text = "";
   let reasoning = "";
+  // Function-scoped, not per-iteration: the outer catch returns from
+  // outside the loop, and the LAST turn's ending is what this answer's
+  // ending is.
+  let endFlags: TurnOutcomeFlags | undefined;
 
   onEvent({ type: "run_started" });
 
@@ -112,7 +121,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
               { role: "user", content: BUDGET_EXHAUSTED_NUDGE } as CompletionMessage,
             ]
           : messages;
-      let turnText = "";
+let turnText = "";
       let turnCalls: EngineToolCall[] = [];
       let outcome;
       try {
@@ -153,8 +162,18 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
         });
         return { text, steps, promptTokens, completionTokens, hitMaxTurns: false };
       }
-      promptTokens += outcome.promptTokens;
+promptTokens += outcome.promptTokens;
       completionTokens += outcome.completionTokens;
+      // The LAST turn's ending is this answer's ending. `hitMaxTurns` is
+      // tracked separately: a forced final turn is a truncation too, but
+      // of the tool loop rather than the context window, and the two mean
+      // different things to a reader.
+      endFlags = {
+        ...(outcome.contextFull !== undefined || outcome.interrupted !== undefined
+          ? { contextFull: outcome.contextFull, interrupted: outcome.interrupted }
+          : {}),
+        ...(outcome.timings !== undefined ? { timings: outcome.timings } : {}),
+      };
       // Outcome text wins (scripted engines); streamed tokens fill the gap.
       if (outcome.text) turnText = outcome.text;
       if (outcome.reasoning) reasoning = outcome.reasoning;
@@ -178,6 +197,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
           promptTokens,
           completionTokens,
           hitMaxTurns: forcedFinal,
+          ...(endFlags !== undefined ? { outcome: endFlags } : {}),
         };
       }
 
@@ -228,6 +248,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
       promptTokens,
       completionTokens,
       hitMaxTurns: false,
+      ...(endFlags !== undefined ? { outcome: endFlags } : {}),
     };
   }
 }

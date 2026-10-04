@@ -168,20 +168,110 @@ describe("bounded input, reported honestly", () => {
     assert.equal(r.skipped, 50, "the overflow is reported, not hidden");
   });
 
-  it("counts a turn whose reasoning/usage/steps it will not restore", () => {
-    // Silently discarding them while reporting skipped: 0 is the same
-    // class of mistake the module exists to prevent -- a restore that
-    // quietly loses data and claims it kept everything.
+  it("counts a turn whose reasoning/usage it will not restore", () => {
+    // Tool calls are NOT in this bucket any more -- ticket 04 restores them,
+    // because losing them is the bug the whole spec exists to fix.
     const r = parseImport(
       wrap([
         ok,
-        { ...ok, content: "rich", steps: [{ tool: "web_search" }], usage: { totalTokens: 5 } },
+        { ...ok, content: "rich", usage: { totalTokens: 5 } },
       ]),
     );
     assert.equal(r.ok, true);
     if (!r.ok) return;
     assert.equal(r.sessions[0].turns.length, 2, "both turns are still restored");
     assert.equal(r.skipped, 1, "and the lossy one is counted");
+  });
+});
+
+describe("tool calls survive a restore (G10 ticket 04)", () => {
+  const stepTurn = (extra: Record<string, unknown> = {}) => ({
+    ...ok,
+    role: "assistant",
+    steps: [{ id: "step-from-file", tool: "web_search", position: 0, result: "hits", ...extra }],
+  });
+
+  it("restores the tool call, keeping a recorded FAILURE a failure", () => {
+    const r = parseImport(wrap([ok, stepTurn({ ok: false })]));
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    const steps = r.sessions[0].turns[1].steps;
+    assert.ok(steps !== undefined && steps.length === 1, "the call came back");
+    assert.equal(steps[0].tool, "web_search");
+    assert.equal(
+      steps[0].ok,
+      false,
+      "dropping ok would silently repaint a failed call as successful",
+    );
+    assert.equal(r.skipped, 0, "restoring a tool call is not a partial restore");
+  });
+
+  it("keeps a successful call's ok true", () => {
+    const r = parseImport(wrap([ok, stepTurn({ ok: true })]));
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.equal(r.sessions[0].turns[1].steps?.[0].ok, true);
+  });
+
+  it("treats an ABSENT ok as unknown, not success and not failure", () => {
+    const r = parseImport(wrap([ok, stepTurn()]));
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.equal(
+      r.sessions[0].turns[1].steps?.[0].ok,
+      undefined,
+      "a backup predating the discriminant says neither",
+    );
+  });
+
+  it("MINTS step ids rather than trusting the file's", () => {
+    // step.id is the GLOBAL toolRuns row key, so a file-supplied id would
+    // let two imports of one backup share rows -- and let a hostile file
+    // name an existing row and overwrite another conversation's tool calls.
+    const text = wrap([ok, stepTurn()]);
+    const a = parseImport(text);
+    const b = parseImport(text);
+    assert.equal(a.ok && b.ok, true);
+    if (!a.ok || !b.ok) return;
+    const idA = a.sessions[0].turns[1].steps?.[0].id;
+    const idB = b.sessions[0].turns[1].steps?.[0].id;
+    assert.notEqual(idA, "step-from-file", "the file's id is not used");
+    assert.notEqual(idA, idB, "two imports must not collide on one row key");
+  });
+
+  it("carries the structured result the renderer needs", () => {
+    const r = parseImport(
+      wrap([ok, stepTurn({ data: { truncated: true } })]),
+    );
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.deepEqual(r.sessions[0].turns[1].steps?.[0].data, { truncated: true });
+  });
+
+  it("drops a malformed call but keeps the turn, and says so", () => {
+    const r = parseImport(
+      wrap([
+        ok,
+        { ...ok, role: "assistant", steps: [{ position: 0 }, "junk", stepTurn().steps![0]] },
+      ]),
+    );
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.equal(r.sessions[0].turns[1].steps?.length, 1, "the good call survived");
+    assert.equal(r.skipped, 2, "and both bad entries are counted");
+  });
+
+  it("bounds a runaway tool-call list", () => {
+    const steps = Array.from({ length: 200 }, (_, i) => ({
+      id: `s${i}`,
+      tool: "web_search",
+      position: i,
+    }));
+    const r = parseImport(wrap([{ ...ok, role: "assistant", steps }]));
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.ok((r.sessions[0].turns[0].steps?.length ?? 0) <= 50, "bounded");
+    assert.ok(r.skipped > 0, "the overflow is reported, not hidden");
   });
 });
 

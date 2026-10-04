@@ -30,6 +30,8 @@
  */
 
 import type { StoredTurn } from "./session-store.ts";
+import { newId } from "./messages.ts";
+import type { AgentStep } from "../../types/chat.ts";
 
 /** Bounds. Deliberately generous -- these exist to stop a hostile or
  *  corrupt file, not to second-guess a real backup. */
@@ -38,6 +40,8 @@ const MAX_TURNS_PER_SESSION = 2000;
 const MAX_TURNS_TOTAL = 10_000;
 const MAX_CONTENT_CHARS = 100_000;
 const MAX_TITLE_CHARS = 200;
+const MAX_STEPS_PER_TURN = 50;
+const MAX_TOOL_CHARS = 80;
 
 /** Only version 1 exists. A file from the future is refused rather than
  *  best-effort parsed: guessing at fields we do not know is how silent
@@ -75,6 +79,40 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+/** Rebuild one tool call, or null when it is unusable.
+ *
+ *  THE ID IS ALWAYS MINTED, NEVER READ. `step.id` is the TinyBase row key
+ *  for the toolRuns table (tinybase-store.ts writes `setRow("toolRuns",
+ *  step.id, …)`), and that table is GLOBAL, not scoped per conversation.
+ *  So an id taken from the file is not a display detail -- importing the
+ *  same backup twice would point both conversations at the SAME rows, and
+ *  a hostile file naming an existing row would overwrite another
+ *  conversation's tool calls. Same rule as turns, and for the same reason.
+ *
+ *  `ok` is preserved because it IS the record of a failure. Dropping it
+ *  would silently repaint a failed call as a successful one. */
+function toStep(value: unknown, position: number): AgentStep | null {
+  if (!isRecord(value)) return null;
+  const tool = str(value.tool, MAX_TOOL_CHARS);
+  if (tool === null || tool === "") return null;
+  // Position is the call order, and the store has no other ordering key.
+  // Fall back to the array position when the file omits it.
+  const at = typeof value.position === "number" && Number.isFinite(value.position)
+    ? value.position
+    : position;
+
+  const result = str(value.result, MAX_CONTENT_CHARS);
+  return {
+    id: newId(),
+    tool,
+    position: at,
+    ...(isRecord(value.input) ? { input: value.input } : {}),
+    ...(result !== null ? { result } : {}),
+    ...(typeof value.ok === "boolean" ? { ok: value.ok } : {}),
+    ...(isRecord(value.data) ? { data: value.data } : {}),
+  };
+}
+
 /** Rebuild one turn, or null when it is unusable. Note there is no
  *  `...(turn as StoredTurn)` anywhere in this file: the spread is what
  *  would smuggle an attacker-supplied `id` into the store.
@@ -87,7 +125,9 @@ function isRecord(v: unknown): v is Record<string, unknown> {
  *  would be the same class of mistake the module exists to avoid: a
  *  restore that quietly loses data and claims it kept everything. So they
  *  are counted and the user is told. */
-function toTurn(value: unknown): { turn: StoredTurn; droppedRich: boolean } | null {
+function toTurn(
+  value: unknown,
+): { turn: StoredTurn; droppedRich: boolean; droppedSteps: number } | null {
   if (!isRecord(value)) return null;
   if (value.role !== "user" && value.role !== "assistant") return null;
   const content = str(value.content, MAX_CONTENT_CHARS);
@@ -98,21 +138,40 @@ function toTurn(value: unknown): { turn: StoredTurn; droppedRich: boolean } | nu
   // dropping turns written before it existed.
   const type = value.type === "error" ? "error" : "text";
 
+  const droppedRich =
+    value.reasoning !== undefined ||
+    value.usage !== undefined ||
+    value.outcome !== undefined;
+
+  // Tool calls are RESTORED, not dropped -- they are the whole point of
+  // this spec. `ok` survives, so a failed call stays a failed call.
+  let droppedSteps = 0;
+  const rawSteps = value.steps;
+  const steps: AgentStep[] = [];
+  if (Array.isArray(rawSteps)) {
+    let skippedSteps = 0;
+    for (const [i, raw] of rawSteps.slice(0, MAX_STEPS_PER_TURN).entries()) {
+      const step = toStep(raw, i);
+      if (step === null) skippedSteps += 1;
+      else steps.push(step);
+    }
+    if (rawSteps.length > MAX_STEPS_PER_TURN) {
+      skippedSteps += rawSteps.length - MAX_STEPS_PER_TURN;
+    }
+    if (skippedSteps > 0) droppedSteps += skippedSteps;
+  }
+
   const turn: StoredTurn = {
     role: value.role,
     content,
     at: value.at,
     type,
   };
+  if (steps.length > 0) turn.steps = steps;
   // No image handling: `StoredTurn` has no image field, so export.ts
   // never writes one and an import cannot restore a photo that was never
   // in the file. Inventing one would be data the backup does not contain.
-  const droppedRich =
-    value.reasoning !== undefined ||
-    value.steps !== undefined ||
-    value.usage !== undefined ||
-    value.outcome !== undefined;
-  return { turn, droppedRich };
+  return { turn, droppedRich, droppedSteps };
 }
 
 /** One session, or null when even its shape is wrong. Turns inside are
@@ -136,6 +195,7 @@ function toSession(value: unknown): { session: ImportedSession; skipped: number 
     else {
       turns.push(turn.turn);
       if (turn.droppedRich) skipped += 1;
+      skipped += turn.droppedSteps;
     }
   }
   if (turns.length === 0) return null;

@@ -37,6 +37,7 @@ export function createSessionsSlice(
   | "renameSession"
   | "setPinned"
   | "refreshSessions"
+  | "deleteMessage"
 > {
   function cancelActive(): void {
     ctx.streamGen += 1;
@@ -218,5 +219,32 @@ export function createSessionsSlice(
   renameSession: (id: string, title: string) => patchSession(id, { title }),
 
   setPinned: (id: string, pinned: boolean) => patchSession(id, { pinned }),
+
+  deleteMessage: async (messageId: string) => {
+    // Deleting into a live turn would truncate the branch the engine is
+    // still writing into. The `messages` index is also the store's turn
+    // index (switchSession builds it with toMessages over store.get),
+    // so one index serves both.
+    if (get().sending) return false;
+    const index = get().messages.findIndex((m) => m.id === messageId);
+    if (index < 0) return false;
+    // Never delete the turn that is still streaming.
+    if (get().messages[index].streaming === true) return false;
+    // No session means nothing is persisted, so there is no branch to
+    // truncate — the bubbles are unsent state only.
+    const sid = get().sessionId;
+    if (sid === null) return false;
+    const store = await storeOf(ctx);
+    if (!store) return false;
+    try {
+      // Storage first: if the store refuses, in-memory state must not
+      // move, or a later load would resurrect the deleted turns.
+      if (!(await store.truncateFrom(sid, index))) return false;
+    } catch {
+      return false;
+    }
+    set((s) => ({ messages: s.messages.slice(0, index) }));
+    return true;
+  },
   };
 }

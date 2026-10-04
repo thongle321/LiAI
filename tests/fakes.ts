@@ -122,12 +122,29 @@ export function fakeSessionStore(
       // exists before this is called.
       if (row && row.title === "") row.title = title;
     },
-    popLastAssistant: async (id: string) => {
+popLastAssistant: async (id: string) => {
       const row = sessions.get(id);
       if (!row || row.turns.length === 0) return false;
       const last = row.turns[row.turns.length - 1];
       if (last.role !== "assistant") return false;
       row.turns.pop();
+      return true;
+    },
+    truncateFrom: async (id: string, turnIndex: number) => {
+      const row = sessions.get(id);
+      if (!row) return false;
+      // Same guards as the real store, so a test that passes here also
+      // passes there: an out-of-range index drops nothing.
+      if (
+        !Number.isInteger(turnIndex) ||
+        turnIndex < 0 ||
+        turnIndex >= row.turns.length
+      ) {
+        return false;
+      }
+      // The fake keeps `steps` inline on each turn, so splicing the tail
+      // takes the tool calls with it — no separate cascade needed here.
+      row.turns.splice(turnIndex);
       return true;
     },
     getDraft: async (sessionId) => drafts.get(draftSlot(sessionId)) ?? "",

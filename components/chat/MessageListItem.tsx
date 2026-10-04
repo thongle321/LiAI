@@ -30,17 +30,25 @@ import { MarkdownView } from "./MarkdownView.tsx";
 import { MessageActions } from "./MessageActions.tsx";
 import { LinkPreviewCard } from "./LinkPreview.tsx";
 import { ReasoningBlock } from "./ReasoningBlock.tsx";
+import { MessageMenu } from "./MessageMenu.tsx";
 
 export function MessageListItem({
   row,
   onRetry,
   onRegenerate,
+  onDelete,
+  sending,
 }: {
   /** One adapter row: message plus its group/avatar/status flags. */
   row: MessageRow;
   onRetry: () => void;
   /** Null for user bubbles (nothing to regenerate). */
   onRegenerate: (() => void) | null;
+  /** Deletes this turn and everything after it. */
+  onDelete: () => void;
+  /** A turn is running: the store refuses to truncate mid-turn, so the
+   *  menu shows Delete as disabled rather than offering a dead action. */
+  sending: boolean;
 }) {
   const { message, grouped, showAvatar, status } = row;
   const duration = MOTION_DURATION_MS;
@@ -79,11 +87,15 @@ export function MessageListItem({
             className="w-40 h-[120px] rounded-xl mb-1"
           />
         )}
-        <View className={`px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-br-sm"} bg-surface-3`}>
-          <Text className="font-sans text-body-lg text-primary-text">
-            {message.text}
-          </Text>
-        </View>
+        <MessageMenu text={message.text} settled={settled} disabled={sending} onDelete={onDelete}>
+          <View
+            className={`px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-br-sm"} bg-surface-3`}
+          >
+            <Text className="font-sans text-body-lg text-primary-text">
+              {message.text}
+            </Text>
+          </View>
+        </MessageMenu>
         <View className="w-full">
           <LinkPreviewCard text={message.text} />
         </View>
@@ -122,28 +134,32 @@ export function MessageListItem({
             autoCollapse={settled || message.text.trim() !== ""}
           />
         ) : null}
-        <View className={`border border-border bg-surface-1 px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-tl-sm"}`}>
-          <MarkdownView text={message.text} />
-          {settled && <LinkPreviewCard text={message.text} />}
-          {message.steps !== undefined && message.steps.length > 0 && (
-            // One settled chip style: a step is only ever written after
-            // the call finished, so the old "running" variant had no
-            // writer. The key is the row id, not the array index.
-            <View className="mt-2 flex-row flex-wrap items-center gap-2">
-              {message.steps.map((step) => (
-                <View
-                  key={step.id}
-                  className="flex-row items-center gap-1 rounded-full border border-border bg-surface-2 px-2 py-0.5"
-                >
-                  <Wrench size={11} color={colors.secondaryText} />
-                  <Text className="font-sans text-caption text-secondary-text">
-                    {step.tool}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
+        <MessageMenu text={message.text} settled={settled} disabled={sending} onDelete={onDelete}>
+          <View
+            className={`border border-border bg-surface-1 px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-tl-sm"}`}
+          >
+            <MarkdownView text={message.text} />
+            {settled && <LinkPreviewCard text={message.text} />}
+            {message.steps !== undefined && message.steps.length > 0 && (
+              // One settled chip style: a step is only ever written after
+              // the call finished, so the old "running" variant had no
+              // writer. The key is the row id, not the array index.
+              <View className="mt-2 flex-row flex-wrap items-center gap-2">
+                {message.steps.map((step) => (
+                  <View
+                    key={step.id}
+                    className="flex-row items-center gap-1 rounded-full border border-border bg-surface-2 px-2 py-0.5"
+                  >
+                    <Wrench size={11} color={colors.secondaryText} />
+                    <Text className="font-sans text-caption text-secondary-text">
+                      {step.tool}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        </MessageMenu>
         <Text className="mt-1 font-sans text-micro text-secondary-text">
           {settled && message.usage ? `${message.usage.totalTokens} tokens` : ""}
         </Text>

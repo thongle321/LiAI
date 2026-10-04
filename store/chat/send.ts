@@ -59,6 +59,10 @@ export function createSendSlice(
     clearOnFirst: boolean;
   }): Promise<void> {
     const gen = (ctx.streamGen += 1);
+    // Hold the screen awake for the life of the turn (audit G2). Every
+    // send/retry/regenerate funnels through here, so this is the one
+    // place that has to know a turn started.
+    ctx.keepAwake(true);
     if (opts.clearOnFirst) {
       updateBubble(opts.assistantId, {
         text: "",
@@ -100,6 +104,9 @@ export function createSendSlice(
       });
       adoptSession(outcome.sessionId);
       set({ sending: false });
+      // Released with the turn. The `gen` guard above means a superseded
+      // run never reaches this, so a NEW turn's lock is never stomped.
+      ctx.keepAwake(false);
       void get().refreshSessions();
     } catch (err) {
       if (gen !== ctx.streamGen) return;
@@ -109,6 +116,7 @@ export function createSendSlice(
         error: llmError(message),
       });
       set({ sending: false });
+      ctx.keepAwake(false);
     }
   }
 
@@ -136,6 +144,10 @@ export function createSendSlice(
       // The partial reply stays in its bubble as the turn's text.
       ctx.streamGen += 1;
       ctx.stopEngine();
+      // Drop the wake lock HERE, not when the aborted run unwinds: the
+      // engine teardown is exactly when the screen must not sleep, and
+      // the `gen` guard keeps the unwinding run from touching it again.
+      ctx.keepAwake(false);
       set((s) => ({
         sending: false,
         messages: s.messages.map((m) =>

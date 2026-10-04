@@ -68,6 +68,19 @@ export interface SessionStore {
   /** Drop the trailing assistant turn, for regenerate. False when the
    *  last turn is not an assistant turn. */
   popLastAssistant(sessionId: string): Promise<boolean>;
+  /** Drop the turn at `turnIndex` and everything after it, cascading to
+   *  those turns' tool calls. This is what edit-and-resend and
+   *  regenerate-from-the-middle need: re-running anything but the last
+   *  turn is meaningless unless the branch it sits on can be deleted.
+   *
+   *  `turnIndex` is the index into `get()`'s call order, so the caller
+   *  cannot drift from the store's own ordering. False when the session
+   *  does not exist or the index is out of range — an out-of-range index
+   *  drops nothing rather than guessing.
+   *
+   *  Deliberately additive: `popLastAssistant` stays for the last-turn
+   *  regenerate, which is cheaper and keeps its boolean contract. */
+  truncateFrom(sessionId: string, turnIndex: number): Promise<boolean>;
   /** Composer draft for a session, or "" when there is none. `null` is
    *  the slot for a conversation that has not been sent yet. */
   getDraft(sessionId: string | null): Promise<string>;

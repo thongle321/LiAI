@@ -302,6 +302,23 @@ export class TinyBaseSessionStore implements SessionStore {
     }
   }
 
+  async truncateFrom(sessionId: string, turnIndex: number): Promise<boolean> {
+    if (!this.store.hasRow("sessions", sessionId)) return false;
+    // Same ordering `get()` hands the caller, so the index cannot drift.
+    const ordered = this.rowsOf(sessionId).sort((a, b) => a.row.seq - b.row.seq);
+    // Out of range drops nothing rather than guessing at the caller's
+    // intent: a bad index is a bug to surface, not a conversation to
+    // silently destroy.
+    if (!Number.isInteger(turnIndex) || turnIndex < 0 || turnIndex >= ordered.length) {
+      return false;
+    }
+    for (const { id } of ordered.slice(turnIndex)) {
+      this.deleteStepsOf(id);
+      this.store.delRow("messages", id);
+    }
+    return true;
+  }
+
   async getDraft(sessionId: string | null): Promise<string> {
     return str(this.store.getCell("drafts", draftSlot(sessionId), "text"));
   }

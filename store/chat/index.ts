@@ -26,6 +26,7 @@ import {
 } from "../../lib/inference/deviceSelection.ts";
 import { createRemoteEngine } from "../../lib/inference/remote-engine.ts";
 import { createTurnRunner } from "../../lib/chat/turn.ts";
+import { holdScreen, releaseScreen } from "../../lib/chat/keep-awake.ts";
 import type { SessionStore } from "../../lib/chat/session-store.ts";
 
 /** Default BYOK resolver: consent-gated key from SecureStore, never KV.
@@ -284,9 +285,15 @@ export function createChatStore(deps?: ChatDeps) {
     stopEngine: () => {
       void getManager().stopActive();
     },
-    releaseEngine: () => {
+releaseEngine: () => {
       void getManager().releaseAll();
     },
+    keepAwake:
+      deps?.keepAwake ??
+      ((on: boolean) => {
+        if (on) void holdScreen();
+        else releaseScreen();
+      }),
     active: { handle: null },
     streamGen: 0,
   };

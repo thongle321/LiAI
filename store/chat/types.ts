@@ -43,6 +43,8 @@ export interface ChatDeps {
   getSearchAuth?: () => Promise<SearchAuth | null>;
   getEngineSource?: () => Promise<EngineSource | null>;
   runTurn?: TurnRunner;
+  /** Screen wake lock. Injected so tests need no native module. */
+  keepAwake?: (on: boolean) => void;
 }
 
 /** Per-factory mutable stream tracking (never in render state). */
@@ -55,6 +57,9 @@ export interface ChatCtx {
   stopEngine: () => void;
   /** Stop and free the loaded model (Unload). Drops the engine slot. */
   releaseEngine: () => void;
+  /** Hold the screen awake for the life of a turn; released on settle or
+   *  on Stop. Never throws. */
+  keepAwake: (on: boolean) => void;
   active: { handle: { cancel(): void } | null };
   streamGen: number;
 }
@@ -78,6 +83,10 @@ export interface ChatState {
   releaseEngine: () => void;
   retry: (messageId: string) => Promise<boolean>;
   regenerate: (messageId: string) => Promise<boolean>;
+  /** Drop a turn and everything after it, in state and in the store.
+   * False when the id is unknown, when no session exists yet (nothing is
+   * persisted to truncate), or while a turn is in flight. */
+  deleteMessage: (messageId: string) => Promise<boolean>;
   newConversation: () => Promise<void>;
   switchSession: (sessionId: string) => Promise<boolean>;
   deleteSession: (sessionId: string) => Promise<void>;

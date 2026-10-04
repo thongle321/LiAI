@@ -253,6 +253,99 @@ describe("popLastAssistant", () => {
   });
 });
 
+describe("truncateFrom", () => {
+  it("drops the turn at the index and everything after it", async () => {
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, { role: "user", content: "q1" });
+    await store.append(id, { role: "assistant", content: "a1" });
+    await store.append(id, { role: "user", content: "q2" });
+    await store.append(id, { role: "assistant", content: "a2" });
+    assert.equal(await store.truncateFrom(id, 1), true);
+    assert.deepEqual(
+      (await store.get(id))?.map((t) => t.content),
+      ["q1"],
+    );
+  });
+
+  it("keeps the turns before the index untouched", async () => {
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, { role: "user", content: "keep 1" });
+    await store.append(id, { role: "assistant", content: "keep 2" });
+    await store.append(id, { role: "user", content: "drop" });
+    await store.truncateFrom(id, 2);
+    assert.deepEqual(
+      (await store.get(id))?.map((t) => t.content),
+      ["keep 1", "keep 2"],
+    );
+  });
+
+  it("drops the tool calls of every turn it removed", async () => {
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, { role: "user", content: "q" });
+    await store.append(id, {
+      role: "assistant",
+      content: "with steps",
+      steps: [{ id: "s1", tool: "web_search", position: 0 }],
+    });
+    await store.append(id, {
+      role: "assistant",
+      content: "more steps",
+      steps: [{ id: "s2", tool: "read_url", position: 0 }],
+    });
+    await store.truncateFrom(id, 1);
+    const left = await store.get(id);
+    assert.equal(left?.length, 1);
+    // The surviving turn must not have inherited a removed turn's tool
+    // calls — that is what the deleteStepsOf cascade is there to stop.
+    assert.equal(left?.[0].steps, undefined);
+  });
+
+  it("can drop the whole conversation", async () => {
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, { role: "user", content: "q" });
+    assert.equal(await store.truncateFrom(id, 0), true);
+    assert.deepEqual(await store.get(id), []);
+  });
+
+  it("refuses an out-of-range index and drops nothing", async () => {
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, { role: "user", content: "q" });
+    await store.append(id, { role: "assistant", content: "a" });
+    assert.equal(await store.truncateFrom(id, 2), false);
+    assert.equal(await store.truncateFrom(id, -1), false);
+    assert.equal(await store.truncateFrom(id, 1.5), false);
+    assert.deepEqual(
+      (await store.get(id))?.map((t) => t.content),
+      ["q", "a"],
+    );
+  });
+
+  it("refuses on a missing session and on an empty one", async () => {
+    const store = newStore();
+    const id = await store.create();
+    assert.equal(await store.truncateFrom("ghost", 0), false);
+    assert.equal(await store.truncateFrom(id, 0), false);
+  });
+
+  it("leaves other sessions alone", async () => {
+    const store = newStore();
+    const a = await store.create();
+    const b = await store.create();
+    await store.append(a, { role: "user", content: "a1" });
+    await store.append(b, { role: "user", content: "b1" });
+    await store.truncateFrom(a, 0);
+    assert.deepEqual(
+      (await store.get(b))?.map((t) => t.content),
+      ["b1"],
+    );
+  });
+});
+
 describe("drafts", () => {
   const NEW = null;
 

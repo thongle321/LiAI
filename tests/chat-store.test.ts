@@ -448,3 +448,116 @@ describe("chat store turns", () => {
     assert.equal(down.getState().connection, "down");
   });
 });
+
+describe("chat store deleteMessage", () => {
+  /** A loaded conversation of three turns: q1 a1 q2. */
+  function loaded() {
+    const seeded = storeWith(
+      [
+        {
+          id: "s1",
+          title: "T",
+          turns: [
+            { role: "user", content: "q1", type: "text" },
+            { role: "assistant", content: "a1", type: "text" },
+            { role: "user", content: "q2", type: "text" },
+          ],
+        },
+      ],
+      "s1",
+    );
+    const useStore = createChatStore({ getStore: seeded.getStore, runTurn: seeded.runTurn });
+    return { useStore, store: seeded.store };
+  }
+
+  it("drops the message and everything after it, in state and in the store", async () => {
+    const { useStore, store } = loaded();
+    await useStore.getState().loadSession();
+    const firstId = useStore.getState().messages[0].id;
+    assert.equal(await useStore.getState().deleteMessage(firstId), true);
+    assert.deepEqual(useStore.getState().messages, []);
+    assert.deepEqual(
+      (await store.get("s1"))?.map((t) => t.content),
+      [],
+    );
+  });
+
+  it("keeps the turns before the deleted one", async () => {
+    const { useStore, store } = loaded();
+    await useStore.getState().loadSession();
+    const secondId = useStore.getState().messages[1].id;
+    assert.equal(await useStore.getState().deleteMessage(secondId), true);
+    assert.deepEqual(
+      useStore.getState().messages.map((m) => m.text),
+      ["q1"],
+    );
+    assert.deepEqual(
+      (await store.get("s1"))?.map((t) => t.content),
+      ["q1"],
+    );
+  });
+
+  it("refuses an unknown id", async () => {
+    const { useStore, store } = loaded();
+    await useStore.getState().loadSession();
+    assert.equal(await useStore.getState().deleteMessage("nope"), false);
+    assert.equal(useStore.getState().messages.length, 3);
+    assert.equal((await store.get("s1"))?.length, 3);
+  });
+
+  it("refuses with no session, since nothing is persisted yet", async () => {
+    const { getStore, runTurn } = storeWith([]);
+    const useStore = createChatStore({ getStore, runTurn });
+    // An unsent conversation has bubbles in state but no store rows.
+    useStore.setState({ messages: [{ id: "m1", role: "user", text: "hi", at: 1 }] });
+    assert.equal(await useStore.getState().deleteMessage("m1"), false);
+    assert.equal(useStore.getState().messages.length, 1);
+  });
+
+  it("refuses while a turn is in flight", async () => {
+    const gate = gatedRunTurn();
+    const seeded = storeWith(
+      [
+        {
+          id: "s1",
+          title: "T",
+          turns: [{ role: "user", content: "q1", type: "text" }],
+        },
+      ],
+      "s1",
+    );
+    const useStore = createChatStore({
+      getStore: seeded.getStore,
+      runTurn: gate.runTurn,
+    });
+    await useStore.getState().loadSession();
+    const first = useStore.getState().send("follow up");
+    const targetId = useStore.getState().messages[0].id;
+    assert.equal(await useStore.getState().deleteMessage(targetId), false);
+    gate.release("done");
+    await first;
+    // Untouched: the turn completed and both turns survived.
+    assert.equal(useStore.getState().messages.length, 3);
+  });
+
+  it("refuses the streaming turn itself", async () => {
+    const gate = gatedRunTurn();
+    const seeded = storeWith(
+      [{ id: "s1", title: "T", turns: [{ role: "user", content: "q1", type: "text" }] }],
+      "s1",
+    );
+    const useStore = createChatStore({ getStore: seeded.getStore, runTurn: gate.runTurn });
+    await useStore.getState().loadSession();
+    const first = useStore.getState().send("follow up");
+    // Found by predicate, not index: send appends BOTH the question and
+    // the assistant turn, so the streaming bubble is the last one and a
+    // hard-coded index would be off by one the moment the seed changes.
+    const streaming = useStore
+      .getState()
+      .messages.find((m) => m.streaming === true);
+    assert.ok(streaming, "the gated turn leaves a streaming bubble");
+    assert.equal(await useStore.getState().deleteMessage(streaming.id), false);
+    gate.release("done");
+    await first;
+  });
+});

@@ -51,6 +51,8 @@ import {
   ContextLadderSheet,
 } from "../../../components/chat/ContextFullBanner.tsx";
 import { fillPercent } from "../../../lib/chat/context-fill.ts";
+import { pickableModels } from "../../../lib/chat/models.ts";
+import { useModelReady } from "../../../hooks/useModelReady.ts";
 import { GenerationSettingsSheet } from "../../../components/chat/GenerationSettingsSheet.tsx";
 import { ChatMenu } from "../../../components/chat/ChatMenu.tsx";
 
@@ -64,6 +66,37 @@ export default function ChatRoute() {
   const retry = useChatStore((s) => s.retry);
   const regenerate = useChatStore((s) => s.regenerate);
   const newConversation = useChatStore((s) => s.newConversation);
+  // ---- G3: per-message actions -----------------------------------------
+  const startEdit = useChatStore((s) => s.startEdit);
+  const editingTurnId = useChatStore((s) => s.editingTurnId);
+  const cancelEdit = useChatStore((s) => s.cancelEdit);
+  const setActiveModel = useModelStore((s) => s.setActiveModel);
+  const setActiveRemoteApi = useModelStore((s) => s.setActiveRemoteApi);
+  const allModels = useModelStore((s) => s.models);
+  const remoteApis = useModelStore((s) => s.remoteApis);
+  // Regenerate and edit both start a turn, so they need a live engine —
+  // the same gate the composer uses.
+  const canRun = useModelReady();
+  const activeModelId = useModelStore((s) => s.activeModelId);
+  const menuModels = useMemo(
+    () => pickableModels(allModels, remoteApis, activeModelId),
+    [allModels, remoteApis, activeModelId],
+  );
+  /** Switch to a model chosen from a message's "Regenerate with…".
+   *
+   *  Uses the SAME discriminator the two menus label with -- a local entry
+   *  has no `host`. Asking `remoteApis.some(...)` instead would be an
+   *  opposite test on the same list: the day a local id equalled a remote
+   *  id, the menu would say "local" and this would switch as remote. */
+  const switchToModel = useCallback(
+    (modelId: string) => {
+      const target = menuModels.find((m) => m.id === modelId);
+      if (target === undefined) return;
+      if (target.host === undefined) setActiveModel(modelId, "local");
+      else setActiveRemoteApi(modelId);
+    },
+    [menuModels, setActiveModel, setActiveRemoteApi],
+  );
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -84,7 +117,6 @@ export default function ChatRoute() {
   // Activation happens on the Models screen while chat stays mounted:
   // re-resolve readiness so the prompt chips and the no-model affordance
   // appear and vanish on their own.
-  const activeModelId = useModelStore((s) => s.activeModelId);
   useEffect(() => {
     void checkHealth();
   }, [activeModelId, checkHealth]);
@@ -337,6 +369,16 @@ export default function ChatRoute() {
                   row={row}
                   onRetry={() => void retry(row.message.id)}
                   contextBannerVisible={contextFullShowing}
+                  canRun={canRun}
+                  models={menuModels}
+                  onEdit={() => startEdit(row.message.id)}
+                  onRegenerateWith={(modelId: string) => {
+                    // Switch first, then re-answer: EngineManager swaps
+                    // the slot on the next ensure(), so the rerun lands on
+                    // the model the user picked.
+                    switchToModel(modelId);
+                    void regenerate(row.message.id);
+                  }}
                   onRegenerate={
                     row.message.role === "assistant"
                       ? () => void regenerate(row.message.id)
@@ -399,6 +441,8 @@ export default function ChatRoute() {
         className="absolute inset-x-0 bottom-0"
         sending={sending}
         ready={ready}
+        editing={editingTurnId !== null}
+        onCancelEdit={cancelEdit}
         onSend={(text, image) => send(text, image)}
         onHeightChange={handleComposerHeight}
       />

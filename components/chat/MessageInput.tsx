@@ -18,7 +18,7 @@ import {
 } from "react-native";
 import { useIsFocused } from "expo-router";
 import { openSettings } from "expo-linking";
-import { Camera, Image as ImageIcon, Mic, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
+import { Camera, Image as ImageIcon, Mic, Pencil, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -43,6 +43,8 @@ export function MessageInput({
   onSend,
   className,
   onHeightChange,
+  editing,
+  onCancelEdit,
 }: {
   sending: boolean;
   /** False with no loaded model: send disables (PocketPal parity). */
@@ -59,6 +61,10 @@ export function MessageInput({
    *  composer that is out of flow, so it must be measured here at the
    *  outermost level and nowhere shallower. */
   onHeightChange?: (event: LayoutChangeEvent) => void;
+  /** True while the composer is rewriting an earlier turn. */
+  editing?: boolean;
+  /** Leave edit mode, restoring the composer to the turn's own text. */
+  onCancelEdit?: () => void;
 }) {
   // This box is the bottom-anchored surface, so it carries the keyboard lift
   // itself rather than being wrapped in something that does. Same mechanism
@@ -308,10 +314,34 @@ export function MessageInput({
           </Animated.View>
         </View>
       )}
+{/* IN FLOW, on purpose. The edit bar belongs to the field's state and
+        nobody else could own it, so it sits above the control row where
+        the measured composer height already counts it — the newest
+        message can never be clipped behind it. Putting it in chat.tsx's
+        overlay row instead would reserve nothing, but an edit bar the
+        user dismisses at will is chrome, and chrome over the list is
+        what that row is for. Spec §5. */}
+      {editing === true && (
+        <View className="flex-row items-center gap-2 border-b border-border px-4 py-1">
+          <Pencil size={14} color={colors.secondaryText} />
+          <Text className="flex-1 font-sans text-body-sm text-secondary-text">
+            Editing message — sending replaces this turn and everything after it
+          </Text>
+          <Pressable
+            onPress={() => onCancelEdit?.()}
+            className="h-12 w-12 items-center justify-center"
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel editing"
+          >
+            <X size={18} color={colors.secondaryText} />
+          </Pressable>
+        </View>
+      )}
       {/* The control row. The field's own spec supplies the fill, the top
-          hairline and the square corners, so this row is padding and
-          controls only: no radius, no border, no background, and no bottom
-          margin — it is flush with the bottom of the screen. */}
+    hairline and the square corners, so this row is padding and
+    controls only: no radius, no border, no background, and no bottom
+    margin — it is flush with the bottom of the screen. */}
       <View className="flex-row items-end gap-2 px-4 py-3">
         <View>
           <Animated.View style={plusPress.animatedStyle}>

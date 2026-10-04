@@ -268,14 +268,38 @@ Same reasoning rules out the store's current treatment of the voice and attach i
 
 ---
 
-## 7. Open questions
+## 7. Resolved 2026-09-29
 
-1. **Does a truncated branch need a confirmation?** Truncating from a middle turn destroys
-   turns irreversibly, with no undo. Delete-session gets no confirm today either
-   (`ChatMenu.tsx:257-265`; PocketPal's does — `HeaderRight.tsx:75-90`). **Recommend a
-   confirm on "Delete" when the tail is longer than one turn, and none when it is exactly
-   one** — an edit always truncates, but it truncates to something the user just typed.
-2. Should the edit bar's ✕ restore the composer draft to its pre-edit value? Recommendation:
-   yes — `draftSlot` already persists it, so this is a store call, not new state.
-3. Does edit mode need to disable attach/dictation? Recommendation: yes for dictation
-   (dictating while editing rewrites the text being corrected), no for attach.
+> These were open questions when the spec was drafted. All three are now decided and
+> implemented; the answers are recorded here so the code and this document agree.
+
+1. ~~**Does a truncated branch need a confirmation?**~~ **MOOT.** The question only existed
+   because this spec originally added a Delete action. Delete was CUT (see the header note):
+   PocketPal has no delete-message action, and its branch truncation happens implicitly
+   through regenerate and edit, with no confirmation. So there is no destructive menu verb
+   left to confirm. PocketPal's actual pattern — confirm only whole-**session** delete, never
+   a "re-ask" verb (`HeaderRight.tsx:75-90`) — is what we follow.
+
+2. ~~**Should the edit bar's ✕ restore the composer draft to its pre-edit value?
+   Recommendation: yes**~~ **ANSWERED THE OTHER WAY; the reversal is deliberate.**
+   `cancelEdit` restores the **edited turn's own text**, discarding whatever the composer held
+   before edit mode was entered. Edit mode *seeds* the field from the turn, so the pre-edit
+   composer text is not what the user was looking at when they hit ✕ — the field read "q1"
+   (seeded), and on cancel it reads "q1" again. Restoring the half-written pre-edit text
+   would be restoring a state the user never saw while editing. The original recommendation
+   was written before the seeding behaviour was pinned down.
+
+3. ~~**Does edit mode need to disable attach/dictation?**~~ **DEFERRED, explicitly.** Neither
+   is disabled yet. This is a decision, not an oversight: dictating while editing rewrites
+   the text being corrected, but the composer already ignores dictation while a turn is
+   running, and edit mode sits next to that rather than being the same thing. Left alone
+   until someone finds it annoying, which is the only evidence that would settle it.
+
+**Still open (neither decided nor implemented):**
+
+- **Images in edit mode.** PocketPal's `handleEdit` restores the turn's own images into the
+  composer (`hooks/useMessageActions.ts:56`). We restore text only, so editing a turn that
+  had a photo silently drops it. Our types carry one image per turn (`types/chat.ts`), so
+  this is small whenever it is wanted — but nobody has asked, and guessing here would be
+  inventing behaviour.
+- **The iOS long-press haptic** remains best-effort and unverified on hardware (§3.5).

@@ -449,11 +449,276 @@ describe("chat store turns", () => {
   });
 });
 
-describe("chat store deleteMessage", () => {
+describe("chat store regenerate from any turn", () => {
+  /** A loaded conversation of four turns: q1 a1 q2 a2. */
+  function fourTurns() {
+    const seeded = storeWith(
+      [
+        {
+          id: "s1",
+          title: "T",
+          turns: [
+            { role: "user", content: "q1", type: "text" },
+            { role: "assistant", content: "a1", type: "text" },
+            { role: "user", content: "q2", type: "text" },
+            { role: "assistant", content: "a2", type: "text" },
+          ],
+        },
+      ],
+      "s1",
+    );
+    return seeded;
+  }
+
+  it("re-answers an EARLIER turn and discards everything after it", async () => {
+    // The whole point of the feature: re-running anything but the last
+    // turn is meaningless unless the branch it sits on can be deleted.
+    const seeded = fourTurns();
+    const { runTurn, calls } = fakeRunTurn([{ reply: "a1-again" }]);
+    const useStore = createChatStore({
+      getStore: seeded.getStore,
+      runTurn,
+    });
+    await useStore.getState().loadSession();
+    const firstAnswer = useStore.getState().messages[1].id;
+    assert.equal(await useStore.getState().regenerate(firstAnswer), true);
+
+    assert.deepEqual(calls.texts, ["q1"], "it re-asks the question that was answered");
+    assert.deepEqual(
+      useStore.getState().messages.map((m) => m.text),
+      ["q1", "a1-again"],
+      "the later turns are gone from the thread too",
+    );
+    // The store is left EMPTY, not merely missing the tail: truncateFrom
+    // starts at the QUESTION, because the question is about to be re-sent.
+    // The re-append is the turn builder's job (see local-turn.test.ts) --
+    // the fake runner bypasses persistence by design.
+    assert.deepEqual(await seeded.store.get("s1"), []);
+  });
+
+  it("pins the bubble ids so the rewritten turn stays addressable", async () => {
+    const seeded = fourTurns();
+    const { runTurn } = fakeRunTurn([{ reply: "again" }]);
+    const useStore = createChatStore({ getStore: seeded.getStore, runTurn });
+    await useStore.getState().loadSession();
+    const questionId = useStore.getState().messages[0].id;
+    const answerId = useStore.getState().messages[1].id;
+    await useStore.getState().regenerate(answerId);
+    const after = useStore.getState().messages;
+    assert.deepEqual(
+      after.map((m) => m.id),
+      [questionId, answerId],
+      "the question and the answer keep the ids they had",
+    );
+  });
+
+  it("keeps everything before the re-asked question", async () => {
+    const seeded = storeWith(
+      [
+        {
+          id: "s1",
+          title: "T",
+          turns: [
+            { role: "user", content: "k1", type: "text" },
+            { role: "assistant", content: "ka1", type: "text" },
+            { role: "user", content: "k2", type: "text" },
+            { role: "assistant", content: "ka2", type: "text" },
+            { role: "user", content: "k3", type: "text" },
+            { role: "assistant", content: "ka3", type: "text" },
+          ],
+        },
+      ],
+      "s1",
+    );
+    const { runTurn } = fakeRunTurn([{ reply: "ka2-again" }]);
+    const useStore = createChatStore({ getStore: seeded.getStore, runTurn });
+    await useStore.getState().loadSession();
+    // Regenerate the THIRD turn (ka2): only a mid-thread regenerate
+    // exercises the truncation branch at all, and only here is there
+    // anything before the question to preserve.
+    await useStore.getState().regenerate(useStore.getState().messages[3].id);
+    assert.deepEqual(
+      useStore.getState().messages.map((m) => m.text),
+      ["k1", "ka1", "k2", "ka2-again"],
+      "the prefix survives; the question onward is rewritten",
+    );
+  });
+
+  it("still regenerates the LAST turn through the cheap path", async () => {
+    // The existing behaviour must not regress: nothing follows, so this is
+    // a plain retry of a stored question.
+    const seeded = fourTurns();
+    const { runTurn, calls } = fakeRunTurn([{ reply: "a2-again" }]);
+    const useStore = createChatStore({ getStore: seeded.getStore, runTurn });
+    await useStore.getState().loadSession();
+    const lastAnswer = useStore.getState().messages[3].id;
+    assert.equal(await useStore.getState().regenerate(lastAnswer), true);
+    assert.deepEqual(calls.texts, ["q2"]);
+    assert.deepEqual(
+      useStore.getState().messages.map((m) => m.text),
+      ["q1", "a1", "q2", "a2-again"],
+      "earlier turns untouched",
+    );
+  });
+
+  it("refuses a user turn, an errored turn, and a mid-turn call", async () => {
+    const seeded = fourTurns();
+    const { runTurn } = fakeRunTurn([]);
+    const useStore = createChatStore({ getStore: seeded.getStore, runTurn });
+    await useStore.getState().loadSession();
+    assert.equal(await useStore.getState().regenerate(useStore.getState().messages[0].id), false);
+    assert.equal(await useStore.getState().regenerate("nope"), false);
+  });
+});
+
+describe("chat store edit mode", () => {
+  /** Two turns: q1 a1. Enough to prove the rewrite reaches history. */
+  function pair() {
+    const seeded = storeWith(
+      [
+        {
+          id: "s1",
+          title: "T",
+          turns: [
+            { role: "user", content: "q1", type: "text" },
+            { role: "assistant", content: "a1", type: "text" },
+          ],
+        },
+      ],
+      "s1",
+    );
+    return seeded;
+  }
+
+  it("seeds the composer with the turn being edited", async () => {
+    const seeded = pair();
+    const useStore = createChatStore({ getStore: seeded.getStore, runTurn: fakeRunTurn([]).runTurn });
+    await useStore.getState().loadSession();
+    const questionId = useStore.getState().messages[0].id;
+    assert.equal(useStore.getState().startEdit(questionId), true);
+    assert.equal(useStore.getState().editingTurnId, questionId);
+    assert.equal(useStore.getState().draft, "q1");
+  });
+
+  it("refuses an assistant turn: that is regenerate, not edit", async () => {
+    const seeded = pair();
+    const useStore = createChatStore({ getStore: seeded.getStore, runTurn: fakeRunTurn([]).runTurn });
+    await useStore.getState().loadSession();
+    assert.equal(useStore.getState().startEdit(useStore.getState().messages[1].id), false);
+    assert.equal(useStore.getState().editingTurnId, null);
+  });
+
+  it("refuses an unknown turn, and with nothing persisted to rewind", async () => {
+    const { getStore, runTurn } = storeWith([]);
+    const useStore = createChatStore({ getStore, runTurn });
+    assert.equal(useStore.getState().startEdit("nope"), false);
+    // Bubbles exist but no session was ever created.
+    useStore.setState({ messages: [{ id: "m1", role: "user", text: "hi", at: 1 }] });
+    assert.equal(useStore.getState().startEdit("m1"), false);
+  });
+
+  it("refuses while a turn is running", async () => {
+    const gate = gatedRunTurn();
+    const seeded = pair();
+    const useStore = createChatStore({ getStore: seeded.getStore, runTurn: gate.runTurn });
+    await useStore.getState().loadSession();
+    const questionId = useStore.getState().messages[0].id;
+    const sent = useStore.getState().send("more");
+    assert.equal(useStore.getState().startEdit(questionId), false);
+    gate.release("done");
+    await sent;
+  });
+
+  it("restores the composer to the turn's text on cancel", async () => {
+    const seeded = pair();
+    const useStore = createChatStore({ getStore: seeded.getStore, runTurn: fakeRunTurn([]).runTurn });
+    await useStore.getState().loadSession();
+    const questionId = useStore.getState().messages[0].id;
+    useStore.getState().startEdit(questionId);
+    // The user starts retyping, then backs out.
+    useStore.setState({ draft: "half written" });
+    useStore.getState().cancelEdit();
+    assert.equal(useStore.getState().editingTurnId, null);
+    assert.equal(useStore.getState().draft, "q1", "not the half-written text");
+  });
+
+  it("cancel is a no-op when not editing", async () => {
+    const seeded = pair();
+    const useStore = createChatStore({ getStore: seeded.getStore, runTurn: fakeRunTurn([]).runTurn });
+    await useStore.getState().loadSession();
+    useStore.setState({ draft: "typing" });
+    useStore.getState().cancelEdit();
+    assert.equal(useStore.getState().draft, "typing", "an unrelated draft survives");
+  });
+
+  it("rewrites the edited turn and everything after it on send", async () => {
+    // The defining behaviour: an edit replaces the branch, it does not
+    // append beside it.
+    const seeded = storeWith(
+      [
+        {
+          id: "s1",
+          title: "T",
+          turns: [
+            { role: "user", content: "keep", type: "text" },
+            { role: "assistant", content: "kept", type: "text" },
+            { role: "user", content: "typo here", type: "text" },
+            { role: "assistant", content: "wrong answer", type: "text" },
+          ],
+        },
+      ],
+      "s1",
+    );
+    const { runTurn, calls } = fakeRunTurn([{ reply: "right answer" }]);
+    const useStore = createChatStore({ getStore: seeded.getStore, runTurn });
+    await useStore.getState().loadSession();
+    const typoId = useStore.getState().messages[2].id;
+    useStore.getState().startEdit(typoId);
+
+    assert.equal(await useStore.getState().send("typo fixed"), true);
+    assert.deepEqual(calls.texts, ["typo fixed"]);
+    assert.deepEqual(
+      useStore.getState().messages.map((m) => m.text),
+      ["keep", "kept", "typo fixed", "right answer"],
+    );
+    assert.equal(
+      useStore.getState().editingTurnId,
+      null,
+      "edit mode ends when the edit is committed",
+    );
+    assert.equal(useStore.getState().draft, "", "and the composer is spent");
+  });
+
+  it("keeps the edited turn's id so it stays addressable", async () => {
+    const seeded = pair();
+    const { runTurn } = fakeRunTurn([{ reply: "again" }]);
+    const useStore = createChatStore({ getStore: seeded.getStore, runTurn });
+    await useStore.getState().loadSession();
+    const questionId = useStore.getState().messages[0].id;
+    useStore.getState().startEdit(questionId);
+    await useStore.getState().send("better question");
+    assert.equal(useStore.getState().messages[0].id, questionId);
+  });
+
+  it("leaves a normal send untouched", async () => {
+    const seeded = pair();
+    const { runTurn, calls } = fakeRunTurn([{ reply: "ok" }]);
+    const useStore = createChatStore({ getStore: seeded.getStore, runTurn });
+    await useStore.getState().loadSession();
+    await useStore.getState().send("new question");
+    assert.deepEqual(
+      useStore.getState().messages.map((m) => m.text),
+      ["q1", "a1", "new question", "ok"],
+    );
+    assert.equal(useStore.getState().editingTurnId, null);
+    assert.deepEqual(calls.texts, ["new question"]);
+  });
+});
+describe("message identity", () => {
   it("gives every bubble the row id it was persisted under", async () => {
     // The one-identity contract (Q9): a bubble's id IS its row id, so a
     // bubble read back from storage is addressable by the same id it had
-    // live. Without this, `deleteMessage` below would only work by index.
+    // live. Regenerate-from-the-middle and edit both depend on it.
     const seeded = storeWith(
       [
         {
@@ -478,115 +743,5 @@ describe("chat store deleteMessage", () => {
       stored?.map((t) => t.id),
     );
     assert.ok(stored?.every((t) => typeof t.id === "string" && t.id !== ""));
-  });
-  /** A loaded conversation of three turns: q1 a1 q2. */
-  function loaded() {
-    const seeded = storeWith(
-      [
-        {
-          id: "s1",
-          title: "T",
-          turns: [
-            { role: "user", content: "q1", type: "text" },
-            { role: "assistant", content: "a1", type: "text" },
-            { role: "user", content: "q2", type: "text" },
-          ],
-        },
-      ],
-      "s1",
-    );
-    const useStore = createChatStore({ getStore: seeded.getStore, runTurn: seeded.runTurn });
-    return { useStore, store: seeded.store };
-  }
-
-  it("drops the message and everything after it, in state and in the store", async () => {
-    const { useStore, store } = loaded();
-    await useStore.getState().loadSession();
-    const firstId = useStore.getState().messages[0].id;
-    assert.equal(await useStore.getState().deleteMessage(firstId), true);
-    assert.deepEqual(useStore.getState().messages, []);
-    assert.deepEqual(
-      (await store.get("s1"))?.map((t) => t.content),
-      [],
-    );
-  });
-
-  it("keeps the turns before the deleted one", async () => {
-    const { useStore, store } = loaded();
-    await useStore.getState().loadSession();
-    const secondId = useStore.getState().messages[1].id;
-    assert.equal(await useStore.getState().deleteMessage(secondId), true);
-    assert.deepEqual(
-      useStore.getState().messages.map((m) => m.text),
-      ["q1"],
-    );
-    assert.deepEqual(
-      (await store.get("s1"))?.map((t) => t.content),
-      ["q1"],
-    );
-  });
-
-  it("refuses an unknown id", async () => {
-    const { useStore, store } = loaded();
-    await useStore.getState().loadSession();
-    assert.equal(await useStore.getState().deleteMessage("nope"), false);
-    assert.equal(useStore.getState().messages.length, 3);
-    assert.equal((await store.get("s1"))?.length, 3);
-  });
-
-  it("refuses with no session, since nothing is persisted yet", async () => {
-    const { getStore, runTurn } = storeWith([]);
-    const useStore = createChatStore({ getStore, runTurn });
-    // An unsent conversation has bubbles in state but no store rows.
-    useStore.setState({ messages: [{ id: "m1", role: "user", text: "hi", at: 1 }] });
-    assert.equal(await useStore.getState().deleteMessage("m1"), false);
-    assert.equal(useStore.getState().messages.length, 1);
-  });
-
-  it("refuses while a turn is in flight", async () => {
-    const gate = gatedRunTurn();
-    const seeded = storeWith(
-      [
-        {
-          id: "s1",
-          title: "T",
-          turns: [{ role: "user", content: "q1", type: "text" }],
-        },
-      ],
-      "s1",
-    );
-    const useStore = createChatStore({
-      getStore: seeded.getStore,
-      runTurn: gate.runTurn,
-    });
-    await useStore.getState().loadSession();
-    const first = useStore.getState().send("follow up");
-    const targetId = useStore.getState().messages[0].id;
-    assert.equal(await useStore.getState().deleteMessage(targetId), false);
-    gate.release("done");
-    await first;
-    // Untouched: the turn completed and both turns survived.
-    assert.equal(useStore.getState().messages.length, 3);
-  });
-
-  it("refuses the streaming turn itself", async () => {
-    const gate = gatedRunTurn();
-    const seeded = storeWith(
-      [{ id: "s1", title: "T", turns: [{ role: "user", content: "q1", type: "text" }] }],
-      "s1",
-    );
-    const useStore = createChatStore({ getStore: seeded.getStore, runTurn: gate.runTurn });
-    await useStore.getState().loadSession();
-    const first = useStore.getState().send("follow up");
-    // Found by predicate, not index: send appends BOTH the question and
-    // the assistant turn, so the streaming bubble is the last one and a
-    // hard-coded index would be off by one the moment the seed changes.
-    const streaming = useStore
-      .getState()
-      .messages.find((m) => m.streaming === true);
-    assert.ok(streaming, "the gated turn leaves a streaming bubble");
-    assert.equal(await useStore.getState().deleteMessage(streaming.id), false);
-    gate.release("done");
-    await first;
   });
 });

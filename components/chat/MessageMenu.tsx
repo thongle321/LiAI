@@ -6,18 +6,10 @@
  * is no platform branch here. The menu anchors to its trigger child, so
  * the trigger is the bubble itself: long-press the text, get the menu.
  *
- * Step 3 of docs/specs/2026-09-29-chat-message-actions-menu.md.
- *
- * **Copy only, deliberately.** PocketPal's menu is Copy · Regenerate ·
- * Regenerate with… · Edit · Report (`pocketpal-ai/.../ChatView.tsx:673-741`)
- * and has **no delete-message action at all** — its destructive branch
- * truncation happens implicitly through edit and regenerate, both of
- * which call `removeMessagesFromId(id, true)`. An earlier draft of this
- * component shipped a Delete item; it was neither in pocketpal nor in
- * the audit, so it was cut (decision Q5).
- *
- * Regenerate / Regenerate with… / Edit arrive in steps 4-6, reusing the
- * `SessionStore.truncateFrom` port method that already exists.
+ * The item set is PocketPal's (ChatView.tsx:673-741): Copy, Regenerate,
+ * Regenerate with… · Edit. There is deliberately NO delete-message item —
+ * see docs/specs/2026-09-29-chat-message-actions-menu.md; branch
+ * truncation happens implicitly through regenerate and edit.
  */
 
 import type { ReactNode } from "react";
@@ -26,15 +18,25 @@ import * as Haptics from "expo-haptics";
 import MenuView, { type MenuAction } from "@expo/ui/community/menu";
 
 import { useCopy } from "../../hooks/useCopy.ts";
+import type { PickableModel } from "../../lib/chat/models.ts";
 
 /** Action ids. `onPressAction` reports `action.id ?? action.title`, so
  * every action MUST carry an explicit id — a renamed label must not
  * change what the handler dispatches on. */
 const COPY = "copy";
+const REGENERATE = "regenerate";
+const REGENERATE_WITH = "regenerate-with";
+const EDIT = "edit";
 
 export function MessageMenu({
   text,
   settled,
+  role,
+  canRun,
+  models,
+  onRegenerate,
+  onEdit,
+  onRegenerateWith,
   children,
 }: {
   /** Copied verbatim by Copy. */
@@ -43,6 +45,16 @@ export function MessageMenu({
    * would grab a prefix. Previews and actions have always targeted
    * settled turns only. */
   settled: boolean;
+  role: "user" | "assistant";
+  /** A model is loaded. Regenerate and Edit both start a turn, so without
+   *  one they are shown but disabled rather than silently doing nothing. */
+  canRun: boolean;
+  models: PickableModel[];
+  /** Optional because a user bubble has nothing to regenerate; the menu
+   *  only offers the action where it exists. */
+  onRegenerate?: () => void;
+  onEdit: () => void;
+  onRegenerateWith: (modelId: string) => void;
   /** The bubble this menu wraps. */
   children: ReactNode;
 }) {
@@ -50,15 +62,52 @@ export function MessageMenu({
 
   if (!settled) return <View>{children}</View>;
 
+  const isUser = role === "user";
   const actions: MenuAction[] = [{ id: COPY, title: "Copy" }];
+
+  if (!isUser) {
+    actions.push({
+      id: REGENERATE,
+      title: "Regenerate",
+      attributes: { disabled: !canRun },
+    });
+    if (models.length > 0) {
+      actions.push({
+        id: REGENERATE_WITH,
+        title: "Regenerate with…",
+        subactions: models.map((m) => ({
+          // The model id is the payload, so the prefix is how one switch
+          // dispatches four different answers.
+          id: `${REGENERATE_WITH}:${m.id}`,
+          title: m.host === undefined ? m.name : `${m.name} (${m.host})`,
+          ...(m.active ? { state: "on" as const } : {}),
+        })),
+      });
+    }
+  } else {
+    actions.push({
+      id: EDIT,
+      title: "Edit",
+      attributes: { disabled: !canRun },
+    });
+  }
 
   return (
     <MenuView
       shouldOpenOnLongPress
       actions={actions}
       onPressAction={(event) => {
+        const id = event.nativeEvent.event;
+        if (id === COPY) {
+          void copy(text);
+        } else if (id === REGENERATE) {
+          onRegenerate?.();
+        } else if (id === EDIT) {
+          onEdit();
+        } else if (id.startsWith(`${REGENERATE_WITH}:`)) {
+          onRegenerateWith(id.slice(REGENERATE_WITH.length + 1));
+        }
         // An id this build does not know: ignore rather than guess.
-        if (event.nativeEvent.event === COPY) void copy(text);
       }}
     >
       {/* The haptic rides the trigger's own long-press. On Android both
@@ -71,6 +120,11 @@ export function MessageMenu({
         onLongPress={() => {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }}
+        // The trigger is the whole bubble, and a screen reader has no way
+        // to know long-press exists unless it is told.
+        accessibilityRole="button"
+        accessibilityLabel="Message actions"
+        accessibilityHint="Long-press for copy, regenerate and edit"
       >
         <View>{children}</View>
       </Pressable>

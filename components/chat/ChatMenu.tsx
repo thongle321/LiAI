@@ -46,8 +46,9 @@ import {
   type ExportSession,
   type ExportKind,
 } from "../../lib/chat/export.ts";
-import { providerHost, shareExportedFile } from "../../lib/chat/share-export.ts";
 import { usePressFeedback } from "../../lib/motion.ts";
+import { shareExportedFile } from "../../lib/chat/share-export.ts";
+import { pickableModels } from "../../lib/chat/models.ts";
 import { colors } from "../../themes/tokens.ts";
 
 type Panel = "menu" | "model" | "export" | "rename";
@@ -132,7 +133,10 @@ export function ChatMenu({
   const setActiveRemoteApi = useModelStore((s) => s.setActiveRemoteApi);
 
   const hasSession = sessionId !== null;
-  const downloadable = models.filter((m) => m.downloadStatus === "completed");
+  // One source for "which models exist", shared with each message's
+  // "Regenerate with…" submenu. A local entry has no `host`; that is the
+  // discriminator for both the label and the switching call.
+  const pickable = pickableModels(models, remoteApis, activeModelId);
 
   function close(): void {
     setOpen(false);
@@ -256,7 +260,7 @@ export function ChatMenu({
                   label="Model"
                   icon={<LayoutGrid size={16} color={colors.secondaryText} />}
                   chevron
-                  disabled={downloadable.length === 0 && remoteApis.length === 0}
+                  disabled={pickable.length === 0}
                   onPress={() => setPanel("model")}
                 />
                 {hasSession ? (
@@ -306,32 +310,31 @@ export function ChatMenu({
             {panel === "model" ? (
               <>
                 <BackRow label="Model" onPress={() => setPanel("menu")} />
-                {downloadable.map((m) => (
-                  <MenuRow
-                    key={m.id}
-                    label={m.name}
-                    value={m.id === activeModelId ? "Active" : undefined}
-                    chevron={m.id === activeModelId}
-                    onPress={() =>
-                      run(() => {
-                        setActiveModel(m.id, "local");
-                      })
-                    }
-                  />
-                ))}
-                {remoteApis.map((p) => (
-                  <MenuRow
-                    key={p.id}
-                    label={`${p.name} (${providerHost(p.baseUrl)})`}
-                    icon={<Cloud size={16} color={colors.secondaryText} />}
-                    value={p.id === activeModelId ? "Active" : undefined}
-                    onPress={() =>
-                      run(() => {
-                        setActiveRemoteApi(p.id);
-                      })
-                    }
-                  />
-                ))}
+                {pickable.map((m) => {
+                  // A local entry has no host; that is the same
+                  // discriminator the message menu uses, so the two can
+                  // never disagree about what is switchable.
+                  const isLocal = m.host === undefined;
+                  return (
+                    <MenuRow
+                      key={m.id}
+                      label={isLocal ? m.name : `${m.name} (${m.host})`}
+                      icon={
+                        isLocal ? undefined : (
+                          <Cloud size={16} color={colors.secondaryText} />
+                        )
+                      }
+                      value={m.active ? "Active" : undefined}
+                      chevron={isLocal && m.active}
+                      onPress={() =>
+                        run(() => {
+                          if (isLocal) setActiveModel(m.id, "local");
+                          else setActiveRemoteApi(m.id);
+                        })
+                      }
+                    />
+                  );
+                })}
               </>
             ) : null}
 

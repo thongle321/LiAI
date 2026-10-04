@@ -7,6 +7,7 @@
  */
 
 import { ActivityIndicator, Image as RNImage, Pressable, Text, View } from "react-native";
+import type { ReactNode } from "react";
 import Animated from "react-native-reanimated";
 import { CheckCheck, Wrench } from "lucide-react-native";
 
@@ -31,11 +32,16 @@ import { MessageActions } from "./MessageActions.tsx";
 import { LinkPreviewCard } from "./LinkPreview.tsx";
 import { ReasoningBlock } from "./ReasoningBlock.tsx";
 import { MessageMenu } from "./MessageMenu.tsx";
+import type { PickableModel } from "../../lib/chat/models.ts";
 
 export function MessageListItem({
   row,
   onRetry,
   onRegenerate,
+  onEdit,
+  onRegenerateWith,
+  canRun,
+  models,
   contextBannerVisible,
 }: {
   /** One adapter row: message plus its group/avatar/status flags. */
@@ -43,6 +49,14 @@ export function MessageListItem({
   onRetry: () => void;
   /** Null for user bubbles (nothing to regenerate). */
   onRegenerate: (() => void) | null;
+  /** Enter edit mode on this turn. Only reachable from a user bubble. */
+  onEdit: () => void;
+  /** Re-answer this turn with a different model. */
+  onRegenerateWith: (modelId: string) => void;
+  /** A model is loaded: regenerate and edit both start a turn. */
+  canRun: boolean;
+  /** Models offered by "Regenerate with…". */
+  models: PickableModel[];
   /** A context-full banner is on screen for this conversation, so the
    *  turn footer must not repeat what it already says. */
   contextBannerVisible?: boolean;
@@ -55,6 +69,22 @@ export function MessageListItem({
   // Previews and actions target settled turns: a half-streamed URL would
   // trigger a garbage preview fetch, and actions need final text.
   const settled = message.streaming !== true;
+  // Both bubbles wrap in the same menu and only the bubble inside differs.
+  // One definition, so the two call sites cannot drift apart.
+  const withMenu = (bubble: ReactNode) => (
+    <MessageMenu
+      text={message.text}
+      settled={settled}
+      role={message.role}
+      canRun={canRun}
+      models={models}
+      onRegenerate={onRegenerate ?? undefined}
+      onEdit={onEdit}
+      onRegenerateWith={onRegenerateWith}
+    >
+      {bubble}
+    </MessageMenu>
+  );
   if (message.error) {
     return (
       <AnimatedPressable
@@ -84,15 +114,15 @@ export function MessageListItem({
             className="w-40 h-[120px] rounded-xl mb-1"
           />
         )}
-        <MessageMenu text={message.text} settled={settled}>
+        {withMenu(
           <View
             className={`px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-br-sm"} bg-surface-3`}
           >
             <Text className="font-sans text-body-lg text-primary-text">
               {message.text}
             </Text>
-          </View>
-        </MessageMenu>
+          </View>,
+        )}
         <View className="w-full">
           <LinkPreviewCard text={message.text} />
         </View>
@@ -131,7 +161,7 @@ export function MessageListItem({
             autoCollapse={settled || message.text.trim() !== ""}
           />
         ) : null}
-        <MessageMenu text={message.text} settled={settled}>
+        {withMenu(
           <View
             className={`border border-border bg-surface-1 px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-tl-sm"}`}
           >
@@ -155,8 +185,8 @@ export function MessageListItem({
                 ))}
               </View>
             )}
-          </View>
-        </MessageMenu>
+          </View>,
+        )}
         {onRegenerate !== null && settled && (
           <MessageActions
             text={message.text}

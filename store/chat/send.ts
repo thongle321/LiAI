@@ -19,7 +19,17 @@ export function createSendSlice(
   set: ChatSet,
   get: ChatGet,
   ctx: ChatCtx,
-): Pick<ChatState, "sending" | "send" | "stop" | "retry" | "regenerate"> {
+): Pick<
+  ChatState,
+  | "sending"
+  | "send"
+  | "stop"
+  | "retry"
+  | "regenerate"
+  | "editingTurnId"
+  | "startEdit"
+  | "cancelEdit"
+> {
   function updateBubble(
     id: string,
     patch: Partial<ChatMessage> | ((m: ChatMessage) => Partial<ChatMessage>),
@@ -148,6 +158,33 @@ export function createSendSlice(
 
   return {
     sending: false,
+    editingTurnId: null,
+
+    startEdit: (messageId: string): boolean => {
+      if (get().sending) return false;
+      const target = get().messages.find((m) => m.id === messageId);
+      // User rows only: re-answering an assistant turn is regenerate, and
+      // letting a user "edit" one would be the same verb with two meanings.
+      if (!target || target.role !== "user") return false;
+      // Nothing persisted means nothing to rewind.
+      if (get().sessionId === null) return false;
+      set({ editingTurnId: messageId, draft: target.text });
+      // persistDraft reads get().draft and get().sessionId, both of which
+      // the line above just set — no reason to hand-roll it.
+      void get().persistDraft();
+      return true;
+    },
+
+    cancelEdit: () => {
+      const editingId = get().editingTurnId;
+      if (editingId === null) return;
+      const target = get().messages.find((m) => m.id === editingId);
+      // Back to the turn's own text, not to whatever the composer happened
+      // to hold before edit mode was entered.
+      const restored = target?.text ?? "";
+      set({ editingTurnId: null, draft: restored });
+      void get().persistDraft();
+    },
 
     stop: () => {
       if (!get().sending) return;
@@ -170,14 +207,46 @@ export function createSendSlice(
     send: async (text: string, image?: string) => {
       const trimmed = text.trim();
       if (trimmed === "" || get().sending) return false;
-      const userId = newId();
-      const assistantId = newId();
       const sid = get().sessionId;
-      const history = get().messages;
-      set((s) => ({
+      const editingId = get().editingTurnId;
+
+      let userId: string;
+      let assistantId: string;
+      let history: ChatMessage[];
+      let keep: ChatMessage[];
+
+      if (editingId !== null) {
+        // Committing an edit. The edited turn AND everything after it are
+        // replaced by this send -- that is what makes an edit an edit
+        // rather than a second message. A FULL send, never a retry:
+        // truncateFrom removes the question's own row, and retry skips
+        // the user append, so the model would answer a question that is
+        // no longer in history.
+        const editIndex = get().messages.findIndex((m) => m.id === editingId);
+        if (editIndex < 0 || sid === null) return false;
+        try {
+          const store: SessionStore | null = await ctx.getStore();
+          if (!store || !(await store.truncateFrom(sid, editingId))) return false;
+        } catch {
+          return false;
+        }
+        history = get().messages.slice(0, editIndex);
+        keep = history;
+        // The edited turn keeps its id, so it stays addressable.
+        userId = editingId;
+        assistantId = newId();
+      } else {
+        userId = newId();
+        assistantId = newId();
+        history = get().messages;
+        keep = history;
+      }
+
+      set({
         sending: true,
+        ...(editingId !== null ? { editingTurnId: null } : {}),
         messages: [
-          ...s.messages,
+          ...keep,
           {
             id: userId,
             role: "user",
@@ -187,7 +256,7 @@ export function createSendSlice(
           },
           { id: assistantId, role: "assistant", text: "", at: Date.now(), streaming: true },
         ],
-      }));
+      });
       await runLocal({
         assistantId,
         userId,
@@ -256,7 +325,8 @@ export function createSendSlice(
     },
 
     regenerate: async (messageId: string) => {
-      const target = get().messages.find((m) => m.id === messageId);
+      const messages = get().messages;
+      const target = messages.find((m) => m.id === messageId);
       const sid = get().sessionId;
       if (
         !target ||
@@ -269,24 +339,73 @@ export function createSendSlice(
       }
       const question = priorUserText(target.id);
       if (!question) return false;
-      // Drop the stored assistant turn so history + bubble agree.
-      if (sid !== null) {
-        try {
-          await (await ctx.getStore())?.popLastAssistant(sid);
-        } catch {
-          // Best-effort: the rerun overwrites the bubble regardless.
+      const questionIndex = messages.findIndex((m) => m.id === question.id);
+      const isLastTurn = messages[messages.length - 1]?.id === target.id;
+
+      if (isLastTurn) {
+        // Nothing follows, so the cheap path is enough: drop the trailing
+        // assistant turn and re-answer the question already stored above it.
+        if (sid !== null) {
+          try {
+            await (await ctx.getStore())?.popLastAssistant(sid);
+          } catch {
+            // Best-effort: the rerun overwrites the bubble regardless.
+          }
         }
+        updateBubble(target.id, { streaming: true });
+        set({ sending: true });
+        await runLocal({
+          assistantId: target.id,
+          text: question.text,
+          sessionId: sid,
+          ...(question.image !== undefined ? { image: question.image } : {}),
+          history: messages.filter((m) => m.id !== target.id),
+          retry: true,
+          clearOnFirst: true,
+        });
+        return true;
       }
-      updateBubble(target.id, { streaming: true });
-      set({ sending: true });
+
+      // Something follows, so re-answering means discarding the question
+      // AND everything after it -- that is the only definition of
+      // "regenerate this answer" that leaves a coherent thread.
+      if (sid === null) return false;
+      const store = await ctx.getStore();
+      if (!store) return false;
+      try {
+        if (!(await store.truncateFrom(sid, question.id))) return false;
+      } catch {
+        return false;
+      }
+
+      // A FULL send, not a retry: truncateFrom removed the question's own
+      // row, and retry skips the user append, so the model would be asked
+      // to answer a question that is no longer in history.
+      const before = messages.slice(0, questionIndex);
+      set({
+        sending: true,
+        messages: [
+          ...before,
+          {
+            id: question.id,
+            role: "user",
+            text: question.text,
+            at: question.at,
+            ...(question.image !== undefined ? { image: question.image } : {}),
+          },
+          // The bubble keeps its id, so the turn stays addressable across
+          // the rewrite.
+          { id: target.id, role: "assistant", text: "", at: Date.now(), streaming: true },
+        ],
+      });
       await runLocal({
         assistantId: target.id,
+        userId: question.id,
         text: question.text,
         sessionId: sid,
         ...(question.image !== undefined ? { image: question.image } : {}),
-        history: get().messages.filter((m) => m.id !== target.id),
-        retry: true,
-        clearOnFirst: true,
+        history: before,
+        clearOnFirst: false,
       });
       return true;
     },

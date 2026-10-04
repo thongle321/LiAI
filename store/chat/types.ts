@@ -92,10 +92,15 @@ export interface ChatState {
   releaseEngine: () => void;
   retry: (messageId: string) => Promise<boolean>;
   regenerate: (messageId: string) => Promise<boolean>;
-  /** Drop a turn and everything after it, in state and in the store.
-   * False when the id is unknown, when no session exists yet (nothing is
-   * persisted to truncate), or while a turn is in flight. */
-  deleteMessage: (messageId: string) => Promise<boolean>;
+  /** The user turn being edited, or null. Not an INDEX: the store is
+   *  id-keyed, so the id survives the rewrite that committing performs. */
+  editingTurnId: string | null;
+  /** Enter edit mode on a user turn and seed the composer with its text.
+   *  False for an assistant turn (that is regenerate), while a turn is
+   *  running, or when nothing is persisted to rewind. */
+  startEdit: (messageId: string) => boolean;
+  /** Leave edit mode, restoring the composer to the turn's own text. */
+  cancelEdit: () => void;
   newConversation: () => Promise<void>;
   switchSession: (sessionId: string) => Promise<boolean>;
   deleteSession: (sessionId: string) => Promise<void>;

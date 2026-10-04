@@ -37,7 +37,6 @@ export function createSessionsSlice(
   | "renameSession"
   | "setPinned"
   | "refreshSessions"
-  | "deleteMessage"
 > {
   function cancelActive(): void {
     ctx.streamGen += 1;
@@ -219,33 +218,5 @@ export function createSessionsSlice(
   renameSession: (id: string, title: string) => patchSession(id, { title }),
 
   setPinned: (id: string, pinned: boolean) => patchSession(id, { pinned }),
-
-  deleteMessage: async (messageId: string) => {
-    // Deleting into a live turn would truncate the branch the engine is
-    // still writing into.
-    if (get().sending) return false;
-    const index = get().messages.findIndex((m) => m.id === messageId);
-    if (index < 0) return false;
-    // Never delete the turn that is still streaming.
-    if (get().messages[index].streaming === true) return false;
-    // No session means nothing is persisted, so there is no branch to
-    // truncate — the bubbles are unsent state only.
-    const sid = get().sessionId;
-    if (sid === null) return false;
-    const store = await storeOf(ctx);
-    if (!store) return false;
-    try {
-      // Storage first: if the store refuses, in-memory state must not
-      // move, or a later load would resurrect the deleted turns.
-      if (!(await store.truncateFrom(sid, messageId))) return false;
-    } catch {
-      return false;
-    }
-    // The store is addressed by id, not index. `index` is used ONLY to
-    // slice render state, where the same array order applies — so the two
-    // cannot drift, because they are the same ids in the same order.
-    set((s) => ({ messages: s.messages.slice(0, index) }));
-    return true;
-  },
   };
 }

@@ -443,10 +443,16 @@ describe("keyboard avoidance", () => {
     // Asserted positively so an empty or truncated file cannot pass it.
     const input = read("components/chat/MessageInput.tsx");
     assert.match(input, /className=\{`border-t border-border bg-surface-1\$\{className/);
+    // Scoped to the ROOT class, not the whole file: the intent is that the
+    // docked field draws one 1px line, not that the string `border-b` may
+    // never appear. A child row inside the field may legitimately carry a
+    // divider (the edit bar does) without drawing onto a screen edge.
+    const rootStart = input.indexOf("className={`border-t border-border bg-surface-1");
+    const rootClass = input.slice(rootStart, input.indexOf("`}", rootStart));
     // Top border ONLY: an all-round `border` here would draw two 1px lines
     // straight onto the screen edges.
-    assert.doesNotMatch(input, /className=\{`border /);
-    assert.doesNotMatch(input, /\bborder-(l|r|b)\b/);
+    assert.doesNotMatch(rootClass, /className=\{`border /);
+    assert.doesNotMatch(rootClass, /\bborder-(l|r|b)\b/);
     assert.doesNotMatch(input, /\bbg-base\b/, "the Cool Paper bar is deleted, not merged");
     // The value sits 16px from the edge, so the control row carries px-4 and
     // the root carries no horizontal inset at all.

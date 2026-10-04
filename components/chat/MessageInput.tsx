@@ -28,6 +28,7 @@ import Animated from "react-native-reanimated";
 import { colors } from "../../themes/tokens.ts";
 import { useChatStore } from "../../store/chat.ts";
 import { useInference } from "../../store/inference.ts";
+import { suspendBackgroundRelease } from "../../lib/inference/offload.ts";
 import { useModelReady } from "../../hooks/useModelReady.ts";
 import { useModelStore } from "../../store/modelStore";
 import { mergeDictation, VOICE_LISTEN_OPTS } from "../../lib/voiceListen.ts";
@@ -244,12 +245,22 @@ export function MessageInput({
   async function handleAttach(source: ImageSource): Promise<void> {
     setPlusOpen(false);
     setAttachIssue(null);
-    const uri = await pickImage(source);
-    if (uri === null) {
-      setAttachIssue("Couldn't attach that photo — try again.");
-      return;
+    // G14: both the camera and the gallery background the app, so the
+    // background-release listener would free the model while the picker is
+    // up -- and the send that follows becomes a load-then-fail. Bracket the
+    // pick, exactly as pocketpal does (ChatInput.tsx:265-276, :326-349).
+    // Android-only symptom: iOS does not report `background` for a picker.
+    const resume = suspendBackgroundRelease();
+    try {
+      const uri = await pickImage(source);
+      if (uri === null) {
+        setAttachIssue("Couldn't attach that photo — try again.");
+        return;
+      }
+      setAttached(uri);
+    } finally {
+      resume();
     }
-    setAttached(uri);
   }
 
   async function handleSend(): Promise<void> {

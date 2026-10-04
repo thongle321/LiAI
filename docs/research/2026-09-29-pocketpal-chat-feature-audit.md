@@ -461,6 +461,8 @@ the file's own comment admits there is nothing honest to display.
 in the foreground turns the next send into a load-then-fail. This is a latent Android-only bug,
 not a cosmetic gap.
 
+**SHIPPED.** `lib/inference/offload.ts` gained `suspendBackgroundRelease()` /`isBackgroundReleaseSuspended()`, and `watchBackgroundRelease` skips while suspended. `MessageInput.handleAttach` brackets `pickImage` with it in a `try`/`finally` — a bare call would pin the model in memory forever after one declined photo, since that path returns early. A counter rather than a boolean because pickers can overlap (a permission prompt on top of the gallery), and the resume handle is idempotent so a double-call cannot drive the counter negative and silently disable suspension for every later pick.
+
 **G15 — Image tap does not enlarge: PARTIAL.**
 Working in pocketpal at `TextMessage.tsx:230-247` (their `ChatView/ImageView.tsx:10-12` is a
 stub, so only the `TextMessage` path counts). Ours renders the image inert

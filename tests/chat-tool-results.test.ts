@@ -36,7 +36,7 @@ test("only a recorded FAILURE is styled as one", () => {
   // `ok === false`, not `!ok`: undefined means "never recorded" (a row
   // written before the discriminant existed). Treating that as a failure
   // would paint every old conversation's tool calls red.
-  assert.match(row, /step\.ok === false \?/);
+  assert.match(row, /step\.ok === false/);
   assert.doesNotMatch(row, /!step\.ok\b/, "undefined is not failure");
 });
 
@@ -55,9 +55,42 @@ test("the error surface is not interactive, so long-press still reaches the menu
 });
 
 test("persistence is additive: absence reads as unknown, not success", () => {
-  // The store must not coerce a missing `ok` into true, and must not drop
-  // a stored false (that false IS the failure).
   const store = read("lib/chat/tinybase-store.ts");
   assert.match(store, /step\.ok !== undefined \? \{ ok: step\.ok \}/);
   assert.match(store, /typeof raw\["ok"\] === "boolean" \? \{ ok: raw\["ok"\] \}/);
+});
+
+test("the chat screen resolves surfaces by NAME, not by hardcoding tools", () => {
+  // A fifth tool must be a registration, not an edit to the bubble.
+  assert.match(row, /toolSurfaceFor\(step\.tool\)/);
+  const surfaces = read("components/chat/toolSurfaces.tsx");
+  assert.match(surfaces, /registerToolSurface\("web_search"/);
+  assert.match(surfaces, /export function registerToolSurface/);
+});
+
+test("dispatch order holds: error, then registered renderer, then chip", () => {
+  // The regression that matters: an error reaching a renderer or the chip
+  // is exactly how a failed tool looked like a successful one.
+  const errorAt = row.indexOf("step.ok === false");
+  const rendererAt = row.indexOf("toolSurfaceFor(step.tool)");
+  const chipAt = row.indexOf("<Wrench");
+  assert.ok(errorAt > -1 && rendererAt > -1 && chipAt > -1, "all three exist");
+  assert.ok(errorAt < rendererAt, "error is checked BEFORE the renderer");
+  assert.ok(rendererAt < chipAt, "the renderer is consulted BEFORE the chip");
+});
+
+test("a collapsed surface exposes its state and meets the touch floor", () => {
+  const surfaces = read("components/chat/toolSurfaces.tsx");
+  assert.match(surfaces, /accessibilityState=\{\{ expanded \}\}/);
+  assert.match(surfaces, /accessibilityRole="button"/);
+  assert.match(surfaces, /min-h-12/, "48dp on the whole row");
+  // The renderer must not become the bubble's long-press gesture.
+  assert.doesNotMatch(surfaces, /accessibilityRole="menu"/);
+});
+
+test("hits are read structured, never re-parsed out of the markdown", () => {
+  // The reason ticket 02 added `data` at all.
+  const surfaces = read("components/chat/toolSurfaces.tsx");
+  assert.match(surfaces, /step\.data\?\.hits/);
+  assert.doesNotMatch(surfaces, /\bisVision|\\n-\s|## Web search results/);
 });

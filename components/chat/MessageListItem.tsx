@@ -34,6 +34,7 @@ import { LinkPreviewCard } from "./LinkPreview.tsx";
 import { ReasoningBlock } from "./ReasoningBlock.tsx";
 import { MessageMenu } from "./MessageMenu.tsx";
 import { ToolErrorBlock } from "./ToolErrorBlock.tsx";
+import { toolSurfaceFor } from "./toolSurfaces.tsx";
 import { ImageViewer } from "./ImageViewer.tsx";
 import type { PickableModel } from "../../lib/chat/models.ts";
 
@@ -83,6 +84,11 @@ export function MessageListItem({
   // mean "I want the menu" than "I want to zoom" -- which is the same
   // reason PocketPal's own image path is a tap.
   const [enlarged, setEnlarged] = useState<string | null>(null);
+  // Which tool surfaces are expanded, by step id (G5). Collapsed by
+  // default: a five-tool turn would otherwise bury the answer it produced.
+  // Keyed by step id, never by position -- the list can shrink when a turn
+  // is regenerated, and a positional key would open the wrong one.
+  const [expandedSteps, setExpandedSteps] = useState<Record<string, boolean>>({});
   // Both bubbles wrap in the same menu and only the bubble inside differs.
   // One definition, so the two call sites cannot drift apart.
   const withMenu = (bubble: ReactNode) => (
@@ -201,21 +207,44 @@ export function MessageListItem({
               // the call finished, so the old "running" variant had no
               // writer. The key is the row id, not the array index.
               <View className="mt-2 flex-row flex-wrap items-center gap-2">
-                {message.steps.map((step) =>
-                  // Dispatch order, pinned by tests: an ERROR must never
-                  // fall through to the chip, which is precisely how a
-                  // failed tool came to look like a successful one.
+                {message.steps.map((step) => {
+                  // THREE-WAY DISPATCH, in this order (G5):
+                  //   1. a recorded FAILURE -> error block
+                  //   2. a registered renderer for this tool name -> its surface
+                  //   3. otherwise -> the "used X" chip
+                  // An error must NEVER fall through to the chip or a
+                  // renderer: that is how a failed tool came to look like
+                  // a successful one.
                   //
                   // `ok === false` SPECIFICALLY. Undefined means "never
-                  // recorded" — a row written before the discriminant — and
-                  // that is not a failure, so it must not be styled as one.
-                  step.ok === false ? (
-                    <ToolErrorBlock
-                      key={step.id}
-                      tool={step.tool}
-                      message={step.result ?? ""}
-                    />
-                  ) : (
+                  // recorded" -- a row written before the discriminant --
+                  // and that is not a failure.
+                  if (step.ok === false) {
+                    return (
+                      <ToolErrorBlock
+                        key={step.id}
+                        tool={step.tool}
+                        message={step.result ?? ""}
+                      />
+                    );
+                  }
+                  const Renderer = toolSurfaceFor(step.tool);
+                  if (Renderer !== undefined) {
+                    return (
+                      <Renderer
+                        key={step.id}
+                        step={step}
+                        expanded={expandedSteps[step.id] === true}
+                        onToggle={() =>
+                          setExpandedSteps((prev) => ({
+                            ...prev,
+                            [step.id]: prev[step.id] !== true,
+                          }))
+                        }
+                      />
+                    );
+                  }
+                  return (
                     <View
                       key={step.id}
                       className="flex-row items-center gap-1 rounded-full border border-border bg-surface-2 px-2 py-0.5"
@@ -225,8 +254,8 @@ export function MessageListItem({
                         {step.tool}
                       </Text>
                     </View>
-                  ),
-                )}
+                  );
+                })}
               </View>
             )}
           </View>,

@@ -25,6 +25,9 @@ export interface AgentStep {
    *  before the discriminant existed reads as undefined, and renders
    *  conservatively rather than claiming a result nobody recorded. */
   ok?: boolean;
+  /** Structured result for the renderer, never for the model. Absent for a
+   *  tool with no structured shape, and for every row written before it. */
+  data?: Record<string, unknown>;
   position: number;
 }
 

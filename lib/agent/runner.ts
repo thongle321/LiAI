@@ -234,8 +234,11 @@ const outcome = await runTalent(call.name, call.arguments, {
           tool: call.name,
           status: "done",
           ...(input ? { input } : {}),
-          result: outcome.content,
+result: outcome.content,
           ok: outcome.ok,
+          // Rides to the store so a settled turn's renderer can draw the
+          // structured shape instead of parsing the fenced markdown.
+          ...(outcome.data !== undefined ? { data: outcome.data } : {}),
         });
         onEvent({
           type: "tool_call_finished",

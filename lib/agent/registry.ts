@@ -38,9 +38,20 @@ export interface TalentContext {
 export interface TalentOutcome {
   ok: boolean;
   content: string;
+  /** Structured result, for the RENDERER only -- never for the model.
+   *
+   *  The model reads `content` and nothing else; the untrusted fence wraps
+   *  that string and exists to stop prompt injection reaching the MODEL.
+   *  A renderer is not a model, and React escapes text by default, so
+   *  handing it the structured shape is safe -- and it is why a tool's
+   *  renderer never has to parse its own markdown back apart. */
+  data?: Record<string, unknown>;
 }
 
-const done = (content: string): TalentOutcome => ({ ok: true, content });
+const done = (
+  content: string,
+  data?: Record<string, unknown>,
+): TalentOutcome => (data !== undefined ? { ok: true, content, data } : { ok: true, content });
 const fail = (content: string): TalentOutcome => ({ ok: false, content });
 
 const MAX_TALENT_TURNS = 5;
@@ -188,7 +199,13 @@ export async function runTalent(
       `## Web search results for "${query}"`,
       ...hits.map(formatHit),
     ].join("\n");
-    return done(fenceUntrusted(menu));
+    // `hits` rides alongside the fenced markdown: one is what the MODEL reads
+    // (fenced, because it is untrusted third-party text) and the other is
+    // what the USER's renderer draws.
+    return done(
+      fenceUntrusted(menu),
+      { hits: hits.map((h) => ({ title: h.title, url: h.url, snippet: h.snippet })) },
+    );
   }
   // read_url
   const url = typeof args.url === "string" ? args.url.trim() : "";

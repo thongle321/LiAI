@@ -93,6 +93,36 @@ describe("runTalent web_search", () => {
     assert.match(gated.content, /not from a web_search result/i);
   });
 
+  it("carries the hits STRUCTURED alongside the fenced markdown", async () => {
+    // The criterion this exists for: a renderer must never parse its own
+    // markdown back apart. The model reads `content` (fenced, because it
+    // is untrusted third-party text); the renderer reads `data`.
+    resetReadUrlAllowlist();
+    const out = await runTalent(
+      "web_search",
+      JSON.stringify({ query: "structured-hits-probe-02" }),
+      {
+        fetchImpl: fakeFetch({
+          results: [
+            { title: "First", url: "https://one.example", content: "s1" },
+            { title: "Second", url: "https://two.example", content: "s2" },
+          ],
+        }),
+        search: { provider: "tavily", key: "k", count: 5 },
+      },
+    );
+    assert.equal(out.ok, true);
+    assert.match(out.content, /third-party/, "the model's copy stays fenced");
+    const hits = out.data?.hits;
+    assert.ok(Array.isArray(hits), "structured hits are present");
+    assert.equal(hits.length, 2);
+    assert.deepEqual(
+      (hits as Array<{ url: string }>).map((h) => h.url),
+      ["https://one.example", "https://two.example"],
+      "order and urls survive, so no re-derivation is needed",
+    );
+  });
+
   it("treats zero results as an empty result, not a failure", async () => {
     // The search WORKED; the answer is that there was nothing to find.
     // Collapsing the two teaches the user that a working search broke.

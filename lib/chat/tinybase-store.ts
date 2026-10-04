@@ -217,6 +217,7 @@ export class TinyBaseSessionStore implements SessionStore {
     // it here would make every failure indistinguishable from a row
     // written before the discriminant existed.
     ...(step.ok !== undefined ? { ok: step.ok } : {}),
+    ...(step.data !== undefined ? { data: step.data } : {}),
       });
     }
     this.touch(sessionId);
@@ -287,6 +288,9 @@ export class TinyBaseSessionStore implements SessionStore {
     // row written before the column reads as "never recorded", not as
     // "succeeded", so it renders conservatively.
     ...(typeof raw["ok"] === "boolean" ? { ok: raw["ok"] } : {}),
+    // Mirrors `input`: a JSON object column, read back only when it really
+    // is an object, so a malformed cell cannot reach a renderer.
+    ...(isRecord(raw["data"]) ? { data: raw["data"] } : {}),
       });
     }
     return steps.sort((a, b) => a.position - b.position);

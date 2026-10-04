@@ -12,7 +12,7 @@ Ours: `D:\aivision` root app (`app/(drawer)/(tabs)/chat.tsx` + `components/chat/
 | G6 | Partial — pill ships; graded effort cycle deliberately absent |
 | G9 | **SHIPPED** — haptic + temporary helper line; the placeholder half was already there |
 | G13 | Partial — elapsed time ships; token count and "Stopping…" deliberately absent |
-| G5 — agent tool result UI | **OPEN** |
+| G5 — agent tool result UI | **SHIPPED**, with two honest gaps: collapse state is not persisted (resets on remount), and `reasoning`/`usage` are still not restored by import |
 | G8 — multi-image attach (up to 5) | **OPEN** |
 | G9 — send-with-no-model haptic | **OPEN** (the partial half) |
 | G17 — content / model-error reporting | **PARKED** — needs a backend; ADR-0012 is local-only |
@@ -402,7 +402,7 @@ We render only a token count (`MessageListItem.tsx:148`, `MessageActions.tsx:72-
 stops a reply sees a bubble that looks exactly like a finished one, and nobody can tell whether
 the model is slow, the device is slow, or the answer was cut short.
 
-**G5 — Agent tool results have no UI: MISSING.**
+**G5 — Agent tool results have no UI: SHIPPED** across four tickets.
 `TalentSurface.tsx:36-101` dispatches each tool outcome into one of four real surfaces:
 `WebSearchResultBubble` + `WebSearchResultsSheet` (`WebSearchResultBubble.tsx:21-83`,
 `WebSearchResultsSheet.tsx:23-130`), `HtmlPreviewBubble`, `ToolUsedChip`

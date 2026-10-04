@@ -36,12 +36,16 @@ export function MessageListItem({
   row,
   onRetry,
   onRegenerate,
+  contextBannerVisible,
 }: {
   /** One adapter row: message plus its group/avatar/status flags. */
   row: MessageRow;
   onRetry: () => void;
   /** Null for user bubbles (nothing to regenerate). */
   onRegenerate: (() => void) | null;
+  /** A context-full banner is on screen for this conversation, so the
+   *  turn footer must not repeat what it already says. */
+  contextBannerVisible?: boolean;
 }) {
   const { message, grouped, showAvatar, status } = row;
   const duration = MOTION_DURATION_MS;
@@ -153,13 +157,12 @@ export function MessageListItem({
             )}
           </View>
         </MessageMenu>
-        <Text className="mt-1 font-sans text-micro text-secondary-text">
-          {settled && message.usage ? `${message.usage.totalTokens} tokens` : ""}
-        </Text>
         {onRegenerate !== null && settled && (
           <MessageActions
             text={message.text}
             usage={message.usage}
+            outcome={message.outcome}
+            contextBannerVisible={contextBannerVisible}
             onRegenerate={onRegenerate}
           />
         )}

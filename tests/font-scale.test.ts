@@ -89,8 +89,10 @@ describe("chat body rises to pocketpal 16 (Q1)", () => {
 
 describe("the small rungs land", () => {
   it("assistant footer timing at micro (10)", () => {
-    const item = read("components/chat/MessageListItem.tsx");
-    assert.match(item, /text-micro/);
+    // The footer moved from MessageListItem.tsx to MessageActions.tsx when
+    // the duplicate token line was consolidated. The pin follows the code:
+    // the intent is the RUNG, not which file holds it.
+    assert.match(read("components/chat/MessageActions.tsx"), /text-micro/);
   });
 
   it("composer hints at xs (11), chip menu labels at 12", () => {

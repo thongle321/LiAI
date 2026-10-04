@@ -35,6 +35,7 @@ import { APP_NAME } from "../../../constants/app.ts";
 import { TAB_BAR_HEIGHT } from "../../../components/BottomNav.tsx";
 import { useChatStore } from "../../../store/chat.ts";
 import { useModelStore } from "../../../store/modelStore";
+import { useInference } from "../../../store/inference.ts";
 import { useKeyboardLift } from "../../../hooks/useKeyboardLift.ts";
 import { useKeyboardState } from "react-native-keyboard-controller";
 import { MessageListItem } from "../../../components/chat/MessageListItem.tsx";
@@ -45,6 +46,11 @@ import { MessageInput } from "../../../components/chat/MessageInput.tsx";
 import { UsageStats } from "../../../components/chat/UsageStats.tsx";
 import { SuggestedPrompts } from "../../../components/chat/SuggestedPrompts.tsx";
 import { MessageList } from "../../../components/chat/MessageList.tsx";
+import {
+  ContextFullBanner,
+  ContextLadderSheet,
+} from "../../../components/chat/ContextFullBanner.tsx";
+import { fillPercent } from "../../../lib/chat/context-fill.ts";
 import { GenerationSettingsSheet } from "../../../components/chat/GenerationSettingsSheet.tsx";
 import { ChatMenu } from "../../../components/chat/ChatMenu.tsx";
 
@@ -104,6 +110,27 @@ export default function ChatRoute() {
   const showPlaceholder = !ready && emptyState;
 
   const motionDuration = MOTION_DURATION_MS;
+
+  // ---- G1: the context-full banner -------------------------------------
+  // It speaks for the NEWEST assistant turn and nothing else. Scoping it
+  // that way makes it self-clearing: keep chatting, answer successfully,
+  // and the banner goes away on its own without a reset rule.
+  const newestAssistant = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].role === "assistant") return messages[i];
+    }
+    return null;
+  }, [messages]);
+  const contextFullTurnId =
+    newestAssistant?.outcome?.contextFull === true ? newestAssistant.id : null;
+  // Dismissal is remembered PER TURN, so it survives a re-render but not
+  // the next context-full turn -- which is a different problem and needs
+  // saying again.
+  const [dismissedTurnId, setDismissedTurnId] = useState<string | null>(null);
+  const [ladderOpen, setLadderOpen] = useState(false);
+  const contextFullShowing = contextFullTurnId !== null && contextFullTurnId !== dismissedTurnId;
+  const nCtx = useInference((s) => s.nCtx);
+  const setNCtx = useInference((s) => s.setNCtx);
   const navigation = useNavigation<{ openDrawer: () => void }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -309,6 +336,7 @@ export default function ChatRoute() {
                 <MessageListItem
                   row={row}
                   onRetry={() => void retry(row.message.id)}
+                  contextBannerVisible={contextFullShowing}
                   onRegenerate={
                     row.message.role === "assistant"
                       ? () => void regenerate(row.message.id)
@@ -391,11 +419,38 @@ export default function ChatRoute() {
             coincide — send/retry/regenerate mint the streaming stub in the
             same set() — so a chip would be a second indicator for one
             state, overlapping the list instead of scrolling with it. */}
+        {contextFullShowing && (
+          <ContextFullBanner
+            fill={fillPercent(newestAssistant?.usage?.promptTokens, nCtx)}
+            onMoreRoom={() => setLadderOpen(true)}
+            onNewChat={() => {
+              setDismissedTurnId(contextFullTurnId);
+              void newConversation();
+            }}
+            onDismiss={() => setDismissedTurnId(contextFullTurnId)}
+          />
+        )}
         {ready && emptyState && (
           <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
         )}
         <UsageStats messages={messages} />
       </Animated.View>
+      {/* The ladder lives OUTSIDE the overlay row: it is a modal sheet
+          with its own scrim, so it must not inherit the composer's lift
+          transform or it would ride up with the keyboard. */}
+      <ContextLadderSheet
+        visible={ladderOpen}
+        currentNctx={nCtx}
+        onPick={(n) => {
+          // The engine reloads on the NEXT send: EngineManager keys its
+          // slot on n_ctx, so a changed value transparently releases and
+          // re-inits. No explicit reload needed.
+          setNCtx(n);
+          setLadderOpen(false);
+          setDismissedTurnId(contextFullTurnId);
+        }}
+        onClose={() => setLadderOpen(false)}
+      />
       {/* Sampling is per conversation and lives here, not in Settings —
           the same split PocketPal uses. */}
       <GenerationSettingsSheet

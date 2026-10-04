@@ -40,6 +40,7 @@ import {
 import { Sheet } from "../Sheet.tsx";
 import { useSnackbar } from "../Snackbar.tsx";
 import { colors } from "../../themes/tokens.ts";
+import { useShallow } from "zustand/shallow";
 import { useModelStore } from "../../store/modelStore";
 import { hfSpecId } from "../../lib/models/huggingface.ts";
 import {
@@ -224,30 +225,37 @@ export function HFModelSearch({
   visible: boolean;
   onClose: () => void;
 }) {
-  const {
-    searchModels,
-    loadMoreModels,
-    loadSearchFilters,
-    searchResults,
-    searchLoading,
-    searchLoadingMore,
-    searchError,
-    searchFilters,
-    setSearchFilters,
-    getModelFiles,
-    disableHfTokenAndRetry,
-    bookmarkModel,
-    isBookmarked,
-    getModelByOid,
-    removeBookmark,
-    startDownload,
-    pauseModelDownload,
-    resumeModelDownload,
-    cancelModelDownload,
-    activeHfToken,
-    models,
-    largestSuccessfulBytes,
-  } = useModelStore();
+  // Stable selectors: actions are referentially stable, but useShallow
+  // keeps the two re-rendering subscriptions (models, largestBytes)
+  // isolated — a bookmark toggle must not rebuild the search list.
+  const searchModels = useModelStore((s) => s.searchModels);
+  const loadMoreModels = useModelStore((s) => s.loadMoreModels);
+  const loadSearchFilters = useModelStore((s) => s.loadSearchFilters);
+  const searchResults = useModelStore((s) => s.searchResults);
+  const searchLoading = useModelStore((s) => s.searchLoading);
+  const searchLoadingMore = useModelStore((s) => s.searchLoadingMore);
+  const searchError = useModelStore((s) => s.searchError);
+  const searchFilters = useModelStore((s) => s.searchFilters);
+  const setSearchFilters = useModelStore((s) => s.setSearchFilters);
+  const getModelFiles = useModelStore((s) => s.getModelFiles);
+  const disableHfTokenAndRetry = useModelStore(
+    (s) => s.disableHfTokenAndRetry,
+  );
+  const bookmarkModel = useModelStore((s) => s.bookmarkModel);
+  const isBookmarked = useModelStore((s) => s.isBookmarked);
+  const getModelByOid = useModelStore((s) => s.getModelByOid);
+  const removeBookmark = useModelStore((s) => s.removeBookmark);
+  const startDownload = useModelStore((s) => s.startDownload);
+  const pauseModelDownload = useModelStore((s) => s.pauseModelDownload);
+  const resumeModelDownload = useModelStore((s) => s.resumeModelDownload);
+  const cancelModelDownload = useModelStore((s) => s.cancelModelDownload);
+  const { models, largestSuccessfulBytes } = useModelStore(
+    useShallow((s) => ({
+      models: s.models,
+      largestSuccessfulBytes: s.largestSuccessfulBytes,
+    })),
+  );
+  const activeHfToken = useModelStore((s) => s.activeHfToken);
   const guard = (sizeBytes: number, proceed: () => void) => {
     if (sizeBytes > largestSuccessfulBytes * 1.5 && largestSuccessfulBytes > 0) {
       Alert.alert(

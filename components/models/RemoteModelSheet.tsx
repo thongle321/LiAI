@@ -22,8 +22,12 @@ export function RemoteModelSheet({
   visible: boolean;
   onClose: () => void;
 }) {
-  const { addRemoteApi, validateAndRecord, privacyAcknowledged, acknowledgePrivacy } =
-    useModelStore();
+  // Stable selectors: actions plus one boolean flag, each subscribing
+  // alone so unrelated store writes never touch this form.
+  const addRemoteApi = useModelStore((s) => s.addRemoteApi);
+  const validateAndRecord = useModelStore((s) => s.validateAndRecord);
+  const privacyAcknowledged = useModelStore((s) => s.privacyAcknowledged);
+  const acknowledgePrivacy = useModelStore((s) => s.acknowledgePrivacy);
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");

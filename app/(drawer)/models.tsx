@@ -9,6 +9,7 @@ import { colors } from "../../themes/tokens.ts";
 import { ScreenHeader } from "../../components/ScreenHeader.tsx";
 import { ContentColumn } from "../../components/ContentColumn.tsx";
 import { useLocalModelImport } from "../../hooks/useLocalModelImport.ts";
+import { useShallow } from "zustand/shallow";
 import { useModelStore } from "../../store/modelStore.ts";
 import { useModelsUi } from "../../store/modelsUi.ts";
 import { ModelsHeaderRight } from "../../components/models/ModelsHeaderRight.tsx";
@@ -20,21 +21,29 @@ import { RemoteModelSheet } from "../../components/models/RemoteModelSheet.tsx";
 import { ModelSettingsSheet } from "../../components/models/ModelSettingsSheet.tsx";
 
 export default function ModelsRoute() {
-  const { loadPersisted, startDownload } = useModelStore();
+  // Stable selectors: actions never change identity, so each subscribes
+  // alone and preset/download writes never re-render this screen.
+  const loadPersisted = useModelStore((s) => s.loadPersisted);
+  const startDownload = useModelStore((s) => s.startDownload);
   const router = useRouter();
   const importLocalModel = useLocalModelImport();
-  const {
-    readyOpen,
-    availableOpen,
-    downloadedOnly,
-    hfOnly,
-    grouped,
-    load: loadUi,
-    setOpen,
-    setAllOpen,
-    setFilter,
-    autoNavigateToChat,
-  } = useModelsUi();
+  // Stable selectors plus one useShallow read set: actions subscribe
+  // alone, the accordion/filter flags move as one shallow unit.
+  const loadUi = useModelsUi((s) => s.load);
+  const setOpen = useModelsUi((s) => s.setOpen);
+  const setAllOpen = useModelsUi((s) => s.setAllOpen);
+  const setFilter = useModelsUi((s) => s.setFilter);
+  const { readyOpen, availableOpen, downloadedOnly, hfOnly, grouped, autoNavigateToChat } =
+    useModelsUi(
+      useShallow((s) => ({
+        readyOpen: s.readyOpen,
+        availableOpen: s.availableOpen,
+        downloadedOnly: s.downloadedOnly,
+        hfOnly: s.hfOnly,
+        grouped: s.grouped,
+        autoNavigateToChat: s.autoNavigateToChat,
+      })),
+    );
 
   useEffect(() => {
     loadPersisted();

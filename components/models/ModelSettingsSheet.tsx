@@ -27,7 +27,10 @@ export function ModelSettingsSheet({
   modelId: string | null;
   onClose: () => void;
 }) {
-  const { getModelSettings, updateModelSettings } = useModelStore();
+  // Stable selectors: both are stable store functions, so this sheet
+  // never re-renders on model-store writes.
+  const getModelSettings = useModelStore((s) => s.getModelSettings);
+  const updateModelSettings = useModelStore((s) => s.updateModelSettings);
   const [displayName, setDisplayName] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [stopWordsText, setStopWordsText] = useState("");

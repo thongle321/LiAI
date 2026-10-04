@@ -35,6 +35,7 @@ import {
   resolveSampler,
   type SamplerParams,
 } from "../../lib/inference/sampler.ts";
+import { useShallow } from "zustand/shallow";
 import { useInference } from "../../store/inference.ts";
 import { useChatStore, defaultGetStore } from "../../store/chat";
 import { SamplerRows } from "../SamplerRows.tsx";
@@ -71,13 +72,23 @@ export function GenerationSettingsSheet({
   onClose: () => void;
 }) {
   const sessionId = useChatStore((s) => s.sessionId);
+  // One useShallow unit: all five fields feed the draft, so the sheet
+  // re-renders only when one of them changes.
   const {
     sampler: preset,
     jinjaEnabled,
     setSampler,
     setJinjaEnabled,
     load,
-  } = useInference();
+  } = useInference(
+    useShallow((s) => ({
+      sampler: s.sampler,
+      jinjaEnabled: s.jinjaEnabled,
+      setSampler: s.setSampler,
+      setJinjaEnabled: s.setJinjaEnabled,
+      load: s.load,
+    })),
+  );
   const [mode, setMode] = useState<Mode>("session");
   const [override, setOverride] = useState<Partial<SamplerParams> | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);

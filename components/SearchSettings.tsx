@@ -24,6 +24,7 @@ import {
   SEARCH_PROVIDERS,
   type SearchProviderId,
 } from "../lib/search-providers.ts";
+import { useShallow } from "zustand/shallow";
 import { useSearch } from "../store/search.ts";
 import { Sheet } from "./Sheet.tsx";
 import {
@@ -209,6 +210,9 @@ function ProviderKeySheet({
 }
 
 export function SearchSettings() {
+  // One useShallow unit: all eight fields render here, so the row
+  // re-renders only when one of them changes — never on unrelated
+  // search-store writes.
   const {
     hasConsented,
     setConsented,
@@ -218,7 +222,18 @@ export function SearchSettings() {
     setResultCount,
     getProviderKey,
     load,
-  } = useSearch();
+  } = useSearch(
+    useShallow((s) => ({
+      hasConsented: s.hasConsented,
+      setConsented: s.setConsented,
+      activeProviderId: s.activeProviderId,
+      setActiveProvider: s.setActiveProvider,
+      resultCount: s.resultCount,
+      setResultCount: s.setResultCount,
+      getProviderKey: s.getProviderKey,
+      load: s.load,
+    })),
+  );
   const [keySheetFor, setKeySheetFor] = useState<SearchProviderId | null>(null);
   const [hasKey, setHasKey] = useState(false);
 

@@ -31,7 +31,11 @@ export default function ModelStep() {
   const tiers = TIERS;
   const [selectedId, setSelectedId] = useState(tiers[0].id);
   const [ramUnknown, setRamUnknown] = useState(false);
-  const { presets, loadPersisted, startDownload } = useModelStore();
+  // Stable selectors plus one useShallow read: actions subscribe alone,
+  // the preset list re-renders only when presets themselves change.
+  const loadPersisted = useModelStore((s) => s.loadPersisted);
+  const startDownload = useModelStore((s) => s.startDownload);
+  const presets = useModelStore((s) => s.presets);
   const guard = useLoadGuard();
 
   useEffect(() => {

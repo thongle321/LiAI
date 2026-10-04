@@ -46,14 +46,14 @@ export function ModelCard({
    *  letting it fail halfway. */
   outOfSpace?: boolean;
 }) {
-  const {
-    removeModel,
-    removeBookmark,
-    getModelSettings,
-    pauseModelDownload,
-    resumeModelDownload,
-    cancelModelDownload,
-  } = useModelStore();
+  // Stable selectors: actions never change identity, so each subscribes
+  // alone and no card re-renders on unrelated store writes.
+  const removeModel = useModelStore((s) => s.removeModel);
+  const removeBookmark = useModelStore((s) => s.removeBookmark);
+  const getModelSettings = useModelStore((s) => s.getModelSettings);
+  const pauseModelDownload = useModelStore((s) => s.pauseModelDownload);
+  const resumeModelDownload = useModelStore((s) => s.resumeModelDownload);
+  const cancelModelDownload = useModelStore((s) => s.cancelModelDownload);
   const settings = getModelSettings(item.id);
   const title = settings.displayName || item.name;
   // Only the file size, never the parameter count next to it: "0.6B" beside

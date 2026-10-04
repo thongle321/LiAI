@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 
+import { useShallow } from "zustand/shallow";
 import { useInference } from "../../store/inference.ts";
 import { resolveLocalFile } from "../../lib/inference/engine.ts";
 import { formatParams } from "../../lib/model-providers.ts";
@@ -36,8 +37,19 @@ export function ModelCardDetails({
   /** Summed by the card (single owner) so the two never disagree. */
   fileBytes: number;
 }) {
+  // One useShallow unit: the estimate reads exactly these six, so
+  // unrelated inference writes never rebuild this card.
   const { nCtx, cacheK, cacheV, nUbatch, specDraftCacheK, specDraftCacheV } =
-    useInference();
+    useInference(
+      useShallow((s) => ({
+        nCtx: s.nCtx,
+        cacheK: s.cacheK,
+        cacheV: s.cacheV,
+        nUbatch: s.nUbatch,
+        specDraftCacheK: s.specDraftCacheK,
+        specDraftCacheV: s.specDraftCacheV,
+      })),
+    );
 
   // Revalidates whenever the spec object changes — redownloads arrive
   // as a new object under the same id.

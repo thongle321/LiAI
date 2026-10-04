@@ -25,6 +25,8 @@ import {
 } from "expo-speech-recognition";
 import Animated from "react-native-reanimated";
 
+import * as Haptics from "expo-haptics";
+
 import { colors } from "../../themes/tokens.ts";
 import { useChatStore } from "../../store/chat.ts";
 import { useInference } from "../../store/inference.ts";
@@ -106,6 +108,19 @@ export function MessageInput({
   // rejected before the run.
   const [attached, setAttached] = useState<string[]>([]);
   const [attachIssue, setAttachIssue] = useState<string | null>(null);
+  // G9 (PocketParity): pressing Send with no model fires a warning haptic
+  // and a temporary helper line (ChatInput.tsx:228-240). The button KEEPS
+  // its disabled look — only `disabled` is dropped, so the press has
+  // something to answer with. Nothing here reverses the keyboard spec §12
+  // decision: that argued the PLACEHOLDER is the honest single surface for
+  // showing state, and this is feedback for an ATTEMPTED action, not a
+  // second place to show state.
+  const [blockedNote, setBlockedNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (blockedNote === null) return;
+    const id = setTimeout(() => setBlockedNote(null), 2500);
+    return () => clearTimeout(id);
+  }, [blockedNote]);
   // Dictation: mic fills the draft, the user presses Send. Interim
   // updates replace the dictated tail (draftBase keeps typed text).
   const [listening, setListening] = useState(false);
@@ -319,9 +334,19 @@ export function MessageInput({
             {voiceIssue}
           </Text>
         ))}
-      {attachIssue !== null && (
+{attachIssue !== null && (
         <Text className="px-4 pb-1 font-sans text-xs text-secondary-text">
           {attachIssue}
+        </Text>
+      )}
+      {blockedNote !== null && (
+        // Same treatment as the other issue lines, so a blocked send
+        // does not shout louder than a failed attach.
+        <Text
+          className="px-4 pb-1 font-sans text-xs text-secondary-text"
+          accessibilityLiveRegion="polite"
+        >
+          {blockedNote}
         </Text>
       )}
       {attached.length > 0 && (
@@ -512,15 +537,29 @@ export function MessageInput({
         ) : (
           <Animated.View style={sendPress.animatedStyle}>
             <Pressable
-              disabled={!canSend}
-              onPress={() => void handleSend()}
+              // Only an EMPTY draft is truly inert. A non-empty draft with
+              // no model must still answer the press -- that answer is the
+              // whole point of G9.
+              disabled={draft.trim() === ""}
+              onPress={() => {
+                if (!modelReady) {
+                  void Haptics.notificationAsync(
+                    Haptics.NotificationFeedbackType.Warning,
+                  );
+                  setBlockedNote("Load a model to send this message.");
+                  return;
+                }
+                void handleSend();
+              }}
               onPressIn={sendPress.onPressIn}
               onPressOut={sendPress.onPressOut}
               className={`h-12 w-12 items-center justify-center rounded-full ${
                 canSend ? "bg-primary" : "bg-surface-2"
               }`}
               accessibilityRole="button"
-              accessibilityLabel="Send message"
+              accessibilityLabel={
+                modelReady ? "Send message" : "Load a model to send this message"
+              }
             >
               <Send size={20} color={canSend ? colors.onPrimary : colors.secondaryText} />
             </Pressable>

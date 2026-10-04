@@ -10,7 +10,7 @@ Ours: `D:\aivision` root app (`app/(drawer)/(tabs)/chat.tsx` + `components/chat/
 |---|---|
 | G1–G4, G7, G10–G12, G14–G16 | **SHIPPED** |
 | G6 | Partial — pill ships; graded effort cycle deliberately absent |
-| G9 | Partial — placeholder ships; the haptic does not |
+| G9 | **SHIPPED** — haptic + temporary helper line; the placeholder half was already there |
 | G13 | Partial — elapsed time ships; token count and "Stopping…" deliberately absent |
 | G5 — agent tool result UI | **OPEN** |
 | G8 — multi-image attach (up to 5) | **OPEN** |
@@ -438,12 +438,18 @@ from fatal ones, and the user is never offered the retry or the fix.
 `string | null`, `types/chat.ts:45` has one `image?`, `lib/chat/turn.ts:124-127` builds at most
 one path. **Consequence:** "compare these two screenshots" is not expressible.
 
-**G9 — Send-with-no-model feedback is weaker: PARTIAL.**
+**G9 — Send-with-no-model feedback is weaker: SHIPPED.**
 PocketPal fires a warning haptic and a temporary helper line (`ChatInput.tsx:228-240`); ours only
 disables the button and changes the placeholder (`MessageInput.tsx:196-207`). Partly deliberate
 (`docs/specs/2026-09-27-pocketpal-keyboard-ui-parity.md` §12 argues the placeholder is the honest
 single surface) — but the *haptic* half is not recorded anywhere as rejected, and we have
 `expo-haptics` installed and unused outside voice.
+
+**SHIPPED**, without reversing §12. The button keeps its disabled LOOK; only `disabled` is dropped,
+and only when the draft is non-empty, so the press has something to answer with. The press fires a
+warning haptic and a temporary helper line that self-clears. §12 argued the placeholder is the
+honest single surface for showing **state** — this is feedback for an **attempted action**, which
+§12 never addressed, so nothing documented was contradicted. Only an empty draft stays truly inert.
 
 **G10 — Session import: MISSING.**
 `HeaderRight.tsx:260-272` → `utils/importUtils.ts:177-287` (document picker, schema validation,

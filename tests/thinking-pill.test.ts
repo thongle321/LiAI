@@ -71,6 +71,32 @@ test("no effort cycle", () => {
   assert.doesNotMatch(src, /cycleEffort|effortLevel|onDoublePress/);
 });
 
+test("G9: a blocked send answers the press instead of doing nothing", () => {
+  // A disabled button fires no press, so there was nothing to haptic.
+  // PocketParity (ChatInput.tsx:228-240): warning haptic + a temporary
+  // helper line. The button KEEPS its disabled look -- only `disabled` is
+  // dropped so the press can answer.
+  assert.match(
+    src,
+    /Haptics\.notificationAsync\(\s*Haptics\.NotificationFeedbackType\.Warning/,
+    "a warning haptic, as pocketpal fires",
+  );
+  assert.match(src, /setBlockedNote\("Load a model to send this message\."\)/);
+  // Only an EMPTY draft is truly inert. Gating on `!canSend` again would
+  // restore the silent no-op this gap is about.
+  assert.match(
+    src,
+    /disabled=\{draft\.trim\(\) === ""\}/,
+    "a non-empty draft must still answer the press",
+  );
+  assert.doesNotMatch(src, /disabled=\{!canSend\}/);
+});
+
+test("G9: the helper line is temporary, not a permanent second status", () => {
+  assert.match(src, /setTimeout\(\(\) => setBlockedNote\(null\), \d+\)/);
+  assert.match(src, /accessibilityLiveRegion="polite"/);
+});
+
 test("the Settings sheet still does not write the flag directly", () => {
   // The sheet is write-through on a draft, so it must not set the flag on
   // Save. The composer pill is the one direct control.

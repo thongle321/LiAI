@@ -243,20 +243,46 @@ if (store) await quiet(store.setActiveSessionId(null));
       if (!store) {
         return { ok: false, imported: 0, skipped: 0, error: "Storage isn't ready." };
       }
-      let imported = 0;
-      for (const s of parsed.sessions) {
-        // A fresh id per session, and `append` is called WITHOUT an id, so
-        // the store mints fresh row ids. Importing the file's own ids
-        // would make a second import of the same backup collide with the
-        // first and overwrite it.
-        const id = await store.create();
-        await quiet(store.renameSession(id, s.title));
-        await quiet(store.setSessionPinned(id, s.pinned));
-        for (const turn of s.turns) await quiet(store.append(id, turn));
-        imported += 1;
+let imported = 0;
+    let skipped = parsed.skipped;
+    for (const s of parsed.sessions) {
+      // A fresh id per session, and `append` is called WITHOUT an id, so
+      // the store mints fresh row ids. Importing the file's own ids
+      // would make a second import of the same backup collide with the
+      // first and overwrite it.
+      //
+      // No `quiet()` on these calls. Swallowing a failed append would
+      // leave a conversation that looks restored but is missing messages,
+      // and still count it as imported -- a silent data loss with a
+      // success message. A partial write is rolled back instead.
+      let id: string | null = null;
+      let complete = true;
+      try {
+        id = await store.create();
+        await store.renameSession(id, s.title);
+        await store.setSessionPinned(id, s.pinned);
+        for (const turn of s.turns) await store.append(id, turn);
+      } catch {
+        complete = false;
       }
+      if (complete) {
+        imported += 1;
+        continue;
+      }
+      // Roll the half-written conversation back rather than leaving it to
+      // look intact. If even the delete fails there is nothing more to do
+      // safely, so it is reported rather than hidden.
+      if (id !== null) {
+        try {
+          await store.deleteSession(id);
+        } catch {
+          /* reported below either way */
+        }
+      }
+      skipped += 1;
+    }
       await quiet(get().refreshSessions());
-      return { ok: true, imported, skipped: parsed.skipped };
+      return { ok: true, imported, skipped };
     },
   };
 }

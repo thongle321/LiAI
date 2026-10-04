@@ -77,8 +77,17 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 /** Rebuild one turn, or null when it is unusable. Note there is no
  *  `...(turn as StoredTurn)` anywhere in this file: the spread is what
- *  would smuggle an attacker-supplied `id` into the store. */
-function toTurn(value: unknown): StoredTurn | null {
+ *  would smuggle an attacker-supplied `id` into the store.
+ *
+ *  `droppedRich` is the honest part. `export.ts` writes reasoning, usage,
+ *  tool steps and outcome flags, and this validator does not restore them
+ *  -- carrying untrusted AgentStep/usage graphs through would need its own
+ *  structural validation, which is not something to bolt on beside a
+ *  security fix. Silently discarding them while reporting `skipped: 0`
+ *  would be the same class of mistake the module exists to avoid: a
+ *  restore that quietly loses data and claims it kept everything. So they
+ *  are counted and the user is told. */
+function toTurn(value: unknown): { turn: StoredTurn; droppedRich: boolean } | null {
   if (!isRecord(value)) return null;
   if (value.role !== "user" && value.role !== "assistant") return null;
   const content = str(value.content, MAX_CONTENT_CHARS);
@@ -98,7 +107,12 @@ function toTurn(value: unknown): StoredTurn | null {
   // No image handling: `StoredTurn` has no image field, so export.ts
   // never writes one and an import cannot restore a photo that was never
   // in the file. Inventing one would be data the backup does not contain.
-  return turn;
+  const droppedRich =
+    value.reasoning !== undefined ||
+    value.steps !== undefined ||
+    value.usage !== undefined ||
+    value.outcome !== undefined;
+  return { turn, droppedRich };
 }
 
 /** One session, or null when even its shape is wrong. Turns inside are
@@ -119,7 +133,10 @@ function toSession(value: unknown): { session: ImportedSession; skipped: number 
     }
     const turn = toTurn(raw);
     if (turn === null) skipped += 1;
-    else turns.push(turn);
+    else {
+      turns.push(turn.turn);
+      if (turn.droppedRich) skipped += 1;
+    }
   }
   if (turns.length === 0) return null;
   return {
@@ -150,19 +167,26 @@ export function parseImport(text: string): ImportOutcome {
   }
 
   const containers: unknown[] = [];
+  const skippedBefore: number[] = [];
   if (root.format === "liai-chat-session") {
     containers.push(root);
   } else if (root.format === "liai-chat-sessions") {
     if (!Array.isArray(root.sessions)) {
       return { ok: false, error: "That backup has no sessions list." };
     }
-    containers.push(...root.sessions);
+    // NOT `push(...root.sessions)`: spreading an untrusted array into a
+    // call overflows the stack around ~100k entries, and that RangeError
+    // is thrown OUTSIDE the JSON try/catch, so it escapes as a crash
+    // instead of a clean rejection. A hostile file should be refused, not
+    // crash the app.
+    for (const s of root.sessions.slice(0, MAX_SESSIONS)) containers.push(s);
+    if (root.sessions.length > MAX_SESSIONS) skippedBefore.push(root.sessions.length - MAX_SESSIONS);
   } else {
     return { ok: false, error: "That file isn't a LiAI chat backup." };
   }
 
   const sessions: ImportedSession[] = [];
-  let skipped = 0;
+  let skipped = skippedBefore.reduce((a, b) => a + b, 0);
   let totalTurns = 0;
   for (const container of containers) {
     if (sessions.length >= MAX_SESSIONS) {

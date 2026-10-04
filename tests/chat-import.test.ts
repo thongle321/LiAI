@@ -149,6 +149,42 @@ describe("import never trusts an id from the file", () => {
   });
 });
 
+describe("bounded input, reported honestly", () => {
+  it("bounds a huge sessions list instead of spreading it into a call", () => {
+    // `push(...sessions)` on an untrusted array overflows the stack well
+    // before this size, and that RangeError is thrown OUTSIDE the JSON
+    // try/catch -- so it escaped parseImport as a crash. It is sliced now.
+    const sessions = Array.from({ length: 250 }, (_, i) => ({
+      title: `S${i}`,
+      pinned: false,
+      turns: [ok],
+    }));
+    const r = parseImport(
+      JSON.stringify({ format: "liai-chat-sessions", version: 1, sessions }),
+    );
+    assert.equal(r.ok, true, "refused cleanly, not crashed");
+    if (!r.ok) return;
+    assert.equal(r.sessions.length, 200);
+    assert.equal(r.skipped, 50, "the overflow is reported, not hidden");
+  });
+
+  it("counts a turn whose reasoning/usage/steps it will not restore", () => {
+    // Silently discarding them while reporting skipped: 0 is the same
+    // class of mistake the module exists to prevent -- a restore that
+    // quietly loses data and claims it kept everything.
+    const r = parseImport(
+      wrap([
+        ok,
+        { ...ok, content: "rich", steps: [{ tool: "web_search" }], usage: { totalTokens: 5 } },
+      ]),
+    );
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.equal(r.sessions[0].turns.length, 2, "both turns are still restored");
+    assert.equal(r.skipped, 1, "and the lossy one is counted");
+  });
+});
+
 describe("titles", () => {
   it("substitutes a name when the title is blank", () => {
     const r = parseImport(wrap([ok], { title: "   " }));

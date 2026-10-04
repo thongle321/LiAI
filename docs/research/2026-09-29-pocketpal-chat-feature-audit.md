@@ -467,10 +467,24 @@ stub, so only the `TextMessage` path counts). Ours renders the image inert
 (`MessageListItem.tsx:81-85`). **Consequence:** a photo you just took is stuck at 160×120 px;
 you cannot check whether you photographed the right thing before sending it.
 
+**SHIPPED.** Tapping the image opens a fullscreen `ImageViewer` modal (tap anywhere or ✕ to
+close, plus `onRequestClose` for Android's hardware back). The tap target is deliberately OUTSIDE
+the long-press `MessageMenu` wrapper -- that is what keeps both gestures working on the same row
+-- and a test pins that ordering, since moving the image inside would silently break it.
+
 **G16 — Deep-link prefill into the composer: MISSING.**
 `ChatScreen.tsx:254-255` + `DeepLinkStore.ts:12-27` park a `?message=` and fill the field once.
 We have no chat-route link handler. (pocketpal's link is pal-keyed, so this is coupled — but the
 *prefill* mechanism is generic.)
+
+**SHIPPED**, with the coupling recorded rather than hidden. `chat.tsx` reads
+`useLocalSearchParams<{ message?: string }>()` and seeds the draft **once**, using a ref as the
+equivalent of PocketPal's `onInitialTextConsumed` (`ChatScreen.tsx:272-273`) — without it the
+effect re-fires on every render and stomps the user's typing. Open question 7 below stays open:
+this has **no in-app producer**, because pocketpal's only producer is the pal link
+(`pocketpal://chat?palId=p1`) and pals are out of scope here. It fires only when an external app
+or Shortcut hands LiAI a `liai://chat?message=...`. Built on an explicit call rather than dropped
+as unused, but it remains a capability awaiting a caller.
 
 **G17 — Content / model-error reporting: MISSING and unreachable.**
 `ContentReportSheet.tsx:46-224` and `ModelErrorReportSheet.tsx:33-286` both POST to their

@@ -8,6 +8,7 @@
 
 import { ActivityIndicator, Image as RNImage, Pressable, Text, View } from "react-native";
 import type { ReactNode } from "react";
+import { useState } from "react";
 import Animated from "react-native-reanimated";
 import { CheckCheck, Wrench } from "lucide-react-native";
 
@@ -32,6 +33,7 @@ import { MessageActions } from "./MessageActions.tsx";
 import { LinkPreviewCard } from "./LinkPreview.tsx";
 import { ReasoningBlock } from "./ReasoningBlock.tsx";
 import { MessageMenu } from "./MessageMenu.tsx";
+import { ImageViewer } from "./ImageViewer.tsx";
 import type { PickableModel } from "../../lib/chat/models.ts";
 
 export function MessageListItem({
@@ -69,6 +71,17 @@ export function MessageListItem({
   // Previews and actions target settled turns: a half-streamed URL would
   // trigger a garbage preview fetch, and actions need final text.
   const settled = message.streaming !== true;
+  // Which attached photo is open, or null. The image sits OUTSIDE
+  // withMenu, so tapping it opens the viewer while the bubble's own
+  // long-press still opens the menu.
+  //
+  // The honest tradeoff: a long-press ON THE PHOTO itself does nothing --
+  // neither menu nor zoom. That is deliberate. Nesting the image in the
+  // menu would hand the gesture to the menu and cost the tap-to-enlarge
+  // this exists for, and a long-press on a photo is far more likely to
+  // mean "I want the menu" than "I want to zoom" -- which is the same
+  // reason PocketPal's own image path is a tap.
+  const [enlarged, setEnlarged] = useState<string | null>(null);
   // Both bubbles wrap in the same menu and only the bubble inside differs.
   // One definition, so the two call sites cannot drift apart.
   const withMenu = (bubble: ReactNode) => (
@@ -107,40 +120,51 @@ export function MessageListItem({
   }
   if (message.role === "user") {
     return (
-      <Animated.View entering={entering} exiting={exiting} className="my-1 max-w-[80%] self-end items-end">
-        {message.image !== undefined && (
-          <RNImage
-            source={{ uri: message.image }}
-            className="w-40 h-[120px] rounded-xl mb-1"
-          />
-        )}
-        {withMenu(
-          <View
-            className={`px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-br-sm"} bg-surface-3`}
-          >
-            <Text className="font-sans text-body-lg text-primary-text">
-              {message.text}
-            </Text>
-          </View>,
-        )}
-        <View className="w-full">
-          <LinkPreviewCard text={message.text} />
-        </View>
-        {/* Time + status once per group, like the assistant name row:
-            repeating them on every grouped turn is visual noise. */}
-        {!grouped && (
-          <View className="mt-1 flex-row items-center">
-            <Text className="font-sans text-caption text-secondary-text">
-              {formatTime(message.at)}
-            </Text>
-            {status === "sending" ? (
-              <ActivityIndicator size="small" color={colors.secondaryText} />
-            ) : (
-              <CheckCheck size={12} color={colors.secondaryText} />
-            )}
+      <>
+        <Animated.View entering={entering} exiting={exiting} className="my-1 max-w-[80%] self-end items-end">
+          {message.image !== undefined && (
+            <Pressable
+              onPress={() => setEnlarged(message.image ?? null)}
+              className="mb-1"
+              accessibilityRole="button"
+              accessibilityLabel="Enlarge attached photo"
+              accessibilityHint="Opens the photo full screen"
+            >
+              <RNImage
+                source={{ uri: message.image }}
+                className="w-40 h-[120px] rounded-xl"
+              />
+            </Pressable>
+          )}
+          {withMenu(
+            <View
+              className={`px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-br-sm"} bg-surface-3`}
+            >
+              <Text className="font-sans text-body-lg text-primary-text">
+                {message.text}
+              </Text>
+            </View>,
+          )}
+          <View className="w-full">
+            <LinkPreviewCard text={message.text} />
           </View>
-        )}
-      </Animated.View>
+          {/* Time + status once per group, like the assistant name row:
+              repeating them on every grouped turn is visual noise. */}
+          {!grouped && (
+            <View className="mt-1 flex-row items-center">
+              <Text className="font-sans text-caption text-secondary-text">
+                {formatTime(message.at)}
+              </Text>
+              {status === "sending" ? (
+                <ActivityIndicator size="small" color={colors.secondaryText} />
+              ) : (
+                <CheckCheck size={12} color={colors.secondaryText} />
+              )}
+            </View>
+          )}
+        </Animated.View>
+        <ImageViewer uri={enlarged} onClose={() => setEnlarged(null)} />
+      </>
     );
   }
   return (

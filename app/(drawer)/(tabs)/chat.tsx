@@ -18,7 +18,11 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation, useRouter } from "expo-router";
+import {
+  useLocalSearchParams,
+  useNavigation,
+  useRouter,
+} from "expo-router";
 import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
 import { Menu, SquarePen } from "lucide-react-native";
 
@@ -64,6 +68,36 @@ export default function ChatRoute() {
   // screen after a switch from the menu).
   const sessionId = useChatStore((s) => s.sessionId);
   const sessions = useChatStore((s) => s.sessions);
+  const setDraft = useChatStore((s) => s.setDraft);
+
+  // G16: prefill the composer from a `?message=` deep link.
+  //
+  // PocketParity: ChatScreen.tsx:272-273 hands `pendingMessage` to the
+  // composer as `initialInputText` and calls `onInitialTextConsumed` to
+  // clear it -- the field is filled ONCE. The ref is our equivalent of
+  // that consumed flag: without it the effect re-fires on every render
+  // and would stomp whatever the user had typed since.
+  //
+  // No in-app producer for this URL. pocketpal's link is pal-keyed
+  // (`pocketpal://chat?palId=p1`) and pals are out of scope here, so
+  // this only fires when an external app or Shortcut hands LiAI a
+  // `liai://chat?message=...`. Deliberate, and recorded in the audit.
+  const { message: deepLinkPrompt } = useLocalSearchParams<{ message?: string }>();
+  const consumedDeepLink = useRef<string | null>(null);
+  useEffect(() => {
+    if (deepLinkPrompt === undefined) {
+      // The link is gone, so the NEXT one is a fresh arrival even when it
+      // carries identical text. PocketParity parks the message and clears
+      // it, so a repeated `?message=hello` fills the field again; keying
+      // only on the value would silently swallow it as a duplicate.
+      consumedDeepLink.current = null;
+      return;
+    }
+    if (consumedDeepLink.current === deepLinkPrompt) return;
+    consumedDeepLink.current = deepLinkPrompt;
+    const text = deepLinkPrompt.trim();
+    if (text !== "") setDraft(text);
+  }, [deepLinkPrompt, setDraft]);
   const connection = useChatStore((s) => s.connection);
   const sending = useChatStore((s) => s.sending);
   const loadSession = useChatStore((s) => s.loadSession);

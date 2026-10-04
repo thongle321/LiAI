@@ -4,30 +4,34 @@
  * dispatches through one too, and that is what makes a fifth tool a
  * registration instead of an edit to the bubble.
  *
- * Registration happens at module load. The chat screen asks for the
- * renderer by name and falls back to the "used X" chip when there is none,
- * so an unregistered tool is never worse off than it is today.
+ * SHAPE, taken from pocketpal's WebSearchResultBubble rather than invented:
+ * a collapsed summary ROW that opens a BOTTOM SHEET. An earlier revision
+ * expanded inline, which diverged -- pocketpal has no inline expanded
+ * state at all, so there was never anything to tap outside of.
  *
- * Dispatch order — pinned by tests/chat-tool-results.test.ts, and the order
- * that matters:
- *   1. a recorded FAILURE  -> the error block
- *   2. a registered name   -> that tool's surface
- *   3. anything else       -> the "used X" chip
- * An error must never fall through to the chip: that is exactly how a
- * failed tool came to look like a successful one.
+ * Concretely, that shape means:
+ *   - the row is the whole control; the content lives in the sheet, so a
+ *     long result list does not stretch the bubble it belongs to
+ *   - the query and the count are SEPARATE lines, so a long query
+ *     truncates but the count never does (pocketpal splits them for
+ *     exactly this reason)
+ *   - zero results is a STATIC row, not an expandable empty list
+ *   - a tool with nothing to expand renders a static row with no control
+ *
+ * Dispatch order -- error first, then a registered renderer, then the
+ * "used X" chip. An error must never fall through to the chip: that is
+ * how a failed tool came to look like a successful one.
  */
 
-import type { ReactNode } from "react";
-import { Linking, Pressable, Text, View } from "react-native";
-import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react-native";
+import { useState, type ReactNode } from "react";
+import { Linking, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { ChevronRight, ExternalLink, Search, Wrench } from "lucide-react-native";
 
 import type { AgentStep } from "../../types/chat.ts";
 import { colors } from "../../themes/tokens.ts";
 
 export interface ToolSurfaceProps {
   step: AgentStep;
-  expanded: boolean;
-  onToggle: () => void;
 }
 
 export type ToolSurfaceRenderer = (props: ToolSurfaceProps) => ReactNode;
@@ -43,41 +47,87 @@ export function toolSurfaceFor(name: string): ToolSurfaceRenderer | undefined {
   return renderers.get(name);
 }
 
-/** The shared collapse affordance. One implementation, so the surfaces
- *  cannot drift into two subtly different controls. */
-function Surface({
+/** The collapsed row that opens a sheet. The whole row is the control, with
+ *  hitSlop rather than padding -- pocketpal's shape. */
+function TriggerRow({
   label,
-  expanded,
-  onToggle,
-  children,
+  count,
+  onPress,
+  accessibilityLabel,
 }: {
   label: string;
-  expanded: boolean;
-  onToggle: () => void;
-  children?: ReactNode;
+  /** Rendered as its own non-wrapping element so it survives a long label. */
+  count?: string;
+  onPress: () => void;
+  accessibilityLabel: string;
 }) {
   return (
-    <View className="basis-full">
-      <Pressable
-        onPress={onToggle}
-        // 48dp: the row is the whole control, not just the chevron.
-        className="min-h-12 flex-row items-center gap-2 rounded-lg px-2 py-1"
-        accessibilityRole="button"
-        accessibilityState={{ expanded }}
-        accessibilityLabel={label}
-        accessibilityHint={expanded ? "Collapses the result" : "Expands the result"}
-      >
-        {expanded ? (
-          <ChevronDown size={14} color={colors.secondaryText} />
-        ) : (
-          <ChevronRight size={14} color={colors.secondaryText} />
-        )}
-        <Text className="flex-1 font-sans text-caption text-secondary-text">
-          {label}
+    <Pressable
+      onPress={onPress}
+      className="min-h-12 w-full flex-row items-center gap-2 rounded-lg px-2 py-1"
+      hitSlop={{ top: 12, bottom: 12 }}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint="Opens the full result"
+    >
+      <Search size={14} color={colors.secondaryText} />
+      {/* Split so a long query truncates but the count never does. */}
+      <Text numberOfLines={1} className="flex-1 font-sans text-caption text-secondary-text">
+        {label}
+      </Text>
+      {count !== undefined && (
+        <Text numberOfLines={1} className="font-sans text-caption text-secondary-text">
+          {count}
         </Text>
-      </Pressable>
-      {expanded && children}
+      )}
+      <ChevronRight size={14} color={colors.secondaryText} />
+    </Pressable>
+  );
+}
+
+/** A static row: no control, because there is nothing to expand. Pocketpal's
+ *  ToolUsedChip is the same shape -- a plain View with a glyph and a label. */
+function StaticRow({ label }: { label: string }) {
+  return (
+    <View className="min-h-12 w-full flex-row items-center gap-2 rounded-lg px-2 py-1">
+      <Wrench size={14} color={colors.secondaryText} />
+      <Text numberOfLines={1} className="flex-1 font-sans text-caption text-secondary-text">
+        {label}
+      </Text>
     </View>
+  );
+}
+
+function Sheet({
+  visible,
+  onDismiss,
+  children,
+}: {
+  visible: boolean;
+  onDismiss: () => void;
+  children: ReactNode;
+}) {
+  if (!visible) return null;
+  return (
+    // `Modal` takes no className -- on the AGENTS.md exception list. Its
+    // children are ordinary components and do.
+    <Modal visible transparent animationType="slide" onRequestClose={onDismiss}>
+      <Pressable
+        className="flex-1 justify-end bg-black/60"
+        onPress={onDismiss}
+        accessibilityRole="button"
+        accessibilityLabel="Close results"
+      >
+        {/* The panel swallows taps so only the scrim dismisses. */}
+        <Pressable
+          className="max-h-[70%] rounded-t-2xl bg-surface-1 px-4 pb-6 pt-3"
+          onPress={() => {}}
+          accessibilityLabel="Results"
+        >
+          <ScrollView>{children}</ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -87,9 +137,8 @@ interface Hit {
   snippet: string;
 }
 
-/** Reads the structured hits ticket 02's plumbing carries. A malformed or
- *  absent shape yields an empty list rather than a crash — the data came
- *  from disk and may predate this renderer. */
+/** Reads the structured hits the seam carries. A malformed or absent shape
+ *  yields an empty list rather than a crash -- the data came from disk. */
 function hitsOf(step: AgentStep): Hit[] {
   const raw: unknown = step.data?.hits;
   if (!Array.isArray(raw)) return [];
@@ -99,108 +148,106 @@ function hitsOf(step: AgentStep): Hit[] {
   );
 }
 
-function WebSearchSurface({ step, expanded, onToggle }: ToolSurfaceProps) {
-  const hits = hitsOf(step);
-  // The query is already persisted as the tool's own argument, so it is not
-  // duplicated into the result payload.
-  const query = typeof step.input?.query === "string" ? step.input.query : "";
-  const noun = hits.length === 1 ? "1 result" : `${hits.length} results`;
+function HitRow({ hit }: { hit: Hit }) {
   return (
-    <Surface
-      label={query === "" ? `web_search — ${noun}` : `web_search “${query}” — ${noun}`}
-      expanded={expanded}
-      onToggle={onToggle}
+    <Pressable
+      onPress={() => {
+        void Linking.openURL(hit.url).catch(() => {
+          /* a dead link must not crash the bubble */
+        });
+      }}
+      className="min-h-12 justify-center rounded-lg px-1 py-2"
+      accessibilityRole="link"
+      accessibilityLabel={hit.title === "" ? hit.url : hit.title}
+      accessibilityHint={hit.snippet === "" ? undefined : hit.snippet}
     >
-      <View className="gap-1 px-2 pb-2">
-        {hits.map((hit) => (
-          <Pressable
-            key={hit.url}
-            onPress={() => {
-              void Linking.openURL(hit.url).catch(() => {
-                /* a dead link must not crash the bubble */
-              });
-            }}
-            className="min-h-12 justify-center rounded-lg px-2 py-1"
-            accessibilityRole="link"
-            accessibilityLabel={hit.title === "" ? hit.url : hit.title}
-            accessibilityHint={hit.snippet === "" ? undefined : hit.snippet}
-          >
-            <View className="flex-row items-center gap-1">
-              <Text
-                numberOfLines={2}
-                className="flex-1 font-sans text-caption text-primary-text"
-              >
-                {hit.title === "" ? hit.url : hit.title}
-              </Text>
-              <ExternalLink size={12} color={colors.secondaryText} />
-            </View>
-            {hit.snippet !== "" && (
-              <Text
-                numberOfLines={2}
-                className="mt-0.5 font-sans text-micro text-secondary-text"
-              >
-                {hit.snippet}
-              </Text>
-            )}
-          </Pressable>
-        ))}
+      <View className="flex-row items-center gap-1">
+        <Text numberOfLines={2} className="flex-1 font-sans text-caption text-primary-text">
+          {hit.title === "" ? hit.url : hit.title}
+        </Text>
+        <ExternalLink size={12} color={colors.secondaryText} />
       </View>
-    </Surface>
+      {hit.snippet !== "" && (
+        <Text numberOfLines={2} className="mt-0.5 font-sans text-micro text-secondary-text">
+          {hit.snippet}
+        </Text>
+      )}
+    </Pressable>
   );
+}
+
+function WebSearchSurface({ step }: ToolSurfaceProps) {
+  const [open, setOpen] = useState(false);
+  const hits = hitsOf(step);
+  const query = typeof step.input?.query === "string" ? step.input.query : "";
+
+  // Zero results is a STATIC row: there is nothing to open, and an
+  // expandable empty list is worse than saying so.
+  if (hits.length === 0) {
+    return <StaticRow label={`No results for ${query}`.trim()} />;
+  }
+  return (
+    <>
+      <TriggerRow
+        label={query === "" ? "Searched the web" : `Searched for ${query}`}
+        count={hits.length === 1 ? "· 1 result" : `·  ${hits.length} results`}
+        onPress={() => setOpen(true)}
+        accessibilityLabel={query === "" ? "Show results" : `Show results for ${query}`}
+      />
+      <Sheet visible={open} onDismiss={() => setOpen(false)}>
+        <Text className="mb-2 font-sans-semibold text-body-md text-primary-text">
+          {query === "" ? "Search results" : `Results for “${query}”`}
+        </Text>
+        {hits.map((hit) => (
+          <HitRow key={hit.url} hit={hit} />
+        ))}
+      </Sheet>
+    </>
+  );
+}
+
+/** A fetched page. Long by nature, so it lives in a sheet rather than
+ *  stretching the bubble the answer sits in. */
+function ReadUrlSurface({ step }: ToolSurfaceProps) {
+  const [open, setOpen] = useState(false);
+  // The ARTICLE, not the model's fenced copy. `step.result` is what the
+  // MODEL reads, so it carries an "untrusted content" banner; rendering
+  // that to a user means showing them prompt-injection instructions they
+  // never asked for. Falls back to `result` for a row predating the split.
+  const text =
+    typeof step.data?.text === "string" ? step.data.text : (step.result ?? "");
+  // Reported by the seam, never inferred here.
+  const truncated = step.data?.truncated === true;
+  if (text === "") return <StaticRow label="No page text" />;
+  return (
+    <>
+      <TriggerRow
+        label="Read a page"
+        count={truncated ? "·  cut off" : undefined}
+        onPress={() => setOpen(true)}
+        accessibilityLabel="Show the page text"
+      />
+      <Sheet visible={open} onDismiss={() => setOpen(false)}>
+        {truncated && (
+          <Text className="mb-2 font-sans text-micro text-secondary-text">
+            Truncated — this is only the start of the page.
+          </Text>
+        )}
+        <Text className="font-sans text-caption text-secondary-text">{text}</Text>
+      </Sheet>
+    </>
+  );
+}
+
+/** A short plain result: nothing to expand, so a static row. */
+function PlainSurface({ step }: ToolSurfaceProps) {
+  const text = step.result ?? "";
+  return <StaticRow label={text === "" ? step.tool : `${step.tool} — ${text}`} />;
 }
 
 // Module load, not first render: the chat screen must never be the thing
 // that decides a renderer exists.
 registerToolSurface("web_search", WebSearchSurface);
-
-/** A short, plain result. The whole value fits in the summary line, so
- *  expanding only shows it again in full -- which is the point: ONE collapse
- *  affordance for every surface, not a second control that drifts. */
-function PlainSurface({ step, expanded, onToggle }: ToolSurfaceProps) {
-  const text = step.result ?? "";
-  return (
-    <Surface
-      label={text === "" ? step.tool : `${step.tool} — ${text}`}
-      expanded={expanded}
-      onToggle={onToggle}
-    />
-  );
-}
-
-/** A fetched page. Long by nature -- up to the reader's cap -- so the
- *  summary line carries only that a page was read, and the text itself lives
- *  behind the control. */
-function ReadUrlSurface({ step, expanded, onToggle }: ToolSurfaceProps) {
-  // The ARTICLE, not the model's fenced copy. `step.result` is what the
-  // MODEL reads, so it carries an "untrusted content" banner; rendering
-  // that to a user means showing them prompt-injection instructions they
-  // never asked for. Falls back to `result` for an old row predating the
-  // split.
-  const text =
-    typeof step.data?.text === "string" ? step.data.text : (step.result ?? "");
-  // Reported by the seam, never inferred here: a renderer comparing
-  // the text length against the cap would silently start lying the day
-  // that cap moves. The notice is the difference between a cut-off
-  // article and the whole thing.
-  const truncated = step.data?.truncated === true;
-  return (
-    <Surface
-      label={truncated ? "read_url — page read, cut off" : "read_url — page read"}
-      expanded={expanded}
-      onToggle={onToggle}
-    >
-      <View className="px-2 pb-2">
-        {truncated && (
-          <Text className="mb-1 font-sans text-micro text-secondary-text">
-            Truncated — this is only the start of the page.
-          </Text>
-        )}
-        <Text className="font-sans text-caption text-secondary-text">{text}</Text>
-      </View>
-    </Surface>
-  );
-}
-
 registerToolSurface("read_url", ReadUrlSurface);
 registerToolSurface("calculate", PlainSurface);
 registerToolSurface("datetime", PlainSurface);

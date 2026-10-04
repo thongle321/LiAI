@@ -84,11 +84,6 @@ export function MessageListItem({
   // mean "I want the menu" than "I want to zoom" -- which is the same
   // reason PocketPal's own image path is a tap.
   const [enlarged, setEnlarged] = useState<string | null>(null);
-  // Which tool surfaces are expanded, by step id (G5). Collapsed by
-  // default: a five-tool turn would otherwise bury the answer it produced.
-  // Keyed by step id, never by position -- the list can shrink when a turn
-  // is regenerated, and a positional key would open the wrong one.
-  const [expandedSteps, setExpandedSteps] = useState<Record<string, boolean>>({});
   // Both bubbles wrap in the same menu and only the bubble inside differs.
   // One definition, so the two call sites cannot drift apart.
   const withMenu = (bubble: ReactNode) => (
@@ -230,19 +225,12 @@ export function MessageListItem({
                   }
                   const Renderer = toolSurfaceFor(step.tool);
                   if (Renderer !== undefined) {
-                    return (
-                      <Renderer
-                        key={step.id}
-                        step={step}
-                        expanded={expandedSteps[step.id] === true}
-                        onToggle={() =>
-                          setExpandedSteps((prev) => ({
-                            ...prev,
-                            [step.id]: prev[step.id] !== true,
-                          }))
-                        }
-                      />
-                    );
+                    // No expanded/onToggle here: a surface owns its own
+                    // open/closed state and renders it as a collapsed row
+                    // plus a sheet, exactly as pocketpal does. Keeping the
+                    // flag in the bubble would make the bubble responsible
+                    // for something it cannot see.
+                    return <Renderer key={step.id} step={step} />;
                   }
                   return (
                     <View

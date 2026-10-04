@@ -79,13 +79,27 @@ test("dispatch order holds: error, then registered renderer, then chip", () => {
   assert.ok(rendererAt < chipAt, "the renderer is consulted BEFORE the chip");
 });
 
-test("a collapsed surface exposes its state and meets the touch floor", () => {
+test("a surface opens a SHEET, not an inline expansion", () => {
+  // Read from pocketpal's WebSearchResultBubble: a collapsed row that
+  // opens a bottom sheet. There is no inline expanded state at all, which
+  // is exactly why there was never anything to "tap outside" to collapse.
   const surfaces = read("components/chat/toolSurfaces.tsx");
-  assert.match(surfaces, /accessibilityState=\{\{ expanded \}\}/);
+  assert.doesNotMatch(
+    surfaces,
+    /accessibilityState=\{\{ expanded \}\}/,
+    "no inline expansion means no expanded state to expose",
+  );
+  assert.match(surfaces, /<Sheet visible=\{open\}/);
+  assert.match(surfaces, /onRequestClose=\{onDismiss\}/, "Android back dismisses");
+  assert.match(surfaces, /onPress=\{onDismiss\}/, "tapping the scrim dismisses");
+});
+
+test("the trigger row meets the touch floor and names its action", () => {
+  const surfaces = read("components/chat/toolSurfaces.tsx");
   assert.match(surfaces, /accessibilityRole="button"/);
+  assert.match(surfaces, /accessibilityHint="Opens the full result"/);
   assert.match(surfaces, /min-h-12/, "48dp on the whole row");
-  // The renderer must not become the bubble's long-press gesture.
-  assert.doesNotMatch(surfaces, /accessibilityRole="menu"/);
+  assert.match(surfaces, /hitSlop=\{\{ top: 12, bottom: 12 \}\}/);
 });
 
 test("hits are read structured, never re-parsed out of the markdown", () => {
@@ -119,11 +133,27 @@ test("truncation is reported by the seam, never inferred from a length", () => {
   assert.doesNotMatch(surfaces, /6000/, "the cap is not duplicated here");
 });
 
-test("ONE collapse control, shared by every surface", () => {
-  // The ticket's "one control rather than two" rule. A second divergent
-  // affordance beside the first is how they drift.
+test("a surface with nothing to expand is a STATIC row with no control", () => {
+  // pocketpal's ToolUsedChip is a plain View for the same reason.
   const surfaces = read("components/chat/toolSurfaces.tsx");
-  const controls = surfaces.split('accessibilityState={{ expanded }}').length - 1;
-  assert.equal(controls, 1, "exactly one expandable control definition");
-  assert.match(surfaces, /<Surface[\s\S]*?expanded=\{expanded\}/);
+  const row = surfaces.slice(
+    surfaces.indexOf("function StaticRow"),
+    surfaces.indexOf("function Sheet"),
+  );
+  assert.doesNotMatch(
+    row,
+    /Pressable|onPress|accessibilityRole="button"/,
+    "nothing to expand means nothing to press",
+  );
+});
+
+test("zero results is static, and the count survives a long query", () => {
+  const surfaces = read("components/chat/toolSurfaces.tsx");
+  assert.match(
+    surfaces,
+    /if \(hits\.length === 0\) \{\s*return <StaticRow label=\{`No results for /,
+    "an expandable empty list is worse than saying so",
+  );
+  // Split so a long query truncates but the count never does.
+  assert.match(surfaces, /count=\{hits\.length === 1 \? "· 1 result"/);
 });

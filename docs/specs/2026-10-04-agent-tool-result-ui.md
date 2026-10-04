@@ -88,7 +88,10 @@ Surface every tool call the way the user would expect, mirroring pocketpal's dis
     cut for the whole article.
 27. As a user, I want a tool surface to not intercept the long-press message menu, so that I can
     still copy or regenerate the turn.
-28. As a user, I want tapping outside an expanded surface to collapse it, so that dismissing is
+28. As a user, I want to dismiss an open result by tapping outside it, so that closing is
+    easy. (Corrected 2026-10-04 — this originally read "I want tapping outside an *expanded*
+    surface to collapse it". That was INVENTED: pocketpal has no inline expanded state at all,
+    so there was never anything to tap outside of. See the correction note below.)
     easy.
 29. As a user, I want per-tool rendering to be registered by name, so that adding a fifth tool does
     not require editing the chat screen.
@@ -214,3 +217,23 @@ and font-rung guards already in the suite.
   model changing its mind. Both are consequences of one missing field.
 - The litmus test for this work: a user who watches a web search fail should be able to say what
   went wrong, without reading the model's prose and guessing.
+
+## Correction: a user story I invented, and the lesson
+
+Story 28 originally read *"I want to tap outside an expanded surface to collapse it."* There is
+no such thing. **pocketpal has no inline expanded state at all** — `WebSearchResultBubble` is a
+collapsed row that opens a bottom sheet, so there is never an expanded inline surface to tap
+outside of. Its dismissal is the sheet's own `onDismiss`.
+
+The story survived because it was written into this spec without reading the reference first, then
+"implemented against" by a review that checked the code against *this document* rather than
+against pocketpal. An invented requirement, faithfully implemented, still isn't the requirement.
+
+The surface was subsequently corrected to pocketpal's shape — collapsed row plus sheet, a static
+no-results row, and split query/count labels so a long query truncates while the count never does.
+
+**The lesson generalises past this document:** every gap in the parity audit describes a
+pocketpal behaviour, so a spec written from those descriptions inherits every gap in them. Read
+the reference before writing the requirement, not after. The spec and the reference should be
+cross-checked before an implementation is reviewed for spec compliance — a review cannot catch a
+requirement that was never real.

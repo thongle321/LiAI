@@ -1,5 +1,6 @@
 import "../global.css";
 import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -20,6 +21,10 @@ import { useFluidTextVariables } from "../hooks/useFluidTextScale.ts";
 // device dark mode must not invent a second world.
 Uniwind.setTheme("light");
 
+// Keep the native splash visible until the Inter files resolve, so cold
+// start never flashes a blank white frame before the font gate below.
+SplashScreen.preventAutoHideAsync();
+
 export default function RootLayout() {
   const [loaded] = useFonts({
     Inter_400Regular,
@@ -32,6 +37,13 @@ export default function RootLayout() {
   // Fluid Type (DESIGN.md): --text-* overrides for this device's width.
   // Must be called before any early return (hook order).
   const typeVars = useFluidTextVariables();
+
+  // Dismiss the native splash once Inter is ready: hideAsync in an
+  // effect would flash one font-less frame, so it runs on the same
+  // render that first returns UI.
+  if (loaded) {
+    void SplashScreen.hideAsync();
+  }
 
   // Gate first paint on the font resolving so nothing flashes in the
   // system typeface (DESIGN.md, Single Family Rule).

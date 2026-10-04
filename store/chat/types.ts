@@ -86,5 +86,6 @@ export interface ChatState {
   duplicateSession: (sessionId: string) => Promise<boolean>;
   renameSession: (sessionId: string, title: string) => Promise<boolean>;
   setPinned: (sessionId: string, pinned: boolean) => Promise<boolean>;
-  refreshSessions: () => Promise<void>;
+  /** True when the drawer now matches the store; false keeps stale UI. */
+  refreshSessions: () => Promise<boolean>;
 }

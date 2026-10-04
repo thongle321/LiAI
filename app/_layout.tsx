@@ -12,6 +12,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ScopedVariables, Uniwind } from "uniwind";
 
+import { useRef } from "react";
 import { colors } from "../themes/tokens.ts";
 import { SnackbarProvider } from "../components/Snackbar.tsx";
 import { useEngineOffload } from "../hooks/useEngineOffload.ts";
@@ -23,7 +24,9 @@ Uniwind.setTheme("light");
 
 // Keep the native splash visible until the Inter files resolve, so cold
 // start never flashes a blank white frame before the font gate below.
-SplashScreen.preventAutoHideAsync();
+// The catch is load-bearing: a rejection (already-hidden splash on a
+// remount) must not surface as an unhandled promise.
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   const [loaded] = useFonts({
@@ -40,9 +43,12 @@ export default function RootLayout() {
 
   // Dismiss the native splash once Inter is ready: hideAsync in an
   // effect would flash one font-less frame, so it runs on the same
-  // render that first returns UI.
-  if (loaded) {
-    void SplashScreen.hideAsync();
+  // render that first returns UI. The ref fires it exactly once — repeat
+  // renders must not re-hide (unawaited native call per render).
+  const splashHidden = useRef(false);
+  if (loaded && !splashHidden.current) {
+    splashHidden.current = true;
+    void SplashScreen.hideAsync().catch(() => {});
   }
 
   // Gate first paint on the font resolving so nothing flashes in the

@@ -36,10 +36,10 @@ describe("splash screen", () => {
     // (same render that first returns UI) — never in an effect.
     const gate = src.indexOf("if (!loaded) return null");
     assert.ok(gate >= 0, "root layout must still gate on fonts");
-    const loadedBranch = src.indexOf("if (loaded) {");
+    const loadedBranch = src.indexOf("if (loaded && !splashHidden.current)");
     assert.ok(
       loadedBranch >= 0 && loadedBranch < gate,
-      "hideAsync must sit on a loaded branch before the font gate",
+      "hideAsync must sit on a once-guarded loaded branch before the font gate",
     );
     const hideCall = src.indexOf("SplashScreen.hideAsync()", loadedBranch);
     assert.ok(

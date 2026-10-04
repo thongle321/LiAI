@@ -26,7 +26,16 @@ export interface LlamaTokenData {
   }>;
 }
 
-/** Structural slice of a llama.rn completion result we actually read. */
+/** Structural slice of a llama.rn completion result we actually read.
+ *
+ *  The stop fields were absent from this slice for the life of the type,
+ *  which is why `stoppedEarly` was hardcoded false and why the chat screen
+ *  had no way to notice a full context. They are all present on the real
+ *  `NativeCompletionResult`
+ *  (node_modules/llama.rn/lib/typescript/types.d.ts:443-485) — the slice
+ *  simply never asked for them, so they were dropped on the floor. Every
+ *  field stays optional: a build whose native module omits one must
+ *  degrade to "no signal", never crash. */
 export interface LlamaCompletionResult {
   text?: string;
   content?: string;
@@ -34,6 +43,27 @@ export interface LlamaCompletionResult {
   tool_calls?: LlamaTokenData["tool_calls"];
   tokens_predicted?: number;
   tokens_evaluated?: number;
+  /** The reply did not fit the context window. */
+  context_full?: boolean;
+  /** Another way to run out of room, reported separately by llama.cpp. */
+  truncated?: boolean;
+  /** The user interrupted (Stop), as distinct from a natural finish. */
+  interrupted?: boolean;
+  /** >0 when the sampler stopped the turn (n_predict). */
+  stopped_limit?: number;
+  timings?: LlamaTimings;
+}
+
+/** Wall-clock figures, kept at the engine's own names; the projection to
+ *  `CompletionTimings` is where our vocabulary starts. */
+export interface LlamaTimings {
+  prompt_ms?: number;
+  predicted_ms?: number;
+  predicted_per_token_ms?: number;
+  predicted_per_second?: number;
+  prompt_per_second?: number;
+  prompt_n?: number;
+  predicted_n?: number;
 }
 
 /** Params the wrapper forwards (messages/tools/media/thinking/sampler). */
@@ -163,13 +193,28 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
         result.tool_calls && result.tool_calls.length > 0
           ? toEngineCalls(result.tool_calls)
           : seen;
+      const t = result.timings;
+      const timings =
+        t === undefined
+          ? undefined
+          : {
+              promptMs: asNumber(t.prompt_ms),
+              tokensPerSecond: asNumber(t.predicted_per_second),
+              msPerToken: asNumber(t.predicted_per_token_ms),
+            };
       return {
         text: result.content ?? result.text ?? "",
         reasoning: result.reasoning_content ?? "",
         toolCalls,
         promptTokens: asNumber(result.tokens_evaluated),
         completionTokens: asNumber(result.tokens_predicted),
-        stoppedEarly: false,
+        // Was hardcoded `false` for the life of the type.
+        stoppedEarly: asNumber(result.stopped_limit) > 0,
+        // Two distinct flags mean the same thing to a reader: the window
+        // ran out either way.
+        contextFull: result.context_full === true || result.truncated === true,
+        interrupted: result.interrupted === true,
+        ...(timings !== undefined ? { timings } : {}),
       };
     },
 

@@ -87,6 +87,56 @@ describe("createRemoteEngine", () => {
     assert.ok(out.toolCalls[1].id.length > 0);
   });
 
+  it("marks a length-capped remote turn as stopped, but NOT context-full", async () => {
+    // `finish_reason: "length"` could be the model's context window or a
+    // server max_tokens; an OpenAI-compatible endpoint does not say which.
+    // Claiming "context full" would put a wrong banner in front of the user.
+    const fetchImpl = (async () =>
+      jsonResponse({
+        choices: [{ message: { content: "cut off", tool_calls: [] }, finish_reason: "length" }],
+        usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 },
+      })) as typeof fetch;
+    const engine = createRemoteEngine(provider(), async () => "k", { fetchImpl });
+    const out = await engine.completion(
+      { messages: [{ role: "user", content: "x" }] },
+      { onToken: () => {} },
+    );
+    assert.equal(out.stoppedEarly, true);
+    assert.equal(out.contextFull, false);
+    assert.equal(out.interrupted, false);
+    // No invented timings: the endpoint reported none.
+    assert.equal(out.timings, undefined);
+  });
+
+  it("leaves a normally-finished remote turn unflagged", async () => {
+    const fetchImpl = (async () =>
+      jsonResponse({
+        choices: [{ message: { content: "done", tool_calls: [] }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      })) as typeof fetch;
+    const engine = createRemoteEngine(provider(), async () => "k", { fetchImpl });
+    const out = await engine.completion(
+      { messages: [{ role: "user", content: "x" }] },
+      { onToken: () => {} },
+    );
+    assert.equal(out.stoppedEarly, false);
+    assert.equal(out.contextFull, false);
+  });
+
+  it("survives a payload with no finish_reason at all", async () => {
+    const fetchImpl = (async () =>
+      jsonResponse({
+        choices: [{ message: { content: "done", tool_calls: [] } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      })) as typeof fetch;
+    const engine = createRemoteEngine(provider(), async () => "k", { fetchImpl });
+    const out = await engine.completion(
+      { messages: [{ role: "user", content: "x" }] },
+      { onToken: () => {} },
+    );
+    assert.equal(out.stoppedEarly, false);
+  });
+
   it("rejects a missing key before touching the network", async () => {
     let calls = 0;
     const fetchImpl = (async () => {

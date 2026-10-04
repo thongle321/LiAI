@@ -123,9 +123,15 @@ export function createRemoteEngine(
         const message = choice ? asRecord(choice["message"]) : null;
         const text = message ? (asString(message["content"]) ?? "") : "";
         const toolCalls = message ? toEngineCalls(message["tool_calls"]) : [];
-        const usage = asRecord(payload) ? asRecord((payload as Record<string, unknown>)["usage"]) : null;
+const usage = asRecord(payload) ? asRecord((payload as Record<string, unknown>)["usage"]) : null;
         const promptTokens = usage ? (asNumber(usage["prompt_tokens"]) ?? 0) : 0;
         const completionTokens = usage ? (asNumber(usage["completion_tokens"]) ?? 0) : 0;
+        // `finish_reason: "length"` means the response hit SOME token cap. On
+        // an OpenAI-compatible endpoint we cannot tell the model's context
+        // window from a server-side max_tokens, so we report the cut-short
+        // fact and deliberately NOT claim the context is full — a false
+        // "context full" banner on a remote turn would be worse than none.
+        const hitLengthCap = choice?.["finish_reason"] === "length";
         if (text !== "") callbacks.onToken(text);
         callbacks.onToolCalls?.(toolCalls);
         return {
@@ -133,7 +139,11 @@ export function createRemoteEngine(
           toolCalls,
           promptTokens,
           completionTokens,
-          stoppedEarly: false,
+          stoppedEarly: hitLengthCap,
+          contextFull: false,
+          interrupted: false,
+          // No timings: an OpenAI-compatible endpoint does not report them,
+          // and inventing an estimate would put fiction in the turn footer.
         };
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {

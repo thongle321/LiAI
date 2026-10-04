@@ -35,7 +35,31 @@ export interface CompletionOutcome {
   toolCalls: EngineToolCall[];
   promptTokens: number;
   completionTokens: number;
+  /** The sampler stopped the turn early — n_predict hit. Distinct from
+   *  `interrupted`, which is the USER stopping it. */
   stoppedEarly: boolean;
+  /** The turn could not fit in the context window: `context_full` or
+   *  `truncated` from the engine. Drives the chat screen's context-full
+   *  banner and its "More room" recovery. */
+  contextFull?: boolean;
+  /** The user pressed Stop mid-turn, so the partial reply is a deliberate
+   *  stopping point rather than a finished answer. */
+  interrupted?: boolean;
+  /** Wall-clock figures for the turn footer. Absent when the engine does
+   *  not report them (most remote endpoints do not). */
+  timings?: CompletionTimings;
+}
+
+/** The subset of timings worth showing a reader. Names are ours, not the
+ *  engine's: `tokens_per_second` becomes `tokensPerSecond` so the footer
+ *  reads one vocabulary regardless of which engine answered. */
+export interface CompletionTimings {
+  /** Time to first token, ms. */
+  promptMs: number;
+  /** Generation rate; 0 when too fast to measure. */
+  tokensPerSecond: number;
+  /** Per-token generation cost, ms. */
+  msPerToken: number;
 }
 
 /** One chat turn in the engine's wire shape (llama + OpenAI compatible). */

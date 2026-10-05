@@ -9,9 +9,12 @@
 
 import { Fragment, type ReactNode } from "react";
 import {
+  Dimensions,
   Linking,
+  ScrollView,
   Text,
   TouchableHighlight,
+  View,
   type ImageStyle,
   type TextStyle,
 } from "react-native";
@@ -37,6 +40,65 @@ function openLink(href: string): void {
       recoverable: false,
     });
   });
+}
+
+/** Fixed shared column width — the library's own layout math
+ *  (react-native-marked utils/table.ts getTableWidthArr): ~43% of the
+ *  window per column. One width for every row keeps the vertical grid
+ *  lines aligned (content-sizing each row let them drift and the grid
+ *  read broken), and a multi-column table overflows into the horizontal
+ *  ScrollView instead of wrapping cells into narrow unreadable columns.
+ *  Measured once at module load, as the base renderer measures once per
+ *  instance; Dimensions is the sanctioned inline-style exception. */
+const COLUMN_WIDTH = Math.floor(Dimensions.get("window").width * (1.3 / 3));
+
+/** One cell: the shared column width plus its two grid borders. Header
+ *  and body cells are identical — their rows differ by fill. */
+function TableCell({ children }: { children: ReactNode }) {
+  return (
+    <View
+      className="border-b border-r border-border px-2 py-1.5"
+      style={{ width: COLUMN_WIDTH }}
+    >
+      {children}
+    </View>
+  );
+}
+
+/** One GFM table (C13): header fill so the first row is distinguishable,
+ *  a 1px cell grid, and a horizontal ScrollView so wide tables scroll
+ *  instead of clipping — cells size to content, so narrow tables stay
+ *  put. Cell borders draw right+bottom and each row draws its left, so
+ *  every grid edge is exactly one line (a full container border would
+ *  double them). Plain Views on purpose: the library's MDTable leans on
+ *  react-native-reanimated-table, which is its dependency, not ours. */
+function MarkdownTable({
+  header,
+  rows,
+}: {
+  header: ReactNode[][];
+  rows: ReactNode[][][];
+}) {
+  return (
+    <View className="mb-2">
+      <ScrollView horizontal>
+        <View>
+          <View className="flex-row border-l border-t border-border bg-surface-2">
+            {header.map((cells, i) => (
+              <TableCell key={`h-${i}`}>{cells}</TableCell>
+            ))}
+          </View>
+          {rows.map((row, i) => (
+            <View key={`r-${i}`} className="flex-row border-l border-border">
+              {row.map((cell, j) => (
+                <TableCell key={`c-${j}`}>{cell}</TableCell>
+              ))}
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+    </View>
+  );
 }
 
 class ChatRenderer extends Renderer implements RendererInterface {
@@ -104,6 +166,16 @@ class ChatRenderer extends Renderer implements RendererInterface {
         {imageNode}
       </TouchableHighlight>
     );
+  }
+
+  /** C13: the base Renderer DOES expose a table hook (verified at the
+   *  library's lib/types.ts:86) — so we override rather than reinvent.
+   *  The override exists for styling: no second table path, and the one
+   *  renderer serves both the body and the reasoning block (dense), so
+   *  tables render in both by construction. The module-level renderer
+   *  identity below keeps streaming re-parses from remounting them. */
+  table(header: ReactNode[][], rows: ReactNode[][][]): ReactNode {
+    return <MarkdownTable header={header} rows={rows} />;
   }
 }
 

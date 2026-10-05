@@ -4,9 +4,11 @@
  * component because a .tsx that imports react-native cannot be loaded by
  * the plain-Node suite.
  *
- * Both operands already exist — `promptTokens` is the engine's
- * `tokens_evaluated` for the turn, and `nCtx` is the live inference
- * setting — so the banner measures nothing new.
+ * Both operands already exist — `promptTokens` is the turn's
+ * `CompletionOutcome.promptTokens` (C3: local KV residency via
+ * `tokens_cached`, remote `prompt_tokens` — not merely the
+ * re-processed count), and `nCtx` is the live inference setting —
+ * so the banner measures nothing new.
  */
 
 /** 0-100, clamped for display.

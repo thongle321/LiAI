@@ -27,3 +27,22 @@ PocketPal: `servers/index.ts:334-345` — `tokensEvaluated = (prompt_n ?? 0) + (
 ## Notes
 
 Open question from the spec, decide here: when `tokens_cached` and `cache_n` disagree, which is authoritative? Answer against the engine's own definition — do not guess.
+
+## Decision (recorded)
+
+**`tokens_cached` is authoritative.** It is llama.rn's `n_past` at completion
+end (`JSICompletion.h:169/245`): prompt (reused + re-processed) plus generated,
+shrunk by any context shift (`rn-completion.cpp:1028`) — i.e. exactly "tokens
+held against the window", on both native paths. `cache_n` is path-dependent:
+the legacy flow aliases it to that same `n_past` (`JSICompletion.h:181`), the
+slot flow sets it to the reused prompt prefix only (`rn-slot.cpp:644`, defined
+"prompt tokens from cache" at `rn-slot.h:23`). PocketPal's `prompt_n + cache_n`
+is a llama-server WIRE formula (`servers/index.ts:341-343`) — porting it here
+would over-count on one path and miss generated tokens on the other. It is
+therefore deliberately not read; occupancy falls back to `tokens_evaluated`
+(prompt length) only when a build omits `tokens_cached`, and a reported `0` is
+a fact, not absence.
+
+Remote: `prompt_tokens` already includes the `cached_tokens` subset (OpenAI
+contract) — never summed; `cached_tokens` is read as the independent fallback
+when a server omits the total.

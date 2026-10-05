@@ -73,6 +73,27 @@ describe("runLocalAgent", () => {
     assert.deepEqual(result.steps, []);
   });
 
+  it("reports occupancy as the last step's figure, never a sum across steps", async () => {
+    // C3: promptTokens is tokens HELD against the window (KV residency).
+    // Every agent step shares that window, so `+=` would multiply-count
+    // it — step 1's 3 plus step 2's 5 must not become 8. Completion
+    // tokens are genuinely per-step work, so those still add up.
+    const result = await runLocalAgent({
+      engine: scriptedEngine([toolCall("c1", "calculate", '{"expression":"2 + 3"}')]),
+      messages: [{ role: "user", content: "add?" }],
+      tools: [
+        {
+          type: "function",
+          function: { name: "calculate", description: "", parameters: {} },
+        },
+      ],
+      ...NO_SEARCH,
+      onEvent: () => {},
+    });
+    assert.equal(result.promptTokens, 5, "last step's residency is the thread's");
+    assert.equal(result.completionTokens, 3, "generated tokens still accumulate");
+  });
+
   it("dispatches a talent and feeds the result back", async () => {
     const seen: string[] = [];
     const result = await runLocalAgent({

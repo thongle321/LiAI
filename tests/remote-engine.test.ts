@@ -284,6 +284,40 @@ describe("request timeout", () => {
   });
 });
 
+describe("remote prompt occupancy (C3)", () => {
+  const occupancy = async (usage: unknown) => {
+    const fetchImpl = (async () =>
+      jsonResponse({
+        choices: [{ message: { content: "ok", tool_calls: [] } }],
+        ...(usage !== undefined ? { usage } : {}),
+      })) as typeof fetch;
+    const engine = createRemoteEngine(provider(), async () => "k", { fetchImpl });
+    return engine.completion(
+      { messages: [{ role: "user", content: "x" }] },
+      { onToken: () => {} },
+    );
+  };
+
+  it("prompt_tokens already includes the cached subset — never add it twice", async () => {
+    // OpenAI's contract: prompt_tokens_details.cached_tokens is a
+    // breakdown OF prompt_tokens, not a remainder to sum in.
+    const out = await occupancy({
+      prompt_tokens: 10,
+      prompt_tokens_details: { cached_tokens: 4 },
+    });
+    assert.equal(out.promptTokens, 10);
+  });
+
+  it("reads cached_tokens on its own when the server omits prompt_tokens", async () => {
+    // Each key guarded independently: absence of the total is not a
+    // licence to invent zero when the subset is right there.
+    const out = await occupancy({
+      prompt_tokens_details: { cached_tokens: 4 },
+    });
+    assert.equal(out.promptTokens, 4);
+  });
+});
+
 describe("timeout wiring", () => {
   it("the store passes the stored provider timeout into the engine options", () => {
     // The seam is RemoteEngineOptions.timeoutMs; without this line the

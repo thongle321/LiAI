@@ -131,8 +131,17 @@ export function createRemoteEngine(
         const message = choice ? asRecord(choice["message"]) : null;
         const text = message ? (asString(message["content"]) ?? "") : "";
         const toolCalls = message ? toEngineCalls(message["tool_calls"]) : [];
-const usage = asRecord(payload) ? asRecord((payload as Record<string, unknown>)["usage"]) : null;
-        const promptTokens = usage ? (asNumber(usage["prompt_tokens"]) ?? 0) : 0;
+        const usage = asRecord(payload) ? asRecord((payload as Record<string, unknown>)["usage"]) : null;
+        // C3: OpenAI's contract makes prompt_tokens INCLUDE the cached
+        // subset in prompt_tokens_details — summing both would double
+        // count. Each key is guarded on its own: a server that omits the
+        // total but reports the subset still yields real occupancy, and
+        // only "nothing reported at all" lands on zero.
+        const details = usage ? asRecord(usage["prompt_tokens_details"]) : null;
+        const promptTokens =
+          asNumber(usage?.["prompt_tokens"]) ??
+          asNumber(details?.["cached_tokens"]) ??
+          0;
         const completionTokens = usage ? (asNumber(usage["completion_tokens"]) ?? 0) : 0;
         // `finish_reason: "length"` means the response hit SOME token cap. On
         // an OpenAI-compatible endpoint we cannot tell the model's context

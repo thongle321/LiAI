@@ -37,6 +37,9 @@ export interface CompletionOutcome {
   /** Final parsed reasoning; "" when the model emitted none. */
   reasoning?: string;
   toolCalls: EngineToolCall[];
+  /** Tokens held against the window, for the fill meter: local = KV
+   *  residency (`tokens_cached`), remote = `prompt_tokens` (which
+   *  includes the cached subset). C3. */
   promptTokens: number;
   completionTokens: number;
   /** The sampler stopped the turn early — n_predict hit. Distinct from

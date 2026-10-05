@@ -193,6 +193,46 @@ describe("createLocalEngine", () => {
   });
 });
 
+describe("prompt occupancy (C3)", () => {
+  /** A completion whose result carries the given extra fields. */
+  const occupancy = async (extra: Record<string, unknown>) =>
+    createLocalEngine(
+      fakeContext({
+        completion: async () => ({
+          text: "hi",
+          content: "hi",
+          tool_calls: [],
+          tokens_predicted: 1,
+          tokens_evaluated: 1000,
+          ...extra,
+        }),
+      }),
+    ).completion(
+      { messages: [{ role: "user", content: "x" }] },
+      { onToken: () => {} },
+    );
+
+  it("counts every token held against the window, not only re-processed ones", async () => {
+    // tokens_cached = n_past at completion end: prompt (reused AND
+    // re-processed) plus generated, post any context shift — what the
+    // fill meter actually divides by nCtx.
+    const out = await occupancy({ tokens_cached: 1200 });
+    assert.equal(out.promptTokens, 1200);
+  });
+
+  it("falls back to the prompt total when the build omits the key", async () => {
+    const out = await occupancy({});
+    assert.equal(out.promptTokens, 1000);
+  });
+
+  it("treats a reported 0 as a fact, never as absence", async () => {
+    // PocketPal's distinction: "old build omits the key" and "cold
+    // reports 0" are different facts — only the omission falls back.
+    const out = await occupancy({ tokens_cached: 0 });
+    assert.equal(out.promptTokens, 0);
+  });
+});
+
 describe("completion stop signals (G1/G4)", () => {
   /** A completion whose result carries the given stop fields. */
   function ctxWith(stop: Record<string, unknown>) {

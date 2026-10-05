@@ -166,7 +166,11 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
         });
         return { text, steps, promptTokens, completionTokens, hitMaxTurns: false };
       }
-      promptTokens += outcome.promptTokens;
+      // C3: promptTokens is occupancy — tokens HELD against the window —
+      // so the LAST step's figure is the thread's (every step shares one
+      // KV cache; summing per-step residency would multiply-count it).
+      // Generated tokens are genuinely per-step work: those add up.
+      promptTokens = outcome.promptTokens;
       completionTokens += outcome.completionTokens;
       // The LAST turn's ending is this answer's ending. `hitMaxTurns` is
       // tracked separately: a forced final turn is a truncation too, but

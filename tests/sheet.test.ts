@@ -175,7 +175,11 @@ describe("sheet library", () => {
       /keyboard-controller|KeyboardAwareScrollView/,
       "the shared Sheet must not use keyboard-controller: its padding voids auto-detent bodies",
     );
-    const body = sheet.match(/<ScrollView[\s\S]*?>/);
+    // Match the opening tag by its TERMINATOR (a '>' alone on its own line),
+    // not by the first '>': a prop holding an arrow function -- onLayout
+    //={(e) => ...} -- supplies a '>' mid-tag and a lazy match would stop
+    // there, silently truncating the props under test.
+    const body = sheet.match(/<ScrollView[\s\S]*?^\s*>/m);
     assert.ok(body, "the sheet's body must be a plain ScrollView");
     assert.match(
       body[0],

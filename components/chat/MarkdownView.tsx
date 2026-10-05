@@ -1,25 +1,108 @@
 /** Markdown renderer for assistant bubbles (Wave 1 chat).
  *
  * react-native-marked parses to native views directly (no HTML layer);
- * the code renderer override plugs syntax highlighting + copy in.
+ * the code renderer override plugs syntax highlighting + copy in, and
+ * the link overrides open http(s) only, loudly (C2).
  * The renderer instance is module-level: stable identity across the
  * token-by-token re-parses of a streaming reply.
  */
 
 import { Fragment, type ReactNode } from "react";
 import {
+  Linking,
+  Text,
+  TouchableHighlight,
+  type ImageStyle,
+  type TextStyle,
+} from "react-native";
+import {
   Renderer,
   useMarkdown,
   type RendererInterface,
 } from "react-native-marked";
 
+import { isOpenableUrl } from "../../lib/chat/links.ts";
+import { useChatStore } from "../../store/chat";
 import { colors, font } from "../../themes/tokens.ts";
 import { CodeBlock } from "./CodeBlock.tsx";
 
+/** One guarded open shared by both link overrides: Linking, then the
+ *  chat's inline notice on failure. The base renderer swallows failures
+ *  into console.warn — silence to the user (C2). Never throws. */
+function openLink(href: string): void {
+  void Linking.openURL(href).catch(() => {
+    useChatStore.getState().setChatWarning({
+      message: "Couldn't open that link.",
+      severity: "warning",
+      recoverable: false,
+    });
+  });
+}
+
 class ChatRenderer extends Renderer implements RendererInterface {
+  /** The base keeps `selectable` private; mirror the constructor option
+   *  here so link text keeps long-press selection (C2). */
+  private readonly selectableText: boolean;
+
+  constructor(options?: { selectable?: boolean }) {
+    super(options);
+    this.selectableText = options?.selectable ?? true;
+  }
+
   code(text: string, language?: string): ReactNode {
     return (
       <CodeBlock key={this.getKey()} language={language || "text"} text={text} />
+    );
+  }
+
+  /** C2: only plain http(s) is pressable. A markdown body is untrusted,
+   *  so `file:`/`javascript:`/bare schemes render as plain text — no
+   *  link styling, no press, never an inert-looking link. */
+  link(
+    children: string | ReactNode[],
+    href: string,
+    styles?: TextStyle,
+  ): ReactNode {
+    if (!isOpenableUrl(href)) {
+      return this.text(children);
+    }
+    return (
+      <Text
+        key={this.getKey()}
+        selectable={this.selectableText}
+        onPress={() => openLink(href)}
+        accessibilityRole="link"
+        accessibilityHint={href}
+        style={styles}
+      >
+        {children}
+      </Text>
+    );
+  }
+
+  /** Linked images carry the same hazard as linked text — the base
+   *  implementation presses any scheme — so they share the guard and the
+   *  one open. An unopenable href drops the press, keeping the image. */
+  linkImage(
+    href: string,
+    imageUrl: string,
+    alt?: string,
+    style?: ImageStyle,
+    title?: string,
+  ): ReactNode {
+    const imageNode = this.image(imageUrl, alt, style, title);
+    if (!isOpenableUrl(href)) {
+      return imageNode;
+    }
+    return (
+      <TouchableHighlight
+        key={this.getKey()}
+        accessibilityRole="link"
+        accessibilityHint={href}
+        onPress={() => openLink(href)}
+      >
+        {imageNode}
+      </TouchableHighlight>
     );
   }
 }

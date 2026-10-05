@@ -68,6 +68,9 @@ export interface AgentRunOptions {
   tools: ToolDefinition[];
   /** Local file paths for a multimodal first turn (llama media_paths). */
   imagePaths?: string[];
+  /** Remote vision (04): the turn's images as data URIs for OpenAI
+   *  content arrays; local engines ignore these. */
+  imageDataUris?: string[];
   /** Local-only: jinja thinking blocks on/off for every loop turn. */
   enableThinking?: boolean;
   /** Local-only: jinja chat template on/off for every loop turn. */
@@ -152,6 +155,9 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
             ...(forcedFinal ? {} : tools.length > 0 ? { tools } : {}),
             ...(turn === 0 && options.imagePaths && options.imagePaths.length > 0
               ? { imagePaths: options.imagePaths }
+              : {}),
+            ...(turn === 0 && options.imageDataUris && options.imageDataUris.length > 0
+              ? { imageDataUris: options.imageDataUris }
               : {}),
             ...(options.enableThinking !== undefined
               ? { enableThinking: options.enableThinking }

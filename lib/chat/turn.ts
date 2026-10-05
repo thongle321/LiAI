@@ -144,8 +144,12 @@ export function createTurnRunner(deps: TurnDeps) {
         sampler?.includeThinkingInContext !== false,
       ),
       tools: talentDefinitions(),
-      // Local reads imagePaths (llama media_paths); remote stays text-only.
+      // Local reads imagePaths (llama media_paths); remote reads the
+      // data URIs (OpenAI content arrays — a server can't read our files).
       ...(imagePaths ? { imagePaths } : {}),
+      ...(paths.images && paths.images.length > 0
+        ? { imageDataUris: paths.images }
+        : {}),
       ...(thinking !== undefined ? { enableThinking: thinking } : {}),
       ...(jinja !== undefined ? { jinja } : {}),
     ...(sampler ? { sampler } : {}),

@@ -10,7 +10,7 @@ import type {
   RemoteApiProvider,
   RemoteCaps,
 } from "../types/models";
-import { normalizeTimeoutMs } from "./inference/remote-engine.ts";
+import { asRecord, positiveFinite } from "./guards.ts";
 
 const STATUSES: ModelDownloadStatus[] = [
   "idle",
@@ -20,11 +20,6 @@ const STATUSES: ModelDownloadStatus[] = [
   "failed",
   "cancelled",
 ];
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
 
 function asNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -123,12 +118,7 @@ export function upgradeRemoteCaps(raw: unknown): Record<string, RemoteCaps> {
     const r = asRecord(entry);
     if (!r || typeof r.reachable !== "boolean") continue;
     const model = typeof r.model === "string" ? r.model : undefined;
-    const contextLength =
-      typeof r.contextLength === "number" &&
-      Number.isFinite(r.contextLength) &&
-      r.contextLength > 0
-        ? r.contextLength
-        : undefined;
+    const contextLength = positiveFinite(r.contextLength);
     out[key] = {
       reachable: r.reachable,
       checkedAt: asNumber(r.checkedAt, 0),
@@ -170,8 +160,9 @@ export function upgradeRemoteApis(raw: unknown): RemoteApiProvider[] {
       modelName: v.modelName,
       isActive: v.isActive === true,
       // Persisted garbage must not arm a timer: the rule lives once, in
-      // the engine (normalizeTimeoutMs); unset falls back to the default.
-      timeoutMs: normalizeTimeoutMs(v.timeoutMs),
+      // lib/guards (remote-engine re-exports it as normalizeTimeoutMs);
+      // unset falls back to the default.
+      timeoutMs: positiveFinite(v.timeoutMs),
     });
   }
   return out;

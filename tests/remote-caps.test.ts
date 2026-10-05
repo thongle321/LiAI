@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import {
   mergeRemoteCaps,
   probeRemoteCaps,
+  stripMeasuredCaps,
 } from "../lib/models/remote-api.ts";
 import type { RemoteApiProvider, RemoteCaps } from "../types/models.ts";
 
@@ -134,6 +135,30 @@ describe("probeRemoteCaps", () => {
     );
     assert.deepEqual(caps, {});
     assert.equal(urls.length, 0, "OpenRouter must not be probed");
+  });
+});
+
+describe("stripMeasuredCaps", () => {
+  it("keeps reachability bookkeeping, drops every measured field", () => {
+    // The store uses this when the provider's identity changes (model OR
+    // server): another identity's context length or vision claim must
+    // never survive to be believed — while the reachability fact, which
+    // is about the endpoint just answered, stays.
+    assert.deepEqual(
+      stripMeasuredCaps({
+        reachable: true,
+        checkedAt: 7,
+        model: "qwen",
+        contextLength: 8192,
+        supportsVision: true,
+      }),
+      { reachable: true, checkedAt: 7 },
+    );
+    // A legacy record with no measured fields strips to itself.
+    assert.deepEqual(
+      stripMeasuredCaps({ reachable: false, checkedAt: 1 }),
+      { reachable: false, checkedAt: 1 },
+    );
   });
 });
 

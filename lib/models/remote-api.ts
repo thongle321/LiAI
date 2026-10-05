@@ -9,6 +9,7 @@ import type {
   RemoteApiProvider,
   RemoteCaps,
 } from "../../types/models";
+import { asRecord, positiveFinite } from "../guards.ts";
 
 /** Capability fields a /props probe can report (everything but the
  *  reachability bookkeeping the store owns). */
@@ -18,12 +19,6 @@ export type RemoteCapsFields = Pick<RemoteCaps, "contextLength" | "supportsVisio
  *  timeout, PocketPal's PROPS_TIMEOUT_MS rationale — a probe must
  *  neither inherit the connection default nor a user-set timeout. */
 const PROBE_TIMEOUT_MS = 5000;
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
 
 /** Fetch a llama.cpp-family server's GET /props for ONE provider.
  *
@@ -70,9 +65,8 @@ export async function probeRemoteCaps(
     const defaults = asRecord(body["default_generation_settings"]);
     const nCtx = defaults ? defaults["n_ctx"] : undefined;
     const rawCtx = nCtx !== undefined ? nCtx : body["n_ctx"];
-    if (typeof rawCtx === "number" && Number.isFinite(rawCtx) && rawCtx > 0) {
-      caps.contextLength = rawCtx;
-    }
+    const contextLength = positiveFinite(rawCtx);
+    if (contextLength !== undefined) caps.contextLength = contextLength;
 
     const modelPath = body["model_path"];
     const describesModel =
@@ -110,6 +104,14 @@ export function mergeRemoteCaps(
     caps.supportsVision = prior.supportsVision;
   }
   return caps;
+}
+
+/** Drop the measured (identity-keyed) fields, keep the reachability
+ *  bookkeeping — used when the provider's identity changes (its model OR
+ *  its server), so numbers measured for another identity are never
+ *  believed. The store's updateRemoteApi applies it on edit. */
+export function stripMeasuredCaps(caps: RemoteCaps): RemoteCaps {
+  return { reachable: caps.reachable, checkedAt: caps.checkedAt };
 }
 
 export async function validateRemoteApi(

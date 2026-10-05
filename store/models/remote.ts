@@ -3,7 +3,7 @@
 import type { StateCreator } from "zustand";
 
 import type { ModelStore, RemoteSlice } from "./types";
-import { buildRemoteModelSpec, mergeRemoteCaps, probeRemoteCaps, validateRemoteApi } from "../../lib/models/remote-api.ts";
+import { buildRemoteModelSpec, mergeRemoteCaps, probeRemoteCaps, stripMeasuredCaps, validateRemoteApi } from "../../lib/models/remote-api.ts";
 import { providerKeySS } from "../../lib/secrets.ts";
 import {
   ACTIVE_MODEL_KEY,
@@ -73,24 +73,25 @@ export const createRemoteSlice: StateCreator<ModelStore, [], [], RemoteSlice> = 
 
   updateRemoteApi: async (providerId, updates) => {
     set((state) => {
-      // C7: caps are keyed per model. Switching the model strips the old
-      // model's measured fields (keep the reachability bookkeeping) so a
-      // later reader can never believe another model's context length or
-      // vision claim for this provider.
+      // C7: caps are keyed per model AND server. Editing either one
+      // strips the measured fields (reachability stays) so another
+      // identity's context length or vision claim is never believed for
+      // this provider — the same guard PocketPal keeps as probedUrl.
       const caps = state.remoteCaps[providerId];
-      const modelChanged =
-        updates.modelName !== undefined &&
+      const current = state.remoteApis.find((p) => p.id === providerId);
+      const identityChanged =
         caps !== undefined &&
-        caps.model !== updates.modelName;
+        ((updates.modelName !== undefined &&
+          caps.model !== updates.modelName) ||
+          (updates.baseUrl !== undefined &&
+            current !== undefined &&
+            current.baseUrl !== updates.baseUrl));
       return {
         remoteApis: state.remoteApis.map((p) =>
           p.id === providerId ? { ...p, ...updates } : p,
         ),
-        remoteCaps: modelChanged
-          ? {
-              ...state.remoteCaps,
-              [providerId]: { reachable: caps.reachable, checkedAt: caps.checkedAt },
-            }
+        remoteCaps: identityChanged
+          ? { ...state.remoteCaps, [providerId]: stripMeasuredCaps(caps) }
           : state.remoteCaps,
       };
     });

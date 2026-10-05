@@ -126,7 +126,8 @@ export interface RemoteApiProvider {
   modelName: string;
   isActive: boolean;
   /** Per-provider request timeout in ms; absent/invalid = engine default.
-   *  Rule lives in one place: remote-engine's normalizeTimeoutMs. */
+   *  Rule lives in one place: lib/guards.ts positiveFinite — remote-engine
+   *  re-exports it as normalizeTimeoutMs. */
   timeoutMs?: number;
 }
 

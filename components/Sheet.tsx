@@ -124,41 +124,18 @@ export function Sheet({
   // sheet height; `bodyHeight` is what the React content actually measured.
   // The DIFFERENCE is the bottom inset TrueSheet applied natively -- the one
   // value `useSafeAreaInsets()` is suspected of dropping.
-  const [sheetPosition, setSheetPosition] = useState(0);
   const [bodyHeight, setBodyHeight] = useState(0);
-  // THE BOTTOM INSET, measured from TrueSheet itself.
-  //
-  // `useSafeAreaInsets().bottom` is 0 on this device (react-native-safe-area-
-  // context #546: the bottom inset is not reported on Android 15), so it
-  // cannot be trusted -- device probe confirmed insets.bottom=0 on all four
-  // sheets. TrueSheet DOES know the real value natively
-  // (TrueSheetViewController.contentBottomInset, read via ScreenUtils) and
-  // reports its own sheet height through onPositionChange, so the inset is
-  // whatever the sheet is taller than its content.
-  //
-  // FROZEN on the first settled measurement, and only once. Recomputing it
-  // from an already-padded body feeds the padding back into the auto detent,
-  // which grows the sheet a frame at a time.
-  const [nativeBottom, setNativeBottom] = useState<number | null>(null);
-  const recordPosition = (sheet: number) => {
-    setSheetPosition(sheet);
-    setNativeBottom((prev) => {
-      if (prev !== null) return prev;
-      if (bodyHeight <= 0 || sheet <= 0) return prev;
-      return Math.max(0, sheet - bodyHeight - (footer ? footerHeight : 0));
-    });
-  };
-  const bottomPad = nativeBottom ?? 0;
-  const nativeInset = nativeBottom;
   const debugLines = DEBUG_INSETS
     ? [
         `insets.bottom=${insets.bottom}`,
         `bodyMaxHeight=${bodyMaxHeight}`,
         `window=${windowHeight}`,
         `body=${bodyHeight}`,
-        `sheet=${sheetPosition}`,
-        `nativeBottom=${nativeInset ?? "?"}`,
-        `pad=${bottomPad}`,
+        // NB: this label deliberately avoids the bare token `footer`.
+        // A sibling test slices this file between two sentinel literals to
+        // isolate TrueSheet's props block, and this array sits ABOVE the
+        // return — a match up here would come first and invert the slice.
+        `footerH=${footerHeight}`,
       ]
     : [];
 
@@ -220,17 +197,16 @@ export function Sheet({
         footer ? (
           <View
             className="px-4 pt-2"
-            // The pinned action must clear the navigation bar. It cannot use
-            // `insets.bottom` (0 here -- see nativeBottom above), so it takes
-            // the inset TrueSheet reserved for the sheet.
-            style={{ paddingBottom: bottomPad }}
+            // Device-observed: TrueSheet's footer container did NOT clear
+            // this phone's 3-button nav bar, so the pinned action rendered
+            // behind the system buttons and could not be tapped.
+            style={{ paddingBottom: insets.bottom }}
             onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
           >
             {footer}
           </View>
         ) : undefined
       }
-      onPositionChange={(e) => recordPosition(e.nativeEvent.position)}
       onDidDismiss={() => {
         presentedRef.current = false;
         if (dismissedRef.current) return;
@@ -247,12 +223,11 @@ export function Sheet({
           keyboardShouldPersistTaps="handled"
           style={{
             maxHeight: bodyMaxHeight,
-            // With a footer, the footer owns the nav-bar clearance (see its
-            // paddingBottom) and the body only reserves the footer's measured
-            // height. Without one, the body is the bottom-most element and
-            // carries the clearance itself. `insets.bottom` used to fill that
-            // role and is a hard 0 on Android 15, so it cleared nothing.
-            paddingBottom: footer ? footerHeight : bottomPad,
+            // No footer in input sheets (grill Q1/Q2): the row at the
+            // body's end carries the actions, and this pad keeps them
+            // above the nav bar. Footer sheets keep their measured
+            // reserve instead.
+            paddingBottom: footer ? footerHeight : insets.bottom,
           }}
         >
           {header}
@@ -264,10 +239,10 @@ export function Sheet({
           className="grow px-4"
           style={{
             maxHeight: bodyMaxHeight,
-            // Was `undefined` with no footer, which dropped the inset
-            // entirely for every scrollable={false} sheet (hf search, hf
-            // details) -- the inconsistency that left them overlapping.
-            paddingBottom: footer ? footerHeight : bottomPad,
+            // Was `undefined` with no footer, which dropped the nav-bar
+            // inset entirely for every scrollable={false} sheet (hf search,
+            // hf details). Same reserve as the ScrollView branch above.
+            paddingBottom: footer ? footerHeight : insets.bottom,
           }}
         >
           {header}

@@ -188,6 +188,38 @@ describe("sheet library", () => {
     );
   });
 
+  it("pads the bottom of BOTH bodies with the nav-bar inset", () => {
+    // REGRESSION, twice over.
+    //
+    // 1. The scrollable={false} branch resolved its bottom pad to
+    //    `undefined` where the ScrollView branch used `insets.bottom`, so
+    //    hf search and hf details dropped the inset entirely and sat under
+    //    the navigation bar.
+    //
+    // 2. An attempt to derive the inset from onPositionChange shipped a
+    //    worse bug and was reverted. That event's `position` is the sheet's
+    //    TOP OFFSET, not its height (on device it equalled the top inset
+    //    to the decimal), and its FIRST firing lands mid-present-animation
+    //    — freezing it captured a 476px phantom that made sheets taller
+    //    than their content and floated footers over their own fields.
+    //    Neither the value nor the moment is trustworthy; insets.bottom
+    //    reports the 3-button bar correctly on this device (47.87).
+    const sheet = read("components/Sheet.tsx")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/[^\n]*/g, "");
+    assert.doesNotMatch(
+      sheet,
+      /onPositionChange/,
+      "the bottom inset must not be derived from an animated sheet position",
+    );
+    const pads = sheet.match(/paddingBottom: footer \? footerHeight : insets\.bottom/g) ?? [];
+    assert.equal(
+      pads.length,
+      2,
+      "both the ScrollView body and the scrollable={false} body must pad with insets.bottom",
+    );
+  });
+
   it("keeps actions in the scroll body, never the native footer", () => {
     // REGRESSION + grill decision Q1/Q2. TrueSheet lifts its absolute
     // footer above the keyboard without shrinking the body, so an input

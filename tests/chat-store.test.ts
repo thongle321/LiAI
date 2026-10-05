@@ -65,6 +65,44 @@ describe("chat store sessions", () => {
     assert.deepEqual(useStore.getState().sessions, []);
   });
 
+  it("reconciles a stored pointer to a session that is gone (C17)", async () => {
+    // The pointer names a session the list no longer contains: loadSession
+    // must clear it rather than leave an active id with nothing behind it.
+    const { getStore, runTurn } = storeWith([], "gone");
+    const useStore = createChatStore({ getStore, runTurn });
+    await useStore.getState().loadSession();
+    assert.equal(useStore.getState().sessionId, null);
+    assert.deepEqual(useStore.getState().messages, []);
+    assert.equal(await (await getStore()).getActiveSessionId(), null);
+  });
+
+  it("still opens the conversation when the draft write fails (C17)", async () => {
+    // switchSession persists the old draft BEFORE hydrating the next
+    // transcript. That write is best-effort: if it throws the conversation
+    // must still resolve — an empty view that looks like lost data is the
+    // failure this guards.
+    const base = fakeSessionStore([
+      { id: "s2", title: "Two", turns: [{ role: "user", content: "hi" }] },
+    ]);
+    const useStore = createChatStore({
+      getStore: async () => ({
+        ...base.store,
+        setDraft: async () => {
+          throw new Error("disk full");
+        },
+      }),
+      runTurn: idleRunTurn,
+    });
+    await useStore.getState().loadSession();
+    assert.equal(await useStore.getState().switchSession("s2"), true);
+    assert.equal(useStore.getState().sessionId, "s2");
+    assert.equal(
+      useStore.getState().messages.length,
+      1,
+      "the transcript resolved despite the failing write",
+    );
+  });
+
   it("switchSession loads history with steps and usage", async () => {
     const { getStore, runTurn, store } = storeWith([
       {
@@ -626,6 +664,25 @@ describe("chat store edit mode", () => {
     const questionId = useStore.getState().messages[0].id;
     const sent = useStore.getState().send("more");
     assert.equal(useStore.getState().startEdit(questionId), false);
+    gate.release("done");
+    await sent;
+  });
+
+  it("refuses to switch sessions mid-turn (C17)", async () => {
+    // The switch guard is the other half of the mid-turn refusal (the
+    // delete side is pinned elsewhere): moving the view to another
+    // conversation while tokens stream would orphan the incoming
+    // bubbles on the old one.
+    const gate = gatedRunTurn();
+    const { getStore } = storeWith([
+      { id: "s1", title: "One" },
+      { id: "s2", title: "Two" },
+    ]);
+    const useStore = createChatStore({ getStore, runTurn: gate.runTurn });
+    await useStore.getState().loadSession();
+    const sent = useStore.getState().send("hi");
+    assert.equal(await useStore.getState().switchSession("s2"), false);
+    assert.notEqual(useStore.getState().sessionId, "s2", "still where it was");
     gate.release("done");
     await sent;
   });

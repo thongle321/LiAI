@@ -7,7 +7,7 @@
 import type { RefObject } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import Animated from "react-native-reanimated";
-import { Keyboard, Mic, Send, SwitchCamera, X } from "lucide-react-native";
+import { Eye, EyeOff, Keyboard, Mic, Minus, Plus, Send, SwitchCamera, X } from "lucide-react-native";
 import {
   Camera,
   type CameraDevice,
@@ -127,46 +127,96 @@ export function VisionTopFloat({
   top,
   onExit,
   onFlip,
+  watchOn,
+  onToggleWatch,
+  intervalMs,
+  onIntervalStep,
 }: {
   top: number;
   onExit: () => void;
   onFlip: () => void;
+  /** Watch mode (05): continuous capture, answer only on ask. */
+  watchOn: boolean;
+  onToggleWatch: () => void;
+  intervalMs: number;
+  onIntervalStep: (deltaMs: number) => void;
 }) {
   const exitPress = usePressFeedback();
   const flipPress = usePressFeedback();
+  const watchPress = usePressFeedback();
   return (
     <View
-      className="absolute left-0 right-0 flex-row items-center px-5"
+      className="absolute left-0 right-0 px-5"
       style={{ top }}
     >
-      <Animated.View style={exitPress.animatedStyle}>
-        <Pressable
-          onPress={onExit}
-          onPressIn={exitPress.onPressIn}
-          onPressOut={exitPress.onPressOut}
-          className="h-12 w-12 items-center justify-center"
-          accessibilityRole="button"
-          accessibilityLabel="Stop vision"
-        >
-          <X size={24} color={colors.inverseText} />
-        </Pressable>
-      </Animated.View>
-      <View className="flex-1" />
-      <Animated.View style={flipPress.animatedStyle}>
-        <Pressable
-          onPress={onFlip}
-          onPressIn={flipPress.onPressIn}
-          onPressOut={flipPress.onPressOut}
-          className="h-12 w-12 items-center justify-center"
-          accessibilityRole="button"
-          accessibilityLabel="Switch camera"
-        >
-          <SwitchCamera size={22} color={colors.inverseText} />
-        </Pressable>
-      </Animated.View>
-      <Text className="ml-1 font-sans-semibold text-caption tracking-widest text-white">
-        VISION
-      </Text>
+      <View className="flex-row items-center">
+        <Animated.View style={exitPress.animatedStyle}>
+          <Pressable
+            onPress={onExit}
+            onPressIn={exitPress.onPressIn}
+            onPressOut={exitPress.onPressOut}
+            className="h-12 w-12 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Stop vision"
+          >
+            <X size={24} color={colors.inverseText} />
+          </Pressable>
+        </Animated.View>
+        <View className="flex-1" />
+        <Animated.View style={watchPress.animatedStyle}>
+          <Pressable
+            onPress={onToggleWatch}
+            onPressIn={watchPress.onPressIn}
+            onPressOut={watchPress.onPressOut}
+            className="h-12 w-12 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityState={{ selected: watchOn }}
+            accessibilityLabel={watchOn ? "Stop watching" : "Watch mode — keep recent frames for the next question"}
+          >
+            {watchOn ? (
+              <Eye size={22} color={colors.primary} />
+            ) : (
+              <EyeOff size={22} color={colors.inverseText} />
+            )}
+          </Pressable>
+        </Animated.View>
+        <Animated.View style={flipPress.animatedStyle}>
+          <Pressable
+            onPress={onFlip}
+            onPressIn={flipPress.onPressIn}
+            onPressOut={flipPress.onPressOut}
+            className="h-12 w-12 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Switch camera"
+          >
+            <SwitchCamera size={22} color={colors.inverseText} />
+          </Pressable>
+        </Animated.View>
+        <Text className="ml-1 font-sans-semibold text-caption tracking-widest text-white">
+          VISION
+        </Text>
+      </View>
+      {watchOn && (
+        <View className="mt-1 flex-row items-center justify-end gap-3">
+          <Pressable
+            onPress={() => onIntervalStep(-500)}
+            className="h-8 w-8 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Decrease capture interval"
+          >
+            <Minus size={16} color={colors.inverseText} />
+          </Pressable>
+          <Text className="font-sans text-caption text-white">{intervalMs}ms</Text>
+          <Pressable
+            onPress={() => onIntervalStep(500)}
+            className="h-8 w-8 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Increase capture interval"
+          >
+            <Plus size={16} color={colors.inverseText} />
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }

@@ -38,6 +38,9 @@ const NO_FRAME = "Couldn't capture a frame — try again.";
 export function useVisionTurn(
   camera: RefObject<VisionCameraView | null>,
   cameraReady: () => boolean,
+  /** Watch mode (05): recent buffered frames win over the at-ask
+   *  snapshot when the buffer is non-empty. */
+  getBufferedFrames?: () => string[],
 ) {
   const [phase, setPhase] = useState<VoicePhase>("idle");
   const [answer, setAnswer] = useState("");
@@ -140,23 +143,30 @@ export function useVisionTurn(
     setBoth("thinking");
     setIssue(null);
 
-    let rawJpeg: string | null = null;
-    try {
-      const cam = camera.current;
-      if (cam !== null && cameraReadyRef.current()) {
-        rawJpeg = await snapshotToBase64(() => cam.takeSnapshot({ quality: 50 }));
+    const buffered = getBufferedFrames?.() ?? [];
+    let dataUris: string[];
+    if (buffered.length > 0) {
+      // Watch mode: the question rides the recent-frames window, so
+      // "what just moved?" has the frames to answer with.
+      dataUris = buffered;
+    } else {
+      let rawJpeg: string | null = null;
+      try {
+        const cam = camera.current;
+        if (cam !== null && cameraReadyRef.current()) {
+          rawJpeg = await snapshotToBase64(() => cam.takeSnapshot({ quality: 50 }));
+        }
+      } catch {
+        rawJpeg = null;
       }
-    } catch {
-      rawJpeg = null;
+      if (!aliveRef.current) return;
+      if (rawJpeg === null) {
+        setIssue(NO_FRAME);
+        setBoth("idle");
+        return;
+      }
+      dataUris = [`data:image/jpeg;base64,${rawJpeg}`];
     }
-    if (!aliveRef.current) return;
-    if (rawJpeg === null) {
-      setIssue(NO_FRAME);
-      setBoth("idle");
-      return;
-    }
-
-    const dataUri = `data:image/jpeg;base64,${rawJpeg}`;
 
     // A chat send may still be in flight (store.send refuses while busy):
     // wait for it instead of failing the turn.
@@ -166,7 +176,7 @@ export function useVisionTurn(
       waited += 1;
     }
     const before = useChatStore.getState().messages.length;
-    const ok = await send(said, [dataUri]);
+    const ok = await send(said, dataUris);
     if (!aliveRef.current) return;
     if (!ok) {
       setIssue("Couldn't send that. Try again.");

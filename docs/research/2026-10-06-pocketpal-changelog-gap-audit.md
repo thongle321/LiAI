@@ -126,6 +126,48 @@ carries two conventions.
 
 **Not a live bug — a trap for the next feature that trusts it.**
 
+### C11–C17 — from the chat-screen divergence sweep
+Found by comparing the two chat screens feature-for-feature in the reverse
+direction (LiAI → PocketPal), which no prior audit had done. Full evidence in
+`2026-10-06-pocketpal-chat-divergence.md` §2; every absence was verified by
+search rather than inferred.
+
+### C11 — Session list has no date grouping
+`SessionList.tsx` handles pinning but has no grouping. PocketPal groups into
+Today / Yesterday / This week / … with pinned sessions hoisted into a leading
+group (`SidebarContent.tsx:315`, `ChatSessionStore.ts:1194`).
+
+### C12 — No multi-select, bulk delete, or bulk export
+Confirmed absent. PocketPal: `SidebarContent.tsx:186,427,458`. A real workflow
+gap, not a nicety.
+
+### C13 — Markdown tables are not rendered
+`ChatRenderer` overrides only `code()` (`MarkdownView.tsx:20`), so there is no
+table handling. PocketPal ships `TableRenderers.tsx` wired into both the
+content and reasoning providers. Any model output containing a table renders
+poorly. **Most likely of the seven to be seen by a user.**
+
+### C14 — No `render_html` talent or HTML preview
+Confirmed absent; four talents only (`datetime`, `calculate`, `web_search`,
+`read_url`). PocketPal renders model HTML in a strict-CSP WebView
+(`HtmlPreviewBubble.tsx:46`). Previously out-of-scope in the G5 spec as a
+WebView dependency — recorded here so the decision is revisited knowingly.
+
+### C15 — No per-tool metrics footer
+Confirmed absent. PocketPal: `ToolMetricsFooter.tsx:28` renders
+`1,500 tokens · 35s` under a tool result. Timing already lives in LiAI's turn
+footer, so this is a placement question rather than missing data.
+
+### C16 — No macrotask yield during streaming
+Confirmed absent. PocketPal yields every 100ms (`useChatSession.ts:722`) so
+touch events — notably Stop — dispatch during long streams. Without it, a long
+stream may keep the JS thread busy enough to delay the Stop press.
+
+### C17 — No lazy message hydration
+Confirmed absent; every session switch reads all turns. PocketPal loads
+metadata only and hydrates on open (`ChatSessionStore.ts:271,406`). A
+performance gap that grows with conversation length.
+
 ---
 
 ## 3. Behaviour changes — decide individually

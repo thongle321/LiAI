@@ -1,10 +1,15 @@
-/** In-chat search filter + Markdown transcript builder (pure). */
+/** In-chat search filter (pure).
+ *
+ * The Markdown transcript builder that used to share this file was removed:
+ * `buildTranscript` in lib/chat/transcript.ts had no production caller — only
+ * this test imported it — so it was dead code that a green suite was keeping
+ * alive. Markdown export actually goes through lib/chat/export.ts.
+ */
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { filterMessages } from "../lib/chat/filter.ts";
-import { buildTranscript } from "../lib/chat/transcript.ts";
 import type { ChatMessage } from "../types/chat.ts";
 
 function msg(id: string, role: "user" | "assistant", text: string): ChatMessage {
@@ -31,23 +36,5 @@ describe("filterMessages", () => {
 
   it("returns nothing when nothing matches", () => {
     assert.deepEqual(filterMessages(messages, " refund "), []);
-  });
-});
-
-describe("buildTranscript", () => {
-  it("renders a titled Markdown transcript with role headers", () => {
-    const out = buildTranscript(
-      [msg("1", "user", "Hi"), msg("2", "assistant", "Hello!")],
-      "Soul food",
-    );
-    assert.equal(
-      out,
-      "# Soul food\n\n**You:**\n\nHi\n\n**LiAI:**\n\nHello!\n",
-    );
-  });
-
-  it("falls back to an untitled header and skips empty texts", () => {
-    const out = buildTranscript([msg("1", "assistant", "")], undefined);
-    assert.equal(out, "# Chat export\n");
   });
 });

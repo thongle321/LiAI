@@ -49,6 +49,13 @@ export interface ModelSpec {
   // Catalog metadata (PocketPal parity, minus pal features)
   params?: number; // parameter count, e.g. 135_000_000
   capabilities?: string[];
+  /** Whether this model reasons at all (C6): true = known reasoner,
+   *  false = known NON-reasoner, absent = unknown — which is the app's
+   *  historic behaviour, unchanged for every model never classified.
+   *  Typed on purpose: C6's schema decision rejected parsing the
+   *  free-form `capabilities` above. User overrides live in the
+   *  inference store's thinkingOverrides, not here. */
+  reasoning?: boolean;
   ggufMetadata?: Record<string, unknown>;
 }
 

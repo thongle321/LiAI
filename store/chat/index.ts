@@ -20,6 +20,7 @@ import type { ChatCtx, ChatDeps, ChatState, TurnRunner } from "./types.ts";
 import { selectEngineSource, type EngineSource } from "../../lib/inference/engine.ts";
 import { EngineManager } from "../../lib/inference/manager.ts";
 import { resolveSampler, type SamplerParams } from "../../lib/inference/sampler.ts";
+import { resolveThinking } from "../../lib/inference/thinking.ts";
 import {
   getAvailableDevices,
   resolveComputeDevices,
@@ -191,11 +192,29 @@ async function defaultSaveImage(dataUri: string): Promise<string | null> {
   }
 }
 
-/** Local-only thinking preference from the inference store. */
+/** Resolved thinking state for the ACTIVE model (C6): a user
+ *  override, then the spec's detected capability, then the global
+ *  preference. An unclassified model gets the global flag, exactly as
+ *  before this ticket. */
 async function defaultThinking(): Promise<boolean> {
   try {
     const { useInference } = await import("../inference.ts");
-    return useInference.getState().thinkingEnabled;
+    const { useModelStore } = await import("../modelStore.ts");
+    const inf = useInference.getState();
+    const m = useModelStore.getState();
+    // Remote engines have no enable_thinking flag (the toggle is local
+    // only); resolving with a null id keeps the global as their default.
+    const local = m.activeProviderType === "local";
+    const spec =
+      local && m.activeModelId !== null
+        ? m.models.find((model) => model.id === m.activeModelId)
+        : undefined;
+    return resolveThinking({
+      modelId: local && m.activeModelId !== null ? m.activeModelId : null,
+      reasoning: spec?.reasoning,
+      overrides: inf.thinkingOverrides,
+      globalEnabled: inf.thinkingEnabled,
+    }).enabled;
   } catch {
     return true;
   }

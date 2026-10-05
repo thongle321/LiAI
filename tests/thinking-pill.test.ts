@@ -25,7 +25,11 @@ test("the composer carries the thinking toggle", () => {
   // conversation to turn it off.
   assert.match(src, /<Brain/, "a Brain glyph marks the pill");
   assert.match(src, />\s*Think\s*</, "and it carries the word, per DESIGN.md");
-  assert.match(src, /setThinkingEnabled\(!thinkingEnabled\)/, "it toggles the store flag");
+  assert.match(
+    src,
+    /setThinkingOverride\(activeModelId, next\)/,
+    "a press writes the PER-MODEL override (C6); the global stays the fallback for untouched models",
+  );
   assert.match(
     src,
     /accessibilityRole="switch"/,

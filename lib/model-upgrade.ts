@@ -89,6 +89,7 @@ export function upgradeModelSpec(raw: unknown): ModelSpec | null {
     capabilities: Array.isArray(v.capabilities)
       ? v.capabilities.filter((c): c is string => typeof c === "string")
       : undefined,
+    reasoning: typeof v.reasoning === "boolean" ? v.reasoning : undefined,
     ggufMetadata:
       v.ggufMetadata && typeof v.ggufMetadata === "object" && !Array.isArray(v.ggufMetadata)
         ? (v.ggufMetadata as Record<string, unknown>)

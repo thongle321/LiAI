@@ -33,6 +33,7 @@ import { useInference } from "../../store/inference.ts";
 import { suspendBackgroundRelease } from "../../lib/inference/offload.ts";
 import { useModelReady } from "../../hooks/useModelReady.ts";
 import { useModelStore } from "../../store/modelStore";
+import { resolveThinking } from "../../lib/inference/thinking.ts";
 import { mergeDictation, VOICE_LISTEN_OPTS } from "../../lib/voiceListen.ts";
 import { ensureMicAccess } from "../../lib/micAccess.ts";
 import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../../lib/voiceStatus.ts";
@@ -90,10 +91,28 @@ export function MessageInput({
   // `enableThinking` is a llama.rn jinja flag (lib/inference/engine.ts),
   // so offering it under a remote API would promise something the remote
   // engine cannot honour.
-  const thinkingEnabled = useInference((s) => s.thinkingEnabled);
+  const thinkingGlobal = useInference((s) => s.thinkingEnabled);
+  const thinkingOverrides = useInference((s) => s.thinkingOverrides);
   const setThinkingEnabled = useInference((s) => s.setThinkingEnabled);
+  const setThinkingOverride = useInference((s) => s.setThinkingOverride);
+  const activeModelId = useModelStore((s) => s.activeModelId);
+  const activeModels = useModelStore((s) => s.models);
   const thinkingLocal =
     useModelStore((s) => s.activeProviderType) === "local";
+  // The pill shows the RESOLVED state for the active model — user
+  // override, then the spec's detected capability, then the global —
+  // never the global alone (C6). Absent capability renders it exactly
+  // as today rather than hiding it.
+  const activeSpec = thinkingLocal
+    ? activeModels.find((m) => m.id === activeModelId)
+    : undefined;
+  const resolved = resolveThinking({
+    modelId: thinkingLocal ? activeModelId : null,
+    reasoning: activeSpec?.reasoning,
+    overrides: thinkingOverrides,
+    globalEnabled: thinkingGlobal,
+  });
+  const thinkingEnabled = resolved.enabled;
   // A switch's label names the THING, not the action: VoiceOver reads
   // "label, switch, checked". An imperative label that flipped to
   // "Disable thinking" announced "Disable thinking, switch, on" -- an
@@ -473,7 +492,21 @@ export function MessageInput({
             // inventing levels here would ship a control with nothing
             // behind it.
             <Pressable
-              onPress={modelReady ? () => setThinkingEnabled(!thinkingEnabled) : undefined}
+              onPress={
+                modelReady
+                  ? () => {
+                      const next = !resolved.enabled;
+                      // With a model loaded a press is a PER-MODEL
+                      // decision; the global stays the default for
+                      // models never touched (C6).
+                      if (activeModelId !== null) {
+                        setThinkingOverride(activeModelId, next);
+                      } else {
+                        setThinkingEnabled(next);
+                      }
+                    }
+                  : undefined
+              }
               disabled={!modelReady}
               className={
                 thinkingEnabled

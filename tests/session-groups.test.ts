@@ -134,7 +134,7 @@ describe("SessionList wiring (C11)", () => {
   it("renders accessible headers and keeps selection + empty state", () => {
     assert.match(src, /renderSectionHeader=/);
     assert.match(src, /accessibilityRole="header"/, "headers must announce");
-    assert.match(src, /extraData=\{sessionId\}/, "current session stays visibly selected");
+    assert.match(src, /extraData=\{\[sessionId, selected\]/, "current session stays visibly selected");
     assert.match(src, /No conversations yet\./, "today's empty state survives");
   });
 

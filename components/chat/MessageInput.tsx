@@ -32,6 +32,7 @@ import { useChatStore } from "../../store/chat.ts";
 import { useInference } from "../../store/inference.ts";
 import { suspendBackgroundRelease } from "../../lib/inference/offload.ts";
 import { useModelReady } from "../../hooks/useModelReady.ts";
+import { useMultimodalAvailable } from "../../hooks/useMultimodalAvailable.ts";
 import { useModelStore } from "../../store/modelStore";
 import { resolveThinking } from "../../lib/inference/thinking.ts";
 import { mergeDictation, VOICE_LISTEN_OPTS } from "../../lib/voiceListen.ts";
@@ -280,6 +281,11 @@ export function MessageInput({
   const stopPress = usePressFeedback();
   const micPress = usePressFeedback();
   const plusPress = usePressFeedback();
+  // Capability-gated attach (vision-series 03, PocketPal's
+  // isPlusButtonEnabled shape): always rendered, disabled-with-hint when
+  // the active model cannot see — no path hands the pipeline an image it
+  // would silently strip. Same rule as the send gate, read live.
+  const canSee = useMultimodalAvailable();
 
   async function handleAttach(source: ImageSource): Promise<void> {
     setPlusOpen(false);
@@ -435,16 +441,22 @@ export function MessageInput({
         <View>
           <Animated.View style={plusPress.animatedStyle}>
             <Pressable
-              onPress={modelReady ? () => setPlusOpen((o) => !o) : undefined}
+              onPress={modelReady && canSee ? () => setPlusOpen((o) => !o) : undefined}
               onPressIn={plusPress.onPressIn}
               onPressOut={plusPress.onPressOut}
-              disabled={!modelReady}
+              disabled={!modelReady || !canSee}
               className="h-12 w-12 items-center justify-center rounded-full bg-surface-3"
               accessibilityRole="button"
-              accessibilityState={{ disabled: !modelReady }}
-              accessibilityLabel={modelReady ? "Attach a photo" : "Load a model to attach a photo"}
+              accessibilityState={{ disabled: !modelReady || !canSee }}
+              accessibilityLabel={
+                modelReady && canSee
+                  ? "Attach a photo"
+                  : modelReady
+                    ? "This model can't see images"
+                    : "Load a model to attach a photo"
+              }
             >
-              <Plus size={20} color={modelReady ? colors.primary : colors.secondaryText} />
+              <Plus size={20} color={modelReady && canSee ? colors.primary : colors.secondaryText} />
             </Pressable>
           </Animated.View>
           {plusOpen && (

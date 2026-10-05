@@ -9,7 +9,7 @@
 ## Acceptance
 
 - Tapping a rendered link opens it via `Linking`.
-- Only `http`/`https` are openable — no `file:`, `javascript:`, or bare scheme. Mirror the guard PocketPal uses in `WebSearchResultsSheet.tsx:38`.
+- Only `http`/`https` are openable — no `file:`, `javascript:`, or bare scheme. Mirror the guard PocketPal uses in `WebSearchResultsSheet.tsx:24` (`const isOpenableUrl = (url) => /^https?:\/\//i.test(url)`; the earlier `:38` citation in this issue was stale — corrected by the parity fact-check).
 - An unopenable scheme renders as plain text rather than an inert-looking link.
 - Failure to open shows an inline message rather than silence.
 - Long-press / selection still works on link text.

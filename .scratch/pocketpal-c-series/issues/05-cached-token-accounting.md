@@ -11,7 +11,7 @@ BLOCKS: 07-near-limit-warning.
 
 Effect: the context meter divides by `nCtx` using an under-reported occupancy, so a thread near the window limit can show a comfortable percentage.
 
-PocketPal: `servers/index.ts:334-345` — `tokensEvaluated = (prompt_n ?? 0) + (cache_n ?? 0)`, each key guarded independently because "old build omits `cache_n`" and "cold prompt reports `0`" are different facts.
+PocketPal: `pocketpal-ai/src/api/servers/index.ts:334-346` (`readFinish`) — `tokensEvaluated = (prompt_n ?? 0) + (cache_n ?? 0)` (:341-344), each key guarded independently because "old build omits `cache_n`" and "cold prompt reports `0`" are different facts (comment at :326-333, the quotes at :330-331).
 
 ## Acceptance
 
@@ -22,7 +22,11 @@ PocketPal: `servers/index.ts:334-345` — `tokensEvaluated = (prompt_n ?? 0) + (
 
 ## Files
 
-`lib/inference/local-engine.ts`, `lib/inference/remote-engine.ts`, `lib/chat/context-fill.ts`, `types/models.ts`.
+`lib/inference/local-engine.ts`, `lib/inference/remote-engine.ts`, `lib/chat/context-fill.ts`, `lib/inference/engine.ts`, `lib/agent/runner.ts`.
+
+(Corrected by the parity fact-check: `types/models.ts` was listed but untouched —
+the usage contract lives in `lib/inference/engine.ts`; `lib/agent/runner.ts` changed
+but was not listed.)
 
 ## Notes
 
@@ -37,7 +41,7 @@ held against the window", on both native paths. `cache_n` is path-dependent:
 the legacy flow aliases it to that same `n_past` (`JSICompletion.h:181`), the
 slot flow sets it to the reused prompt prefix only (`rn-slot.cpp:644`, defined
 "prompt tokens from cache" at `rn-slot.h:23`). PocketPal's `prompt_n + cache_n`
-is a llama-server WIRE formula (`servers/index.ts:341-343`) — porting it here
+is a llama-server WIRE formula (`pocketpal-ai/src/api/servers/index.ts:341-344`) — porting it here
 would over-count on one path and miss generated tokens on the other. It is
 therefore deliberately not read; occupancy falls back to `tokens_evaluated`
 (prompt length) only when a build omits `tokens_cached`, and a reported `0` is

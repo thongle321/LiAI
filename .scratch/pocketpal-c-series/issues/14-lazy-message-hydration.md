@@ -18,6 +18,9 @@ Every session switch reads all turns. PocketPal loads metadata only and hydrates
 
 `lib/chat/tinybase-store.ts`, `lib/chat/session-store.ts`, `store/chat/sessions.ts`.
 
+(`store/chat/sessions.ts` ended up untouched — its pointer-reconcile and mid-turn
+behaviour already existed; noted by the parity fact-check.)
+
 ## Notes
 
 **The most likely source of data-loss regressions in the set** — a stale or missing guard shows an empty conversation that looks like lost data. Guard with existing session-store tests plus new lazy/hydrate cases, and verify on device with a long conversation. If a store write fails mid-hydrate the conversation must still resolve.

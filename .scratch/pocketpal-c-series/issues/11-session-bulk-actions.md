@@ -4,7 +4,7 @@
 **Status:** ready-for-agent
 **Blocked by:** 10-session-date-grouping.md
 
-Confirmed absent. PocketPal: selection mode with a checkbox header, select-all, count-confirmed bulk delete, and bulk export of the selected sessions (`SidebarContent.tsx:186,427,458`).
+Confirmed absent. PocketPal: selection mode with a checkbox header, select-all, count-confirmed bulk delete, and bulk export of the selected sessions (`SidebarContent.tsx:186,427,458` — re-verified directly against the source after the parity fact-check proposed `:464`; `:458` IS `handleBulkExport`, the original citation was correct all along, and `:464` is only the error-message line inside its catch).
 
 ## Acceptance
 

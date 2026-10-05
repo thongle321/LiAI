@@ -22,6 +22,9 @@ BLOCKS: 11-session-bulk-actions.
 
 `components/chat/SessionList.tsx`, `store/chat/sessions.ts`.
 
+(`store/chat/sessions.ts` ended up untouched — grouping is derived in the
+component; noted by the parity fact-check.)
+
 ## Notes
 
 The list is currently a non-scrolling `FlatList`; grouping likely makes it a `SectionList`. Mind the per-row actions (pin/rename/delete) under a sticky header.

@@ -89,6 +89,7 @@ backlog rather than two competing lists.
 | Import not gated on `hasSession` | `components/chat/ChatMenu.tsx` | Restoring into an empty app is the main case |
 | Actions in the scroll body, not a native footer | `GenerationSettingsSheet.tsx` | The native footer lifts over scrolled content |
 | `modalAvailable()` returns constant `false` | `store/chat/send.ts:22-32` | Deliberate single flip point until projector pairing exists |
+| Remote vision cap stays `unknown` when `/props` describes a model but omits `modalities` | `lib/models/remote-api.ts` (`asRecord` guard) | PocketPal writes `supportsVision=false` there (`props.ts:109`); absence can't distinguish "no vision" from "a server that never reports modalities", and an absent RemoteCaps field is never coerced to false. No consumer yet. Decision: `issues/06-remote-caps-probe.md` |
 
 ---
 

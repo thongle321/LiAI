@@ -22,4 +22,20 @@ The data is already collected and discarded — this is a rendering gap, not a d
 
 ## Notes
 
-PocketPal has no direct equivalent — this was found by the divergence sweep, not the changelog. Verify the exact field name before wiring; `spec.error` is the claim, not a verified read site.
+~~PocketPal has no direct equivalent~~ — **that claim was false** (corrected by the
+C-series parity fact-check, 2026-10-06): PocketPal does surface the stored reason,
+in a dialog rather than on the button — `pocketpal-ai/src/screens/ModelsScreen/ModelsScreen.tsx:415-431`
+(`<DownloadErrorDialog error=…>`), dialog logic `pocketpal-ai/src/components/DownloadErrorDialog/DownloadErrorDialog.tsx:19-51`
+(props through the `error?.code === 'storage'` branch at :51),
+reason written at `services/downloads/DownloadManager.ts:278-282`; the retry button
+itself carries no reason (`ModelsScreen.tsx:392`). Found by the divergence sweep,
+not the changelog. `spec.error` verified as the field.
+
+## Decision (recorded)
+
+**Inline-on-the-button instead of PocketPal's modal dialog — kept deliberately.**
+The acceptance criteria (readable, no layout push, a11y label carries the reason)
+were all met by the inline surface, and a modal for a one-line reason is heavier
+than the failure deserves. The original choice was made against the false "no
+equivalent" baseline above; on review it stands — recorded so later audits don't
+inherit the premise (parity fact-check, issue 01 = PREMISE WRONG).

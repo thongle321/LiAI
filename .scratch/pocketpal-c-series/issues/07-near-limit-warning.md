@@ -17,10 +17,13 @@ at `:76-80`: `used >= nCtx - AUTOCLEAR_RUNWAY`), NOT part of the warning. LiAI's
 full banner keys off the native per-turn flag with no runway (`local-engine.ts`,
 `context_full || truncated`) — pre-existing G1 design.
 
-Known accepted band (test-pinned): LiAI compares the **rounded** fill percent so the
-trigger always matches the displayed meter, so the warning can fire in
-[79.5%, 80%) where PocketPal's raw ratio would not. Sub-1pp; fix only if
-exact-threshold parity is ever required (`tests/context-fill.test.ts` threshold pins).
+Known band — **RESOLVED to raw (2026-10-06, "implement all" round):** the
+original implementation compared the ROUNDED fill percent (trigger matched
+the displayed meter, but could fire up to 0.5pp below PocketPal's raw
+`ratio >= 0.8`). Implemented as agreed: `isNearLimit` now compares the raw
+ratio — `promptTokens / windowSize >= 0.8` — while `fillPercent` keeps
+rounding for display. Test `compares the RAW ratio — the rounded band must
+not warn` pins 3276/4096 (79.98%, displays 80) as NOT warning.
 
 ## Acceptance
 

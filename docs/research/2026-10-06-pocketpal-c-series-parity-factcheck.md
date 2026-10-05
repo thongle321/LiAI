@@ -556,3 +556,21 @@ PREMISE WRONG ×1 (01) · CITATION STALE ×0 as a primary label
 4. **Issue 07 — rounding band (cosmetic).** `fillPercent` rounds, so the warning can
    fire up to 0.5pp below PocketPal's raw `ratio >= 0.8` (`context-fill.ts:52-56`).
    Test-pinned; fix only if exact-threshold parity is ever required.
+
+---
+
+## Implemented after this fact-check (2026-10-06, "implement all" round)
+
+All four actionable items above were taken to code, plus the two structural
+evaluations, each in its own commit:
+
+| Finding | Outcome |
+|---|---|
+| 06 vision semantics | **Recorded, kept as `unknown`** — Decision in `issues/06-remote-caps-probe.md`, D-doc §3 row, code comment at the `asRecord` guard |
+| 01 download reason | **Rebuilt as the dialog** — `lib/models/download-error.ts` (regex taxonomy over the raw strings: storage / `HTTP 401` / `403` / `5xx` / size-mismatch / other) + `components/models/DownloadErrorDialog.tsx`, auto-opened from failed store state on the models screen, dismiss → `clearDownloadError`, Try Again → `resumeInterruptedDownload`. The inline reason and its `error` prop are REMOVED from `DownloadButton` and its three callers (PocketPal shape: the button is plain Retry). **Recorded divergences:** no View-on-HF button (ModelSpec carries no `hfUrl`) and simplified copy (PocketPal's token checklists need l10n + hfStore gating we don't have) |
+| 01 premise | Corrected in the issue file (was: "PocketPal has no direct equivalent") |
+| 02 two-timer | **Evaluated no-op** — Decision block in `issues/02-remote-timeout-setting.md`: non-streaming client, idle timer meaningless, 30 s connection timer unsafe |
+| 07 rounding band | **Raw ratio** — `isNearLimit` compares `promptTokens / windowSize >= 0.8` (PocketPal's exact compare); the meter still rounds for display; a band test was ADDED (3276/4096 = 79.98% must not warn) |
+| 13 token window | **Fragment-count metric** — local streams of tool-args fire `onToolCalls` per token, so ≥2 fires prove streaming and their count is PocketPal's delta count, anchored from the first fragment; a single fire (non-streaming remote / outcome-only engines) keeps the whole-turn `completionTokens` fallback — the one measurable figure there. **Recorded divergence:** remote cannot report fragment counts at all |
+| 06b samplerDefaults | **Captured + one honest banner** — probe reads `temperature`/`top_p`/`top_k` (finite, no seed) under `RemoteCaps.samplerDefaults`, hydrated/merged/stripped like the rest; `GenerationSettingsSheet` shows "Remote server: its own defaults (…) — the knobs below apply to local models only" for remote models (they were silent decoration before). **Recorded divergences:** PocketPal's per-row captions and reset-to-server-default tap skipped — remote *always* uses the server values, so there is nothing to reset |
+| citation hygiene | Fixed in the issue files (08 `:24`, 05 path+lines, 11 `:458` restored — the fact-check's own `:464` correction was wrong — Files lists annotated in 05/10/14) |

@@ -23,3 +23,25 @@
 ## Notes
 
 Decision point: one decision point for the rule. `RemoteEngineOptions.timeoutMs` is already the seam.
+
+## Decision (recorded)
+
+**The configurable setting shipped (faf0354); the two-timer structure was
+re-evaluate after the parity fact-check and lands as an evaluated NO-OP.**
+(Fact-check follow-up, 2026-10-06 — "implement all findings to code"
+round.)
+
+- LiAI's remote engine is **non-streaming**: `remote-engine.ts` awaits the
+  whole JSON body and emits the reply as one token. PocketPal's
+  `IDLE_TIMEOUT_MS` pair exists *because* responses stream — it resets per
+  SSE chunk (`openai.ts:600,679`), so there is literally nothing on our
+  side for it to space.
+- PocketPal's `CONNECTION_TIMEOUT_MS = 30000` cannot be ported either:
+  on a non-streaming path headers can arrive only after generation
+  completes, so a 30-second connection timer would abort every legitimate
+  long reply. One overall deadline (`remote-engine.ts:95`, 120 s default)
+  **is** the correct non-streaming equivalent of their pair.
+- The remaining delta — their silent invalid-value drop vs our form error —
+  already matches in effect: neither ever stores a bad value.
+
+No code change; this block IS the deliverable.

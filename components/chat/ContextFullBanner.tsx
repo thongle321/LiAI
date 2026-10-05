@@ -24,38 +24,51 @@ import { usePressFeedback } from "../../lib/motion.ts";
 const LADDER = [2048, 4096, 8192, 16384, 32768, 65536, 131072];
 
 export function ContextFullBanner({
+  variant = "full",
   fill,
   onMoreRoom,
   onNewChat,
   onDismiss,
 }: {
+  /** "full" is the post-failure banner (unchanged); "warning" is the C4
+   *  pre-failure alert — same surface, same actions, softer meter. */
+  variant?: "full" | "warning";
   /** 0-100. */
   fill: number;
   onMoreRoom: () => void;
   onNewChat: () => void;
   onDismiss: () => void;
 }) {
+  const warning = variant === "warning";
   const moreRoom = usePressFeedback();
   const newChat = usePressFeedback();
   return (
-    <View className="mb-2 rounded-lg border border-border bg-surface-2 p-3">
+    <View
+      className={`mb-2 rounded-lg border p-3 ${
+        warning ? "border-warning/30 bg-warning/10" : "border-border bg-surface-2"
+      }`}
+    >
       <View className="flex-row items-center justify-between">
         <Text className="font-sans-semibold text-body-sm text-primary-text">
-          Context full
+          {warning ? "Context running low" : "Context full"}
         </Text>
         <Text className="font-sans text-caption text-secondary-text">{fill}%</Text>
       </View>
       {/* The fill meter: the one thing that tells the user this is about
-          room, not about the model being broken. */}
+          room, not about the model being broken. The warning variant
+          tints the whole card amber at the same lighter strength
+          PocketPal gives its warning banner (BannerRow tint.warning), so
+          "soon" and "now" are not the same surface. */}
       <View className="mt-2 h-1 overflow-hidden rounded-full bg-surface-3">
         <View
-          className="h-full rounded-full bg-error"
+          className={`h-full rounded-full ${warning ? "bg-warning" : "bg-error"}`}
           style={{ width: `${Math.max(2, fill)}%` }}
         />
       </View>
       <Text className="mt-2 font-sans text-caption text-secondary-text">
-        This thread has used the room the model has. Start a new chat, or
-        give the model more.
+        {warning
+          ? "This conversation is getting long and may soon run out of room."
+          : "This thread has used the room the model has. Start a new chat, or give the model more."}
       </Text>
       <View className="mt-2 flex-row items-center gap-2">
         <AnimatedPress press={moreRoom} onPress={onMoreRoom} label="More room">

@@ -54,7 +54,7 @@ import {
   ContextFullBanner,
   ContextLadderSheet,
 } from "../../../components/chat/ContextFullBanner.tsx";
-import { fillPercent } from "../../../lib/chat/context-fill.ts";
+import { effectiveNCtx, fillPercent, isNearLimit } from "../../../lib/chat/context-fill.ts";
 import { pickableModels } from "../../../lib/chat/models.ts";
 import { useModelReady } from "../../../hooks/useModelReady.ts";
 import { GenerationSettingsSheet } from "../../../components/chat/GenerationSettingsSheet.tsx";
@@ -127,6 +127,10 @@ export default function ChatRoute() {
   // the same gate the composer uses.
   const canRun = useModelReady();
   const activeModelId = useModelStore((s) => s.activeModelId);
+  const activeProviderType = useModelStore((s) => s.activeProviderType);
+  // C4: a remote thread's window comes from the C7 /props caps, never
+  // from the local inference setting.
+  const remoteCaps = useModelStore((s) => s.remoteCaps);
   const menuModels = useMemo(
     () => pickableModels(allModels, remoteApis, activeModelId),
     [allModels, remoteApis, activeModelId],
@@ -227,6 +231,29 @@ export default function ChatRoute() {
   const contextFullShowing = contextFullTurnId !== null && contextFullTurnId !== dismissedTurnId;
   const nCtx = useInference((s) => s.nCtx);
   const setNCtx = useInference((s) => s.setNCtx);
+  // C4: the window this thread divides by. Local = configured nCtx;
+  // remote = the C7 /props contextLength, which is unknown until a probe
+  // lands — and an unknown window never warns and never fills.
+  const windowSize = effectiveNCtx({
+    isRemote: activeProviderType === "remote",
+    localNCtx: nCtx,
+    remoteContextLength:
+      activeProviderType === "remote" && activeModelId?.startsWith("remote-")
+        ? remoteCaps[activeModelId.slice("remote-".length)]?.contextLength
+        : undefined,
+  });
+  // The pre-failure warning (C4): 05's corrected occupancy against that
+  // window, same per-turn dismissal as the full banner, and full-banner
+  // precedence — an already-full thread keeps today's banner, never the
+  // softer one in its place.
+  const nearLimitTurnId =
+    contextFullTurnId === null &&
+    newestAssistant !== null &&
+    isNearLimit(newestAssistant.usage?.promptTokens, windowSize)
+      ? newestAssistant.id
+      : null;
+  const bannerTurnId = contextFullTurnId ?? nearLimitTurnId;
+  const bannerShowing = bannerTurnId !== null && bannerTurnId !== dismissedTurnId;
   const navigation = useNavigation<{ openDrawer: () => void }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -549,17 +576,22 @@ export default function ChatRoute() {
             warning={chatWarning}
             onDismiss={dismissWarning}
           />
-          {contextFullShowing && (
-          <ContextFullBanner
-            fill={fillPercent(newestAssistant?.usage?.promptTokens, nCtx)}
-            onMoreRoom={() => setLadderOpen(true)}
-            onNewChat={() => {
-              setDismissedTurnId(contextFullTurnId);
-              void newConversation();
-            }}
-            onDismiss={() => setDismissedTurnId(contextFullTurnId)}
-          />
-        )}
+  {/* `?? 0` is dead-in-practice: a FULL banner implies the local engine
+      (remote hardcodes contextFull: false) so windowSize is nCtx there,
+      and the warning branch only renders when isNearLimit already saw a
+      real window. fillPercent(…, 0) would read 0 rather than divide blind. */}
+  {bannerShowing && (
+    <ContextFullBanner
+      variant={contextFullTurnId !== null ? "full" : "warning"}
+      fill={fillPercent(newestAssistant?.usage?.promptTokens, windowSize ?? 0)}
+      onMoreRoom={() => setLadderOpen(true)}
+      onNewChat={() => {
+        setDismissedTurnId(bannerTurnId);
+        void newConversation();
+      }}
+      onDismiss={() => setDismissedTurnId(bannerTurnId)}
+    />
+  )}
         {ready && emptyState && (
           <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
         )}
@@ -577,7 +609,7 @@ export default function ChatRoute() {
           // re-inits. No explicit reload needed.
           setNCtx(n);
           setLadderOpen(false);
-          setDismissedTurnId(contextFullTurnId);
+          setDismissedTurnId(bannerTurnId);
         }}
         onClose={() => setLadderOpen(false)}
       />

@@ -3,8 +3,13 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
-import { createRemoteEngine } from "../lib/inference/remote-engine.ts";
+import {
+  createRemoteEngine,
+  normalizeTimeoutMs,
+} from "../lib/inference/remote-engine.ts";
 import type { RemoteApiProvider } from "../types/models.ts";
 
 function provider(): RemoteApiProvider {
@@ -183,5 +188,114 @@ describe("createRemoteEngine", () => {
     await engine.stopCompletion();
     assert.ok(observed !== null && (observed as AbortSignal).aborted);
     await assert.rejects(pending, /abort|cancel/i);
+  });
+});
+
+describe("request timeout", () => {
+  /** A fetch that hangs until its signal aborts, capturing the signal. */
+  function hangingFetch(): {
+    fetchImpl: typeof fetch;
+    signal: () => AbortSignal | null;
+  } {
+    let observed: AbortSignal | null = null;
+    const fetchImpl = ((_url: string, init?: RequestInit) => {
+      observed = (init?.signal ?? null) as AbortSignal | null;
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          const err = new Error("aborted");
+          err.name = "AbortError";
+          reject(err);
+        });
+      });
+    }) as typeof fetch;
+    return { fetchImpl, signal: () => observed };
+  }
+
+  it("the injected value reaches the abort timer", async () => {
+    const { fetchImpl, signal } = hangingFetch();
+    const engine = createRemoteEngine(provider(), async () => "k", {
+      fetchImpl,
+      timeoutMs: 60,
+    });
+    const started = Date.now();
+    const pending = engine.completion(
+      { messages: [{ role: "user", content: "x" }] },
+      { onToken: () => {} },
+    );
+    await assert.rejects(pending, /abort/i);
+    const elapsed = Date.now() - started;
+    // Fires (not the 120s default) and not instantly (not zero/negative):
+    // the injected 60ms is what armed the timer.
+    assert.ok(elapsed >= 30, `aborted too early: ${elapsed}ms`);
+    assert.ok(elapsed < 5000, `aborted too late: ${elapsed}ms`);
+    assert.ok(signal()?.aborted);
+  });
+
+  it("a completed turn is unaffected by the timer", async () => {
+    let observed: AbortSignal | null = null;
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      observed = (init?.signal ?? null) as AbortSignal | null;
+      await new Promise((r) => setTimeout(r, 10));
+      return jsonResponse({
+        choices: [{ message: { content: "ok", tool_calls: [] } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      });
+    }) as typeof fetch;
+    const engine = createRemoteEngine(provider(), async () => "k", {
+      fetchImpl,
+      timeoutMs: 40,
+    });
+    const out = await engine.completion(
+      { messages: [{ role: "user", content: "x" }] },
+      { onToken: () => {} },
+    );
+    assert.equal(out.text, "ok");
+    // The finally clears the timer; nothing aborts a finished turn.
+    await new Promise((r) => setTimeout(r, 60));
+    assert.ok(observed !== null && !(observed as AbortSignal).aborted);
+  });
+
+  it("falls back to the default when the value is non-positive or non-finite", async () => {
+    const { fetchImpl, signal } = hangingFetch();
+    const engine = createRemoteEngine(provider(), async () => "k", {
+      fetchImpl,
+      timeoutMs: 0,
+    });
+    const pending = engine.completion(
+      { messages: [{ role: "user", content: "x" }] },
+      { onToken: () => {} },
+    );
+    // A zero timeout would abort instantly; the default (120s) must win.
+    await new Promise((r) => setTimeout(r, 30));
+    assert.ok(signal() !== null && !signal()!.aborted);
+    await engine.stopCompletion();
+    await assert.rejects(pending, /abort/i);
+  });
+
+  it("normalizeTimeoutMs is the one rule: finite and positive, else unset", () => {
+    assert.equal(normalizeTimeoutMs(120_000), 120_000);
+    assert.equal(normalizeTimeoutMs(undefined), undefined);
+    assert.equal(normalizeTimeoutMs(0), undefined);
+    assert.equal(normalizeTimeoutMs(-1), undefined);
+    assert.equal(normalizeTimeoutMs(NaN), undefined);
+    assert.equal(normalizeTimeoutMs(Infinity), undefined);
+    assert.equal(normalizeTimeoutMs("120000"), undefined);
+    assert.equal(normalizeTimeoutMs(null), undefined);
+  });
+});
+
+describe("timeout wiring", () => {
+  it("the store passes the stored provider timeout into the engine options", () => {
+    // The seam is RemoteEngineOptions.timeoutMs; without this line the
+    // stored value never reaches the abort timer.
+    const source = readFileSync(
+      path.join(import.meta.dirname, "..", "store/chat/index.ts"),
+      "utf8",
+    );
+    assert.match(
+      source,
+      /createRemoteEngine\(\s*provider,\s*getKey,\s*\{\s*timeoutMs:\s*provider\.timeoutMs\s*\}\s*\)/,
+      "createRemote must forward provider.timeoutMs to the engine",
+    );
   });
 });

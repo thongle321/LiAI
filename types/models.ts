@@ -125,6 +125,9 @@ export interface RemoteApiProvider {
   apiKey: string;
   modelName: string;
   isActive: boolean;
+  /** Per-provider request timeout in ms; absent/invalid = engine default.
+   *  Rule lives in one place: remote-engine's normalizeTimeoutMs. */
+  timeoutMs?: number;
 }
 
 /** Probed capability snapshot per provider (PocketPal remoteCaps parity). */

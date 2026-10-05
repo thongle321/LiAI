@@ -21,6 +21,14 @@ export interface RemoteEngineOptions {
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 
+/** The one rule for a stored timeout: finite and positive, else unset.
+ *  Unset means "use the default" — never zero, never a negative timer. */
+export function normalizeTimeoutMs(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : undefined;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -71,7 +79,7 @@ export function createRemoteEngine(
   options: RemoteEngineOptions = {},
 ): CompletionEngine {
   const fetchImpl = options.fetchImpl ?? fetch;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = normalizeTimeoutMs(options.timeoutMs) ?? DEFAULT_TIMEOUT_MS;
   let controller: AbortController | null = null;
   // A stop can land while the async key lookup is still in flight —
   // remember it so the fetch below aborts instead of escaping.

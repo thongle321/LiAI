@@ -149,7 +149,8 @@ function getManager(): EngineManager {
             release: () => local.releaseLocalEngine(ctx),
           };
         },
-        createRemote: (provider, getKey) => createRemoteEngine(provider, getKey),
+        createRemote: (provider, getKey) =>
+          createRemoteEngine(provider, getKey, { timeoutMs: provider.timeoutMs }),
       },
       async (providerId: string) => {
         try {

@@ -10,6 +10,7 @@ import type {
   RemoteApiProvider,
   RemoteCaps,
 } from "../types/models";
+import { normalizeTimeoutMs } from "./inference/remote-engine.ts";
 
 const STATUSES: ModelDownloadStatus[] = [
   "idle",
@@ -150,6 +151,9 @@ export function upgradeRemoteApis(raw: unknown): RemoteApiProvider[] {
       apiKey: "",
       modelName: v.modelName,
       isActive: v.isActive === true,
+      // Persisted garbage must not arm a timer: the rule lives once, in
+      // the engine (normalizeTimeoutMs); unset falls back to the default.
+      timeoutMs: normalizeTimeoutMs(v.timeoutMs),
     });
   }
   return out;

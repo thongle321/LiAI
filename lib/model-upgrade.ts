@@ -112,7 +112,9 @@ export function upgradeModelList(raw: unknown): ModelSpec[] {
   return out;
 }
 
-/** Upgrade a persisted caps map; drops malformed entries. */
+/** Upgrade a persisted caps map; drops malformed entries.
+ *  C7: capability fields survive ONLY alongside the model they describe —
+ *  unkeyed fields could not be trusted — and invalid values drop. */
 export function upgradeRemoteCaps(raw: unknown): Record<string, RemoteCaps> {
   const v = asRecord(raw);
   if (!v) return {};
@@ -120,9 +122,25 @@ export function upgradeRemoteCaps(raw: unknown): Record<string, RemoteCaps> {
   for (const [key, entry] of Object.entries(v)) {
     const r = asRecord(entry);
     if (!r || typeof r.reachable !== "boolean") continue;
+    const model = typeof r.model === "string" ? r.model : undefined;
+    const contextLength =
+      typeof r.contextLength === "number" &&
+      Number.isFinite(r.contextLength) &&
+      r.contextLength > 0
+        ? r.contextLength
+        : undefined;
     out[key] = {
       reachable: r.reachable,
       checkedAt: asNumber(r.checkedAt, 0),
+      ...(model !== undefined
+        ? {
+            model,
+            ...(contextLength !== undefined ? { contextLength } : {}),
+            ...(typeof r.supportsVision === "boolean"
+              ? { supportsVision: r.supportsVision }
+              : {}),
+          }
+        : {}),
     };
   }
   return out;

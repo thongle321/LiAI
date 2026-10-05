@@ -130,10 +130,22 @@ export interface RemoteApiProvider {
   timeoutMs?: number;
 }
 
-/** Probed capability snapshot per provider (PocketPal remoteCaps parity). */
+/** Probed capability snapshot per provider (PocketPal remoteCaps parity).
+ *  Capability fields describe ONE model — `model` records which — so a
+ *  provider that switches models starts fresh (store strips them) and a
+ *  merge never carries a field across models. An ABSENT capability field
+ *  means UNKNOWN: never coerced to zero or false ("unsupported" is a
+ *  claim a failed probe must not make). */
 export interface RemoteCaps {
   reachable: boolean;
   checkedAt: number;
+  /** The model this snapshot describes; absent on legacy records. */
+  model?: string;
+  /** Context window (n_ctx) as reported by /props; absent = unknown. */
+  contextLength?: number;
+  /** Vision modality, only when the body described a loaded model AND
+   *  reported modalities; absent = unknown. */
+  supportsVision?: boolean;
 }
 
 /** Per-model overrides edited on the Models screen. */

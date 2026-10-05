@@ -3,7 +3,7 @@
 import type { StateCreator } from "zustand";
 
 import type { ModelStore, RemoteSlice } from "./types";
-import { buildRemoteModelSpec, validateRemoteApi } from "../../lib/models/remote-api.ts";
+import { buildRemoteModelSpec, mergeRemoteCaps, probeRemoteCaps, validateRemoteApi } from "../../lib/models/remote-api.ts";
 import { providerKeySS } from "../../lib/secrets.ts";
 import {
   ACTIVE_MODEL_KEY,
@@ -72,11 +72,28 @@ export const createRemoteSlice: StateCreator<ModelStore, [], [], RemoteSlice> = 
   },
 
   updateRemoteApi: async (providerId, updates) => {
-    set((state) => ({
-      remoteApis: state.remoteApis.map((p) =>
-        p.id === providerId ? { ...p, ...updates } : p,
-      ),
-    }));
+    set((state) => {
+      // C7: caps are keyed per model. Switching the model strips the old
+      // model's measured fields (keep the reachability bookkeeping) so a
+      // later reader can never believe another model's context length or
+      // vision claim for this provider.
+      const caps = state.remoteCaps[providerId];
+      const modelChanged =
+        updates.modelName !== undefined &&
+        caps !== undefined &&
+        caps.model !== updates.modelName;
+      return {
+        remoteApis: state.remoteApis.map((p) =>
+          p.id === providerId ? { ...p, ...updates } : p,
+        ),
+        remoteCaps: modelChanged
+          ? {
+              ...state.remoteCaps,
+              [providerId]: { reachable: caps.reachable, checkedAt: caps.checkedAt },
+            }
+          : state.remoteCaps,
+      };
+    });
     if (updates.apiKey !== undefined && updates.apiKey !== "") {
       await writeSecret(providerKeySS(providerId), updates.apiKey);
     } else if (updates.apiKey === "") {
@@ -105,10 +122,23 @@ export const createRemoteSlice: StateCreator<ModelStore, [], [], RemoteSlice> = 
 
   validateAndRecord: async (provider) => {
     const ok = await validateRemoteApi(provider);
+    // C7: probe only after a successful validation — a server that did
+    // not answer is already "unknown", and the probe must never add a
+    // second wait to a dead endpoint. probeRemoteCaps never throws
+    // (timeout/401/non-2xx/malformed all → {}), so nothing here can
+    // reject into the sheet or a turn.
+    const probed = ok ? await probeRemoteCaps(provider) : {};
     set((state) => ({
       remoteCaps: {
         ...state.remoteCaps,
-        [provider.id]: { reachable: ok, checkedAt: Date.now() },
+        // Field-wise merge: reported fields win, absent fields keep the
+        // known values, a different model starts fresh.
+        [provider.id]: mergeRemoteCaps(state.remoteCaps[provider.id], {
+          reachable: ok,
+          checkedAt: Date.now(),
+          model: provider.modelName,
+          ...probed,
+        }),
       },
     }));
     void get().saveRemoteCaps();

@@ -4,7 +4,113 @@
  * Spec id stays stable for persisted-state upgrades: remote-<providerId>.
  */
 
-import type { ModelSpec, RemoteApiProvider } from "../../types/models";
+import type {
+  ModelSpec,
+  RemoteApiProvider,
+  RemoteCaps,
+} from "../../types/models";
+
+/** Capability fields a /props probe can report (everything but the
+ *  reachability bookkeeping the store owns). */
+export type RemoteCapsFields = Pick<RemoteCaps, "contextLength" | "supportsVision">;
+
+/** Fire-and-forget probe: bounded tighter than the 10s validation
+ *  timeout, PocketPal's PROPS_TIMEOUT_MS rationale — a probe must
+ *  neither inherit the connection default nor a user-set timeout. */
+const PROBE_TIMEOUT_MS = 5000;
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** Fetch a llama.cpp-family server's GET /props for ONE provider.
+ *
+ *  NEVER THROWS: a timeout, a 401, a non-2xx, a malformed body or a
+ *  fetch that throws synchronously all resolve to no fields — a failure
+ *  is never evidence of absence, so it can never blank a capability the
+ *  store already knows ("unknown", never "unsupported").
+ *
+ *  `/props` is llama.cpp-specific (PocketPal asks profileFor(type).hasProps);
+ *  here the server type is the only discriminator, so only
+ *  `custom_openai` is probed — a hosted OpenRouter endpoint never gets
+ *  the request. The URL is scoped `?model=<modelName>` because a
+ *  multi-model router answers the bare form with a placeholder
+ *  (model_path "none", n_ctx 0) that describes no loaded model; such a
+ *  body is discarded, not believed.
+ *
+ *  Key names verified against live llama.cpp builds (PocketPal props.ts):
+ *  context window is `default_generation_settings.n_ctx` with top-level
+ *  `n_ctx` as the older-build fallback; vision is `modalities.vision` —
+ *  and only read when the body actually REPORTS modalities, so silence
+ *  stays unknown instead of becoming a confident `false`. */
+export async function probeRemoteCaps(
+  provider: RemoteApiProvider,
+  fetchImpl: typeof fetch = fetch,
+): Promise<RemoteCapsFields> {
+  if (provider.providerType !== "custom_openai") return {};
+  try {
+    const baseUrl = provider.baseUrl.replace(/\/$/, "");
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (provider.apiKey && provider.apiKey !== "not-required") {
+      headers.Authorization = `Bearer ${provider.apiKey}`;
+    }
+    const response = await fetchImpl(
+      `${baseUrl}/props?model=${encodeURIComponent(provider.modelName)}`,
+      { method: "GET", headers, signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) },
+    );
+    if (!response.ok) return {};
+    const body = asRecord(await response.json());
+    if (!body) return {};
+
+    const caps: RemoteCapsFields = {};
+    const defaults = asRecord(body["default_generation_settings"]);
+    const nCtx = defaults ? defaults["n_ctx"] : undefined;
+    const rawCtx = nCtx !== undefined ? nCtx : body["n_ctx"];
+    if (typeof rawCtx === "number" && Number.isFinite(rawCtx) && rawCtx > 0) {
+      caps.contextLength = rawCtx;
+    }
+
+    const modelPath = body["model_path"];
+    const describesModel =
+      (typeof modelPath === "string" && modelPath !== "" && modelPath !== "none") ||
+      caps.contextLength !== undefined;
+    if (!describesModel) return {};
+
+    const modalities = asRecord(body["modalities"]);
+    if (modalities) caps.supportsVision = modalities["vision"] === true;
+    return caps;
+  } catch {
+    return {};
+  }
+}
+
+/** Field-wise merge of a fresh validation/probe result into stored caps.
+ *
+ *  Reported fields win; ABSENT fields keep what was known — a failed or
+ *  /props-less probe must never blank a measured capability. Model-level
+ *  fields survive only when they describe the SAME model: caps are keyed
+ *  per model, never per server, so a model switch starts fresh. */
+export function mergeRemoteCaps(
+  previous: RemoteCaps | undefined,
+  next: RemoteCaps,
+): RemoteCaps {
+  const prior =
+    previous !== undefined && previous.model === next.model
+      ? previous
+      : undefined;
+  const caps: RemoteCaps = { ...next };
+  if (caps.contextLength === undefined && prior?.contextLength !== undefined) {
+    caps.contextLength = prior.contextLength;
+  }
+  if (caps.supportsVision === undefined && prior?.supportsVision !== undefined) {
+    caps.supportsVision = prior.supportsVision;
+  }
+  return caps;
+}
 
 export async function validateRemoteApi(
   provider: RemoteApiProvider,

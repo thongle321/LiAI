@@ -38,7 +38,7 @@ describe("specCanSeeImages", () => {
 describe("the composer gates the attach affordance on it", () => {
   it("the hook reads the SAME rule, synchronously", () => {
     const src = readFileSync("hooks/useMultimodalAvailable.ts", "utf8");
-    assert.match(src, /specCanSeeImages/, "one rule, one source");
+    assert.match(src, /canSeeImages/, "one rule, one source");
     assert.match(src, /useModelStore/, "reactive to model switches");
   });
 

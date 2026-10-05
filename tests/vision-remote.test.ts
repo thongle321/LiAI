@@ -66,13 +66,13 @@ describe("remoteCapsCanSeeImages", () => {
 describe("the remote capability reaches every surface", () => {
   it("the composer hook ORs the local and remote rules", () => {
     const src = readFileSync("hooks/useMultimodalAvailable.ts", "utf8");
-    assert.match(src, /remoteCapsCanSeeImages/, "remote branch present");
-    assert.match(src, /specCanSeeImages/, "local branch kept");
+    assert.match(src, /canSeeImages/, "the ONE verdict covers both");
+    assert.match(src, /useModelStore/, "reactive to model switches");
   });
 
   it("the send gate covers remote too", () => {
     const src = readFileSync("store/chat/send.ts", "utf8");
-    assert.match(src, /remoteCapsCanSeeImages/, "the strip knows remote vision");
+    assert.match(src, /canSeeImages/, "the strip reads the ONE verdict");
   });
 
   it("the turn forwards data URIs for the remote engine", () => {

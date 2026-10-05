@@ -58,13 +58,13 @@ describe("the gate flips with the pair", () => {
   it("multimodalAvailable is async and reads the active model's projector", () => {
     const src = readFileSync("store/chat/send.ts", "utf8");
     assert.match(src, /export async function multimodalAvailable/, "seam is now async + real");
-    assert.match(src, /activeLocalProjectorPath/, "reads the pair, not a hardcoded false");
+    assert.match(src, /canSeeImages/, "reads the pair via the ONE verdict");
     assert.match(src, /await ctx\.multimodalAvailable\(\)/, "the strip awaits the seam");
   });
 
   it("the engine load receives the projector path", () => {
     const src = readFileSync("store/chat/index.ts", "utf8");
-    assert.match(src, /projectorPathForFileName\(/, "ensureEngine resolves the pair");
+    assert.match(src, /loadModelState|projectorPathForFileName/, "ensureEngine resolves the pair");
   });
 
   it("the engine slot key accounts for the projector", () => {

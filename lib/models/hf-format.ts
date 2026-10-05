@@ -4,6 +4,8 @@
  * React — everything here is unit-tested in tests/hf-format.test.ts.
  */
 
+import { findProjectorFile } from "./vision-pairing.ts";
+
 /** "lmstudio-community/Qwen3-0.6B-GGUF" → "Qwen3-0.6B" */
 export function extractHFModelTitle(modelId: string): string {
   const sanitized = modelId.replace(/[-_]?[Gg][Gg][Uu][Ff]$/, "");
@@ -112,8 +114,6 @@ export interface VisionSize {
   total: number;
   isVision: boolean;
 }
-
-import { findProjectorFile } from "./vision-pairing.ts";
 
 /** A vision model's real footprint is the LLM PLUS its projector. The
  * pairing rule itself lives in lib/models/vision-pairing.ts (family

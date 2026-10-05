@@ -77,7 +77,7 @@ export class EngineManager {
   ): Promise<CompletionEngine> {
     const key =
       source.kind === "local"
-        ? `local:${source.fileName}:${mmprojPath ?? "nomm"}:${init ? initKey(init) : "default"}`
+        ? `local:${source.fileName}:${mmprojPath ?? "none"}:${init ? initKey(init) : "default"}`
         : `remote:${source.provider.id}`;
     if (this.engine && this.key === key) return this.engine;
     if (this.engine) await quiet(this.engine.stopCompletion());

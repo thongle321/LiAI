@@ -106,14 +106,8 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       downloadService.removeJob(stale.id);
     }
 
-    // Create the spec once; a re-download keeps its existing row. A row
-    // from before the pairing ticket heals its projector record here.
+    // Create the spec once; a re-download keeps its existing row.
     const existing = get().getModel(specId);
-    if (!existing) {
-      get().addModel(spec);
-    } else if (spec.projector && !existing.projector) {
-      get().updateModel(specId, { projector: spec.projector });
-    }
 
     // Bytes on disk per file, so the pair's legs resume independently.
     // A partial file means the app died mid-flight: continue from its
@@ -145,6 +139,14 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       file.size > 0 && mainBytes >= file.size,
       spec.projector !== undefined && projectorBytes >= (spec.projector?.size ?? 1),
     );
+    // Create/heal the row ONLY after the disk read (spec-review fix): a
+    // completed row that heals its projector record before the truth is
+    // known would briefly report can-see against a missing file.
+    if (!existing) {
+      get().addModel(spec);
+    } else if (spec.projector && !existing.projector) {
+      get().updateModel(specId, { projector: spec.projector });
+    }
     if (step === "complete") {
       get().updateModel(specId, {
         downloadStatus: "completed",

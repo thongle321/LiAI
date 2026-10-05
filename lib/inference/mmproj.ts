@@ -20,9 +20,7 @@ import { resolveLocalFile } from "./engine.ts";
  *  guarantees "completed" means the pair landed. This is the ONE rule;
  *  the path resolver, the send gate, and the composer all read it. */
 export function specCanSeeImages(
-  specs: ReadonlyArray<
-    Pick<ModelSpec, "id" | "downloadStatus" | "projector">
-  >,
+  specs: ReadonlyArray<CapabilityModel>,
   activeModelId: string | null,
   providerType: "local" | "remote" | null,
 ): boolean {
@@ -43,9 +41,7 @@ export function specCanSeeImages(
  *  pair landed (ticket 01's sequencing) — a mid-download spec must not
  *  arm a load with a projector that isn't there. */
 export function projectorPathFromSpecs(
-  specs: ReadonlyArray<
-    Pick<ModelSpec, "id" | "downloadStatus" | "projector">
-  >,
+  specs: ReadonlyArray<CapabilityModel>,
   activeModelId: string | null,
   providerType: "local" | "remote" | null,
   docsDir: string,
@@ -73,23 +69,64 @@ export function remoteCapsCanSeeImages(
   return remoteCaps[providerId]?.supportsVision === true;
 }
 
-/** The ACTIVE local model's projector path — the image gate's answer. */
-export async function activeLocalProjectorPath(): Promise<string | undefined> {
+/** Everything the capability verdict reads, in one shape — the composer
+ *  hook and the send gate both answer through canSeeImages, so the two
+ *  surfaces cannot drift (code-review 04). */
+export type CapabilityModel = Pick<
+  ModelSpec,
+  "id" | "downloadStatus" | "projector"
+> & {
+  files?: ReadonlyArray<Pick<ModelSpec["files"][number], "name">>;
+};
+
+export interface ModelCapabilityState {
+  models: ReadonlyArray<CapabilityModel>;
+  remoteCaps: Record<string, { supportsVision?: boolean }>;
+  activeModelId: string | null;
+  activeProviderType: "local" | "remote" | null;
+}
+
+/** The ONE verdict: local pair or remote probe. */
+export function canSeeImages(s: ModelCapabilityState): boolean {
+  return s.activeProviderType === "remote"
+    ? remoteCapsCanSeeImages(s.remoteCaps, s.activeModelId, s.activeProviderType)
+    : specCanSeeImages(s.models, s.activeModelId, s.activeProviderType);
+}
+
+/** The ONE dynamic-import seam for capability reads (code-review: the
+ *  dance existed in three places). Node-safe: a failed import yields
+ *  undefined, and every caller's answer degrades to cannot-see. */
+export async function loadModelState(): Promise<
+  (ModelCapabilityState & { docsDir: string }) | undefined
+> {
   try {
     const [fs, models] = await Promise.all([
       import("expo-file-system/legacy"),
       import("../../store/modelStore.ts"),
     ]);
     const m = models.useModelStore.getState();
-    return projectorPathFromSpecs(
-      m.models,
-      m.activeModelId,
-      m.activeProviderType,
-      fs.documentDirectory ?? "",
-    );
+    return {
+      docsDir: fs.documentDirectory ?? "",
+      models: m.models,
+      remoteCaps: m.remoteCaps,
+      activeModelId: m.activeModelId,
+      activeProviderType: m.activeProviderType,
+    };
   } catch {
     return undefined;
   }
+}
+
+/** The ACTIVE local model's projector path — the image gate's answer. */
+export async function activeLocalProjectorPath(): Promise<string | undefined> {
+  const st = await loadModelState();
+  if (!st) return undefined;
+  return projectorPathFromSpecs(
+    st.models,
+    st.activeModelId,
+    st.activeProviderType,
+    st.docsDir,
+  );
 }
 
 /** The projector path for the model the ENGINE is being asked to load
@@ -98,21 +135,12 @@ export async function activeLocalProjectorPath(): Promise<string | undefined> {
 export async function projectorPathForFileName(
   fileName: string,
 ): Promise<string | undefined> {
-  try {
-    const [fs, models] = await Promise.all([
-      import("expo-file-system/legacy"),
-      import("../../store/modelStore.ts"),
-    ]);
-    const spec = models.useModelStore
-      .getState()
-      .models.find(
-        (m) =>
-          m.downloadStatus === "completed" && m.files[0]?.name === fileName,
-      );
-    return spec?.projector
-      ? resolveLocalFile(fs.documentDirectory ?? "", spec.projector.name)
-      : undefined;
-  } catch {
-    return undefined;
-  }
+  const st = await loadModelState();
+  if (!st) return undefined;
+  const spec = st.models.find(
+    (m) => m.downloadStatus === "completed" && m.files?.[0]?.name === fileName,
+  );
+  return spec?.projector
+    ? resolveLocalFile(st.docsDir, spec.projector.name)
+    : undefined;
 }

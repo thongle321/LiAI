@@ -15,11 +15,40 @@ function llmError(message: string): ApiError {
   return { code: "llm_error", message };
 }
 
+/** Can the ACTIVE engine see an image this turn? (G12)
+ *
+ * PocketPal asks `modelStore.activeModelCaps.visionActive` -- whether a
+ * projector is loaded RIGHT NOW, not whether the model is declared
+ * vision-capable. We have no projector pairing at all
+ * (`components/models/HFModelSearch.tsx:393`: "LiAI cannot pair one"),
+ * and the remote engine is wired for text only, so this is false for
+ * every provider today. Kept as the one place that decides it, because
+ * projector pairing is exactly what flips it. */
+function multimodalAvailable(): boolean {
+  return false;
+}
+
+/** What PocketPal says when images ride a turn the model cannot see. */
+const MULTIMODAL_WARNING = "This model can't see images, so it was sent the text only.";
+
 export function createSendSlice(
   set: ChatSet,
   get: ChatGet,
   ctx: ChatCtx,
-): Pick<ChatState, "sending" | "send" | "stop" | "retry" | "regenerate"> {
+): Pick<
+  ChatState,
+  | "sending"
+  | "turnStartedAt"
+  | "chatWarning"
+  | "setChatWarning"
+  | "send"
+  | "stop"
+  | "retry"
+  | "regenerate"
+  | "editingTurnId"
+  | "startEdit"
+  | "cancelEdit"
+> {
   function updateBubble(
     id: string,
     patch: Partial<ChatMessage> | ((m: ChatMessage) => Partial<ChatMessage>),
@@ -51,34 +80,83 @@ export function createSendSlice(
    * stored question, so it skips the user append (no duplicate). */
   async function runLocal(opts: {
     assistantId: string;
+    /** Row id for the user turn. Undefined on retry/regenerate, which
+     *  re-answer an already-stored question. */
+    userId?: string;
     text: string;
     sessionId: string | null;
-    image?: string;
+    /** Photos for this turn (G8). */
+    images?: string[];
     history: ChatMessage[];
     retry?: boolean;
     clearOnFirst: boolean;
   }): Promise<void> {
     const gen = (ctx.streamGen += 1);
+    // Hold the screen awake for the life of the turn (audit G2). Every
+    // send/retry/regenerate funnels through here, so this is the one
+    // place that has to know a turn started.
+    ctx.keepAwake(true);
+    set({ turnStartedAt: Date.now() });
     if (opts.clearOnFirst) {
-      updateBubble(opts.assistantId, { text: "", steps: undefined, usage: undefined });
+      updateBubble(opts.assistantId, {
+        text: "",
+        reasoning: undefined,
+        steps: undefined,
+        usage: undefined,
+        // A rerun replaces the turn's ending: keeping the old flags would
+        // claim the new answer finished the way the old one did.
+        outcome: undefined,
+      });
+    }
+    // G12 (PocketParity) -- do the same as PocketPal's useChatSession.
+    //
+    // PocketPal gates on whether a projector is actually loaded; when
+    // images ride a turn that cannot see them it STILL sends the message
+    // as plain text and raises a warning (useChatSession.ts:97-105). It
+    // does not block, and it does not fail the turn -- which is why the
+    // user gets a turn back instead of a raw engine error.
+    //
+    // The guard sits HERE, not in each caller: send, retry, regenerate and
+    // edit all route through runLocal, so one check covers every path and
+    // none of them can drift into disagreeing about it.
+    const images = multimodalAvailable() ? opts.images : undefined;
+    if (opts.images !== undefined && opts.images.length > 0 && images === undefined) {
+      set({
+        chatWarning: {
+          message: MULTIMODAL_WARNING,
+          // PocketPal's createMultimodalWarning: not recoverable, because
+          // there is nothing to retry into until a projector can be paired.
+          severity: "warning",
+          recoverable: false,
+        },
+      });
     }
     try {
       const outcome = await ctx.runTurn(
         opts.text,
         {
           sessionId: opts.sessionId,
-          ...(opts.image !== undefined ? { image: opts.image } : {}),
+          ...(images !== undefined ? { images } : {}),
           history: opts.history,
           ...(opts.retry ? { retry: true } : {}),
+          // The bubble ids ARE the row ids: minted up front so there is
+          // never a moment where a bubble exists but cannot be addressed.
+          ...(opts.userId !== undefined ? { userMessageId: opts.userId } : {}),
+          assistantMessageId: opts.assistantId,
         },
         (token) => {
           if (gen !== ctx.streamGen) return;
           updateBubble(opts.assistantId, (m) => ({ text: m.text + token }));
         },
+        (cumulative) => {
+          if (gen !== ctx.streamGen) return;
+          updateBubble(opts.assistantId, { reasoning: cumulative });
+        },
       );
       if (gen !== ctx.streamGen) return;
       updateBubble(opts.assistantId, {
         text: outcome.reply,
+        ...(outcome.reasoning !== undefined ? { reasoning: outcome.reasoning } : {}),
         streaming: false,
         at: Date.now(),
         ...(outcome.steps.length > 0 ? { steps: outcome.steps } : {}),
@@ -87,9 +165,13 @@ export function createSendSlice(
           completionTokens: outcome.completionTokens,
           totalTokens: outcome.promptTokens + outcome.completionTokens,
         },
+        ...(outcome.outcome !== undefined ? { outcome: outcome.outcome } : {}),
       });
       adoptSession(outcome.sessionId);
-      set({ sending: false });
+      set({ sending: false, turnStartedAt: null });
+      // Released with the turn. The `gen` guard above means a superseded
+      // run never reaches this, so a NEW turn's lock is never stomped.
+      ctx.keepAwake(false);
       void get().refreshSessions();
     } catch (err) {
       if (gen !== ctx.streamGen) return;
@@ -98,7 +180,8 @@ export function createSendSlice(
         streaming: false,
         error: llmError(message),
       });
-      set({ sending: false });
+      set({ sending: false, turnStartedAt: null });
+      ctx.keepAwake(false);
     }
   }
 
@@ -119,6 +202,36 @@ export function createSendSlice(
 
   return {
     sending: false,
+    turnStartedAt: null,
+    chatWarning: null,
+    setChatWarning: (warning) => set({ chatWarning: warning }),
+    editingTurnId: null,
+
+    startEdit: (messageId: string): boolean => {
+      if (get().sending) return false;
+      const target = get().messages.find((m) => m.id === messageId);
+      // User rows only: re-answering an assistant turn is regenerate, and
+      // letting a user "edit" one would be the same verb with two meanings.
+      if (!target || target.role !== "user") return false;
+      // Nothing persisted means nothing to rewind.
+      if (get().sessionId === null) return false;
+      set({ editingTurnId: messageId, draft: target.text });
+      // persistDraft reads get().draft and get().sessionId, both of which
+      // the line above just set — no reason to hand-roll it.
+      void get().persistDraft();
+      return true;
+    },
+
+    cancelEdit: () => {
+      const editingId = get().editingTurnId;
+      if (editingId === null) return;
+      const target = get().messages.find((m) => m.id === editingId);
+      // Back to the turn's own text, not to whatever the composer happened
+      // to hold before edit mode was entered.
+      const restored = target?.text ?? "";
+      set({ editingTurnId: null, draft: restored });
+      void get().persistDraft();
+    },
 
     stop: () => {
       if (!get().sending) return;
@@ -126,40 +239,78 @@ export function createSendSlice(
       // The partial reply stays in its bubble as the turn's text.
       ctx.streamGen += 1;
       ctx.stopEngine();
+      // Drop the wake lock HERE, not when the aborted run unwinds: the
+      // engine teardown is exactly when the screen must not sleep, and
+      // the `gen` guard keeps the unwinding run from touching it again.
+      ctx.keepAwake(false);
       set((s) => ({
         sending: false,
+        turnStartedAt: null,
         messages: s.messages.map((m) =>
           m.streaming === true ? { ...m, streaming: false, at: Date.now() } : m,
         ),
       }));
     },
 
-    send: async (text: string, image?: string) => {
+    send: async (text: string, images?: string[]) => {
       const trimmed = text.trim();
       if (trimmed === "" || get().sending) return false;
-      const userId = newId();
-      const assistantId = newId();
       const sid = get().sessionId;
-      const history = get().messages;
-      set((s) => ({
+      const editingId = get().editingTurnId;
+
+      let userId: string;
+      let assistantId: string;
+      let history: ChatMessage[];
+      let keep: ChatMessage[];
+
+      if (editingId !== null) {
+        // Committing an edit. The edited turn AND everything after it are
+        // replaced by this send -- that is what makes an edit an edit
+        // rather than a second message. A FULL send, never a retry:
+        // truncateFrom removes the question's own row, and retry skips
+        // the user append, so the model would answer a question that is
+        // no longer in history.
+        const editIndex = get().messages.findIndex((m) => m.id === editingId);
+        if (editIndex < 0 || sid === null) return false;
+        try {
+          const store: SessionStore | null = await ctx.getStore();
+          if (!store || !(await store.truncateFrom(sid, editingId))) return false;
+        } catch {
+          return false;
+        }
+        history = get().messages.slice(0, editIndex);
+        keep = history;
+        // The edited turn keeps its id, so it stays addressable.
+        userId = editingId;
+        assistantId = newId();
+      } else {
+        userId = newId();
+        assistantId = newId();
+        history = get().messages;
+        keep = history;
+      }
+
+      set({
         sending: true,
+        ...(editingId !== null ? { editingTurnId: null } : {}),
         messages: [
-          ...s.messages,
+          ...keep,
           {
             id: userId,
             role: "user",
             text: trimmed,
             at: Date.now(),
-            ...(image !== undefined ? { image } : {}),
+            ...(images !== undefined ? { images } : {}),
           },
           { id: assistantId, role: "assistant", text: "", at: Date.now(), streaming: true },
         ],
-      }));
+      });
       await runLocal({
         assistantId,
+        userId,
         text: trimmed,
         sessionId: sid,
-        ...(image !== undefined ? { image } : {}),
+        ...(images !== undefined ? { images } : {}),
         history,
         clearOnFirst: false,
       });
@@ -196,7 +347,7 @@ export function createSendSlice(
           assistantId,
           text: target.text,
           sessionId: sid,
-          ...(target.image !== undefined ? { image: target.image } : {}),
+          ...(target.images !== undefined ? { images: target.images } : {}),
           history,
           retry: true,
           clearOnFirst: false,
@@ -213,7 +364,7 @@ export function createSendSlice(
         assistantId: target.id,
         text: question.text,
         sessionId: sid,
-        ...(question.image !== undefined ? { image: question.image } : {}),
+        ...(question.images !== undefined ? { images: question.images } : {}),
         history: get().messages.filter((m) => m.id !== target.id),
         retry: true,
         clearOnFirst: true,
@@ -222,7 +373,8 @@ export function createSendSlice(
     },
 
     regenerate: async (messageId: string) => {
-      const target = get().messages.find((m) => m.id === messageId);
+      const messages = get().messages;
+      const target = messages.find((m) => m.id === messageId);
       const sid = get().sessionId;
       if (
         !target ||
@@ -235,24 +387,73 @@ export function createSendSlice(
       }
       const question = priorUserText(target.id);
       if (!question) return false;
-      // Drop the stored assistant turn so history + bubble agree.
-      if (sid !== null) {
-        try {
-          await (await ctx.getStore())?.popLastAssistant(sid);
-        } catch {
-          // Best-effort: the rerun overwrites the bubble regardless.
+      const questionIndex = messages.findIndex((m) => m.id === question.id);
+      const isLastTurn = messages[messages.length - 1]?.id === target.id;
+
+      if (isLastTurn) {
+        // Nothing follows, so the cheap path is enough: drop the trailing
+        // assistant turn and re-answer the question already stored above it.
+        if (sid !== null) {
+          try {
+            await (await ctx.getStore())?.popLastAssistant(sid);
+          } catch {
+            // Best-effort: the rerun overwrites the bubble regardless.
+          }
         }
+        updateBubble(target.id, { streaming: true });
+        set({ sending: true });
+        await runLocal({
+          assistantId: target.id,
+          text: question.text,
+          sessionId: sid,
+          ...(question.images !== undefined ? { images: question.images } : {}),
+          history: messages.filter((m) => m.id !== target.id),
+          retry: true,
+          clearOnFirst: true,
+        });
+        return true;
       }
-      updateBubble(target.id, { streaming: true });
-      set({ sending: true });
+
+      // Something follows, so re-answering means discarding the question
+      // AND everything after it -- that is the only definition of
+      // "regenerate this answer" that leaves a coherent thread.
+      if (sid === null) return false;
+      const store = await ctx.getStore();
+      if (!store) return false;
+      try {
+        if (!(await store.truncateFrom(sid, question.id))) return false;
+      } catch {
+        return false;
+      }
+
+      // A FULL send, not a retry: truncateFrom removed the question's own
+      // row, and retry skips the user append, so the model would be asked
+      // to answer a question that is no longer in history.
+      const before = messages.slice(0, questionIndex);
+      set({
+        sending: true,
+        messages: [
+          ...before,
+          {
+            id: question.id,
+            role: "user",
+            text: question.text,
+            at: question.at,
+            ...(question.images !== undefined ? { images: question.images } : {}),
+          },
+          // The bubble keeps its id, so the turn stays addressable across
+          // the rewrite.
+          { id: target.id, role: "assistant", text: "", at: Date.now(), streaming: true },
+        ],
+      });
       await runLocal({
         assistantId: target.id,
+        userId: question.id,
         text: question.text,
         sessionId: sid,
-        ...(question.image !== undefined ? { image: question.image } : {}),
-        history: get().messages.filter((m) => m.id !== target.id),
-        retry: true,
-        clearOnFirst: true,
+        ...(question.images !== undefined ? { images: question.images } : {}),
+        history: before,
+        clearOnFirst: false,
       });
       return true;
     },

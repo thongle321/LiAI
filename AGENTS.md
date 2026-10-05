@@ -195,7 +195,11 @@ Style with Uniwind `className` by default. Use inline styles (never
 - `@expo/ui` native components — `Host`, `Switch`, `Picker`, `Slider`,
   `BottomSheet`. These are real SwiftUI/Compose views; they take
   `UniversalStyle` (padding/background/border/width/height/opacity), not
-  `className`. Uniwind styles the screen around them.
+  `className`. Uniwind styles the screen around them. Prefer the universal
+  import where it renders correctly on both platforms; where a primitive
+  is platform-only (Compose menu, SnackbarHost), put each version in its
+  own `.ios.tsx` / `.android.tsx` file and never branch inline — a
+  Compose import mounting on iOS is a crash, not a fallback.
 
 - Third-party native components with no `className`: vision-camera
   `Camera`, `react-native-code-highlighter` `CodeHighlighter` — verify on

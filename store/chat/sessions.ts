@@ -2,6 +2,7 @@
 
 import { toMessages, toSession } from "../../lib/chat/messages.ts";
 import type { SessionStore } from "../../lib/chat/session-store.ts";
+import { parseImport } from "../../lib/chat/import.ts";
 import { readDraftFor } from "./draft.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
@@ -36,6 +37,7 @@ export function createSessionsSlice(
   | "duplicateSession"
   | "renameSession"
   | "setPinned"
+  | "importSessions"
   | "refreshSessions"
 > {
   function cancelActive(): void {
@@ -44,13 +46,18 @@ export function createSessionsSlice(
     ctx.active.handle = null;
   }
 
-  async function refreshSessions(): Promise<void> {
+  async function refreshSessions(): Promise<boolean> {
     const store = await storeOf(ctx);
-    if (!store) return;
+    if (!store) return false;
     try {
+      // Full re-list, not an optimistic patch: setCell bumps the row's
+      // sort key (touch), so patching title/pinned in place would leave
+      // the drawer sorted by the pre-touch order until the next refresh.
       set({ sessions: (await store.listSessions()).map(toSession) });
+      return true;
     } catch {
       // best-effort: the drawer keeps whatever it has
+      return false;
     }
   }
 
@@ -66,6 +73,10 @@ export function createSessionsSlice(
           ? await store.renameSession(id, patch.title)
           : await store.setSessionPinned(id, patch.pinned ?? false);
       if (!ok) return false;
+      if (await refreshSessions()) return true;
+      // The write landed but the re-list failed: patch in place so the
+      // drawer shows the accepted value (order catches up on the next
+      // refresh) instead of the stale one.
       set((s) => ({
         sessions: s.sessions.map((sess) =>
           sess.id === id ? { ...sess, ...patch } : sess,
@@ -124,11 +135,16 @@ export function createSessionsSlice(
       cancelActive();
       await quiet(get().persistDraft());
       const store = await storeOf(ctx);
-      if (store) await quiet(store.setActiveSessionId(null));
+if (store) await quiet(store.setActiveSessionId(null));
+      // A notice raised in the conversation you just left must not follow
+      // you into the next one — "the image was dropped" is only ever true
+      // of the turn that raised it.
       set({
         sessionId: null,
         messages: [],
         sending: false,
+        turnStartedAt: null,
+        chatWarning: null,
         draft: await readDraftFor(ctx, null),
       });
     },
@@ -147,6 +163,7 @@ export function createSessionsSlice(
           sessionId: id,
           messages: toMessages(turns),
           draft: await readDraftFor(ctx, id),
+          chatWarning: null,
         });
         return true;
       } catch {
@@ -164,11 +181,13 @@ export function createSessionsSlice(
       set((s) => ({ sessions: s.sessions.filter((sess) => sess.id !== id) }));
       if (get().sessionId === id) {
         // The deleted session's text must not haunt the fresh composer:
-        // fall back to whatever is parked in the unsent slot.
+// fall back to whatever is parked in the unsent slot.
         set({
           sessionId: null,
           messages: [],
           sending: false,
+          turnStartedAt: null,
+          chatWarning: null,
           draft: await readDraftFor(ctx, null),
         });
       }
@@ -201,6 +220,8 @@ export function createSessionsSlice(
       messages: toMessages(turns),
       draft: await readDraftFor(ctx, copyId),
       sending: false,
+      turnStartedAt: null,
+      chatWarning: null,
     });
     await quiet(get().refreshSessions());
     return true;
@@ -209,5 +230,59 @@ export function createSessionsSlice(
   renameSession: (id: string, title: string) => patchSession(id, { title }),
 
   setPinned: (id: string, pinned: boolean) => patchSession(id, { pinned }),
+
+    // G10: read conversations back from our own JSON export. The file is
+    // untrusted, so validation happens BEFORE anything is written and a
+    // rejected file leaves the store untouched.
+    importSessions: async (raw: string) => {
+      const parsed = parseImport(raw);
+      if (!parsed.ok) {
+        return { ok: false, imported: 0, skipped: 0, error: parsed.error };
+      }
+      const store = await storeOf(ctx);
+      if (!store) {
+        return { ok: false, imported: 0, skipped: 0, error: "Storage isn't ready." };
+      }
+let imported = 0;
+    let skipped = parsed.skipped;
+    for (const s of parsed.sessions) {
+      // A fresh id per session, and `append` is called WITHOUT an id, so
+      // the store mints fresh row ids. Importing the file's own ids
+      // would make a second import of the same backup collide with the
+      // first and overwrite it.
+      //
+      // No `quiet()` on these calls. Swallowing a failed append would
+      // leave a conversation that looks restored but is missing messages,
+      // and still count it as imported -- a silent data loss with a
+      // success message. A partial write is rolled back instead.
+      let id: string | null = null;
+      let complete = true;
+      try {
+        id = await store.create();
+        await store.renameSession(id, s.title);
+        await store.setSessionPinned(id, s.pinned);
+        for (const turn of s.turns) await store.append(id, turn);
+      } catch {
+        complete = false;
+      }
+      if (complete) {
+        imported += 1;
+        continue;
+      }
+      // Roll the half-written conversation back rather than leaving it to
+      // look intact. If even the delete fails there is nothing more to do
+      // safely, so it is reported rather than hidden.
+      if (id !== null) {
+        try {
+          await store.deleteSession(id);
+        } catch {
+          /* reported below either way */
+        }
+      }
+      skipped += 1;
+    }
+      await quiet(get().refreshSessions());
+      return { ok: true, imported, skipped };
+    },
   };
 }

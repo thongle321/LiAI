@@ -32,14 +32,20 @@ function menuLabels(): string[] {
 }
 
 describe("chat menu", () => {
-  it("keeps PocketPal's order", () => {
+  it("keeps PocketPal's order, with Search heading the session group", () => {
+    // PocketPal has no chat search at all; its slot is ours, agreed in
+    // grilling: first among the session-gated rows.
     assert.deepEqual(menuLabels(), [
       "Generation settings",
       "Model",
+      "Search",
       "Duplicate chat history",
       "Rename",
       "Delete",
       "Export",
+      // G10 sits after Export: they are the two halves of a backup, so
+      // export and restore read together.
+      "Import",
     ]);
   });
 
@@ -59,6 +65,23 @@ describe("chat menu", () => {
       const at = panel.indexOf(`label="${label}"`);
       assert.ok(at > gate, `${label} must live inside the hasSession gate`);
     }
+    // Import must stay OUTSIDE that gate. Restoring into an empty app is
+    // the main case, and it is exactly the one Export hides behind a
+    // session — gating Import would make the restore path unreachable
+    // precisely when someone needs it.
+    const importAt = panel.indexOf('label="Import"');
+    assert.ok(importAt > -1, "the Import row exists");
+    // Assert on the GATE MECHANISM, not a bare substring: the gate is the
+    // `disabled` prop, and a substring scan of the row would trip over the
+    // explanatory comment sitting right beside it.
+    const disabled = panel
+      .slice(importAt, importAt + 300)
+      .match(/disabled=\{([^}]*)\}/);
+    assert.ok(disabled !== null, "the Import row sets disabled");
+    assert.ok(
+      !(disabled[1] ?? "").includes("hasSession"),
+      "Import must not be session-gated",
+    );
   });
 
   it("keeps Delete destructive", () => {
@@ -125,7 +148,8 @@ describe("chat header", () => {
   it("wires the menu's first item to the generation sheet", () => {
     assert.match(
       CHAT,
-      /<ChatMenu onOpenGeneration=\{\(\) => setGenerationOpen\(true\)\} \/>/,
+      /<ChatMenu\s+onOpenGeneration=\{\(\) => setGenerationOpen\(true\)\}\s+onOpenSearch=\{/,
+      "both menu callbacks are wired (generation + search)",
     );
     assert.doesNotMatch(
       CHAT,

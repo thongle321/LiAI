@@ -24,7 +24,11 @@
 import { createStore, type Store } from "tinybase";
 
 import type { AgentStep, SessionInfo } from "../../types/chat.ts";
-import type { SessionStore, StoredTurn } from "./session-store.ts";
+import type {
+  SessionStore,
+  StoredMessage,
+  StoredTurn,
+} from "./session-store.ts";
 import { draftSlot } from "./session-store.ts";
 import { DEFAULT_SAMPLER, type SamplerParams } from "../inference/sampler.ts";
 import { newId } from "./messages.ts";
@@ -58,9 +62,18 @@ interface MessageRow {
   type: string;
   at: number;
   seq: number;
+  reasoning?: string;
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+  /** How the turn ended. TinyBase has one column space per table, so the
+   *  flags and timings are FLAT siblings, exactly as `usage` already is —
+   *  not a nested object. */
+  contextFull?: boolean;
+  interrupted?: boolean;
+  promptMs?: number;
+  tokensPerSecond?: number;
+  msPerToken?: number;
 }
 
 function messageRowFrom(raw: unknown): MessageRow | null {
@@ -76,9 +89,21 @@ function messageRowFrom(raw: unknown): MessageRow | null {
     type: str(raw["type"], "text"),
     at: num(raw["at"]),
     seq: num(raw["seq"]),
+    ...(typeof raw["reasoning"] === "string" && raw["reasoning"] !== ""
+      ? { reasoning: raw["reasoning"] }
+      : {}),
     promptTokens: usage("promptTokens"),
     completionTokens: usage("completionTokens"),
     totalTokens: usage("totalTokens"),
+    ...(raw["contextFull"] === true ? { contextFull: true } : {}),
+    ...(raw["interrupted"] === true ? { interrupted: true } : {}),
+    ...(typeof raw["promptMs"] === "number"
+      ? {
+          promptMs: raw["promptMs"],
+          tokensPerSecond: num(raw["tokensPerSecond"]),
+          msPerToken: num(raw["msPerToken"]),
+        }
+      : {}),
   };
 }
 
@@ -128,7 +153,7 @@ export class TinyBaseSessionStore implements SessionStore {
     });
   }
 
-  async get(sessionId: string): Promise<StoredTurn[] | null> {
+  async get(sessionId: string): Promise<StoredMessage[] | null> {
     if (!this.store.hasRow("sessions", sessionId)) return null;
     return this.rowsOf(sessionId)
       .sort((a, b) => a.row.seq - b.row.seq)
@@ -145,19 +170,23 @@ export class TinyBaseSessionStore implements SessionStore {
     return out;
   }
 
-  async append(sessionId: string, turn: StoredTurn): Promise<void> {
+  async append(sessionId: string, turn: StoredTurn, id?: string): Promise<void> {
     if (!this.store.hasRow("sessions", sessionId)) {
       this.newSessionRow(sessionId, "");
     }
     const seq = this.nextSeq();
-    const id = rowId(seq);
-    this.store.setRow("messages", id, {
+    // The caller's id wins: the chat slice mints it before the bubble
+    // exists so a bubble's id and its row id are one string. Fall back to
+    // a fresh one for any caller that has no id to offer.
+    const rowKey = id ?? newId();
+    this.store.setRow("messages", rowKey, {
       sessionId,
       role: turn.role,
       content: turn.content,
       type: turn.type ?? "text",
       at: turn.at ?? Date.now(),
       seq,
+      ...(turn.reasoning !== undefined ? { reasoning: turn.reasoning } : {}),
       ...(turn.usage !== undefined
         ? {
             promptTokens: turn.usage.promptTokens,
@@ -165,27 +194,68 @@ export class TinyBaseSessionStore implements SessionStore {
             totalTokens: turn.usage.totalTokens,
           }
         : {}),
+      // Flat, like usage: TinyBase has no nested cell.
+      ...(turn.outcome?.contextFull === true ? { contextFull: true } : {}),
+      ...(turn.outcome?.interrupted === true ? { interrupted: true } : {}),
+      ...(turn.outcome?.timings !== undefined
+        ? {
+            promptMs: turn.outcome.timings.promptMs,
+            tokensPerSecond: turn.outcome.timings.tokensPerSecond,
+            msPerToken: turn.outcome.timings.msPerToken,
+          }
+        : {}),
     });
     for (const step of turn.steps ?? []) {
       this.store.setRow("toolRuns", step.id, {
-        messageId: id,
+        messageId: rowKey,
         position: step.position,
         tool: step.tool,
         ...(step.input !== undefined ? { input: step.input } : {}),
         ...(step.result !== undefined ? { result: step.result } : {}),
+    // `ok: false` is the load-bearing value, so it is stored even when
+    // false -- unlike the turn outcome flags, which drop a false. Dropping
+    // it here would make every failure indistinguishable from a row
+    // written before the discriminant existed.
+    ...(step.ok !== undefined ? { ok: step.ok } : {}),
+    ...(step.data !== undefined ? { data: step.data } : {}),
       });
     }
     this.touch(sessionId);
   }
 
   /** Row -> turn, reattaching the turn's tool calls in call order. */
-  private toTurn(messageId: string, row: MessageRow): StoredTurn {
+  private toTurn(messageId: string, row: MessageRow): StoredMessage {
     const steps = this.stepsFor(messageId);
     return {
+      // The row id travels with the turn, so callers can address it
+      // later without re-deriving an index.
+      id: messageId,
       role: row.role === "assistant" ? "assistant" : "user",
       content: row.content,
       type: row.type,
       at: row.at,
+      ...(row.reasoning !== undefined ? { reasoning: row.reasoning } : {}),
+      // Rebuilt as the nested shape the port declares, from the flat
+      // columns. Omitted entirely when the engine reported nothing, so an
+      // old row simply has no `outcome` key.
+      ...(row.contextFull !== undefined || row.interrupted !== undefined
+      || row.promptMs !== undefined
+        ? {
+            outcome: {
+              ...(row.contextFull !== undefined ? { contextFull: row.contextFull } : {}),
+              ...(row.interrupted !== undefined ? { interrupted: row.interrupted } : {}),
+              ...(row.promptMs !== undefined && row.promptMs !== null
+                ? {
+                    timings: {
+                      promptMs: row.promptMs,
+                      tokensPerSecond: row.tokensPerSecond ?? 0,
+                      msPerToken: row.msPerToken ?? 0,
+                    },
+                  }
+                : {}),
+            },
+          }
+        : {}),
       ...(row.promptTokens !== undefined &&
       row.completionTokens !== undefined &&
       row.totalTokens !== undefined
@@ -214,6 +284,13 @@ export class TinyBaseSessionStore implements SessionStore {
         position: num(raw["position"]),
         ...(isRecord(raw["input"]) ? { input: raw["input"] } : {}),
         ...(typeof raw["result"] === "string" ? { result: raw["result"] } : {}),
+    // Absent -> undefined -> UNKNOWN, which is not the same as true. A
+    // row written before the column reads as "never recorded", not as
+    // "succeeded", so it renders conservatively.
+    ...(typeof raw["ok"] === "boolean" ? { ok: raw["ok"] } : {}),
+    // Mirrors `input`: a JSON object column, read back only when it really
+    // is an object, so a malformed cell cannot reach a renderer.
+    ...(isRecord(raw["data"]) ? { data: raw["data"] } : {}),
       });
     }
     return steps.sort((a, b) => a.position - b.position);
@@ -296,6 +373,21 @@ export class TinyBaseSessionStore implements SessionStore {
     }
   }
 
+  async truncateFrom(sessionId: string, messageId: string): Promise<boolean> {
+    if (!this.store.hasRow("sessions", sessionId)) return false;
+    const ordered = this.rowsOf(sessionId).sort((a, b) => a.row.seq - b.row.seq);
+    const index = ordered.findIndex((entry) => entry.id === messageId);
+    // Unknown id drops nothing rather than guessing at the caller's
+    // intent: a bad id is a bug to surface, not a conversation to
+    // silently destroy.
+    if (index < 0) return false;
+    for (const { id } of ordered.slice(index)) {
+      this.deleteStepsOf(id);
+      this.store.delRow("messages", id);
+    }
+    return true;
+  }
+
   async getDraft(sessionId: string | null): Promise<string> {
     return str(this.store.getCell("drafts", draftSlot(sessionId), "text"));
   }
@@ -347,13 +439,15 @@ export class TinyBaseSessionStore implements SessionStore {
       return null;
     }
     if (!isRecord(parsed)) return null;
-    // Only finite numbers count as an override: a half-written save
-    // degrades to "this session follows the global preset" rather than
-    // pinning a value the user cannot see.
-    const out: Record<string, number> = {};
+    // Finite numbers AND booleans count as an override: a boolean flag
+    // (includeThinkingInContext) is a real per-session choice, and a
+    // number-only filter would silently drop `false` and fall back to the
+    // preset. A half-written save still degrades the same way.
+    const out: Record<string, number | boolean> = {};
     for (const key of Object.keys(DEFAULT_SAMPLER)) {
       const v = parsed[key];
       if (typeof v === "number" && Number.isFinite(v)) out[key] = v;
+      else if (typeof v === "boolean") out[key] = v;
     }
     return Object.keys(out).length > 0 ? (out as Partial<SamplerParams>) : null;
   }

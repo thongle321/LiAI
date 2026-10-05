@@ -1,9 +1,9 @@
 /** In-chat image attach: picker seam over expo-image-picker.
  *
- * The store already accepts one image per turn (`send(text, image?)` →
- * multimodal turn); the composer had no way to supply one. This module
- * owns the native picker calls so the UI stays declarative and node
- * tests inject a fake launcher.
+ * A turn may carry several photos (G8): `send(text, images?)` feeds a
+ * multimodal turn whose `imagePaths` the engine already accepted as an
+ * array. This module owns the native picker calls so the UI stays
+ * declarative and node tests inject a fake launcher.
  */
 
 export type ImageSource = "camera" | "gallery";
@@ -48,19 +48,37 @@ export async function ensurePhotoAccess(
 // full-resolution base64 would balloon the JSON chat body.
 const PICKER_OPTS = { mediaTypes: ["images"], base64: true, quality: 0.7 } as const;
 
-/** Data-uri for the picked shot, or null on cancel/denial/empty payload. */
-export async function pickImage(
+/** How many photos one turn may carry. PocketPal's gallery
+ *  `selectionLimit` (ChatInput.tsx:320). */
+export const MAX_IMAGES = 5;
+
+/** Data-uris for the picked photos; EMPTY (not null) on cancel, denial, or
+ *  an empty payload.
+ *
+ *  The camera yields exactly one shot; the gallery asks for up to
+ *  MAX_IMAGES. The list is also truncated HERE rather than trusting the
+ *  platform to honour `selectionLimit` -- it is advisory, and an
+ *  unbounded attach is a multi-megabyte base64 body the model never
+ *  wanted. */
+export async function pickImages(
   source: ImageSource,
   launcher?: ImageLauncher,
-): Promise<string | null> {
+): Promise<string[]> {
   const mod = launcher ?? (await defaultLauncher());
-  if (!(await ensurePhotoAccess(source, mod))) return null;
+  if (!(await ensurePhotoAccess(source, mod))) return [];
   const result =
     source === "camera"
       ? await mod.launchCameraAsync({ ...PICKER_OPTS })
-      : await mod.launchImageLibraryAsync({ ...PICKER_OPTS });
-  if (result.canceled) return null;
-  const asset = result.assets?.[0];
-  if (asset?.base64 === undefined || asset.base64 === "") return null;
-  return toDataUri(asset.base64, asset.mimeType);
+      : await mod.launchImageLibraryAsync({
+          ...PICKER_OPTS,
+          selectionLimit: MAX_IMAGES,
+        });
+  if (result.canceled) return [];
+  const uris: string[] = [];
+  for (const asset of result.assets ?? []) {
+    if (uris.length >= MAX_IMAGES) break;
+    if (asset.base64 === undefined || asset.base64 === "") continue;
+    uris.push(toDataUri(asset.base64, asset.mimeType));
+  }
+  return uris;
 }

@@ -8,12 +8,14 @@ import * as DocumentPicker from "expo-document-picker";
 import * as LegacyFileSystem from "expo-file-system/legacy";
 
 import { numberedFileName } from "../lib/local-model.ts";
+import { useSnackbar } from "../components/Snackbar.tsx";
 import { useLoadGuard } from "./useLoadGuard.ts";
 import { useModelStore } from "../store/modelStore";
 
 export function useLocalModelImport(): () => Promise<void> {
   const addLocalModel = useModelStore((s) => s.addLocalModel);
   const guard = useLoadGuard();
+  const { showSnackbar } = useSnackbar();
 
   return async function importLocalModel(): Promise<void> {
     const res = await DocumentPicker.getDocumentAsync({
@@ -57,7 +59,7 @@ export function useLocalModelImport(): () => Promise<void> {
     try {
       await addLocalModel(asset.uri, fileName, size);
     } catch {
-      Alert.alert("Import failed", "Could not copy the file into models.");
+      showSnackbar("Could not copy the file into models.", { type: "error" });
     }
   };
 }

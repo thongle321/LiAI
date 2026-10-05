@@ -3,7 +3,6 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   Text,
   TextInput,
@@ -23,8 +22,12 @@ export function RemoteModelSheet({
   visible: boolean;
   onClose: () => void;
 }) {
-  const { addRemoteApi, validateAndRecord, privacyAcknowledged, acknowledgePrivacy } =
-    useModelStore();
+  // Stable selectors: actions plus one boolean flag, each subscribing
+  // alone so unrelated store writes never touch this form.
+  const addRemoteApi = useModelStore((s) => s.addRemoteApi);
+  const validateAndRecord = useModelStore((s) => s.validateAndRecord);
+  const privacyAcknowledged = useModelStore((s) => s.privacyAcknowledged);
+  const acknowledgePrivacy = useModelStore((s) => s.acknowledgePrivacy);
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -33,12 +36,16 @@ export function RemoteModelSheet({
     "custom_openai",
   );
   const [validating, setValidating] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [validationWarning, setValidationWarning] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!name || !baseUrl || !modelName) {
-      Alert.alert("Error", "Please fill in all required fields");
+      setFormError("Please fill in all required fields");
       return;
     }
+    setFormError(null);
+    setValidationWarning(null);
 
     setValidating(true);
     const provider: RemoteApiProvider = {
@@ -53,7 +60,7 @@ export function RemoteModelSheet({
 
     const isValid = await validateAndRecord(provider);
     if (!isValid) {
-      Alert.alert("Warning", "Could not validate API endpoint. Adding anyway.");
+      setValidationWarning("Could not validate API endpoint. Adding anyway.");
     }
 
     addRemoteApi(provider);
@@ -67,18 +74,10 @@ export function RemoteModelSheet({
   };
 
   return (
-    // ACCEPTED RISK, agreed rather than overlooked: this file used
-    // KeyboardAwareScrollView precisely because "with four fields in a
-    // full-height sheet the keyboard covers the lower ones". The shared
-    // Sheet uses a plain ScrollView and relies on app.json's
-    // softwareKeyboardLayoutMode: resize. So:
-    //   - Android: the window resizes and the body scrolls, and the pinned
-    //     footer keeps Add and Cancel reachable.
-    //   - iOS: resize does not apply, so the keyboard covers the lower
-    //     fields AND the pinned footer, putting Add out of reach. The fix
-    //     is a KeyboardAvoidingView on the card, or a keyboardAware opt-in
-    //     on Sheet. Not built: no iOS target, and no one has yet observed
-    //     the Android case failing.
+    // Short sheet on the shared Sheet: TrueSheet's auto detent sizes to
+    // the content, and keyboard avoidance comes from the wrapper. This
+    // also resolves the accepted iOS risk above: TrueSheet owns the
+    // keyboard natively instead of relying on window resize.
     <Sheet
       visible={visible}
       onClose={onClose}
@@ -113,6 +112,12 @@ export function RemoteModelSheet({
       testID="remote-model-sheet"
     >
       <View className="flex-col gap-4">
+        {formError ? (
+          <Text className="font-sans text-body-sm text-error">{formError}</Text>
+        ) : null}
+        {validationWarning ? (
+          <Text className="font-sans text-body-sm text-warning">{validationWarning}</Text>
+        ) : null}
         {!privacyAcknowledged && (
           <Text className="font-sans text-body-sm text-secondary-text">
             API keys stay on this device in encrypted storage.

@@ -29,9 +29,9 @@ import { Mic } from "lucide-react-native";
 import { colors } from "../../../themes/tokens.ts";
 import { VOICE_STATUS_LABEL } from "../../../lib/voiceStatus.ts";
 import {
+  MOTION_DURATION_MS,
   fadeEntering,
   motionEasing,
-  useMotionDuration,
   usePressFeedback,
 } from "../../../lib/motion.ts";
 import { useVoiceLoop } from "../../../hooks/useVoiceLoop.ts";
@@ -39,7 +39,7 @@ import { useModelReady } from "../../../hooks/useModelReady.ts";
 
 export default function VoiceScreen() {
   const { phase, heard, reply, issue, needsSettings, bargeIn, retry } = useVoiceLoop();
-  const motionDuration = useMotionDuration();
+  const motionDuration = MOTION_DURATION_MS;
   const replyVisible = phase === "speaking";
   const micPress = usePressFeedback();
 

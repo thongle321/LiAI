@@ -27,6 +27,7 @@ import {
   type CacheType,
   type FlashAttn,
 } from "../store/inference.ts";
+import { useShallow } from "zustand/shallow";
 import { useModelStore } from "../store/modelStore";
 import { useModelsUi } from "../store/modelsUi.ts";
 import { colors } from "../themes/tokens.ts";
@@ -52,6 +53,9 @@ const OPENCL_DOCS_URL =
   "https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/OPENCL.md#model-preparation";
 
 export function ModelInitializationSettings() {
+  // One useShallow unit: all 31 fields render here, so the section
+  // re-renders only when one of them changes — never on memory/loading
+  // writes owned by the sibling sections below.
   const {
     nCtx,
     nGpuLayers,
@@ -84,7 +88,41 @@ export function ModelInitializationSettings() {
     setDraftModelId,
     setImageMaxTokens,
     setUseHexagonNpu,
-  } = useInference();
+  } = useInference(
+    useShallow((s) => ({
+      nCtx: s.nCtx,
+      nGpuLayers: s.nGpuLayers,
+      imageMaxTokens: s.imageMaxTokens,
+      nBatch: s.nBatch,
+      nUbatch: s.nUbatch,
+      nThreads: s.nThreads,
+      flashAttn: s.flashAttn,
+      cacheK: s.cacheK,
+      cacheV: s.cacheV,
+      speculativeEnabled: s.speculativeEnabled,
+      specDraftGpuLayers: s.specDraftGpuLayers,
+      specDraftCacheK: s.specDraftCacheK,
+      specDraftCacheV: s.specDraftCacheV,
+      draftModelId: s.draftModelId,
+      useHexagonNpu: s.useHexagonNpu,
+      load: s.load,
+      setNCtx: s.setNCtx,
+      setNGpuLayers: s.setNGpuLayers,
+      setNBatch: s.setNBatch,
+      setNUbatch: s.setNUbatch,
+      setNThreads: s.setNThreads,
+      setFlashAttn: s.setFlashAttn,
+      setCacheK: s.setCacheK,
+      setCacheV: s.setCacheV,
+      setSpeculativeEnabled: s.setSpeculativeEnabled,
+      setSpecDraftGpuLayers: s.setSpecDraftGpuLayers,
+      setSpecDraftCacheK: s.setSpecDraftCacheK,
+      setSpecDraftCacheV: s.setSpecDraftCacheV,
+      setDraftModelId: s.setDraftModelId,
+      setImageMaxTokens: s.setImageMaxTokens,
+      setUseHexagonNpu: s.setUseHexagonNpu,
+    })),
+  );
   const models = useModelStore((s) => s.models);
   const activeModelId = useModelStore((s) => s.activeModelId);
 
@@ -130,7 +168,6 @@ export function ModelInitializationSettings() {
 
   return (
     <SettingsSection
-      title="Model Initialization Settings"
       description="Takes effect on the next reply — the model reloads automatically."
     >
       {availability?.hasHexagon ? (
@@ -315,6 +352,7 @@ export function ModelInitializationSettings() {
 }
 
 export function MemorySettings() {
+  // Shallow unit: the memory section ignores init/loading writes.
   const {
     useMlock,
     useMmap,
@@ -323,14 +361,24 @@ export function MemorySettings() {
     setUseMlock,
     setUseMmap,
     setUseWeightRepacking,
-  } = useInference();
+  } = useInference(
+    useShallow((s) => ({
+      useMlock: s.useMlock,
+      useMmap: s.useMmap,
+      useWeightRepacking: s.useWeightRepacking,
+      load: s.load,
+      setUseMlock: s.setUseMlock,
+      setUseMmap: s.setUseMmap,
+      setUseWeightRepacking: s.setUseWeightRepacking,
+    })),
+  );
 
   useEffect(() => {
     void load();
   }, []);
 
   return (
-    <SettingsSection title="Memory Settings">
+    <SettingsSection>
       <View className="row">
         <ToggleRow
           label="Use Memory Lock"
@@ -367,8 +415,14 @@ export function MemorySettings() {
 }
 
 export function ModelLoadingSettings() {
-  const { autoOffload, load, setAutoOffload } = useInference();
-  const { autoNavigateToChat, setAutoNavigateToChat, load: loadUi } = useModelsUi();
+  // Stable selectors: one boolean flag plus stable actions — this row
+  // never re-renders on inference writes it does not display.
+  const autoOffload = useInference((s) => s.autoOffload);
+  const load = useInference((s) => s.load);
+  const setAutoOffload = useInference((s) => s.setAutoOffload);
+  const autoNavigateToChat = useModelsUi((s) => s.autoNavigateToChat);
+  const setAutoNavigateToChat = useModelsUi((s) => s.setAutoNavigateToChat);
+  const loadUi = useModelsUi((s) => s.load);
 
   useEffect(() => {
     void load();
@@ -376,7 +430,7 @@ export function ModelLoadingSettings() {
   }, []);
 
   return (
-    <SettingsSection title="Model Loading Settings">
+    <SettingsSection>
       <View className="row">
         <ToggleRow
           label="Auto Offload/Load"

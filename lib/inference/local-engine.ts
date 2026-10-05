@@ -18,27 +18,70 @@ import type {
 export interface LlamaTokenData {
   token?: string;
   content?: string;
+  /** Cumulative parsed reasoning (present only with reasoning_format). */
+  reasoning_content?: string;
   tool_calls?: Array<{
     id?: string;
     function?: { name?: string; arguments?: string };
   }>;
 }
 
-/** Structural slice of a llama.rn completion result we actually read. */
+/** Structural slice of a llama.rn completion result we actually read.
+ *
+ *  The stop fields were absent from this slice for the life of the type,
+ *  which is why `stoppedEarly` was hardcoded false and why the chat screen
+ *  had no way to notice a full context. They are all present on the real
+ *  `NativeCompletionResult`
+ *  (node_modules/llama.rn/lib/typescript/types.d.ts:443-485) — the slice
+ *  simply never asked for them, so they were dropped on the floor. Every
+ *  field stays optional: a build whose native module omits one must
+ *  degrade to "no signal", never crash. */
 export interface LlamaCompletionResult {
   text?: string;
   content?: string;
+  reasoning_content?: string;
   tool_calls?: LlamaTokenData["tool_calls"];
   tokens_predicted?: number;
   tokens_evaluated?: number;
+  /** The reply did not fit the context window. */
+  context_full?: boolean;
+  /** Another way to run out of room, reported separately by llama.cpp. */
+  truncated?: boolean;
+  /** The user interrupted (Stop), as distinct from a natural finish. */
+  interrupted?: boolean;
+  /** >0 when the sampler stopped the turn (n_predict). */
+  stopped_limit?: number;
+  timings?: LlamaTimings;
+}
+
+/** Wall-clock figures, kept at the engine's own names; the projection to
+ *  `CompletionTimings` is where our vocabulary starts. */
+export interface LlamaTimings {
+  prompt_ms?: number;
+  predicted_ms?: number;
+  predicted_per_token_ms?: number;
+  predicted_per_second?: number;
+  prompt_per_second?: number;
+  prompt_n?: number;
+  predicted_n?: number;
 }
 
 /** Params the wrapper forwards (messages/tools/media/thinking/sampler). */
 export interface LlamaCompletionParams extends Partial<LlamaSamplerParams> {
-  messages: Array<{ role: string; content: string }>;
+  messages: Array<{
+    role: string;
+    content: string;
+    reasoning_content?: string;
+  }>;
   tools?: unknown;
   media_paths?: string[];
   enable_thinking?: boolean;
+  /** Always sent as 'auto' — extracts reasoning into reasoning_content
+   *  instead of leaking raw think/channel markers into the answer text. */
+  reasoning_format?: "none" | "auto" | "deepseek";
+  /** Flat top-level sibling like enable_thinking — never nested: llama.rn's
+   *  converter drops unknown keys. */
+  jinja?: boolean;
   // The sampler's 16 fields arrive as FLAT, top-level siblings here — they
   // extend from LlamaSamplerParams rather than being restated, so the names
   // are defined once. They are NOT nested under a key: llama.rn's converter
@@ -85,12 +128,23 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
       callbacks: CompletionCallbacks,
     ): Promise<CompletionOutcome> {
       const seen: EngineToolCall[] = [];
+      // llama.rn emits ACCUMULATED content/reasoning (a parse of everything
+      // so far), while our chain appends deltas — so the router tracks the
+      // last seen accumulation and slices. A revision (parser retracted a
+      // prefix) restarts from the new accumulation; the final result
+      // replaces the bubble text anyway.
+      let seenContent = "";
+      let seenReasoning = "";
       const result = await ctx.completion(
         {
           messages: request.messages.map((m) => ({
             role: m.role,
             content: m.content,
+            ...(m.reasoning_content !== undefined && m.reasoning_content !== ""
+              ? { reasoning_content: m.reasoning_content }
+              : {}),
           })),
+          reasoning_format: "auto",
           ...(request.tools && request.tools.length > 0
             ? { tools: request.tools }
             : {}),
@@ -100,6 +154,7 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
           ...(request.enableThinking !== undefined
             ? { enable_thinking: request.enableThinking }
             : {}),
+          ...(request.jinja !== undefined ? { jinja: request.jinja } : {}),
           // Flat, top-level, and NOT nested under a key: llama.rn's
           // NativeCompletionParams takes these as siblings (types.d.ts), and
           // the JSI converter drops unknown keys. Nesting them under
@@ -108,8 +163,25 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
           ...(request.sampler ? toLlamaSampler(request.sampler) : {}),
         },
         (data) => {
-          const delta = data.content ?? data.token ?? "";
-          if (delta !== "") callbacks.onToken(delta);
+          const reasoning = data.reasoning_content ?? "";
+          if (reasoning !== "" && reasoning !== seenReasoning) {
+            seenReasoning = reasoning;
+            callbacks.onReasoning?.(reasoning);
+          }
+          const content = data.content;
+          if (content !== undefined && content !== "") {
+            const delta = content.startsWith(seenContent)
+              ? content.slice(seenContent.length)
+              : content;
+            seenContent = content;
+            if (delta !== "") callbacks.onToken(delta);
+          } else if (seenReasoning === "") {
+            // No parser extraction at all (nothing parsed yet): raw tokens
+            // ARE the answer. With reasoning present and no content field,
+            // the token is thinking — it must not leak into the answer.
+            const delta = data.token ?? "";
+            if (delta !== "") callbacks.onToken(delta);
+          }
           const calls = toEngineCalls(data.tool_calls);
           if (calls.length > 0) {
             seen.push(...calls);
@@ -121,12 +193,28 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
         result.tool_calls && result.tool_calls.length > 0
           ? toEngineCalls(result.tool_calls)
           : seen;
+      const t = result.timings;
+      const timings =
+        t === undefined
+          ? undefined
+          : {
+              promptMs: asNumber(t.prompt_ms),
+              tokensPerSecond: asNumber(t.predicted_per_second),
+              msPerToken: asNumber(t.predicted_per_token_ms),
+            };
       return {
         text: result.content ?? result.text ?? "",
+        reasoning: result.reasoning_content ?? "",
         toolCalls,
         promptTokens: asNumber(result.tokens_evaluated),
         completionTokens: asNumber(result.tokens_predicted),
-        stoppedEarly: false,
+        // Was hardcoded `false` for the life of the type.
+        stoppedEarly: asNumber(result.stopped_limit) > 0,
+        // Two distinct flags mean the same thing to a reader: the window
+        // ran out either way.
+        contextFull: result.context_full === true || result.truncated === true,
+        interrupted: result.interrupted === true,
+        ...(timings !== undefined ? { timings } : {}),
       };
     },
 

@@ -28,7 +28,6 @@ expo-env.d.ts
 scratch/
 /models/
 .agents/
-pocketpal-ai/
 /.pi/
 /.impeccable/
 skills-lock.json

@@ -8,11 +8,18 @@
 
 import { buildRemoteModelSpec } from "../models/remote-api.ts";
 import type { ModelSpec, RemoteApiProvider } from "../../types/models.ts";
+// The timings shape is a DOMAIN type, defined once in types/chat.ts and
+// shared: the engine projects it, the store persists it, the footer reads
+// it. Restating it here would be a second definition waiting to drift.
+import type { TurnTimings } from "../../types/chat.ts";
 import type { SamplerParams } from "./sampler.ts";
 
 /** Token deltas stream here; the runner feeds bubbles directly. */
 export interface CompletionCallbacks {
   onToken: (text: string) => void;
+  /** Cumulative reasoning so far (mirrors llama.rn's reasoning_content,
+   *  which arrives accumulated, not as a delta). */
+  onReasoning?: (cumulative: string) => void;
   /** Tool calls the model emitted alongside (or instead of) text. */
   onToolCalls?: (calls: EngineToolCall[]) => void;
 }
@@ -27,16 +34,34 @@ export interface EngineToolCall {
 /** Result of one finished completion (plain text + tool calls + usage). */
 export interface CompletionOutcome {
   text: string;
+  /** Final parsed reasoning; "" when the model emitted none. */
+  reasoning?: string;
   toolCalls: EngineToolCall[];
   promptTokens: number;
   completionTokens: number;
+  /** The sampler stopped the turn early — n_predict hit. Distinct from
+   *  `interrupted`, which is the USER stopping it. */
   stoppedEarly: boolean;
+  /** The turn could not fit in the context window: `context_full` or
+   *  `truncated` from the engine. Drives the chat screen's context-full
+   *  banner and its "More room" recovery. */
+  contextFull?: boolean;
+  /** The user pressed Stop mid-turn, so the partial reply is a deliberate
+   *  stopping point rather than a finished answer. */
+  interrupted?: boolean;
+  /** Wall-clock figures for the turn footer. Absent when the engine does
+   *  not report them (most remote endpoints do not). */
+  timings?: TurnTimings;
 }
 
 /** One chat turn in the engine's wire shape (llama + OpenAI compatible). */
 export interface CompletionMessage {
   role: "user" | "assistant" | "tool" | "system";
   content: string;
+  /** Assistant reasoning, read back by llama.cpp's chat parser and
+   *  re-serialized into the template JSON (chat.cpp:464). Sent only when
+   *  include_thinking_in_context says so. */
+  reasoning_content?: string;
   tool_calls?: EngineToolCall[];
   tool_call_id?: string;
   name?: string;
@@ -60,6 +85,8 @@ export interface CompletionRequest {
   imagePaths?: string[];
   /** Local-only: jinja thinking blocks on/off (native default true). */
   enableThinking?: boolean;
+  /** Local-only: jinja chat template on/off (native default true). */
+  jinja?: boolean;
   /** Local-only: sampling params. Remote engines ignore them — an OpenAI-
    *  compatible endpoint has its own defaults and no equivalent for the
    *  llama-only knobs (typical-p, XTC, mirostat). */

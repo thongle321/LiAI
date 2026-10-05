@@ -59,7 +59,7 @@ export function PresetModelCard({
           <View className="flex-1">
             <View className="flex-row items-center gap-2 mb-1">
               <ModelTypeIcon type={preset.type} />
-              <Text className="font-sans-semibold text-h4 text-primary-text">{preset.name}</Text>
+              <Text className="font-sans-semibold text-body-md text-primary-text">{preset.name}</Text>
               {preset.recommended && (
                 <View className="rounded bg-surface-3 px-2 py-0.5">
                   <Text className="font-sans text-caption text-primary-text">Recommended</Text>

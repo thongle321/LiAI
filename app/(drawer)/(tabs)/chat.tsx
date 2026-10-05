@@ -18,23 +18,28 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation, useRouter } from "expo-router";
+import {
+  useLocalSearchParams,
+  useNavigation,
+  useRouter,
+} from "expo-router";
 import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
-import { Menu, Search, X } from "lucide-react-native";
+import { Menu, SquarePen } from "lucide-react-native";
 
 import { colors } from "../../../themes/tokens.ts";
 import { filterMessages } from "../../../lib/chat/filter.ts";
 import { buildRows, type ChatRow } from "../../../lib/chat/rows.ts";
 import {
+  MOTION_DURATION_MS,
   fadeEntering,
   fadeExiting,
-  useMotionDuration,
   usePressFeedback,
 } from "../../../lib/motion.ts";
 import { APP_NAME } from "../../../constants/app.ts";
 import { TAB_BAR_HEIGHT } from "../../../components/BottomNav.tsx";
 import { useChatStore } from "../../../store/chat.ts";
 import { useModelStore } from "../../../store/modelStore";
+import { useInference } from "../../../store/inference.ts";
 import { useKeyboardLift } from "../../../hooks/useKeyboardLift.ts";
 import { useKeyboardState } from "react-native-keyboard-controller";
 import { MessageListItem } from "../../../components/chat/MessageListItem.tsx";
@@ -45,11 +50,54 @@ import { MessageInput } from "../../../components/chat/MessageInput.tsx";
 import { UsageStats } from "../../../components/chat/UsageStats.tsx";
 import { SuggestedPrompts } from "../../../components/chat/SuggestedPrompts.tsx";
 import { MessageList } from "../../../components/chat/MessageList.tsx";
+import {
+  ContextFullBanner,
+  ContextLadderSheet,
+} from "../../../components/chat/ContextFullBanner.tsx";
+import { fillPercent } from "../../../lib/chat/context-fill.ts";
+import { pickableModels } from "../../../lib/chat/models.ts";
+import { useModelReady } from "../../../hooks/useModelReady.ts";
 import { GenerationSettingsSheet } from "../../../components/chat/GenerationSettingsSheet.tsx";
+import { ChatWarningSnackbar } from "../../../components/chat/ChatWarningSnackbar.tsx";
 import { ChatMenu } from "../../../components/chat/ChatMenu.tsx";
 
 export default function ChatRoute() {
   const messages = useChatStore((s) => s.messages);
+  // The header names the conversation and the model answering it; both
+  // live here (G11 — the active model was otherwise invisible on this
+  // screen after a switch from the menu).
+  const sessionId = useChatStore((s) => s.sessionId);
+  const sessions = useChatStore((s) => s.sessions);
+  const setDraft = useChatStore((s) => s.setDraft);
+
+  // G16: prefill the composer from a `?message=` deep link.
+  //
+  // PocketParity: ChatScreen.tsx:272-273 hands `pendingMessage` to the
+  // composer as `initialInputText` and calls `onInitialTextConsumed` to
+  // clear it -- the field is filled ONCE. The ref is our equivalent of
+  // that consumed flag: without it the effect re-fires on every render
+  // and would stomp whatever the user had typed since.
+  //
+  // No in-app producer for this URL. pocketpal's link is pal-keyed
+  // (`pocketpal://chat?palId=p1`) and pals are out of scope here, so
+  // this only fires when an external app or Shortcut hands LiAI a
+  // `liai://chat?message=...`. Deliberate, and recorded in the audit.
+  const { message: deepLinkPrompt } = useLocalSearchParams<{ message?: string }>();
+  const consumedDeepLink = useRef<string | null>(null);
+  useEffect(() => {
+    if (deepLinkPrompt === undefined) {
+      // The link is gone, so the NEXT one is a fresh arrival even when it
+      // carries identical text. PocketParity parks the message and clears
+      // it, so a repeated `?message=hello` fills the field again; keying
+      // only on the value would silently swallow it as a duplicate.
+      consumedDeepLink.current = null;
+      return;
+    }
+    if (consumedDeepLink.current === deepLinkPrompt) return;
+    consumedDeepLink.current = deepLinkPrompt;
+    const text = deepLinkPrompt.trim();
+    if (text !== "") setDraft(text);
+  }, [deepLinkPrompt, setDraft]);
   const connection = useChatStore((s) => s.connection);
   const sending = useChatStore((s) => s.sending);
   const loadSession = useChatStore((s) => s.loadSession);
@@ -57,6 +105,60 @@ export default function ChatRoute() {
   const send = useChatStore((s) => s.send);
   const retry = useChatStore((s) => s.retry);
   const regenerate = useChatStore((s) => s.regenerate);
+  const newConversation = useChatStore((s) => s.newConversation);
+  const startEdit = useChatStore((s) => s.startEdit);
+  const editingTurnId = useChatStore((s) => s.editingTurnId);
+  const cancelEdit = useChatStore((s) => s.cancelEdit);
+  const turnStartedAt = useChatStore((s) => s.turnStartedAt);
+  const chatWarning = useChatStore((s) => s.chatWarning);
+  const setChatWarning = useChatStore((s) => s.setChatWarning);
+  // Stable identity matters here: the snackbar's auto-dismiss timer is
+  // keyed on its onDismiss, so an inline arrow would restart the dwell on
+  // every parent render and the notice would never expire.
+  const dismissWarning = useCallback(
+    () => setChatWarning(null),
+    [setChatWarning],
+  );
+  const setActiveModel = useModelStore((s) => s.setActiveModel);
+  const setActiveRemoteApi = useModelStore((s) => s.setActiveRemoteApi);
+  const allModels = useModelStore((s) => s.models);
+  const remoteApis = useModelStore((s) => s.remoteApis);
+  // Regenerate and edit both start a turn, so they need a live engine —
+  // the same gate the composer uses.
+  const canRun = useModelReady();
+  const activeModelId = useModelStore((s) => s.activeModelId);
+  const menuModels = useMemo(
+    () => pickableModels(allModels, remoteApis, activeModelId),
+    [allModels, remoteApis, activeModelId],
+  );
+  /** Switch to a model chosen from a message's "Regenerate with…".
+   *
+   *  Uses the SAME discriminator the two menus label with -- a local entry
+   *  has no `host`. Asking `remoteApis.some(...)` instead would be an
+   *  opposite test on the same list: the day a local id equalled a remote
+   *  id, the menu would say "local" and this would switch as remote. */
+  const switchToModel = useCallback(
+    (modelId: string) => {
+      const target = menuModels.find((m) => m.id === modelId);
+      if (target === undefined) return;
+      if (target.host === undefined) setActiveModel(modelId, "local");
+      else setActiveRemoteApi(modelId);
+    },
+    [menuModels, setActiveModel, setActiveRemoteApi],
+  );
+  const activeModelLabel = useMemo(() => {
+    const m = menuModels.find((x) => x.active);
+    if (m === undefined) return null;
+    // Same `name (host)` shape the menus use. Dropping the host here
+    // would reintroduce the exact ambiguity G11 exists to remove: two
+    // providers offering "qwen" would be indistinguishable in the one
+    // place whose job is saying which model is answering.
+    return m.host === undefined ? m.name : `${m.name} (${m.host})`;
+  }, [menuModels]);
+  const activeSessionTitle = useMemo(
+    () => sessions.find((s) => s.id === sessionId)?.title ?? null,
+    [sessions, sessionId],
+  );
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -77,18 +179,19 @@ export default function ChatRoute() {
   // Activation happens on the Models screen while chat stays mounted:
   // re-resolve readiness so the prompt chips and the no-model affordance
   // appear and vanish on their own.
-  const activeModelId = useModelStore((s) => s.activeModelId);
   useEffect(() => {
     void checkHealth();
   }, [activeModelId, checkHealth]);
 
   // PocketPal parity: the composer is always visible. With no model the send
   // button disables and the field's placeholder names it. There is
-  // deliberately NO in-composer prompt or button: the models screen is reached
-  // from the header wordmark, and the empty thread has its own card with a
-  // button. `ready` is only the transport health check; the engine-accurate
-  // gate (useModelReady) is what the composer's own affordances key off, inside
-  // MessageInput. Do not confuse the two when editing either side.
+  // deliberately NO in-composer prompt or button: the models screen is
+  // reached from the header title, which names the conversation and the
+  // model answering it, and the empty thread has its own card with a
+  // button. `ready` is only the transport health check; the
+  // engine-accurate gate (useModelReady) is what the composer's own
+  // affordances key off, inside MessageInput. Do not confuse the two
+  // when editing either side.
   const ready = connection === "up";
   // The empty placeholder ("Activate Model To Get Started" / "No Models
   // Available") is NOT scroll content, despite pocketpal-ai putting it in
@@ -102,7 +205,28 @@ export default function ChatRoute() {
   const emptyState = messages.length === 0 && query.trim() === "";
   const showPlaceholder = !ready && emptyState;
 
-  const motionDuration = useMotionDuration();
+  const motionDuration = MOTION_DURATION_MS;
+
+  // ---- G1: the context-full banner -------------------------------------
+  // It speaks for the NEWEST assistant turn and nothing else. Scoping it
+  // that way makes it self-clearing: keep chatting, answer successfully,
+  // and the banner goes away on its own without a reset rule.
+  const newestAssistant = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].role === "assistant") return messages[i];
+    }
+    return null;
+  }, [messages]);
+  const contextFullTurnId =
+    newestAssistant?.outcome?.contextFull === true ? newestAssistant.id : null;
+  // Dismissal is remembered PER TURN, so it survives a re-render but not
+  // the next context-full turn -- which is a different problem and needs
+  // saying again.
+  const [dismissedTurnId, setDismissedTurnId] = useState<string | null>(null);
+  const [ladderOpen, setLadderOpen] = useState(false);
+  const contextFullShowing = contextFullTurnId !== null && contextFullTurnId !== dismissedTurnId;
+  const nCtx = useInference((s) => s.nCtx);
+  const setNCtx = useInference((s) => s.setNCtx);
   const navigation = useNavigation<{ openDrawer: () => void }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -166,7 +290,7 @@ export default function ChatRoute() {
     });
   }, [streaming, listHeight, blankSpace, motionDuration]);
   const menuPress = usePressFeedback();
-  const searchPress = usePressFeedback();
+  const penPress = usePressFeedback();
   const [generationOpen, setGenerationOpen] = useState(false);
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
@@ -198,47 +322,65 @@ export default function ChatRoute() {
         </View>
         <Pressable
           onPress={() => router.navigate("/models")}
-          className="flex-1"
+          className="flex-1 items-center"
           accessibilityRole="button"
-          accessibilityLabel="Open models"
+          accessibilityLabel={
+            activeModelLabel === null ? "Open models" : `Open models — ${activeModelLabel}`
+          }
         >
+          {/* Two lines, like PocketPal's ChatHeaderTitle: the conversation,
+              then the model answering it. Without the second line, a model
+              switched from the menu was invisible until the answer came
+              back wrong. The wordmark only stands in until a session
+              exists, so an unsent chat still reads as the app's own. */}
           <Text
             numberOfLines={1}
             // Capped like ScreenHeader's title: DESIGN pins the
             // header at 56px (Fluid Type Rule caps geometry).
             maxFontSizeMultiplier={1.5}
-            className="text-center font-sans-semibold text-h2 text-primary-text"
+            className="text-center font-sans-semibold text-title text-primary-text"
           >
-            {APP_NAME}
+            {activeSessionTitle ?? APP_NAME}
           </Text>
+          {activeModelLabel !== null && (
+            <Text
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.5}
+              className="text-center font-sans text-caption text-secondary-text"
+            >
+              {activeModelLabel}
+            </Text>
+          )}
         </Pressable>
         <View className="w-36 flex-row items-center justify-end">
-          {/* The overflow menu carries generation settings as its first
-              item, so the trailing group stays at three controls and the
-              w-36 slot is unchanged. */}
-          <ChatMenu onOpenGeneration={() => setGenerationOpen(true)} />
-          <Animated.View style={searchPress.animatedStyle}>
+          {/* Pen (pocketpal's reset-button) leads, the kebab trails —
+              their HeaderRight order. The slot stays w-36. */}
+          <Animated.View style={penPress.animatedStyle}>
             <Pressable
               onPress={() => {
-                setSearchOpen((o) => !o);
+                // The pen starts a fresh chat; a stale search bar must
+                // not outlive the conversation it was filtering.
+                setSearchOpen(false);
                 setQuery("");
+                void newConversation();
               }}
-              onPressIn={searchPress.onPressIn}
-              onPressOut={searchPress.onPressOut}
+              onPressIn={penPress.onPressIn}
+              onPressOut={penPress.onPressOut}
               className="h-12 w-12 items-center justify-center"
               hitSlop={4}
               accessibilityRole="button"
-              accessibilityLabel={searchOpen ? "Close search" : "Search this conversation"}
+              accessibilityLabel="New conversation"
             >
-              {searchOpen ? (
-                <X size={20} color={colors.primary} />
-              ) : (
-                // Ink, like the menu and kebab beside it: DESIGN.md,
-                // Navigation — "Icons are 2px stroke at 20px in Ink".
-                <Search size={20} color={colors.primaryText} />
-              )}
+              <SquarePen size={20} color={colors.primaryText} />
             </Pressable>
           </Animated.View>
+          <ChatMenu
+            onOpenGeneration={() => setGenerationOpen(true)}
+            onOpenSearch={() => {
+              setSearchOpen(true);
+              setQuery("");
+            }}
+          />
         </View>
       </View>
       {searchOpen && (
@@ -284,7 +426,7 @@ export default function ChatRoute() {
           keyboard opens. The library's guide is also explicit that
           KeyboardAvoidingView is the wrong tool for chat, so there is no KAV
           on this screen. */}
-      <View style={{ flex: 1 }}>
+      <View className="flex-1">
         <View
           className="flex-1"
           onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
@@ -301,11 +443,22 @@ export default function ChatRoute() {
               row.kind === "date" ? (
                 <DateHeader label={row.label} />
               ) : row.kind === "pending" ? (
-                <PendingIndicator />
+                <PendingIndicator startedAt={turnStartedAt} />
               ) : (
                 <MessageListItem
                   row={row}
                   onRetry={() => void retry(row.message.id)}
+                  contextBannerVisible={contextFullShowing}
+                  canRun={canRun}
+                  models={menuModels}
+                  onEdit={() => startEdit(row.message.id)}
+                  onRegenerateWith={(modelId: string) => {
+                    // Switch first, then re-answer: EngineManager swaps
+                    // the slot on the next ensure(), so the rerun lands on
+                    // the model the user picked.
+                    switchToModel(modelId);
+                    void regenerate(row.message.id);
+                  }}
                   onRegenerate={
                     row.message.role === "assistant"
                       ? () => void regenerate(row.message.id)
@@ -368,7 +521,9 @@ export default function ChatRoute() {
         className="absolute inset-x-0 bottom-0"
         sending={sending}
         ready={ready}
-        onSend={(text, image) => send(text, image)}
+        editing={editingTurnId !== null}
+        onCancelEdit={cancelEdit}
+        onSend={(text, images) => send(text, images)}
         onHeightChange={handleComposerHeight}
       />
       {/* Composer overlays: the chrome that is NOT part of the field and so
@@ -388,11 +543,44 @@ export default function ChatRoute() {
             coincide — send/retry/regenerate mint the streaming stub in the
             same set() — so a chip would be a second indicator for one
             state, overlapping the list instead of scrolling with it. */}
+        {/* The transient notice outranks the persistent banner: it is about the
+    turn that just happened, while the banner is standing context. */}
+          <ChatWarningSnackbar
+            warning={chatWarning}
+            onDismiss={dismissWarning}
+          />
+          {contextFullShowing && (
+          <ContextFullBanner
+            fill={fillPercent(newestAssistant?.usage?.promptTokens, nCtx)}
+            onMoreRoom={() => setLadderOpen(true)}
+            onNewChat={() => {
+              setDismissedTurnId(contextFullTurnId);
+              void newConversation();
+            }}
+            onDismiss={() => setDismissedTurnId(contextFullTurnId)}
+          />
+        )}
         {ready && emptyState && (
           <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
         )}
         <UsageStats messages={messages} />
       </Animated.View>
+      {/* The ladder lives OUTSIDE the overlay row: it is a modal sheet
+          with its own scrim, so it must not inherit the composer's lift
+          transform or it would ride up with the keyboard. */}
+      <ContextLadderSheet
+        visible={ladderOpen}
+        currentNctx={nCtx}
+        onPick={(n) => {
+          // The engine reloads on the NEXT send: EngineManager keys its
+          // slot on n_ctx, so a changed value transparently releases and
+          // re-inits. No explicit reload needed.
+          setNCtx(n);
+          setLadderOpen(false);
+          setDismissedTurnId(contextFullTurnId);
+        }}
+        onClose={() => setLadderOpen(false)}
+      />
       {/* Sampling is per conversation and lives here, not in Settings —
           the same split PocketPal uses. */}
       <GenerationSettingsSheet

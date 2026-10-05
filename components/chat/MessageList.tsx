@@ -30,7 +30,7 @@ import {
 } from "react-native-keyboard-controller";
 import type { SharedValue } from "react-native-reanimated";
 
-import { useMotionDuration } from "../../lib/motion.ts";
+
 import type { ChatRow } from "../../lib/chat/rows.ts";
 
 /** PocketPal STICK/LEAVE hysteresis (ChatView.tsx:451): re-arm "at latest"
@@ -73,7 +73,6 @@ export function MessageList({
    *  shove the reader. iOS-only prop, a no-op on Android. */
   streaming: boolean;
 }) {
-  const motionDuration = useMotionDuration();
   // Mirrors the end state for the scroll effect, which must not re-subscribe
   // to it (it changes on every scroll and would restart the animation).
   const atEndRef = useRef(true);
@@ -148,9 +147,9 @@ export function MessageList({
   const rowCount = rows.length;
   useEffect(() => {
     if (atEndRef.current) {
-      listRef.current?.scrollToEnd({ animated: motionDuration > 0 });
+      listRef.current?.scrollToEnd({ animated: true });
     }
-  }, [rowCount, motionDuration, listRef]);
+  }, [rowCount, listRef]);
 
   return (
     <FlatList

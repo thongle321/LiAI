@@ -1,37 +1,71 @@
-/** Shared bottom sheet, built on the Modal + card pattern this repo already
- * owns twice (ChatMenu.tsx, ModelsHeaderRight.tsx).
+/** Shared bottom sheet, built on TrueSheet (`@lodev09/react-native-true-sheet`).
  *
- * Why this is not @expo/ui's native BottomSheet, which it replaces for the
- * two long sheets. Three reasons, all user-visible:
+ * Why TrueSheet and not the previous `@expo/ui/community/bottom-sheet`:
+ * every tall sheet (HF search, HF details, generation settings) rendered
+ * fullscreen behind the status bar on device despite an arithmetically
+ * correct cap — the community sheet's Material3 surface has only
+ * half/full resting states and no top inset, so tall content has nowhere
+ * to stop. TrueSheet instead clamps every detent to
+ * `realScreenHeight - topInset` (topInset = the status-bar height when
+ * edge-to-edge, which this app always is at targetSdk 36), so tall sheets
+ * stop below the status bar by construction — no hand-rolled height math.
+ * TrueSheet owns insets, keyboard avoidance and gestures natively.
  *
- *   1. It applies no window insets. ModalBottomSheetView.kt is a stock
- *      Material3 ModalBottomSheet with no WindowInsets reference anywhere,
- *      so the JS child must supply every inset itself — which is why the
- *      generation sheet drew behind the status bar.
- *   2. On Android it can only rest at 'half' or 'full'; its own types say a
- *      {fraction} or {height} "snaps to the nearest of 'half' / 'full'". A
- *      sheet whose top edge sits just below the status bar is neither.
- *   3. Its pan gesture consumes vertical drags, so a nested scroll view
- *      fought it and the body would not scroll.
+ * Two learnings from the community-sheet era, kept or adapted:
  *
- * Geometry matches PocketPal (Sheet.tsx:100-102): bottom-anchored and
- * capped at windowHeight - insets.top - SHEET_TOP_GAP, so a full sheet's top
- * edge lands below the status bar with the scrim showing above it. That
- * arithmetic lives in lib/sheet.ts, and tests/sheet.test.ts pins it.
+ * - Scrollable bodies keep `grow`, never `flex-1`: Uniwind compiles
+ *   flex-1 to native `flex: 1`, which Yoga resolves as flexBasis 0% — and
+ *   a zero basis inside a capped container measured the scroll view to
+ *   zero, rendering a WHITE sheet (device-observed).
+ * - TrueSheet's OWN `scrollable` prop is deliberately NOT passed (the
+ *   local `scrollable` prop below only picks the body element). In v3 it
+ *   puts `flex: 1` on the content view inside an absolute-fill container
+ *   (TrueSheet.tsx:576,584 scrollableContent = {flex:1}), so
+ *   contentHeight — which IS the 'auto' detent — reports the screen, and
+ *   auto collapses to fullscreen (device-observed: every sheet opened
+ *   near-full). With it off the content view wraps, and `auto` measures
+ *   the real content; each body then carries its own `maxHeight` bound so
+ *   content taller than the surface scrolls inside a bounded box instead
+ *   of being clipped.
+ * - v3's auto detent does NOT include the absolute footer (only `peek`
+ *   does: TrueSheetDetentCalculator.kt:51), so a body with a footer must
+ *   reserve the footer's measured height as bottom padding.
+ * - Keyboard avoidance comes from the NATIVE side: the dialog resizes
+ *   above the keyboard (adjustResize), so the body must NOT pad or
+ *   scroll for the keyboard itself. A KeyboardAwareScrollView did both:
+ *   it added keyboard-height padding to the content, auto sized the sheet
+ *   to content+pad, and its scroll-to-focus landed inside that padding —
+ *   short bodies VOIDED (title, blurb, input all gone) the moment the
+ *   keyboard opened, and every keystroke re-measured pad+scroll (stutter
+ *   and flicker, device-observed). Tall bodies only scrolled within
+ *   range, which is exactly why the HF sheet "worked" and the API-key
+ *   sheet did not.
  *
- * Dismiss is the close button, the scrim, and the hardware back button.
- * There is deliberately NO drag handle: a handle that does not drag is a
- * promise the sheet does not keep. Swipe-to-dismiss is the remaining gap
- * against PocketPal and is the follow-up.
+ * - Actions live in the SCROLL BODY, never TrueSheet's native `footer`
+ *   (grill Q1/Q2): the native footer lifts above the keyboard without
+ *   shrinking the body (TrueSheetViewController.positionFooter), so a
+ *   footer floats over scrolled content — and no JS channel hears the
+ *   dialog keyboard, so no bound can hold. In-body buttons are
+ *   pixel-identical when the keyboard is closed.
+ *
+ * The shared `footer` prop stays wired to TrueSheet's native footer (the
+ * wrapper keeps its safe-area pad inside) for sheets without text
+ * inputs; every sheet that hosts an input keeps its actions in-body
+ * instead, and footer-less bodies reserve the safe-area bottom so those
+ * in-body actions always clear the nav bar.
  */
 
-import type { ReactNode } from "react";
-import { Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { Dimensions, Pressable, ScrollView, StatusBar, Text, View, useWindowDimensions } from "react-native";
+import { TrueSheet, type TrueSheet as TrueSheetType } from "@lodev09/react-native-true-sheet";
 import { X } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { sheetMaxHeight } from "../lib/sheet.ts";
-import { colors, scrim } from "../themes/tokens.ts";
+import { colors } from "../themes/tokens.ts";
+
+// [DEBUG-a4f2] Temporary runtime probe for the nav-bar overlap question.
+// Flip to false (or delete the whole block) once the numbers are read.
+const DEBUG_INSETS = true;
 
 export function Sheet({
   visible,
@@ -42,6 +76,7 @@ export function Sheet({
   titleEllipsize = false,
   children,
   testID,
+  ref,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -49,103 +84,188 @@ export function Sheet({
   /** Pinned below the scrolling body, e.g. a reset action. */
   footer?: ReactNode;
   /** false for a body that IS the scroller (a paginated FlatList): a
-   *  VirtualizedList nested in this ScrollView warns and never paginates. */
+   *  VirtualizedList nested in a ScrollView warns and never paginates. */
   scrollable?: boolean;
   /** Middle-ellipsize a long title (an "org/model" repo name keeps its
    *  informative end). Off by default: the other callers wrap. */
   titleEllipsize?: boolean;
   children: ReactNode;
   testID?: string;
+  ref?: Ref<TrueSheetType>;
 }) {
-  // Read OUTSIDE the Modal on purpose. On Android a Modal is its own
-  // window that already excludes the status bar, so insets.top measured
-  // inside it would be 0; taking the parent's value is what compensates,
-  // and the resulting top edge was confirmed on device.
+  // TrueSheet is ref-driven (present/dismiss); this adapter keeps the
+  // declarative visible/onClose API so no caller changes. The internal ref
+  // merges with the forwarded one: both must drive the same instance.
+  const innerRef = useRef<TrueSheetType | null>(null);
+  // REGRESSION. Every hidden sheet called dismiss() on mount — including
+  // the sort/author sheets nested inside the HF search sheet — before its
+  // native view existed, logging "already dismissed" warnings and
+  // throwing "TrueSheetView with tag not found". Dismiss may only fire
+  // for a sheet this adapter actually presented.
+  const presentedRef = useRef(false);
+  const dismissedRef = useRef(false);
+
+  const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-      testID={testID}
-      // RN's Modal does not do this for us: without it the content behind
-      // the sheet stays in the accessibility tree.
-      accessibilityViewIsModal
-    >
-      <Pressable
-        className="flex-1"
-        onPress={onClose}
-        // A dismiss affordance only. The labelled X in the header is the
-        // accessible way out, so announcing a screen-sized button here
-        // would be a lie to a screen reader.
-        importantForAccessibility="no"
-        // The scrim, which the native sheet took as a prop. A plain Modal
-        // has to paint it, or a tall sheet is a card on an undimmed screen.
-        style={{ backgroundColor: scrim }}
-      />
-      <View
-        className="absolute left-0 right-0 bottom-0 rounded-t-xl bg-surface-1"
-        // Runtime-computed: the cap is what keeps the top edge below the
-        // status bar, and it depends on the window and the inset.
-        style={{ maxHeight: sheetMaxHeight(height, insets.top) }}
+  // Floor the safe-area top with StatusBar.currentHeight (Android): a
+  // zero inset would grow bodies behind the status bar.
+  const topInset = Math.max(insets.top, StatusBar.currentHeight ?? 0);
+  // TrueSheet clamps the SURFACE to realScreenHeight - topInset natively;
+  // this clamps the CONTENT to the same box (window <= screen in
+  // edge-to-edge, plus the 16px gap), so wrap-content bodies stay at-or-
+  // below the surface instead of being clipped at the top with no way to
+  // scroll to it. At-most: short content still wraps to its own height.
+  const bodyMaxHeight = windowHeight - topInset - 16;
+  // v3's auto detent ignores the absolute footer, so the body reserves its
+  // measured height; measured at runtime rather than guessed.
+  const [footerHeight, setFooterHeight] = useState(0);
+
+  // [DEBUG-a4f2] Probe state. `sheetPosition` is TrueSheet's own reported
+  // sheet height; `bodyHeight` is what the React content actually measured.
+  // The DIFFERENCE is the bottom inset TrueSheet applied natively -- the one
+  // value `useSafeAreaInsets()` is suspected of dropping.
+  const [sheetPosition, setSheetPosition] = useState(0);
+  const [bodyHeight, setBodyHeight] = useState(0);
+  const nativeInset =
+    sheetPosition > 0 && bodyHeight > 0 ? sheetPosition - bodyHeight : null;
+  const debugLines = DEBUG_INSETS
+    ? [
+        `insets.bottom=${insets.bottom}`,
+        `insets.top=${insets.top}`,
+        `statusBar=${StatusBar.currentHeight ?? 0}`,
+        `window=${windowHeight}`,
+        `screen=${Dimensions.get("screen").height}`,
+        `body=${bodyHeight}`,
+        `sheet=${sheetPosition}`,
+        `nativeInset=${nativeInset ?? "?"}`,
+      ]
+    : [];
+
+  useEffect(() => {
+    if (visible) {
+      dismissedRef.current = false;
+      presentedRef.current = true;
+      // The native view lazy-mounts on first present; a race with
+      // unmount rejects, which is benign — an uncaught rejection is not.
+      void innerRef.current?.present().catch(() => {});
+    } else if (presentedRef.current && !dismissedRef.current) {
+      // Programmatic close (X button, submit). A native swipe already
+      // dismissed and set the flag in onDidDismiss — dismissing again
+      // would race the finished animation.
+      void innerRef.current?.dismiss().catch(() => {});
+    }
+  }, [visible]);
+
+  const header = (
+    <View className="flex-row items-center justify-between px-4 pb-2 pt-4">
+      <Text
+        className="flex-1 mr-2 font-sans-semibold text-body-lg text-primary-text"
+        numberOfLines={titleEllipsize ? 1 : undefined}
+        ellipsizeMode={titleEllipsize ? "middle" : undefined}
       >
-        <View className="flex-row items-center justify-between px-4 pb-2 pt-4">
-          {/* No numberOfLines: the card is full-bleed now, so the title
-              wraps, and a cap here would truncate a long one. */}
-          <Text
-            className="flex-1 mr-2 font-sans-semibold text-h3 text-primary-text"
-            numberOfLines={titleEllipsize ? 1 : undefined}
-            ellipsizeMode={titleEllipsize ? "middle" : undefined}
-          >
-            {title}
-          </Text>
-          <Pressable
-            onPress={onClose}
-            className="h-12 w-12 items-center justify-center"
-            hitSlop={4}
-            accessibilityRole="button"
-            accessibilityLabel={`Close ${title}`}
-          >
-            <X size={20} color={colors.secondaryText} />
-          </Pressable>
-        </View>
+        {title}
+      </Text>
+      <Pressable
+        onPress={onClose}
+        className="h-12 w-12 items-center justify-center"
+        hitSlop={4}
+        accessibilityRole="button"
+        accessibilityLabel={`Close ${title}`}
+      >
+        <X size={20} color={colors.secondaryText} />
+      </Pressable>
+    </View>
+  );
 
-        {/*
-          flexGrow, deliberately NOT flex-1. Uniwind compiles flex-1 to
-          native `flex: 1`, which Yoga resolves as flexBasis 0% — and a
-          zero basis inside a maxHeight container is what collapsed this
-          sheet to a white screen last time. flexGrow keeps the content as
-          the base size, so a short sheet stays short and a tall one
-          shrinks into a scroll.
-        */}
-        {/* flexGrow, deliberately NOT flex-1, on BOTH paths: see the note
-            on the ScrollView below. */}
-        {scrollable ? (
-          <ScrollView
-            className="grow"
-            contentContainerClassName="px-4 pb-4"
-            style={footer ? undefined : { paddingBottom: 16 + insets.bottom }}
-            keyboardShouldPersistTaps="handled"
-          >
-            {children}
-          </ScrollView>
-        ) : (
-          <View className="grow px-4">{children}</View>
-        )}
-
-        {footer ? (
+  return (
+    <TrueSheet
+      ref={(instance) => {
+        innerRef.current = instance;
+        if (typeof ref === "function") ref(instance);
+        else if (ref) ref.current = instance;
+      }}
+      // ONE detent for every sheet: content-sized, clamped below the status
+      // bar natively (TrueSheetDetentCalculator's realScreenHeight -
+      // topInset). A fixed 0.9 made short sheets read as fullscreen — the
+      // exact defect this replaced.
+      detents={["auto"]}
+      dismissible
+      grabber
+      backgroundColor={colors.surface1}
+      cornerRadius={12}
+      // NO `scrollable` prop on TrueSheet — v3's flag makes auto measure
+      // the screen (see header). Bodies bound themselves below.
+      footer={
+        footer ? (
           <View
             className="px-4 pt-2"
-            // The home indicator, the way PocketPal's actions bar does it
-            // (Actions.tsx:21: paddingBottom 10 + insets.bottom).
-            style={{ paddingBottom: 10 + insets.bottom }}
+            // Device-observed: TrueSheet's footer container did NOT clear
+            // this phone's 3-button nav bar — the pinned action rendered
+            // behind the system buttons and could not be tapped. The
+            // safe-area bottom is 0 under gesture nav, so this pads
+            // nothing there and cannot double with a future native inset
+            // on a device that reports one.
+            style={{ paddingBottom: insets.bottom }}
+            onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
           >
             {footer}
           </View>
-        ) : null}
-      </View>
-    </Modal>
+        ) : undefined
+      }
+      onPositionChange={(e) => setSheetPosition(e.nativeEvent.position)}
+      onDidDismiss={() => {
+        presentedRef.current = false;
+        if (dismissedRef.current) return;
+        dismissedRef.current = true;
+        onClose();
+      }}
+    >
+      {scrollable ? (
+        <ScrollView
+          testID={testID}
+          className="grow"
+          onLayout={(e) => setBodyHeight(e.nativeEvent.layout.height)}
+          contentContainerClassName="px-4 pb-4"
+          keyboardShouldPersistTaps="handled"
+          style={{
+            maxHeight: bodyMaxHeight,
+            // No footer in input sheets (grill Q1/Q2): the row at the
+            // body's end carries the actions, and this pad keeps them
+            // above the nav bar. Footer sheets keep their measured
+            // reserve instead.
+            paddingBottom: footer ? footerHeight : insets.bottom,
+          }}
+        >
+          {header}
+          {children}
+        </ScrollView>
+      ) : (
+        <View
+          testID={testID}
+          className="grow px-4"
+          style={{
+            maxHeight: bodyMaxHeight,
+            paddingBottom: footer ? footerHeight : undefined,
+          }}
+        >
+          {header}
+          {children}
+        </View>
+      )}
+      {/* [DEBUG-a4f2] Probe overlay. Tap-through, and the LAST child so it
+          paints above the body. Removed in the cleanup pass. */}
+      {DEBUG_INSETS && (
+        <View
+          pointerEvents="none"
+          className="absolute left-0 right-0 top-0 z-50 rounded-b bg-black/85 px-2 py-1"
+        >
+          {debugLines.map((line) => (
+            <Text key={line} className="text-[10px] text-white">
+              {line}
+            </Text>
+          ))}
+        </View>
+      )}
+    </TrueSheet>
   );
 }

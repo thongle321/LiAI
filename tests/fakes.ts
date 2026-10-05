@@ -7,7 +7,11 @@
  * session store (ADR-0012).
  */
 
-import type { SessionStore, StoredTurn } from "../lib/chat/session-store.ts";
+import type {
+  SessionStore,
+  StoredMessage,
+  StoredTurn,
+} from "../lib/chat/session-store.ts";
 import { draftSlot } from "../lib/chat/session-store.ts";
 import type { SamplerParams } from "../lib/inference/sampler.ts";
 import type { AgentStep, SessionInfo } from "../types/chat.ts";
@@ -40,13 +44,17 @@ export function fakeSessionStore(
 } {
   const sessions = new Map<
     string,
-    { title: string; pinned: boolean; turns: StoredTurn[]; seq: number }
+    { title: string; pinned: boolean; turns: StoredMessage[]; seq: number }
   >();
+  // Row ids, like the real store mints on append. Seeded turns get
+  // stable, readable ids so a test can name one in a truncateFrom call.
+  let turnSeq = 0;
+  const mintId = (sessionId: string): string => `${sessionId}-t${(turnSeq += 1)}`;
   for (const seed of seeds) {
     sessions.set(seed.id, {
       title: seed.title ?? "",
       pinned: seed.pinned ?? false,
-      turns: (seed.turns ?? []).map((t) => ({ ...t })),
+      turns: (seed.turns ?? []).map((t, i) => ({ ...t, id: `${seed.id}-t${i + 1}` })),
       seq: 0,
     });
   }
@@ -75,22 +83,28 @@ export function fakeSessionStore(
           : {}),
       }));
     },
-    append: async (sessionId: string, turn: StoredTurn) => {
+    append: async (sessionId: string, turn: StoredTurn, id?: string) => {
       let row = sessions.get(sessionId);
       if (!row) {
         row = { title: "", pinned: false, turns: [], seq: 0 };
         sessions.set(sessionId, row);
       }
-      row.turns.push({ ...turn });
+      // Same rule as the real store: a caller-supplied id pins the row, so
+      // a bubble's id and its persisted id are one string.
+      row.turns.push({ ...turn, id: id ?? mintId(sessionId) });
       calls.appends.push({ sessionId, turn: { ...turn } });
     },
-    listSessions: async (): Promise<SessionInfo[]> =>
-      [...sessions.entries()].map(([id, row]) => ({
-        id,
-        title: row.title,
-        pinned: row.pinned,
-        updatedAt: row.seq,
-      })),
+ listSessions: async (): Promise<SessionInfo[]> =>
+ // Mirrors the real store's drawer order: pinned first, insertion
+ // order otherwise (the fake seeds share one seq).
+ [...sessions.entries()]
+ .map(([id, row]) => ({
+ id,
+ title: row.title,
+ pinned: row.pinned,
+ updatedAt: row.seq,
+ }))
+ .sort((a, b) => (a.pinned === b.pinned ? 0 : a.pinned ? -1 : 1)),
     renameSession: async (id: string, title: string) => {
       const row = sessions.get(id);
       if (!row) return false;
@@ -118,12 +132,23 @@ export function fakeSessionStore(
       // exists before this is called.
       if (row && row.title === "") row.title = title;
     },
-    popLastAssistant: async (id: string) => {
+popLastAssistant: async (id: string) => {
       const row = sessions.get(id);
       if (!row || row.turns.length === 0) return false;
       const last = row.turns[row.turns.length - 1];
       if (last.role !== "assistant") return false;
       row.turns.pop();
+      return true;
+    },
+    truncateFrom: async (id: string, messageId: string) => {
+      const row = sessions.get(id);
+      if (!row) return false;
+      const index = row.turns.findIndex((t) => t.id === messageId);
+      // Unknown id drops nothing, same as the real store.
+      if (index < 0) return false;
+      // The fake keeps `steps` inline on each turn, so splicing the tail
+      // takes the tool calls with it — no separate cascade needed here.
+      row.turns.splice(index);
       return true;
     },
     getDraft: async (sessionId) => drafts.get(draftSlot(sessionId)) ?? "",
@@ -180,6 +205,10 @@ export interface ScriptedTurn {
 export interface FakeTurnCalls {
   texts: string[];
   sessions: (string | null)[];
+  /** The images actually handed to the engine, or undefined. G12's whole
+   *  claim is about what the MODEL receives, not what the user attached,
+   *  so it has to be observable here. */
+  images: (string[] | undefined)[];
 }
 
 /** Scripted TurnRunner: shifts one outcome per call, records inputs. */
@@ -187,11 +216,12 @@ export function fakeRunTurn(script: ScriptedTurn[]): {
   runTurn: TurnRunner;
   calls: FakeTurnCalls;
 } {
-  const calls: FakeTurnCalls = { texts: [], sessions: [] };
+  const calls: FakeTurnCalls = { texts: [], sessions: [], images: [] };
   const queue = script.map((s) => ({ ...s }));
   const runTurn: TurnRunner = async (text, paths, onToken) => {
     calls.texts.push(text);
     calls.sessions.push(paths.sessionId);
+    calls.images.push(paths.images);
     const next = queue.length > 0 ? queue.shift()! : {};
     if (next.fail !== undefined) throw new Error(next.fail);
     const reply = next.reply ?? `Echo ${text}`;
@@ -217,12 +247,13 @@ export function gatedRunTurn(): {
   release: (reply?: string) => void;
   calls: FakeTurnCalls;
 } {
-  const calls: FakeTurnCalls = { texts: [], sessions: [] };
+  const calls: FakeTurnCalls = { texts: [], sessions: [], images: [] };
   let release: (reply?: string) => void = () => {};
   const runTurn: TurnRunner = (text, paths, onToken) =>
     new Promise((resolve) => {
       calls.texts.push(text);
       calls.sessions.push(paths.sessionId);
+      calls.images.push(paths.images);
       release = (reply = `Echo ${text}`) => {
         onToken?.(reply);
         resolve({

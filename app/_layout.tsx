@@ -1,5 +1,6 @@
 import "../global.css";
 import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -11,13 +12,27 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ScopedVariables, Uniwind } from "uniwind";
 
+import { useRef } from "react";
 import { colors } from "../themes/tokens.ts";
+import { SnackbarProvider } from "../components/Snackbar.tsx";
 import { useEngineOffload } from "../hooks/useEngineOffload.ts";
 import { useFluidTextVariables } from "../hooks/useFluidTextScale.ts";
 
 // Light-locked (DESIGN.md): one theme, and it is the light one —
 // device dark mode must not invent a second world.
 Uniwind.setTheme("light");
+
+// Keep the native splash visible until the Inter files resolve, so cold
+// start never flashes a blank white frame before the font gate below.
+// The catch is load-bearing: a rejection (already-hidden splash on a
+// remount) must not surface as an unhandled promise.
+void SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// expo-router's error-boundary convention is a NAMED export from a layout.
+// This used to be `app/+error.tsx`, which is TanStack Router's syntax --
+// expo-router's route scanner throws on any route node starting with '+',
+// so the app died before rendering anything.
+export { RootErrorBoundary as ErrorBoundary } from "../components/RouteErrorBoundaries.tsx";
 
 export default function RootLayout() {
   const [loaded] = useFonts({
@@ -31,6 +46,16 @@ export default function RootLayout() {
   // Fluid Type (DESIGN.md): --text-* overrides for this device's width.
   // Must be called before any early return (hook order).
   const typeVars = useFluidTextVariables();
+
+  // Dismiss the native splash once Inter is ready: hideAsync in an
+  // effect would flash one font-less frame, so it runs on the same
+  // render that first returns UI. The ref fires it exactly once — repeat
+  // renders must not re-hide (unawaited native call per render).
+  const splashHidden = useRef(false);
+  if (loaded && !splashHidden.current) {
+    splashHidden.current = true;
+    void SplashScreen.hideAsync().catch(() => {});
+  }
 
   // Gate first paint on the font resolving so nothing flashes in the
   // system typeface (DESIGN.md, Single Family Rule).
@@ -54,6 +79,7 @@ export default function RootLayout() {
             launch. (An earlier comment here claimed they were what made the
             keyboard height correct. That was a guess, and it was wrong.) */}
         <KeyboardProvider>
+          <SnackbarProvider>
           <Stack
             screenOptions={{
               headerShown: false,
@@ -67,6 +93,7 @@ export default function RootLayout() {
             <Stack.Screen name="(drawer)" options={{ animation: "none" }} />
             <Stack.Screen name="onboarding" />
           </Stack>
+          </SnackbarProvider>
         </KeyboardProvider>
         </GestureHandlerRootView>
       </ScopedVariables>

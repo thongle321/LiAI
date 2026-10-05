@@ -1,8 +1,8 @@
 /** Bottom tab bar (DESIGN.md Navigation).
  *
- * 69px (see TAB_BAR_HEIGHT) plus the device's bottom safe-area inset, on
- * Clean White with a 1px Hairline top border. Items are icon over Caption
- * label; inactive is Slate, active is Signal Blue on icon and label —
+ * 67px (see TAB_BAR_HEIGHT) plus the device's bottom safe-area inset, on
+ * Clean White with a 1px Hairline top border. Items are icon over label;
+ * inactive is Slate, active is Signal Blue on icon and label —
  * colour is the ONLY active signal. The Surface Tint pill and the 2px
  * indicator bar are gone: the square behind the icon read as a shape
  * rather than a state. The 40x40 icon box stays because it is the touch
@@ -27,7 +27,7 @@ export type ChatTab = "chat" | "voice" | "vision";
  *   border-t            1
  *   pt-2                8
  *   icon box h-10      40
- *   caption label      16  (text-caption line-height, global.css)
+ *   label box          14  (pinned 11/14 below, pocketpal's bar label)
  *   pb-1                4
  * Single definition by decree: the chat screen's keyboard compensation and
  * the message list's offset both import it, because when this change landed
@@ -35,7 +35,7 @@ export type ChatTab = "chat" | "voice" | "vision";
  * the no-model card came to drift when the keyboard opened. The SUM above
  * is the spec — if the bar's classes change, change this with them; the
  * value itself is verified on device, not by test. */
-export const TAB_BAR_HEIGHT = 69;
+export const TAB_BAR_HEIGHT = 67;
 
 const TABS: { id: ChatTab; label: string; Icon: LucideIcon }[] = [
   { id: "chat", label: "Chat", Icon: MessageCircle },
@@ -43,15 +43,16 @@ const TABS: { id: ChatTab; label: string; Icon: LucideIcon }[] = [
   { id: "vision", label: "Vision", Icon: Eye },
 ];
 
-/** The caption pair PINNED at the bar (Fluid Type Rule: pinned geometry
- * never moves). The bar's 69px is a class sum whose label box is the
- * 16px caption line-height, so the width drift must not reach it — the
- * drift would render that box 18px wide-device and shift the bar. The
- * system scale is capped on the label below; this pins the other axis.
- * Module-level so the variables object keeps a stable identity. */
+/** The label pair PINNED at the bar (Fluid Type Rule: pinned geometry
+ * never moves). Pocketpal's bar label is 11/14 (BottomNavBar snapshots);
+ * the bar's 67px is a class sum whose label box is that 14px line-height,
+ * so the width drift must not reach it — the drift would render that box
+ * wider on wide devices and shift the bar. The system scale is capped on
+ * the label below; this pins the other axis. Module-level so the variables
+ * object keeps a stable identity. */
 const PINNED_CAPTION = {
-  "--text-caption": 12,
-  "--text-caption--line-height": 16,
+  "--text-caption": 11,
+  "--text-caption--line-height": 14,
 };
 
 export function BottomNav({
@@ -87,10 +88,10 @@ export function BottomNav({
             </View>
             <Text
               numberOfLines={1}
-              // Capped: DESIGN pins the bar at 69px. Worst case font
-              // 12 × 1.1 (Fluid Type clamp) × 1.2 = 15.84px, inside the
-              // pinned 16px line box — the bar never shifts.
-              maxFontSizeMultiplier={1.2}
+              // Capped: DESIGN pins the bar at 67px. Worst case font
+              // 11 × 1.1 (Fluid Type clamp) × 1.1 = 13.31px, inside the
+              // pinned 14px line box — the bar never shifts.
+              maxFontSizeMultiplier={1.1}
               className={`font-sans text-caption ${
                 selected ? "text-primary" : "text-secondary-text"
               }`}

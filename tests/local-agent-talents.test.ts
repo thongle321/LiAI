@@ -26,7 +26,8 @@ describe("runTalent pure engines", () => {
       "{}",
       { fetchImpl: fakeFetch({}), search: null },
     );
-    assert.match(out, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/);
+    assert.equal(out.ok, true);
+    assert.match(out.content, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/);
   });
 
   it("answers calculate without a key", async () => {
@@ -35,21 +36,23 @@ describe("runTalent pure engines", () => {
       JSON.stringify({ expression: "2 + 3" }),
       { fetchImpl: fakeFetch({}), search: null },
     );
-    assert.equal(out, "2 + 3 = 5");
+    assert.equal(out.ok, true);
+    assert.equal(out.content, "2 + 3 = 5");
   });
 
   it("rejects unknown talents and bad JSON without throwing", async () => {
-    assert.match(
-      await runTalent("nope", "{}", { fetchImpl: fakeFetch({}), search: null }),
-      /not enabled/i,
-    );
-    assert.match(
-      await runTalent("calculate", "{bad", {
-        fetchImpl: fakeFetch({}),
-        search: null,
-      }),
-      /invalid JSON/i,
-    );
+    const unknown = await runTalent("nope", "{}", {
+      fetchImpl: fakeFetch({}),
+      search: null,
+    });
+    assert.equal(unknown.ok, false, "an unknown talent did not succeed");
+    assert.match(unknown.content, /not enabled/i);
+    const badArgs = await runTalent("calculate", "{bad", {
+      fetchImpl: fakeFetch({}),
+      search: null,
+    });
+    assert.equal(badArgs.ok, false, "unparseable arguments did not succeed");
+    assert.match(badArgs.content, /invalid JSON/i);
   });
 });
 
@@ -63,7 +66,8 @@ describe("runTalent web_search", () => {
       }) as typeof fetch,
       search: null,
     });
-    assert.match(out, /not enabled|no search key/i);
+    assert.equal(out.ok, false, "a missing key is a failure, not an empty result");
+    assert.match(out.content, /not enabled|no search key/i);
     assert.equal(calls, 0);
   });
 
@@ -75,7 +79,8 @@ describe("runTalent web_search", () => {
       }),
       search: { provider: "tavily", key: "k", count: 5 },
     });
-    assert.ok(out.includes("https://t.example"));
+    assert.equal(out.ok, true);
+    assert.ok(out.content.includes("https://t.example"));
     const gated = await runTalent(
       "read_url",
       JSON.stringify({ url: "https://other.example" }),
@@ -84,7 +89,55 @@ describe("runTalent web_search", () => {
         search: { provider: "tavily", key: "k", count: 5 },
       },
     );
-    assert.match(gated, /not from a web_search result/i);
+    assert.equal(gated.ok, false, "an unlisted URL is a refused read, not a read");
+    assert.match(gated.content, /not from a web_search result/i);
+  });
+
+  it("carries the hits STRUCTURED alongside the fenced markdown", async () => {
+    // The criterion this exists for: a renderer must never parse its own
+    // markdown back apart. The model reads `content` (fenced, because it
+    // is untrusted third-party text); the renderer reads `data`.
+    resetReadUrlAllowlist();
+    const out = await runTalent(
+      "web_search",
+      JSON.stringify({ query: "structured-hits-probe-02" }),
+      {
+        fetchImpl: fakeFetch({
+          results: [
+            { title: "First", url: "https://one.example", content: "s1" },
+            { title: "Second", url: "https://two.example", content: "s2" },
+          ],
+        }),
+        search: { provider: "tavily", key: "k", count: 5 },
+      },
+    );
+    assert.equal(out.ok, true);
+    assert.match(out.content, /third-party/, "the model's copy stays fenced");
+    const hits = out.data?.hits;
+    assert.ok(Array.isArray(hits), "structured hits are present");
+    assert.equal(hits.length, 2);
+    assert.deepEqual(
+      (hits as Array<{ url: string }>).map((h) => h.url),
+      ["https://one.example", "https://two.example"],
+      "order and urls survive, so no re-derivation is needed",
+    );
+  });
+
+  it("treats zero results as an empty result, not a failure", async () => {
+    // The search WORKED; the answer is that there was nothing to find.
+    // Collapsing the two teaches the user that a working search broke.
+    // A distinct query: the search layer caches by query, and the sibling
+    // test already searched "q" -- reusing it returned that cached result.
+    const out = await runTalent(
+      "web_search",
+      JSON.stringify({ query: "definitely-no-hits-query-01" }),
+      {
+        fetchImpl: fakeFetch({ results: [] }),
+        search: { provider: "tavily", key: "k", count: 5 },
+      },
+    );
+    assert.equal(out.ok, true, "an empty result set is not an error");
+    assert.match(out.content, /no results/i);
   });
 });
 
@@ -102,7 +155,8 @@ describe("runTalent read_url", () => {
         search: { provider: "tavily", key: "k", count: 5 },
       },
     );
-    assert.match(out, /only public http/i);
+    assert.equal(out.ok, false, "a refused target did not succeed");
+    assert.match(out.content, /only public http/i);
     assert.equal(calls, 0);
   });
 });

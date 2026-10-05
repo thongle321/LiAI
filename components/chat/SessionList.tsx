@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { FlatList, Modal, Pressable, Text, TextInput, View } from "react-native";
 import { useDrawerStatus } from "expo-router/drawer";
-import { History, MessageSquarePlus, Pencil, Pin, PinOff, X } from "lucide-react-native";
+import { History, Pencil, Pin, PinOff, X } from "lucide-react-native";
 
 import { colors, scrim } from "../../themes/tokens.ts";
 import { formatTime } from "../../lib/format.ts";
@@ -17,7 +17,6 @@ import type { ChatSession } from "../../types/chat.ts";
 export function SessionList({
   sessions,
   sessionId,
-  onNew,
   onOpen,
   onDelete,
   onRename,
@@ -25,7 +24,6 @@ export function SessionList({
 }: {
   sessions: ChatSession[];
   sessionId: string | null;
-  onNew: () => void;
   onOpen: (id: string) => Promise<boolean>;
   onDelete: (id: string) => void;
   onRename: (id: string, title: string) => Promise<boolean>;
@@ -57,17 +55,6 @@ export function SessionList({
 
   return (
     <>
-      <Pressable
-        onPress={onNew}
-        className="menu-row"
-        accessibilityRole="button"
-        accessibilityLabel="New conversation"
-      >
-        <MessageSquarePlus size={20} color={colors.primary} />
-        <Text className="ml-3 font-sans text-body-md text-primary-text">
-          New conversation
-        </Text>
-      </Pressable>
       <View className="flex-row items-center px-5 pb-1 pt-3">
         <History size={20} color={colors.secondaryText} />
         <Text className="ml-3 font-sans text-body-sm text-secondary-text">
@@ -154,7 +141,7 @@ export function SessionList({
       >
         <View className="flex-1 items-center justify-center p-5" style={{ backgroundColor: scrim }}>
           <View className="w-full rounded-2xl border border-border bg-surface-1 p-5">
-            <Text className="mb-4 font-sans-semibold text-h3 text-primary-text">
+            <Text className="mb-4 font-sans-semibold text-body-lg text-primary-text">
               Rename conversation
             </Text>
             <TextInput

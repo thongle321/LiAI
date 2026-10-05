@@ -74,7 +74,8 @@
           "enableOpenCLAndHexagon": true
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "expo-splash-screen"
     ],
     "extra": {
       "router": {},

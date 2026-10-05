@@ -30,9 +30,11 @@ import {
   LayoutGrid,
   MoreVertical,
   Pencil,
+  Search,
   Settings,
   Share,
   Trash,
+  Download,
 } from "lucide-react-native";
 
 import { useChatStore, defaultGetStore } from "../../store/chat";
@@ -45,8 +47,10 @@ import {
   type ExportSession,
   type ExportKind,
 } from "../../lib/chat/export.ts";
-import { providerHost, shareExportedFile } from "../../lib/chat/share-export.ts";
 import { usePressFeedback } from "../../lib/motion.ts";
+import { useChatImport } from "../../hooks/useChatImport.ts";
+import { shareExportedFile } from "../../lib/chat/share-export.ts";
+import { pickableModels } from "../../lib/chat/models.ts";
 import { colors } from "../../themes/tokens.ts";
 
 type Panel = "menu" | "model" | "export" | "rename";
@@ -79,7 +83,7 @@ function MenuRow({
       {icon ? <View className="w-5 items-center">{icon}</View> : <View className="w-5" />}
       <Text
         numberOfLines={1}
-        className={`flex-1 mr-2 font-sans text-body-md ${
+        className={`flex-1 mr-2 font-sans text-body-lg ${
           disabled
             ? "text-secondary-text"
             : destructive
@@ -104,8 +108,12 @@ function MenuRow({
 
 export function ChatMenu({
   onOpenGeneration,
+  onOpenSearch,
 }: {
   onOpenGeneration: () => void;
+  /** Opens the in-conversation search bar fresh (menu can't reflect
+   *  toggle state, so the row is a plain "open"). */
+  onOpenSearch: () => void;
 }) {
   const btnRef = useRef<View | null>(null);
   const [open, setOpen] = useState(false);
@@ -125,9 +133,13 @@ export function ChatMenu({
   const activeModelId = useModelStore((s) => s.activeModelId);
   const setActiveModel = useModelStore((s) => s.setActiveModel);
   const setActiveRemoteApi = useModelStore((s) => s.setActiveRemoteApi);
+  const importChat = useChatImport();
 
   const hasSession = sessionId !== null;
-  const downloadable = models.filter((m) => m.downloadStatus === "completed");
+  // One source for "which models exist", shared with each message's
+  // "Regenerate with…" submenu. A local entry has no `host`; that is the
+  // discriminator for both the label and the switching call.
+  const pickable = pickableModels(models, remoteApis, activeModelId);
 
   function close(): void {
     setOpen(false);
@@ -251,12 +263,17 @@ export function ChatMenu({
                   label="Model"
                   icon={<LayoutGrid size={16} color={colors.secondaryText} />}
                   chevron
-                  disabled={downloadable.length === 0 && remoteApis.length === 0}
+                  disabled={pickable.length === 0}
                   onPress={() => setPanel("model")}
                 />
                 {hasSession ? (
                   <>
                     <View className="h-px bg-border mx-4" />
+                    <MenuRow
+                      label="Search"
+                      icon={<Search size={16} color={colors.secondaryText} />}
+                      onPress={() => run(onOpenSearch)}
+                    />
                     <MenuRow
                       label="Duplicate chat history"
                       icon={<Copy size={16} color={colors.secondaryText} />}
@@ -288,40 +305,52 @@ export function ChatMenu({
                   label="Export"
                   icon={<Share size={16} color={colors.secondaryText} />}
                   chevron
-                  onPress={() => setPanel("export")}
+onPress={() => setPanel("export")}
                 />
               </>
             ) : null}
+            <MenuRow
+              label="Import"
+              icon={<Download size={16} color={colors.secondaryText} />}
+              // NOT gated on hasSession: restoring into an empty app is the
+              // main case, and it is exactly the one Export hides behind a
+              // session.
+              disabled={busy}
+              onPress={() => {
+                // Close first, or the picker opens behind the sheet.
+                close();
+                void importChat();
+              }}
+            />
 
             {panel === "model" ? (
               <>
                 <BackRow label="Model" onPress={() => setPanel("menu")} />
-                {downloadable.map((m) => (
-                  <MenuRow
-                    key={m.id}
-                    label={m.name}
-                    value={m.id === activeModelId ? "Active" : undefined}
-                    chevron={m.id === activeModelId}
-                    onPress={() =>
-                      run(() => {
-                        setActiveModel(m.id, "local");
-                      })
-                    }
-                  />
-                ))}
-                {remoteApis.map((p) => (
-                  <MenuRow
-                    key={p.id}
-                    label={`${p.name} (${providerHost(p.baseUrl)})`}
-                    icon={<Cloud size={16} color={colors.secondaryText} />}
-                    value={p.id === activeModelId ? "Active" : undefined}
-                    onPress={() =>
-                      run(() => {
-                        setActiveRemoteApi(p.id);
-                      })
-                    }
-                  />
-                ))}
+                {pickable.map((m) => {
+                  // A local entry has no host; that is the same
+                  // discriminator the message menu uses, so the two can
+                  // never disagree about what is switchable.
+                  const isLocal = m.host === undefined;
+                  return (
+                    <MenuRow
+                      key={m.id}
+                      label={isLocal ? m.name : `${m.name} (${m.host})`}
+                      icon={
+                        isLocal ? undefined : (
+                          <Cloud size={16} color={colors.secondaryText} />
+                        )
+                      }
+                      value={m.active ? "Active" : undefined}
+                      chevron={isLocal && m.active}
+                      onPress={() =>
+                        run(() => {
+                          if (isLocal) setActiveModel(m.id, "local");
+                          else setActiveRemoteApi(m.id);
+                        })
+                      }
+                    />
+                  );
+                })}
               </>
             ) : null}
 

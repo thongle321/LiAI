@@ -11,12 +11,12 @@ import type {
   ChatSession,
   SessionInfo,
 } from "../../types/chat.ts";
-import type { StoredTurn } from "./session-store.ts";
+import type { StoredMessage } from "./session-store.ts";
 
 let nextId = 0;
 
-/** Local bubble ids: store row ids are not carried into render state,
- * because nothing persists a reference to a bubble. */
+/** Local ids: a timestamp prefix keeps them unique across restarts, the
+ *  counter orders them inside one millisecond. */
 export function newId(): string {
   nextId += 1;
   return `${Date.now()}-${nextId}`;
@@ -31,16 +31,26 @@ export function toSession(row: SessionInfo): ChatSession {
   };
 }
 
-/** Stored turns -> bubbles. */
-export function toMessages(turns: StoredTurn[]): ChatMessage[] {
+/** Stored messages -> bubbles, KEEPING the store's row id.
+ *
+ *  The id used to be minted here (`newId()`), justified by "nothing
+ *  persists a reference to a bubble". That stopped being true the moment
+ *  regenerate-from-the-middle, edit-and-resend and delete all needed to
+ *  address a bubble that had been persisted. Carrying the row id means a
+ *  reloaded conversation is addressable by the same ids it had live. */
+export function toMessages(turns: StoredMessage[]): ChatMessage[] {
   return turns.map((turn) => ({
-    id: newId(),
+    id: turn.id,
     role: turn.role,
     text: turn.content,
     at: turn.at ?? Date.now(),
     ...(turn.steps !== undefined && turn.steps.length > 0
       ? { steps: turn.steps }
       : {}),
+    ...(turn.reasoning !== undefined ? { reasoning: turn.reasoning } : {}),
     ...(turn.usage !== undefined ? { usage: turn.usage } : {}),
+    // Carried straight through: a reloaded reply must still know how it
+    // ended, or the context banner and turn footer lose their subject.
+    ...(turn.outcome !== undefined ? { outcome: turn.outcome } : {}),
   }));
 }

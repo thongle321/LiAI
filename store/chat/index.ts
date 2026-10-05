@@ -26,6 +26,7 @@ import {
 } from "../../lib/inference/deviceSelection.ts";
 import { createRemoteEngine } from "../../lib/inference/remote-engine.ts";
 import { createTurnRunner } from "../../lib/chat/turn.ts";
+import { holdScreen, releaseScreen } from "../../lib/chat/keep-awake.ts";
 import type { SessionStore } from "../../lib/chat/session-store.ts";
 
 /** Default BYOK resolver: consent-gated key from SecureStore, never KV.
@@ -199,6 +200,16 @@ async function defaultThinking(): Promise<boolean> {
   }
 }
 
+/** Local-only jinja preference from the inference store. */
+async function defaultJinja(): Promise<boolean> {
+  try {
+    const { useInference } = await import("../inference.ts");
+    return useInference.getState().jinjaEnabled;
+  } catch {
+    return true;
+  }
+}
+
 /** Resolved sampling params for one conversation, or null for a remote
  *  engine (an OpenAI-compatible endpoint keeps its own defaults and has no
  *  equivalent for typical-p, XTC or mirostat, so sending ours would be
@@ -256,6 +267,7 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
       },
       getSystemPrompt: () => defaultSystemPrompt(),
       getThinking: () => defaultThinking(),
+      getJinja: () => defaultJinja(),
     getSampler: (sid) => defaultSampler(sid),
       saveImage: (uri: string) => defaultSaveImage(uri),
     });
@@ -273,9 +285,15 @@ export function createChatStore(deps?: ChatDeps) {
     stopEngine: () => {
       void getManager().stopActive();
     },
-    releaseEngine: () => {
+releaseEngine: () => {
       void getManager().releaseAll();
     },
+    keepAwake:
+      deps?.keepAwake ??
+      ((on: boolean) => {
+        if (on) void holdScreen();
+        else releaseScreen();
+      }),
     active: { handle: null },
     streamGen: 0,
   };

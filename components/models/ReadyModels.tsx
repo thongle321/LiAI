@@ -1,5 +1,6 @@
 /** "Ready to use" group: completed local downloads + connected remote APIs. */
 
+import { useShallow } from "zustand/shallow";
 import { useModelStore } from "../../store/modelStore";
 import { useChatStore } from "../../store/chat";
 import { isProviderActive } from "../../lib/model-providers.ts";
@@ -22,15 +23,21 @@ export function ReadyModels({
   /** PocketPal `hf` filter: HuggingFace-origin downloads only, no remotes. */
   hfOnly?: boolean;
 }) {
-  const {
-    models,
-    remoteApis,
-    remoteCaps,
-    activeModelId,
-    setActiveModel,
-    setActiveRemoteApi,
-    removeRemoteApi,
-  } = useModelStore();
+  // Stable selectors plus one useShallow pair: actions never change
+  // identity, so they subscribe alone; the four read fields move as one
+  // shallow unit so a download-status tick only re-renders when one of
+  // them actually changes.
+  const setActiveModel = useModelStore((s) => s.setActiveModel);
+  const setActiveRemoteApi = useModelStore((s) => s.setActiveRemoteApi);
+  const removeRemoteApi = useModelStore((s) => s.removeRemoteApi);
+  const { models, remoteApis, remoteCaps, activeModelId } = useModelStore(
+    useShallow((s) => ({
+      models: s.models,
+      remoteApis: s.remoteApis,
+      remoteCaps: s.remoteCaps,
+      activeModelId: s.activeModelId,
+    })),
+  );
   // Unload must free memory, not just detach: point the model store at
   // nothing AND drop the engine's cached context so the next Load reloads.
   const releaseEngine = useChatStore((s) => s.releaseEngine);

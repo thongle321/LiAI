@@ -7,10 +7,11 @@ import { ChevronDown, ChevronRight, Power, Settings, Trash2, X } from "lucide-re
 
 import { colors } from "../../themes/tokens.ts";
 import { useModelStore } from "../../store/modelStore";
+import { parseModelSettings } from "../../lib/model-settings.ts";
 import {
+  MOTION_DURATION_MS,
   fadeEntering,
   fadeExiting,
-  useMotionDuration,
 } from "../../lib/motion.ts";
 import type { ModelSpec, RemoteApiProvider } from "../../types/models";
 import { Chip, CancelDownloadButton, DownloadButton, ModelTypeIcon, StatusDot, formatBytes, isProgressVisible } from "./ModelBits.tsx";
@@ -46,24 +47,26 @@ export function ModelCard({
    *  letting it fail halfway. */
   outOfSpace?: boolean;
 }) {
-  const {
-    removeModel,
-    removeBookmark,
-    getModelSettings,
-    pauseModelDownload,
-    resumeModelDownload,
-    cancelModelDownload,
-  } = useModelStore();
-  const settings = getModelSettings(item.id);
+  // Stable selectors: actions never change identity, so each subscribes
+  // alone and no card re-renders on unrelated store writes.
+  const removeModel = useModelStore((s) => s.removeModel);
+  const removeBookmark = useModelStore((s) => s.removeBookmark);
+  // The card renders this model's display name: subscribe to the entry
+  // itself (not the whole map) so a rename re-renders this card only.
+  const settings = parseModelSettings(
+    useModelStore((s) => s.modelSettings[item.id]),
+  );
+  const pauseModelDownload = useModelStore((s) => s.pauseModelDownload);
+  const resumeModelDownload = useModelStore((s) => s.resumeModelDownload);
+  const cancelModelDownload = useModelStore((s) => s.cancelModelDownload);
   const title = settings.displayName || item.name;
   // Only the file size, never the parameter count next to it: "0.6B" beside
   // "751 MB" reads as two competing sizes for one model.
   const fileBytes = item.files.reduce((sum, f) => sum + f.size, 0);
   // Detail expand: chevron state only — the region itself mounts with
-  // the shared fade preset (reduced motion collapses the duration to 0
-  // inside useMotionDuration, so no second path is needed here).
+  // the shared fade preset.
   const [expanded, setExpanded] = useState(false);
-  const duration = useMotionDuration();
+  const duration = MOTION_DURATION_MS;
 
   return (
     <View className="mb-3 overflow-hidden rounded-lg border border-border bg-surface-1">

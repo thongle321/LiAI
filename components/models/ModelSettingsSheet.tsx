@@ -8,11 +8,9 @@
 
 import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import BottomSheet from "@expo/ui/community/bottom-sheet";
-import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import { X } from "lucide-react-native";
 
 import { useModelStore } from "../../store/modelStore";
+import { Sheet } from "../Sheet.tsx";
 import { colors } from "../../themes/tokens.ts";
 
 function parseStopWords(text: string): string[] {
@@ -29,7 +27,10 @@ export function ModelSettingsSheet({
   modelId: string | null;
   onClose: () => void;
 }) {
-  const { getModelSettings, updateModelSettings } = useModelStore();
+  // Stable selectors: both are stable store functions, so this sheet
+  // never re-renders on model-store writes.
+  const getModelSettings = useModelStore((s) => s.getModelSettings);
+  const updateModelSettings = useModelStore((s) => s.updateModelSettings);
   const [displayName, setDisplayName] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [stopWordsText, setStopWordsText] = useState("");
@@ -53,38 +54,16 @@ export function ModelSettingsSheet({
     onClose();
   }
 
-  // The COMMUNITY sheet, not the universal one: the universal sheet holds no
-  // RN RootView in its Compose Dialog, so dragging this KeyboardAware
-  // ScrollView crashed the app (RootViewUtil.getRootView). See
-  // HfTokenSettings for the same swap. No snapPoints keeps it content-sized.
+  // Short sheet on the shared Sheet: TrueSheet's auto detent sizes to
+  // the content, and keyboard avoidance comes from the wrapper.
   return (
-    <BottomSheet
-      index={modelId !== null ? 0 : -1}
-      onChange={(i) => {
-        if (i === -1) onClose();
-      }}
+    <Sheet
+      visible={modelId !== null}
       onClose={onClose}
-      enablePanDownToClose
-      backgroundStyle={{ backgroundColor: colors.surface1 }}
+      title="Model Settings"
+      testID="model-settings-sheet"
     >
-      <KeyboardAwareScrollView
-        testID="model-settings-sheet"
-        className="flex-col px-5 py-5"
-        keyboardShouldPersistTaps="handled"
-      >
-        <View className="mb-4 flex-row items-center justify-between">
-          <Text className="font-sans-semibold text-h3 text-primary-text">Model Settings</Text>
-          <Pressable
-            onPress={onClose}
-            className="h-12 w-12 items-center justify-center"
-            accessibilityRole="button"
-            accessibilityLabel="Close model settings"
-          >
-            <X size={20} color={colors.secondaryText} />
-          </Pressable>
-        </View>
-
-        <View className="flex-col gap-4">
+      <View className="flex-col gap-4">
           <View>
             <Text className="font-sans text-body-sm text-secondary-text mb-1">Display name</Text>
             <TextInput
@@ -146,7 +125,6 @@ export function ModelSettingsSheet({
             </Pressable>
           </View>
         </View>
-      </KeyboardAwareScrollView>
-    </BottomSheet>
+    </Sheet>
   );
 }

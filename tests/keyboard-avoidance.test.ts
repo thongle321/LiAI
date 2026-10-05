@@ -420,9 +420,13 @@ describe("keyboard avoidance", () => {
 
     assert.match(
       field,
-      /mx-4 mb-2 flex-row items-center gap-2 rounded-lg bg-surface-2/,
-      "the attach preview is a row inside the field, and Mist on white",
+      /mx-4 mb-2 rounded-lg bg-surface-2/,
+      "the attach preview is a box inside the field, and Mist on white",
     );
+    // G8 moved the row onto an inner wrapping view (up to five thumbs), so
+    // the flex lives one level down now. The in-flow property is unchanged
+    // and is what the assertion below actually protects.
+    assert.match(field, /flex-row flex-wrap items-center gap-2/);
     // Being *written* inside the field is not enough: an `absolute` preview
     // would still be out of flow, still overlay the newest message, and still
     // be missing from the field's measured height. Proved by mutation — the
@@ -433,7 +437,7 @@ describe("keyboard avoidance", () => {
       "the attach preview must stay in flow, or the measured height lies",
     );
     // The issue lines live here too, for the same reason.
-    assert.match(field, /px-4 pb-1 font-sans text-body-sm text-secondary-text/);
+    assert.match(field, /px-4 pb-1 font-sans text-xs text-secondary-text/);
     // ...and the banners must NOT, or they are overlays again.
     assert.doesNotMatch(field, /SuggestedPrompts|UsageStats/, "the banners are overlays");
   });
@@ -443,10 +447,16 @@ describe("keyboard avoidance", () => {
     // Asserted positively so an empty or truncated file cannot pass it.
     const input = read("components/chat/MessageInput.tsx");
     assert.match(input, /className=\{`border-t border-border bg-surface-1\$\{className/);
+    // Scoped to the ROOT class, not the whole file: the intent is that the
+    // docked field draws one 1px line, not that the string `border-b` may
+    // never appear. A child row inside the field may legitimately carry a
+    // divider (the edit bar does) without drawing onto a screen edge.
+    const rootStart = input.indexOf("className={`border-t border-border bg-surface-1");
+    const rootClass = input.slice(rootStart, input.indexOf("`}", rootStart));
     // Top border ONLY: an all-round `border` here would draw two 1px lines
     // straight onto the screen edges.
-    assert.doesNotMatch(input, /className=\{`border /);
-    assert.doesNotMatch(input, /\bborder-(l|r|b)\b/);
+    assert.doesNotMatch(rootClass, /className=\{`border /);
+    assert.doesNotMatch(rootClass, /\bborder-(l|r|b)\b/);
     assert.doesNotMatch(input, /\bbg-base\b/, "the Cool Paper bar is deleted, not merged");
     // The value sits 16px from the edge, so the control row carries px-4 and
     // the root carries no horizontal inset at all.

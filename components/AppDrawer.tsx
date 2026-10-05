@@ -12,15 +12,14 @@ import { router } from "expo-router";
 import Constants from "expo-constants";
 import {
   CircleHelp,
+  MessageCircle,
   Settings,
-  X,
   Download,
   Mic,
   type LucideIcon,
 } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
-import { APP_NAME } from "../constants/app.ts";
 import { useChatStore } from "../store/chat.ts";
 import { SessionList } from "./chat/SessionList.tsx";
 
@@ -35,7 +34,7 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
   const renameSession = useChatStore((s) => s.renameSession);
   const setPinned = useChatStore((s) => s.setPinned);
 
-  function go(path: "/settings" | "/about" | "/models" | "/voice-settings"): void {
+  function go(path: "/chat" | "/settings" | "/about" | "/models" | "/voice-settings"): void {
     // ONE navigation, no closeDrawer(): every destination is a screen of
     // the drawer navigator, and its router closes the panel as part of the
     // same state transition as the swap (DrawerRouter getStateForAction /
@@ -58,29 +57,12 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface1 }}>
       <View className="flex-1">
-        <View className="h-16 flex-row items-center border-b border-border px-5">
-          <Text className="flex-1 font-sans-semibold text-h2 text-primary-text">
-            {APP_NAME}
-          </Text>
-          <Pressable
-            onPress={onClose}
-            className="h-12 w-12 items-center justify-center"
-            accessibilityRole="button"
-            accessibilityLabel="Close menu"
-            hitSlop={4}
-          >
-            <X size={20} color={colors.secondaryText} />
-          </Pressable>
-        </View>
-
+        {/* No header row: pocketpal's sidebar starts at the menu (font-size
+            mirror Q5=A) — scrim, swipe and back all close the panel. */}
         <View className="flex-1">
           <SessionList
             sessions={sessions}
             sessionId={sessionId}
-            onNew={() => {
-              void newConversation();
-              onClose();
-            }}
             onOpen={(id) => openSession(id)}
             onDelete={(id) => void deleteSession(id)}
             onRename={(id, title) => renameSession(id, title)}
@@ -89,6 +71,16 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
         </View>
 
         <View className="border-t border-border">
+          {/* Pocketpal's drawer leads its menu with Chat; ours routes it
+              AND starts fresh (Q1=A) — the new-conversation entry point. */}
+          <DrawerItem
+            Icon={MessageCircle}
+            label="Chat"
+            onPress={() => {
+              void newConversation();
+              go("/chat");
+            }}
+          />
           <DrawerItem Icon={Download} label="Models" onPress={() => go("/models")} />
           <DrawerItem Icon={Mic} label="Voice" onPress={() => go("/voice-settings")} />
           <DrawerItem Icon={Settings} label="Settings" onPress={() => go("/settings")} />

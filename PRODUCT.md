@@ -205,7 +205,7 @@ surface:
 - Clear, visible focus states on every interactive element.
 - Screen-reader labelling on icon-only controls, without exception.
 - Support for dynamic type.
-- Honour the system reduced-motion setting by collapsing animation durations to zero.
+- Motion always plays at full timing (PocketPal parity); the OS reduce-motion setting is deliberately not honoured.
 
 Dynamic type support is a real risk in a chat product: a fixed-height message row or composer
 truncates the user's own text when they enlarge it. Layouts must grow with the type scale rather

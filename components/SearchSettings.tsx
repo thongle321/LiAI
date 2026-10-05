@@ -8,9 +8,14 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
-import BottomSheet from "@expo/ui/community/bottom-sheet";
-import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import {
+  ActivityIndicator,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { Eye, EyeOff } from "lucide-react-native";
 
 import { colors } from "../themes/tokens.ts";
 import {
@@ -19,7 +24,9 @@ import {
   SEARCH_PROVIDERS,
   type SearchProviderId,
 } from "../lib/search-providers.ts";
+import { useShallow } from "zustand/shallow";
 import { useSearch } from "../store/search.ts";
+import { Sheet } from "./Sheet.tsx";
 import {
   ActionRow,
   PickerRow,
@@ -54,89 +61,158 @@ function ProviderKeySheet({
   const clearProviderKey = useSearch((s) => s.clearProviderKey);
   const [draft, setDraft] = useState("");
   const [hasKey, setHasKey] = useState(false);
+  const [secure, setSecure] = useState(true);
+  const [busy, setBusy] = useState<"save" | "clear" | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (providerId === null) return;
-    setDraft("");
+    // Stale guard: a slow read landing after close/reopen (or a provider
+    // switch) must not overwrite the newly opened field with the old key.
+    let stale = false;
+    setError(null);
+    setBusy(null);
+    setSecure(true);
+    // Q7: the saved key prefills, masked — their open behavior.
     getProviderKey(providerId).then(
-      (k) => setHasKey(k !== null && k !== ""),
-      () => setHasKey(false),
+      (k) => {
+        if (stale) return;
+        setDraft(k ?? "");
+        setHasKey(k !== null && k !== "");
+      },
+      () => {
+        if (stale) return;
+        setDraft("");
+        setHasKey(false);
+      },
     );
+    return () => {
+      stale = true;
+    };
   }, [providerId, getProviderKey]);
 
   async function save(): Promise<void> {
-    if (!providerId || draft.trim() === "") return;
-    await setProviderKey(providerId, draft.trim());
-    setDraft("");
-    setHasKey(true);
-    onChanged();
+    if (!providerId || busy !== null) return;
+    setBusy("save");
+    setError(null);
+    try {
+      await setProviderKey(providerId, draft.trim());
+      setHasKey(true);
+      onChanged();
+      onClose();
+    } catch {
+      // Their failure copy, inline: the sheet stays open (Q3 hybrid).
+      setError("Couldn't update the key. Please try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function clear(): Promise<void> {
+    if (!providerId || busy !== null) return;
+    setBusy("clear");
+    setError(null);
+    try {
+      await clearProviderKey(providerId);
+      setHasKey(false);
+      setDraft("");
+      onChanged();
+      onClose();
+    } catch {
+      setError("Couldn't update the key. Please try again.");
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
-    // The COMMUNITY sheet, not the universal one: the universal sheet holds no
-    // RN RootView in its Compose Dialog, so dragging this KeyboardAware
-    // ScrollView crashed the app (RootViewUtil.getRootView). See
-    // HfTokenSettings for the same swap.
-    <BottomSheet
-      index={providerId !== null ? 0 : -1}
-      onChange={(i) => {
-        if (i === -1) onClose();
-      }}
+    // Short sheet on the shared Sheet: TrueSheet's auto detent sizes to
+    // the content, and the dialog's native resize keeps it above the
+    // keyboard — the body never pads or scrolls for the keyboard itself.
+    <Sheet
+      visible={providerId !== null}
       onClose={onClose}
-      enablePanDownToClose
-      backgroundStyle={{ backgroundColor: colors.surface1 }}
+      title="API key"
+      testID="search-key-sheet"
     >
-      <KeyboardAwareScrollView
-        testID="search-key-sheet"
-        className="flex-col px-5 py-5"
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text className="mb-1 font-sans-semibold text-h3 text-primary-text">
-          {providerId === null ? "" : providerName(providerId)}
-        </Text>
-        <Text className="mb-4 font-sans text-body-md text-secondary-text">
-          {hasKey ? "A key is saved for this provider." : "No key set for this provider."}
-        </Text>
+      <Text className="mb-4 font-sans text-body-md text-primary-text">
+        {/* Q8: their sentence, brand-swapped. */}
+        {"Let the assistant search the web with its own tools. Bring your own API key — LiAI never holds your keys or routes your queries."}
+      </Text>
+      <Text className="mb-1 font-sans text-body-md text-primary-text">API key</Text>
+      <View className="relative">
         <TextInput
           value={draft}
           onChangeText={setDraft}
-          placeholder={hasKey ? "Key saved — enter to replace" : "Enter API key"}
-          secureTextEntry
+          placeholder={`Paste your ${
+            providerId === null ? "" : providerName(providerId)
+          } API key`}
+          secureTextEntry={secure}
           autoCapitalize="none"
-          className="input font-sans text-body-md"
+          autoCorrect={false}
+          spellCheck={false}
+          className="input font-sans text-body-md pr-12"
           placeholderTextColor={colors.secondaryText}
           accessibilityLabel={`${providerId ?? ""} API key`}
         />
-        <View className="mt-4 flex-row gap-2">
-          {hasKey ? (
-            <Pressable
-              onPress={() => {
-                if (providerId) void clearProviderKey(providerId);
-                setHasKey(false);
-                onChanged();
-              }}
-              className="btn btn--ghost flex-1"
-              accessibilityRole="button"
-              accessibilityLabel="Clear key"
-            >
-              <Text className="font-sans text-body-md text-primary">Clear</Text>
-            </Pressable>
-          ) : null}
+        <Pressable
+          onPress={() => setSecure((s) => !s)}
+          className="absolute right-0 top-0 h-12 w-12 items-center justify-center"
+          accessibilityRole="button"
+          accessibilityLabel={secure ? "Show API key" : "Hide API key"}
+        >
+          {secure ? (
+            <Eye size={24} color={colors.secondaryText} />
+          ) : (
+            <EyeOff size={24} color={colors.secondaryText} />
+          )}
+        </Pressable>
+      </View>
+      {error !== null ? (
+        <Text className="mt-2 font-sans text-body-sm text-error">{error}</Text>
+      ) : null}
+      {/* Grill Q1/Q2: actions ride the scroll body, never the native
+          footer prop — the lifted footer overlaps scrolled content. */}
+      <View className="mt-4 flex-row items-center justify-between gap-2">
+        {hasKey ? (
           <Pressable
-            onPress={() => void save()}
-            className="btn btn--primary flex-1"
+            onPress={() => void clear()}
+            disabled={busy !== null}
+            className={`btn btn--ghost flex-1${busy !== null ? " opacity-40" : ""}`}
             accessibilityRole="button"
-            accessibilityLabel="Save key"
+            accessibilityLabel="Clear Key"
           >
-            <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
+            {busy === "clear" ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Text className="font-sans text-body-md text-primary">Clear Key</Text>
+            )}
           </Pressable>
-        </View>
-      </KeyboardAwareScrollView>
-    </BottomSheet>
+        ) : null}
+        <Pressable
+          onPress={() => void save()}
+          disabled={!draft.trim() || busy !== null}
+          className={`btn btn--primary flex-1${
+            !draft.trim() || busy !== null ? " opacity-40" : ""
+          }`}
+          accessibilityRole="button"
+          accessibilityLabel="Set Key"
+        >
+          {busy === "save" ? (
+            <ActivityIndicator size="small" color={colors.surface1} />
+          ) : (
+            <Text className="font-sans-semibold text-body-md text-on-primary">Set Key</Text>
+          )}
+        </Pressable>
+      </View>
+    </Sheet>
   );
 }
 
 export function SearchSettings() {
+  // One useShallow unit: all eight fields render here, so the row
+  // re-renders only when one of them changes — never on unrelated
+  // search-store writes.
   const {
     hasConsented,
     setConsented,
@@ -146,7 +222,18 @@ export function SearchSettings() {
     setResultCount,
     getProviderKey,
     load,
-  } = useSearch();
+  } = useSearch(
+    useShallow((s) => ({
+      hasConsented: s.hasConsented,
+      setConsented: s.setConsented,
+      activeProviderId: s.activeProviderId,
+      setActiveProvider: s.setActiveProvider,
+      resultCount: s.resultCount,
+      setResultCount: s.setResultCount,
+      getProviderKey: s.getProviderKey,
+      load: s.load,
+    })),
+  );
   const [keySheetFor, setKeySheetFor] = useState<SearchProviderId | null>(null);
   const [hasKey, setHasKey] = useState(false);
 
@@ -174,7 +261,6 @@ export function SearchSettings() {
 
   return (
     <SettingsSection
-      title="Internet Search"
       description="Searches leave this device. Bring your own key — we never hold it."
     >
       {hasConsented ? (
@@ -219,6 +305,7 @@ export function SearchSettings() {
           }
           buttonLabel={hasKey ? "Update Key" : "Set Key"}
           variant="secondary"
+          disabled={!hasConsented}
           onPress={() => setKeySheetFor(activeProviderId)}
         />
       </View>

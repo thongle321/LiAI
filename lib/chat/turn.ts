@@ -6,9 +6,10 @@
  * are best-effort (the reply still renders); a missing engine rejects.
  */
 
-import type { AgentStep } from "../../types/chat.ts";
+import type { AgentStep, TurnOutcomeFlags } from "../../types/chat.ts";
 import type { ChatMessage } from "../../types/chat.ts";
 import type { StoredTurn } from "./session-store.ts";
+import type { TurnPaths } from "../../store/chat/types.ts";
 import type {
   CompletionEngine,
   CompletionMessage,
@@ -27,16 +28,23 @@ export const SESSION_TITLE_LEN = 48;
  *  write contract has exactly one definition. */
 export interface TurnSessionStore {
   create(): Promise<string>;
-  append(sessionId: string, turn: StoredTurn): Promise<void>;
+  /** `id` lets the slice pin the row id to the bubble's, so the two are
+   *  one string. Optional here exactly as on `SessionStore.append`. */
+  append(sessionId: string, turn: StoredTurn, id?: string): Promise<void>;
   setTitleIfEmpty(sessionId: string, title: string): Promise<void>;
 }
 
 export interface TurnOutcome {
   reply: string;
+  /** Last non-empty reasoning, when the model emitted any. */
+  reasoning?: string;
   sessionId: string;
   steps: AgentStep[];
   promptTokens: number;
   completionTokens: number;
+  /** How the turn ended, when the engine reported it. Omitted entirely
+   *  otherwise, so an unflagged turn stores no empty object. */
+  outcome?: TurnOutcomeFlags;
 }
 
 export interface TurnDeps {
@@ -47,6 +55,8 @@ export interface TurnDeps {
   getSystemPrompt(): Promise<string | undefined>;
   /** Local-only thinking preference; omitted keeps the native default. */
   getThinking?: () => Promise<boolean>;
+  /** Local-only jinja template preference; omitted keeps the native default. */
+  getJinja?: () => Promise<boolean>;
   /** Local-only sampling params for THIS session, already resolved
    *  session-vs-preset; null falls back to the native default. Takes the
    *  id rather than reading the active pointer, because a turn that mints
@@ -60,6 +70,7 @@ function toAgentMessages(
   history: ChatMessage[],
   text: string,
   systemPrompt: string | undefined,
+  includeThinking: boolean,
 ): CompletionMessage[] {
   const messages: CompletionMessage[] = [];
   if (systemPrompt && systemPrompt.trim() !== "") {
@@ -69,7 +80,16 @@ function toAgentMessages(
     if ((m.role !== "user" && m.role !== "assistant") || m.text.trim() === "") {
       continue;
     }
-    messages.push({ role: m.role, content: m.text });
+    messages.push({
+      role: m.role,
+      content: m.text,
+      // include_thinking_in_context: prior reasoning goes back as
+      // reasoning_content, read by llama.cpp's chat parser and dropped
+      // again when the flag is off — user turns never carry it.
+      ...(m.role === "assistant" && includeThinking && m.reasoning
+        ? { reasoning_content: m.reasoning }
+        : {}),
+    });
   }
   messages.push({ role: "user", content: text });
   return messages;
@@ -83,13 +103,9 @@ function userTextsOf(history: ChatMessage[]): string[] {
 export function createTurnRunner(deps: TurnDeps) {
   return async (
     text: string,
-    paths: {
-      sessionId: string | null;
-      image?: string;
-      history: ChatMessage[];
-      retry?: boolean;
-    },
+    paths: TurnPaths,
     onToken?: (text: string) => void,
+    onReasoning?: (cumulative: string) => void,
   ): Promise<TurnOutcome> => {
     const trimmed = text.trim();
     if (trimmed === "") throw new Error("empty message");
@@ -103,26 +119,44 @@ export function createTurnRunner(deps: TurnDeps) {
     const search = await deps.getSearch().catch(() => null);
     const systemPrompt = await deps.getSystemPrompt().catch(() => undefined);
     const thinking = await deps.getThinking?.().catch(() => undefined);
+    const jinja = await deps.getJinja?.().catch(() => undefined);
     const sampler = await deps.getSampler?.(sessionId).catch(() => null);
+// G8: every attached photo becomes a media path. One that fails to
+    // save is dropped rather than failing the turn -- the text still went,
+    // and losing a photo is better than losing the message.
     let imagePaths: string[] | undefined;
-    if (paths.image) {
-      const saved = await deps.saveImage(paths.image).catch(() => null);
-      if (saved) imagePaths = [saved];
+    if (paths.images !== undefined && paths.images.length > 0) {
+      const saved: string[] = [];
+      for (const dataUri of paths.images) {
+            const path = await deps.saveImage(dataUri).catch(() => null);
+            if (path !== null) saved.push(path);
+      }
+      if (saved.length > 0) imagePaths = saved;
     }
 
     const result = await runLocalAgent({
       engine,
-      messages: toAgentMessages(paths.history, trimmed, systemPrompt),
+      messages: toAgentMessages(
+        paths.history,
+        trimmed,
+        systemPrompt,
+        // A missing sampler means no override — default to including.
+        sampler?.includeThinkingInContext !== false,
+      ),
       tools: talentDefinitions(),
       // Local reads imagePaths (llama media_paths); remote stays text-only.
       ...(imagePaths ? { imagePaths } : {}),
       ...(thinking !== undefined ? { enableThinking: thinking } : {}),
+      ...(jinja !== undefined ? { jinja } : {}),
     ...(sampler ? { sampler } : {}),
       fetchImpl: fetch,
       search,
       userTexts: userTextsOf(paths.history),
       onEvent: (event) => {
         if (event.type === "token" && event.text !== "") onToken?.(event.text);
+        if (event.type === "reasoning" && event.text !== "") {
+          onReasoning?.(event.text);
+        }
       },
     });
 
@@ -148,26 +182,38 @@ export function createTurnRunner(deps: TurnDeps) {
     try {
       if (store) {
         if (!paths.retry) {
-          await store.append(sessionId, { role: "user", content: trimmed, type: "text" });
+          await store.append(
+            sessionId,
+            { role: "user", content: trimmed, type: "text" },
+            paths.userMessageId,
+          );
           await store.setTitleIfEmpty(sessionId, trimmed.slice(0, SESSION_TITLE_LEN));
         }
-        await store.append(sessionId, {
-          role: "assistant",
-          content: result.text,
-          type: "text",
-          usage,
-          steps,
-        });
+        await store.append(
+          sessionId,
+          {
+            role: "assistant",
+            content: result.text,
+            ...(result.reasoning !== undefined ? { reasoning: result.reasoning } : {}),
+            type: "text",
+            usage,
+            steps,
+            ...(result.outcome !== undefined ? { outcome: result.outcome } : {}),
+          },
+          paths.assistantMessageId,
+        );
       }
     } catch {
       // Reply already resolved; persistence retries on the next turn.
     }
     return {
       reply: result.text,
+      ...(result.reasoning !== undefined ? { reasoning: result.reasoning } : {}),
       sessionId,
       steps,
       promptTokens: result.promptTokens,
       completionTokens: result.completionTokens,
+      ...(result.outcome !== undefined ? { outcome: result.outcome } : {}),
     };
   };
 }

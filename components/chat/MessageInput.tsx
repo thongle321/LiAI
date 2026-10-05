@@ -18,22 +18,29 @@ import {
 } from "react-native";
 import { useIsFocused } from "expo-router";
 import { openSettings } from "expo-linking";
-import { Camera, Image as ImageIcon, Mic, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
+import { Brain, Camera, Image as ImageIcon, Mic, Pencil, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
 import Animated from "react-native-reanimated";
 
+import * as Haptics from "expo-haptics";
+
 import { colors } from "../../themes/tokens.ts";
 import { useChatStore } from "../../store/chat.ts";
 import { useInference } from "../../store/inference.ts";
+import { suspendBackgroundRelease } from "../../lib/inference/offload.ts";
 import { useModelReady } from "../../hooks/useModelReady.ts";
 import { useModelStore } from "../../store/modelStore";
 import { mergeDictation, VOICE_LISTEN_OPTS } from "../../lib/voiceListen.ts";
 import { ensureMicAccess } from "../../lib/micAccess.ts";
 import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../../lib/voiceStatus.ts";
-import { pickImage, type ImageSource } from "../../lib/chat/attachments.ts";
+import {
+  MAX_IMAGES,
+  pickImages,
+  type ImageSource,
+} from "../../lib/chat/attachments.ts";
 import { usePressFeedback } from "../../lib/motion.ts";
 import { useKeyboardLift } from "../../hooks/useKeyboardLift.ts";
 
@@ -43,11 +50,13 @@ export function MessageInput({
   onSend,
   className,
   onHeightChange,
+  editing,
+  onCancelEdit,
 }: {
   sending: boolean;
   /** False with no loaded model: send disables (PocketPal parity). */
   ready: boolean;
-  onSend: (text: string, image?: string) => Promise<boolean>;
+  onSend: (text: string, images?: string[]) => Promise<boolean>;
   /** Where the caller wants this box to sit. The composer floats above the
    *  keyboard, so the chat route passes `absolute inset-x-0 bottom-0`. Note this
    *  component is the chat composer and not a generic input: the keyboard
@@ -59,6 +68,10 @@ export function MessageInput({
    *  composer that is out of flow, so it must be measured here at the
    *  outermost level and nowhere shallower. */
   onHeightChange?: (event: LayoutChangeEvent) => void;
+  /** True while the composer is rewriting an earlier turn. */
+  editing?: boolean;
+  /** Leave edit mode, restoring the composer to the turn's own text. */
+  onCancelEdit?: () => void;
 }) {
   // This box is the bottom-anchored surface, so it carries the keyboard lift
   // itself rather than being wrapped in something that does. Same mechanism
@@ -73,12 +86,41 @@ export function MessageInput({
   // button both start a turn that needs a live model, so they disable when
   // no model can actually answer.
   const modelReady = useModelReady();
+  // G6: the thinking toggle PocketPal keeps in the composer. Local only --
+  // `enableThinking` is a llama.rn jinja flag (lib/inference/engine.ts),
+  // so offering it under a remote API would promise something the remote
+  // engine cannot honour.
+  const thinkingEnabled = useInference((s) => s.thinkingEnabled);
+  const setThinkingEnabled = useInference((s) => s.setThinkingEnabled);
+  const thinkingLocal =
+    useModelStore((s) => s.activeProviderType) === "local";
+  // A switch's label names the THING, not the action: VoiceOver reads
+  // "label, switch, checked". An imperative label that flipped to
+  // "Disable thinking" announced "Disable thinking, switch, on" -- an
+  // instruction contradicting the state beside it. The blocked case goes
+  // in the hint instead, so the label never moves.
+  let thinkingHint: string | undefined;
+  if (!modelReady) thinkingHint = "Load a model to use thinking";
   const stop = useChatStore((s) => s.stop);
   const [plusOpen, setPlusOpen] = useState(false);
-  // One attached photo per turn (the local turn takes a single data-uri);
-  // text stays required — blank messages are rejected before the run.
-  const [attached, setAttached] = useState<string | null>(null);
+  // Photos attached to the NEXT message (G8: up to MAX_IMAGES). The camera
+  // adds one, the gallery several; text stays required — blank messages are
+  // rejected before the run.
+  const [attached, setAttached] = useState<string[]>([]);
   const [attachIssue, setAttachIssue] = useState<string | null>(null);
+  // G9 (PocketParity): pressing Send with no model fires a warning haptic
+  // and a temporary helper line (ChatInput.tsx:228-240). The button KEEPS
+  // its disabled look — only `disabled` is dropped, so the press has
+  // something to answer with. Nothing here reverses the keyboard spec §12
+  // decision: that argued the PLACEHOLDER is the honest single surface for
+  // showing state, and this is feedback for an ATTEMPTED action, not a
+  // second place to show state.
+  const [blockedNote, setBlockedNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (blockedNote === null) return;
+    const id = setTimeout(() => setBlockedNote(null), 2500);
+    return () => clearTimeout(id);
+  }, [blockedNote]);
   // Dictation: mic fills the draft, the user presses Send. Interim
   // updates replace the dictated tail (draftBase keeps typed text).
   const [listening, setListening] = useState(false);
@@ -223,12 +265,24 @@ export function MessageInput({
   async function handleAttach(source: ImageSource): Promise<void> {
     setPlusOpen(false);
     setAttachIssue(null);
-    const uri = await pickImage(source);
-    if (uri === null) {
-      setAttachIssue("Couldn't attach that photo — try again.");
-      return;
+    // G14: both the camera and the gallery background the app, so the
+    // background-release listener would free the model while the picker is
+    // up -- and the send that follows becomes a load-then-fail. Bracket the
+    // pick, exactly as pocketpal does (ChatInput.tsx:265-276, :326-349).
+    // Android-only symptom: iOS does not report `background` for a picker.
+    const resume = suspendBackgroundRelease();
+    try {
+      const picked = await pickImages(source);
+      if (picked.length === 0) {
+        setAttachIssue("Couldn't attach that photo — try again.");
+        return;
+      }
+      // Append, and cap here too: picking again is additive, so without
+      // this the total would creep past MAX_IMAGES across two picks.
+      setAttached((current) => [...current, ...picked].slice(0, MAX_IMAGES));
+    } finally {
+      resume();
     }
-    setAttached(uri);
   }
 
   async function handleSend(): Promise<void> {
@@ -236,8 +290,8 @@ export function MessageInput({
     // only stop an active dictate before sending.
     if (listening) safeStopDictation();
     // The store clears the draft once the text lives in its bubble.
-    await onSend(draft, attached ?? undefined);
-    setAttached(null);
+    await onSend(draft, attached.length > 0 ? attached : undefined);
+    setAttached([]);
   }
 
   return (
@@ -271,47 +325,93 @@ export function MessageInput({
             accessibilityRole="button"
             accessibilityLabel="Open voice settings"
           >
-            <Text className="px-4 font-sans text-body-sm text-primary">
+            <Text className="px-4 font-sans text-xs text-primary">
               {voiceIssue}
             </Text>
           </Pressable>
         ) : (
-          <Text className="px-4 pb-1 font-sans text-body-sm text-secondary-text">
+          <Text className="px-4 pb-1 font-sans text-xs text-secondary-text">
             {voiceIssue}
           </Text>
         ))}
-      {attachIssue !== null && (
-        <Text className="px-4 pb-1 font-sans text-body-sm text-secondary-text">
+          {attachIssue !== null && (
+        <Text className="px-4 pb-1 font-sans text-xs text-secondary-text">
           {attachIssue}
         </Text>
       )}
-      {attached !== null && (
+      {blockedNote !== null && (
+        // Same treatment as the other issue lines, so a blocked send
+        // does not shout louder than a failed attach.
+        <Text
+          className="px-4 pb-1 font-sans text-xs text-secondary-text"
+          accessibilityLiveRegion="polite"
+        >
+          {blockedNote}
+        </Text>
+      )}
+      {attached.length > 0 && (
         // Mist, not Clean White: this row sits INSIDE the white field now, and
         // the three-plane rule is "a track inside a card is mist on white". It
         // was a white card on the Cool Paper bar before the collapse.
-        <View className="mx-4 mb-2 flex-row items-center gap-2 rounded-lg bg-surface-2 p-2">
-          <RNImage source={{ uri: attached }} className="h-14 w-14 rounded" />
-          <Text className="flex-1 font-sans text-body-sm text-secondary-text">
-            Attached — sent with your message
+        //
+        // Per-image remove, as pocketpal's preview row does. Wrapping rather
+        // than a horizontal ScrollView: five thumbs fit in a bounded box, and
+        // a nested scroll inside the composer is a fight with the keyboard
+        // lift for no gain.
+        <View className="mx-4 mb-2 rounded-lg bg-surface-2 p-2">
+          <View className="flex-row flex-wrap items-center gap-2">
+            {attached.map((uri, i) => (
+              <View key={`${i}-${uri.length}`} className="relative">
+                <RNImage source={{ uri }} className="h-14 w-14 rounded" />
+                <Pressable
+                  onPress={() => setAttached((c) => c.filter((_, j) => j !== i))}
+                  className="absolute -right-2 -top-2 h-12 w-12 items-center justify-center"
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove photo ${i + 1} of ${attached.length}`}
+                  hitSlop={4}
+                >
+                  <View className="h-5 w-5 items-center justify-center rounded-full bg-surface-1">
+                    <X size={12} color={colors.primaryText} />
+                  </View>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+          <Text className="mt-1 font-sans text-xs text-secondary-text">
+            {attached.length === 1
+              ? "1 photo — sent with your message"
+              : `${attached.length} photos — sent with your message`}
           </Text>
-          <Animated.View style={plusPress.animatedStyle}>
-            <Pressable
-              onPress={() => setAttached(null)}
-              onPressIn={plusPress.onPressIn}
-              onPressOut={plusPress.onPressOut}
-              className="h-12 w-12 items-center justify-center"
-              accessibilityRole="button"
-              accessibilityLabel="Remove attachment"
-            >
-              <X size={18} color={colors.secondaryText} />
-            </Pressable>
-          </Animated.View>
+        </View>
+      )}
+          {/* IN FLOW, on purpose. The edit bar belongs to the field's state and
+        nobody else could own it, so it sits above the control row where
+        the measured composer height already counts it — the newest
+        message can never be clipped behind it. Putting it in chat.tsx's
+        overlay row instead would reserve nothing, but an edit bar the
+        user dismisses at will is chrome, and chrome over the list is
+        what that row is for. Spec §5. */}
+      {editing === true && (
+        <View className="flex-row items-center gap-2 border-b border-border px-4 py-1">
+          <Pencil size={14} color={colors.secondaryText} />
+          <Text className="flex-1 font-sans text-body-sm text-secondary-text">
+            Editing message — sending replaces this turn and everything after it
+          </Text>
+          <Pressable
+            onPress={() => onCancelEdit?.()}
+            className="h-12 w-12 items-center justify-center"
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel editing"
+          >
+            <X size={18} color={colors.secondaryText} />
+          </Pressable>
         </View>
       )}
       {/* The control row. The field's own spec supplies the fill, the top
-          hairline and the square corners, so this row is padding and
-          controls only: no radius, no border, no background, and no bottom
-          margin — it is flush with the bottom of the screen. */}
+    hairline and the square corners, so this row is padding and
+    controls only: no radius, no border, no background, and no bottom
+    margin — it is flush with the bottom of the screen. */}
       <View className="flex-row items-end gap-2 px-4 py-3">
         <View>
           <Animated.View style={plusPress.animatedStyle}>
@@ -353,7 +453,7 @@ export function MessageInput({
           placeholderTextColor={colors.secondaryText}
           multiline
           editable={!sending}
-          className="flex-1 pt-2 font-sans text-body-md text-primary-text"
+          className="flex-1 pt-2 font-sans text-body-lg text-primary-text"
           accessibilityLabel="Message"
         // The no-model state must not be visual-only: the chip that routes to
         // Models is focus-gated, and a screen reader announces a field's label
@@ -362,6 +462,44 @@ export function MessageInput({
         accessibilityHint={modelReady ? undefined : composerPlaceholder}
         />
         <View className="flex-row items-center gap-2">
+          {thinkingLocal && (
+            // PocketPal's composer pill (ChatInput.tsx:588-640). State is
+            // carried by the fill AND the icon, per DESIGN.md's "pair every
+            // status colour with a glyph and a word" rule -- so it never
+            // depends on colour alone.
+            //
+            // NO effort cycle. PocketPal's pill double-taps through graded
+            // reasoning effort; LiAI has no effort concept anywhere, and
+            // inventing levels here would ship a control with nothing
+            // behind it.
+            <Pressable
+              onPress={modelReady ? () => setThinkingEnabled(!thinkingEnabled) : undefined}
+              disabled={!modelReady}
+              className={
+                thinkingEnabled
+                  ? "h-12 flex-row items-center gap-1.5 rounded-full bg-surface-2 pl-3.5 pr-3.5"
+                  : "h-12 flex-row items-center gap-1.5 rounded-full bg-surface-3 pl-3.5 pr-3.5"
+              }
+              accessibilityRole="switch"
+              accessibilityState={{ checked: thinkingEnabled, disabled: !modelReady }}
+              accessibilityLabel="Thinking"
+              accessibilityHint={thinkingHint}
+            >
+              <Brain
+                size={16}
+                color={thinkingEnabled ? colors.primary : colors.secondaryText}
+              />
+              <Text
+                className={
+                  thinkingEnabled
+                    ? "font-sans text-caption text-primary-text"
+                    : "font-sans text-caption text-secondary-text"
+                }
+              >
+                Think
+              </Text>
+            </Pressable>
+          )}
           <Animated.View style={micPress.animatedStyle}>
             <Pressable
               onPress={modelReady ? () => void toggleDictation() : undefined}
@@ -399,15 +537,29 @@ export function MessageInput({
         ) : (
           <Animated.View style={sendPress.animatedStyle}>
             <Pressable
-              disabled={!canSend}
-              onPress={() => void handleSend()}
+              // Only an EMPTY draft is truly inert. A non-empty draft with
+              // no model must still answer the press -- that answer is the
+              // whole point of G9.
+              disabled={draft.trim() === ""}
+              onPress={() => {
+                if (!modelReady) {
+                  void Haptics.notificationAsync(
+                    Haptics.NotificationFeedbackType.Warning,
+                  );
+                  setBlockedNote("Load a model to send this message.");
+                  return;
+                }
+                void handleSend();
+              }}
               onPressIn={sendPress.onPressIn}
               onPressOut={sendPress.onPressOut}
               className={`h-12 w-12 items-center justify-center rounded-full ${
                 canSend ? "bg-primary" : "bg-surface-2"
               }`}
               accessibilityRole="button"
-              accessibilityLabel="Send message"
+              accessibilityLabel={
+                modelReady ? "Send message" : "Load a model to send this message"
+              }
             >
               <Send size={20} color={canSend ? colors.onPrimary : colors.secondaryText} />
             </Pressable>
@@ -430,7 +582,7 @@ function PlusItem({
   return (
     <Pressable onPress={onPress} className="flex-row items-center gap-3 px-5 py-2">
       <Icon size={18} color={colors.primary} />
-      <Text className="font-sans text-body-md text-primary-text">{label}</Text>
+      <Text className="font-sans text-body-sm text-primary-text">{label}</Text>
     </Pressable>
   );
 }

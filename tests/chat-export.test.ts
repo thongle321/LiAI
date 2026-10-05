@@ -24,8 +24,9 @@ const session: ExportSession = {
   pinned: false,
   updatedAt: 1_700_000_000_000,
   turns: [
-    { role: "user", content: "How do I fix a wobbly shelf?", at: 1_700_000_000_000 },
+    { id: "r1", role: "user", content: "How do I fix a wobbly shelf?", at: 1_700_000_000_000 },
     {
+      id: "r2",
       role: "assistant",
       content: "Check the wall anchors first.",
       at: 1_700_000_001_000,
@@ -61,6 +62,7 @@ describe("markdown export", () => {
       ...session,
       turns: [
         {
+          id: "r2",
           role: "assistant",
           content: "done",
           steps: [
@@ -112,6 +114,31 @@ describe("json export", () => {
     const parsed = JSON.parse(toSessionJson(session));
     assert.equal(parsed.id, "s-1");
     assert.equal(parsed.pinned, false);
+  });
+
+it("strips row ids, so the exported format stays what version 1 defined", () => {
+    // Row ids are our TinyBase layout, not the user's data. Leaking them
+    // would change the format under any export a user already has.
+    const parsed = JSON.parse(toSessionJson(session));
+    assert.ok(session.turns.every((t) => typeof t.id === "string" && t.id !== ""));
+    assert.deepEqual(
+      parsed.turns.map((t: { id?: unknown }) => "id" in t),
+      [false, false],
+      "no turn carries an id",
+    );
+    // Everything else survives intact.
+    assert.deepEqual(
+      parsed.turns.map((t: { content: string }) => t.content),
+      session.turns.map((t) => t.content),
+    );
+  });
+
+it("strips row ids when exporting every session too", () => {
+    const parsed = JSON.parse(toAllSessionsJson([session]));
+    assert.deepEqual(
+      parsed.sessions[0].turns.map((t: { id?: unknown }) => "id" in t),
+      [false, false],
+    );
   });
 
   it("writes every session when exporting all of them", () => {

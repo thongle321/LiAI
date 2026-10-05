@@ -192,3 +192,85 @@ describe("createLocalEngine", () => {
     );
   });
 });
+
+describe("completion stop signals (G1/G4)", () => {
+  /** A completion whose result carries the given stop fields. */
+  function ctxWith(stop: Record<string, unknown>) {
+    return fakeContext({
+      completion: async () => ({
+        text: "hi",
+        content: "hi",
+        tool_calls: [],
+        tokens_predicted: 2,
+        tokens_evaluated: 5,
+        ...stop,
+      }),
+    });
+  }
+
+  const run = async (stop: Record<string, unknown>) =>
+    createLocalEngine(ctxWith(stop)).completion(
+      { messages: [{ role: "user", content: "x" }] },
+      { onToken: () => {} },
+    );
+
+  it("reports context_full straight from the native result", async () => {
+    // No string-matching a thrown message: llama.rn hands us the flag.
+    const out = await run({ context_full: true });
+    assert.equal(out.contextFull, true);
+  });
+
+  it("reports truncated, which is a second way to fill the context", async () => {
+    const out = await run({ truncated: true });
+    assert.equal(out.contextFull, true);
+  });
+
+  it("reports a normal finish as neither full nor cut off", async () => {
+    const out = await run({ context_full: false, truncated: false, interrupted: false });
+    assert.equal(out.contextFull, false);
+    assert.equal(out.interrupted, false);
+    assert.equal(out.stoppedEarly, false);
+  });
+
+  it("reports interrupted, so a stopped reply is not a finished one", async () => {
+    const out = await run({ interrupted: true });
+    assert.equal(out.interrupted, true);
+  });
+
+  it("makes stoppedEarly real instead of hardcoded false", async () => {
+    // This field was `false` on every completion for the life of the
+    // type. A stopped_limit above zero means the sampler hit n_predict.
+    const out = await run({ stopped_limit: 1 });
+    assert.equal(out.stoppedEarly, true);
+    assert.equal((await run({ stopped_limit: 0 })).stoppedEarly, false);
+  });
+
+  it("treats an absent stop field as not stopped, not as a crash", async () => {
+    // Older/dev builds may omit the field entirely; the banner must
+    // simply not appear rather than the turn failing.
+    const out = await run({});
+    assert.equal(out.contextFull, false);
+    assert.equal(out.interrupted, false);
+    assert.equal(out.stoppedEarly, false);
+  });
+
+  it("projects timings for the turn footer", async () => {
+    const out = await run({
+      timings: {
+        prompt_ms: 120,
+        predicted_per_second: 25,
+        predicted_per_token_ms: 40,
+        prompt_n: 5,
+        predicted_n: 2,
+      },
+    });
+    assert.equal(out.timings?.promptMs, 120);
+    assert.equal(out.timings?.tokensPerSecond, 25);
+    assert.equal(out.timings?.msPerToken, 40);
+  });
+
+  it("leaves timings undefined when the engine reports none", async () => {
+    const out = await run({});
+    assert.equal(out.timings, undefined);
+  });
+});

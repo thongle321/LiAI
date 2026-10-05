@@ -118,6 +118,67 @@ describe("runner attaches per-call metrics (C15)", () => {
     });
     assert.equal(result.steps[0].metrics, undefined, "absence is the cue");
   });
+
+  it("counts STREAMED tool-fragment callbacks, like PocketPal counts deltas", async () => {
+    // llama.rn fires onToolCalls once per token while args stream, each
+    // carrying the accumulated set (local-engine.ts:189-192). Two or
+    // more fires PROVE incremental args, so the metric is the fragment
+    // count — the whole-turn completionTokens would overcount prose.
+    // (A single fire is the non-streaming remote / outcome-only case and
+    // keeps the whole-turn fallback, tested above.)
+    let fires = 0;
+    const engine: CompletionEngine = {
+      completion: async (request, cbs) => {
+        const answered = request.messages.some((m) => m.role === "tool");
+        if (answered) {
+          cbs.onToken("done");
+          return {
+            text: "done",
+            toolCalls: [],
+            promptTokens: 5,
+            completionTokens: 2,
+            stoppedEarly: false,
+          };
+        }
+        // Three accumulated fragment callbacks, as a real stream does.
+        for (const partial of [
+          [{ id: "c1", name: "calculate", arguments: "0" }],
+          [
+            { id: "c1", name: "calculate", arguments: "0" },
+            { id: "c1", name: "calculate", arguments: "0 +" },
+          ],
+          [
+            { id: "c1", name: "calculate", arguments: "0 + 3" },
+          ],
+        ]) {
+          fires += 1;
+          cbs.onToolCalls?.(partial);
+        }
+        return {
+          text: "",
+          toolCalls: [{ id: "c1", name: "calculate", arguments: "0 + 3" }],
+          promptTokens: 3,
+          completionTokens: 9,
+          stoppedEarly: false,
+        };
+      },
+      stopCompletion: async () => {},
+    };
+    const result = await runLocalAgent({
+      engine,
+      messages: [{ role: "user", content: "2+3?" }],
+      tools: TOOLS,
+      fetchImpl: fetch,
+      search: null,
+      onEvent: () => {},
+    });
+    assert.equal(fires, 3);
+    assert.equal(
+      result.steps[0].metrics?.tokens,
+      3,
+      "the fragment count, not the whole-turn usage",
+    );
+  });
 });
 
 describe("TinyBase persists metrics on toolRuns (C15)", () => {

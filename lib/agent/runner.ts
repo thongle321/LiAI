@@ -32,9 +32,10 @@ export interface AgentStep {
    *  reads it. */
   data?: Record<string, unknown>;
   /** Per-call cost of the GENERATION turn that produced this call (C15):
-   *  the tokens the model spent producing it + that turn's wall-clock.
-   *  Absent when the engine reported no generated tokens — absence is
-   *  the cue. */
+   *  streamed args → the tool-fragment count and the window from the
+   *  first fragment; otherwise whole-turn usage from the turn start
+   *  (the non-streaming remote path). Absent when neither was seen —
+   *  absence is the cue. */
   metrics?: ToolMetrics;
 }
 
@@ -127,6 +128,12 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
   try {
     for (let turn = 0; ; turn += 1) {
       const turnStartedAt = Date.now();
+      // Parity fact-check (C15): llama.rn fires onToolCalls once per
+      // token while tool args stream, each with the accumulated set —
+      // the count of those fires is PocketPal's tool-carrying-delta
+      // count. Per turn, reset with the turn.
+      let toolFragmentCalls = 0;
+      let firstToolCallAt: number | null = null;
       const forcedFinal = turn >= maxTurns;
       const requestMessages =
         forcedFinal && turn > 0
@@ -165,6 +172,10 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
               onEvent({ type: "reasoning", text: cumulative });
             },
             onToolCalls: (calls) => {
+              if (calls.length > 0) {
+                toolFragmentCalls += 1;
+                firstToolCallAt ??= Date.now();
+              }
               turnCalls = calls;
             },
           },
@@ -198,19 +209,25 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
       if (outcome.toolCalls.length > 0) turnCalls = outcome.toolCalls;
       text = turnText;
 
-      // C15: per-call cost of THIS generation turn — the tokens the
-      // model spent producing these calls and that turn's wall-clock,
+      // C15 + parity fact-check: per-call cost of THIS generation turn,
       // replicated onto each call of a multi-tool turn (the same
-      // overstatement PocketPal's ToolMetricsFooter accepts rather than
-      // omitting multi-tool metrics). Absent when the engine reported
-      // no generated tokens: absence is the cue.
+      // overstatement PocketPal's ToolMetricsFooter accepts).
+      //
+      // Tokens: two or more fragment fires PROVE the args streamed
+      // token-by-token, so their count is PocketPal's delta count — the
+      // tokens actually spent producing the call. A single fire is the
+      // non-streaming remote path (whole body at once) or an
+      // outcome-only engine, where whole-turn usage is the only
+      // measurable figure. Duration anchors at the first fragment when
+      // streaming, else at the turn start — PocketPal's two windows.
+      // Absent when neither fragments nor tokens were seen: absence is
+      // the cue.
+      const streamed = toolFragmentCalls >= 2;
+      const anchor =
+        streamed && firstToolCallAt !== null ? firstToolCallAt : turnStartedAt;
+      const tokens = streamed ? toolFragmentCalls : outcome.completionTokens;
       const stepMetrics =
-        outcome.completionTokens > 0
-          ? {
-              tokens: outcome.completionTokens,
-              durationMs: Date.now() - turnStartedAt,
-            }
-          : undefined;
+        tokens > 0 ? { tokens, durationMs: Date.now() - anchor } : undefined;
       const allowed = forcedFinal
         ? []
         : turnCalls.filter((c) => advertisedName(c, tools));

@@ -21,6 +21,12 @@ import {
 
 import { colors } from "../themes/tokens.ts";
 import { useChatStore } from "../store/chat.ts";
+import {
+  exportFilename,
+  toAllSessionsJson,
+} from "../lib/chat/export.ts";
+import { readExportSessions } from "../lib/chat/export-read.ts";
+import { shareExportedFile } from "../lib/chat/share-export.ts";
 import { SessionList } from "./chat/SessionList.tsx";
 
 const VERSION = Constants.expoConfig?.version ?? "0.1.0";
@@ -31,8 +37,27 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
   const newConversation = useChatStore((s) => s.newConversation);
   const switchSession = useChatStore((s) => s.switchSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
+  const deleteSessions = useChatStore((s) => s.deleteSessions);
   const renameSession = useChatStore((s) => s.renameSession);
   const setPinned = useChatStore((s) => s.setPinned);
+
+  /** Bulk export of exactly the selected sessions — one JSON through
+   *  the SAME serializer and read path as ChatMenu's "Export all"
+   *  (toAllSessionsJson + readExportSessions), never a second one.
+   *  Returns an error message for the drawer's inline notice, or null. */
+  async function exportSelected(ids: string[]): Promise<string | null> {
+    try {
+      const chosen = await readExportSessions(ids);
+      await shareExportedFile(
+        exportFilename(chosen[0], "all"),
+        toAllSessionsJson(chosen),
+        "all",
+      );
+      return null;
+    } catch (err) {
+      return err instanceof Error ? err.message : "Export failed.";
+    }
+  }
 
   function go(path: "/chat" | "/settings" | "/about" | "/models" | "/voice-settings"): void {
     // ONE navigation, no closeDrawer(): every destination is a screen of
@@ -67,6 +92,8 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
             onDelete={(id) => void deleteSession(id)}
             onRename={(id, title) => renameSession(id, title)}
             onTogglePin={(id, pinned) => setPinned(id, pinned)}
+            onDeleteMany={(ids) => deleteSessions(ids)}
+            onExportSelected={exportSelected}
           />
         </View>
 

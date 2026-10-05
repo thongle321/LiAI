@@ -37,16 +37,16 @@ import {
   Download,
 } from "lucide-react-native";
 
-import { useChatStore, defaultGetStore } from "../../store/chat";
+import { useChatStore } from "../../store/chat";
 import { useModelStore } from "../../store/modelStore";
 import {
   exportFilename,
   toAllSessionsJson,
   toMarkdown,
   toSessionJson,
-  type ExportSession,
   type ExportKind,
 } from "../../lib/chat/export.ts";
+import { readExportSessions } from "../../lib/chat/export-read.ts";
 import { usePressFeedback } from "../../lib/motion.ts";
 import { useChatImport } from "../../hooks/useChatImport.ts";
 import { shareExportedFile } from "../../lib/chat/share-export.ts";
@@ -180,24 +180,12 @@ export function ChatMenu({
     setBusy(true);
     setError(null);
     try {
-      const store = await defaultGetStore();
-      if (!store) throw new Error("Conversations are not ready yet.");
-      const listed = await store.listSessions();
-      const ids = kind === "all" ? listed.map((r) => r.id) : sessionId ? [sessionId] : [];
-      const sessions: ExportSession[] = [];
-      for (const id of ids) {
-        const turns = await store.get(id).catch(() => null);
-        if (turns === null) continue;
-        const row = listed.find((r) => r.id === id);
-        sessions.push({
-          id,
-          title: row?.title ?? "Untitled",
-          pinned: row?.pinned ?? false,
-          updatedAt: row?.updatedAt ?? Date.now(),
-          turns,
-        });
-      }
-      if (sessions.length === 0) throw new Error("There is nothing to export yet.");
+      // The shared read path (export-read): the drawer's bulk export
+      // runs through this same helper, so there is one way store rows
+      // become ExportSession[].
+      const sessions = await readExportSessions(
+        kind === "all" ? undefined : sessionId ? [sessionId] : [],
+      );
       const contents =
         kind === "all"
           ? toAllSessionsJson(sessions)

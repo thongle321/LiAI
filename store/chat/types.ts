@@ -136,6 +136,12 @@ export interface ChatState {
   newConversation: () => Promise<void>;
   switchSession: (sessionId: string) => Promise<boolean>;
   deleteSession: (sessionId: string) => Promise<void>;
+  /** Bulk path: routes every id through deleteSession, so the mid-turn
+   *  guard applies per row exactly as it does for a single delete.
+   *  Resolves to the number actually deleted — rows the guard kept make
+   *  it less than ids.length, so the UI's confirmed count can be
+   *  reconciled instead of silently lying. */
+  deleteSessions: (sessionIds: string[]) => Promise<number>;
   /** Fork a conversation and adopt the copy. False when it could not be
    *  forked, or when the source is mid-turn. */
   duplicateSession: (sessionId: string) => Promise<boolean>;

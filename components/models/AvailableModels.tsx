@@ -139,6 +139,7 @@ export function PresetModelCard({
                       onPause={() => void pauseModelDownload(presetSpecId(preset.id, item.name))}
                       onResume={() => void resumeModelDownload(presetSpecId(preset.id, item.name))}
                       disabled={st.status === "completed"}
+                      error={st.error}
                     />
                   </View>
                 </View>

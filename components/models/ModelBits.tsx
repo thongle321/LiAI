@@ -133,6 +133,7 @@ export function DownloadButton({
   onPause,
   onResume,
   disabled = false,
+  error,
 }: {
   status: string;
   progress: number;
@@ -141,15 +142,20 @@ export function DownloadButton({
   onPause?: () => void;
   onResume?: () => void;
   disabled?: boolean;
+  /** Stored failure reason (spec.error): shown with Retry when present. */
+  error?: string;
 }) {
   const isDownloading = status === "downloading";
   const isPaused = status === "paused";
   const isCompleted = status === "completed";
+  const isFailed = status === "failed";
+  // Absent or empty reason must never render: bare "Retry" is the floor.
+  const reason = isFailed && error ? error : undefined;
   const label = isDownloading
     ? `${Math.round(progress)}%`
     : isPaused
     ? "Paused"
-    : status === "failed"
+    : isFailed
     ? "Retry"
     : "Download";
 
@@ -169,26 +175,37 @@ export function DownloadButton({
     <Pressable
       onPress={isDownloading ? onPause ?? onPress : isPaused ? onResume ?? onPress : onPress}
       disabled={disabled}
-      className="min-h-12 flex-row items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
+      className="min-h-12 items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
       accessibilityRole="button"
       accessibilityLabel={
         isDownloading
           ? `Pause download, ${Math.round(progress)} percent`
           : isPaused
           ? "Resume download"
-          : status === "failed"
-          ? "Retry download"
+          : isFailed
+          ? `Retry download${reason ? `. ${reason}` : ""}`
           : "Download model"
       }
     >
-      {isDownloading ? (
-        <Pause size={16} color={colors.primary} />
-      ) : isPaused ? (
-        <Play size={16} color={colors.primary} />
-      ) : (
-        <Download size={16} color={colors.primary} />
-      )}
-      <Text className="ml-2 font-sans text-body-sm text-primary-text">{label}</Text>
+      <View className="flex-row items-center gap-2">
+        {isDownloading ? (
+          <Pause size={16} color={colors.primary} />
+        ) : isPaused ? (
+          <Play size={16} color={colors.primary} />
+        ) : (
+          <Download size={16} color={colors.primary} />
+        )}
+        <Text className="font-sans text-body-sm text-primary-text">{label}</Text>
+      </View>
+      {/* The reason rides inside the button: as a sibling in the card's
+          action row it reflowed the neighbours. Capped so a long reason
+          wraps instead of widening the row; no numberOfLines, so it is
+          never truncated to nothing. */}
+      {reason ? (
+        <Text className="mt-0.5 max-w-[160px] text-center font-sans text-caption text-error">
+          {reason}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }

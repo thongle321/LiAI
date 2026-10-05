@@ -120,6 +120,19 @@ export function upgradeRemoteCaps(raw: unknown): Record<string, RemoteCaps> {
     if (!r || typeof r.reachable !== "boolean") continue;
     const model = typeof r.model === "string" ? r.model : undefined;
     const contextLength = positiveFinite(r.contextLength);
+    // 06b: finite numeric entries only; anything else drops — a
+    // malformed defaults map is display data, not something to repair.
+    const rawDefaults = asRecord(r.samplerDefaults);
+    const samplerDefaults = rawDefaults
+      ? Object.fromEntries(
+          Object.entries(rawDefaults).filter(
+            (entry): entry is [string, number] => {
+              const value: unknown = entry[1];
+              return typeof value === "number" && Number.isFinite(value);
+            },
+          ),
+        )
+      : undefined;
     out[key] = {
       reachable: r.reachable,
       checkedAt: asNumber(r.checkedAt, 0),
@@ -129,6 +142,10 @@ export function upgradeRemoteCaps(raw: unknown): Record<string, RemoteCaps> {
             ...(contextLength !== undefined ? { contextLength } : {}),
             ...(typeof r.supportsVision === "boolean"
               ? { supportsVision: r.supportsVision }
+              : {}),
+            ...(samplerDefaults !== undefined &&
+            Object.keys(samplerDefaults).length > 0
+              ? { samplerDefaults }
               : {}),
           }
         : {}),

@@ -13,7 +13,10 @@ import { asRecord, positiveFinite } from "../guards.ts";
 
 /** Capability fields a /props probe can report (everything but the
  *  reachability bookkeeping the store owns). */
-export type RemoteCapsFields = Pick<RemoteCaps, "contextLength" | "supportsVision">;
+export type RemoteCapsFields = Pick<
+  RemoteCaps,
+  "contextLength" | "supportsVision" | "samplerDefaults"
+>;
 
 /** Fire-and-forget probe: bounded tighter than the 10s validation
  *  timeout, PocketPal's PROPS_TIMEOUT_MS rationale — a probe must
@@ -74,14 +77,30 @@ export async function probeRemoteCaps(
       caps.contextLength !== undefined;
     if (!describesModel) return {};
 
-// A model-describing body WITHOUT `modalities`: PocketPal resolves this
-// to supportsVision=false (props.ts, `data?.modalities?.vision ===
-// true`); we leave it UNKNOWN — absence cannot distinguish "no vision"
-// from "a server that never reports modalities", and an absent
-// capability field is never coerced to false here (types/models.ts).
-// No consumer reads it yet. Decision recorded in issues/06-remote-caps-probe.md.
-const modalities = asRecord(body["modalities"]);
-if (modalities) caps.supportsVision = modalities["vision"] === true;
+    // A model-describing body WITHOUT `modalities`: PocketPal resolves this
+    // to supportsVision=false (props.ts, `data?.modalities?.vision ===
+    // true`); we leave it UNKNOWN — absence cannot distinguish "no vision"
+    // from "a server that never reports modalities", and an absent
+    // capability field is never coerced to false here (types/models.ts).
+    // No consumer reads it yet. Decision recorded in issues/06-remote-caps-probe.md.
+    const modalities = asRecord(body["modalities"]);
+    if (modalities) caps.supportsVision = modalities["vision"] === true;
+
+    // 06b (parity fact-check): the server's OWN defaults, wire names —
+    // three displayable knobs only, finite numbers only, never the live
+    // seed (PocketPal skips it too: a running seed is not a default
+    // anyone returns to). Under `params` on current builds, directly on
+    // the settings object on older ones.
+    const settings = defaults ?? {};
+    const params = asRecord(settings["params"]) ?? settings;
+    const found: Record<string, number> = {};
+    for (const name of ["temperature", "top_p", "top_k"]) {
+      const value = params[name];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        found[name] = value;
+      }
+    }
+    if (Object.keys(found).length > 0) caps.samplerDefaults = found;
     return caps;
   } catch {
     return {};
@@ -108,6 +127,9 @@ export function mergeRemoteCaps(
   }
   if (caps.supportsVision === undefined && prior?.supportsVision !== undefined) {
     caps.supportsVision = prior.supportsVision;
+  }
+  if (caps.samplerDefaults === undefined && prior?.samplerDefaults !== undefined) {
+    caps.samplerDefaults = prior.samplerDefaults;
   }
   return caps;
 }

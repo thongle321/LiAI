@@ -154,6 +154,11 @@ export interface RemoteCaps {
   /** Vision modality, only when the body described a loaded model AND
    *  reported modalities; absent = unknown. */
   supportsVision?: boolean;
+  /** The server's OWN generation defaults under wire names (06b,
+   *  PocketPal props.ts readSamplerDefaults): informational only —
+   *  remote turns never send sampler overrides, so these ARE the
+   *  values in effect. Absent when the probe reported none. */
+  samplerDefaults?: Record<string, number>;
 }
 
 /** Per-model overrides edited on the Models screen. */

@@ -136,6 +136,57 @@ describe("probeRemoteCaps", () => {
     assert.deepEqual(caps, {});
     assert.equal(urls.length, 0, "OpenRouter must not be probed");
   });
+
+  it("captures the server's own generation defaults (06b)", async () => {
+    // PocketPal's readSamplerDefaults (props.ts:48-63): wire names,
+    // values under params on current builds and directly on
+    // default_generation_settings on older ones, finite numbers only —
+    // and the live seed is never offered as a default to return to.
+    const { fetchImpl } = fakeFetch(() =>
+      json({
+        model_path: "/models/qwen.gguf",
+        default_generation_settings: {
+          n_ctx: 8192,
+          params: {
+            temperature: 0.7,
+            top_p: 0.95,
+            top_k: 40,
+            seed: 42,
+            min_p: "hot",
+          },
+        },
+      }),
+    );
+    const caps = await probeRemoteCaps(provider(), fetchImpl);
+    assert.deepEqual(
+      caps.samplerDefaults,
+      { temperature: 0.7, top_p: 0.95, top_k: 40 },
+      "the three displayable knobs — no seed, no non-numeric garbage",
+    );
+  });
+
+  it("reads older builds that report defaults directly on default_generation_settings", async () => {
+    const { fetchImpl } = fakeFetch(() =>
+      json({
+        model_path: "/m.gguf",
+        default_generation_settings: { temperature: 0.2 },
+      }),
+    );
+    const caps = await probeRemoteCaps(provider(), fetchImpl);
+    assert.deepEqual(caps.samplerDefaults, { temperature: 0.2 });
+  });
+
+  it("captures no defaults for a body that describes no model", async () => {
+    const { fetchImpl } = fakeFetch(() =>
+      json({
+        model_path: "none",
+        n_ctx: 0,
+        default_generation_settings: { params: { temperature: 0.7 } },
+      }),
+    );
+    const caps = await probeRemoteCaps(provider(), fetchImpl);
+    assert.deepEqual(caps, {}, "a placeholder body describes nothing");
+  });
 });
 
 describe("stripMeasuredCaps", () => {
@@ -151,6 +202,7 @@ describe("stripMeasuredCaps", () => {
         model: "qwen",
         contextLength: 8192,
         supportsVision: true,
+        samplerDefaults: { temperature: 0.7 },
       }),
       { reachable: true, checkedAt: 7 },
     );
@@ -215,5 +267,31 @@ describe("mergeRemoteCaps", () => {
     });
     assert.equal(merged.contextLength, undefined);
     assert.equal(merged.supportsVision, undefined);
+  });
+
+  it("keeps samplerDefaults when a later probe omits them (06b)", () => {
+    const merged = mergeRemoteCaps(
+      {
+        reachable: true,
+        checkedAt: 1,
+        model: "qwen",
+        samplerDefaults: { temperature: 0.7 },
+      },
+      { reachable: true, checkedAt: 2, model: "qwen" },
+    );
+    assert.deepEqual(merged.samplerDefaults, { temperature: 0.7 });
+  });
+
+  it("drops samplerDefaults on a model switch — identity-keyed like the rest", () => {
+    const merged = mergeRemoteCaps(
+      {
+        reachable: true,
+        checkedAt: 1,
+        model: "qwen",
+        samplerDefaults: { temperature: 0.7 },
+      },
+      { reachable: true, checkedAt: 2, model: "llama3", contextLength: 2048 },
+    );
+    assert.equal(merged.samplerDefaults, undefined);
   });
 });

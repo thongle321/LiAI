@@ -21,7 +21,7 @@ is the thing that lands on disk.
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done — 06cce3b (+ review pass 6e838a4)
 
 - [ ] Asking the vision screen a question while the model cannot see shows the
       can't-see notice on the vision screen (not only in chat), and never

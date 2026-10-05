@@ -14,7 +14,7 @@ a second source of truth.
 
 **Blocked by:** 03 (extends the same attach gate).
 
-**Status:** ready-for-agent
+**Status:** done — bf22804 (+ review pass 6e838a4)
 
 - [ ] Remote provider whose probe reports vision + attached image ⇒ the request
       carries the image (content array) and the reply answers about it — unit

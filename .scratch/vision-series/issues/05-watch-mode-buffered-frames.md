@@ -18,7 +18,7 @@ nothing is sent, stored, or answered until the user speaks or types.
 
 **Blocked by:** 02 (needs local vision actually working to send frames to).
 
-**Status:** ready-for-agent
+**Status:** done — 4081434 (+ review pass 6e838a4)
 
 - [ ] Opt-in watch-mode control on the vision screen; off = today's
       snapshot-on-question flow unchanged.

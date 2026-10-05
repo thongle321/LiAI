@@ -13,7 +13,7 @@ the control is disabled and explains why.
 
 **Blocked by:** 02 (needs the real runtime capability flag).
 
-**Status:** ready-for-agent
+**Status:** done — 7cea4f5 (+ review pass 6e838a4)
 
 - [ ] Attach is always rendered; disabled-with-hint while the active model
       cannot see images, enabled otherwise.

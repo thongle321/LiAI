@@ -17,7 +17,7 @@ images were genuinely dropped.
 
 **Blocked by:** 01 (needs the projector on disk).
 
-**Status:** ready-for-agent
+**Status:** done — 0beef8e (+ review pass 6e838a4)
 
 - [ ] Loading a local model that has a downloaded projector initialises
       multimodal support at engine-load time; a model without one loads normally.

@@ -22,6 +22,9 @@ import { Drawer } from "expo-router/drawer";
 import { colors, scrim } from "../../themes/tokens.ts";
 import { AppDrawerContent } from "../../components/AppDrawer.tsx";
 
+// Same story as the root boundary: this was `app/(drawer)/+error.tsx`.
+export { DrawerErrorBoundary as ErrorBoundary } from "../../components/RouteErrorBoundaries.tsx";
+
 export default function DrawerLayout() {
   return (
     <Drawer

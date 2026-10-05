@@ -12,6 +12,9 @@ import { useKeyboardState } from "react-native-keyboard-controller";
 
 import { BottomNav, type ChatTab } from "../../../components/BottomNav.tsx";
 
+// Same story as the root boundary: this was `app/(drawer)/(tabs)/+error.tsx`.
+export { TabsErrorBoundary as ErrorBoundary } from "../../../components/RouteErrorBoundaries.tsx";
+
 export default function TabLayout() {
   return (
     <Tabs

@@ -28,6 +28,12 @@ Uniwind.setTheme("light");
 // remount) must not surface as an unhandled promise.
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 
+// expo-router's error-boundary convention is a NAMED export from a layout.
+// This used to be `app/+error.tsx`, which is TanStack Router's syntax --
+// expo-router's route scanner throws on any route node starting with '+',
+// so the app died before rendering anything.
+export { RootErrorBoundary as ErrorBoundary } from "../components/RouteErrorBoundaries.tsx";
+
 export default function RootLayout() {
   const [loaded] = useFonts({
     Inter_400Regular,

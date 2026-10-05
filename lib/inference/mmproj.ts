@@ -15,6 +15,29 @@
 import type { ModelSpec } from "../../types/models.ts";
 import { resolveLocalFile } from "./engine.ts";
 
+/** Pure decision: can the ACTIVE local model see images? (vision-series 03)
+ *  True only for a completed spec that records its projector — ticket 01
+ *  guarantees "completed" means the pair landed. This is the ONE rule;
+ *  the path resolver, the send gate, and the composer all read it. */
+export function specCanSeeImages(
+  specs: ReadonlyArray<
+    Pick<ModelSpec, "id" | "downloadStatus" | "projector">
+  >,
+  activeModelId: string | null,
+  providerType: "local" | "remote" | null,
+): boolean {
+  return (
+    providerType === "local" &&
+    activeModelId !== null &&
+    specs.some(
+      (m) =>
+        m.id === activeModelId &&
+        m.downloadStatus === "completed" &&
+        m.projector !== undefined,
+    )
+  );
+}
+
 /** Pure decision: the pair's projector path, or undefined when the active
  *  setup cannot see. `downloadStatus === "completed"` is the proof the
  *  pair landed (ticket 01's sequencing) — a mid-download spec must not
@@ -27,12 +50,11 @@ export function projectorPathFromSpecs(
   providerType: "local" | "remote" | null,
   docsDir: string,
 ): string | undefined {
-  if (providerType !== "local" || activeModelId === null) return undefined;
+  if (!specCanSeeImages(specs, activeModelId, providerType)) return undefined;
   const spec = specs.find((m) => m.id === activeModelId);
-  if (!spec || spec.downloadStatus !== "completed" || !spec.projector) {
-    return undefined;
-  }
-  return resolveLocalFile(docsDir, spec.projector.name);
+  return spec?.projector
+    ? resolveLocalFile(docsDir, spec.projector.name)
+    : undefined;
 }
 
 /** The ACTIVE local model's projector path — the image gate's answer. */

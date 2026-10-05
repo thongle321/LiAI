@@ -21,7 +21,7 @@ describe("the capability seam is shared", () => {
     assert.match(src, /MULTIMODAL_WARNING/, "uses the send path's wording");
     assert.match(
       src,
-      /if \(!multimodalAvailable\(\)\)[\s\S]{0,120}?setIssue\(MULTIMODAL_WARNING\)/,
+      /if \(!\(await multimodalAvailable\(\)\)\)[\s\S]{0,120}?setIssue\(MULTIMODAL_WARNING\)/,
       "warning set when images were stripped",
     );
   });

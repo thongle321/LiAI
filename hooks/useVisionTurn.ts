@@ -188,7 +188,7 @@ export function useVisionTurn(
     // chatWarning never reaches this tab). Reads the send path's own
     // gate, so the strip and this notice can never disagree (and the
     // notice silences itself when vision becomes real).
-    if (!multimodalAvailable()) {
+    if (!(await multimodalAvailable())) {
       setIssue(MULTIMODAL_WARNING);
     }
   }

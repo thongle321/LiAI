@@ -896,6 +896,7 @@ describe("multimodal warning (G12)", () => {
     const useStore = createChatStore({
       getStore: async () => fakeSessionStore([]).store,
       runTurn,
+      multimodalAvailable: async () => false,
     });
     await useStore.getState().send("what is this?", [
       "data:image/jpeg;base64,AAAA",
@@ -927,15 +928,31 @@ describe("multimodal warning (G12)", () => {
     );
   });
 
+  it("hands images through when the model can see (vision-series 02)", async () => {
+    const { runTurn, calls } = fakeRunTurn([{ reply: "a cat" }]);
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+      multimodalAvailable: async () => true,
+    });
+    await useStore.getState().send("what is this?", [
+      "data:image/jpeg;base64,AAAA",
+    ]);
+    assert.deepEqual(
+      calls.images[0],
+      ["data:image/jpeg;base64,AAAA"],
+      "the image reaches the turn",
+    );
+    assert.equal(useStore.getState().chatWarning, null, "no false alarm");
+  });
+
   it("the guard lives in runLocal, so every re-run path shares it", () => {
     // send, retry, regenerate and edit all funnel through runLocal. A
     // guard written per-caller would let one of them drift into handing a
     // text-only model an image again -- so pin the shape, not four copies.
     const src = readFileSync("store/chat/send.ts", "utf8");
-    assert.match(
-      src,
-      /const images = multimodalAvailable\(\) \? opts\.images : undefined;/,
-    );
+    assert.match(src, /await ctx\.multimodalAvailable\(\)/);
+    assert.match(src, /\? opts\.images[\s\S]{0,20}?: undefined;/);
     // Exactly one place decides, so it cannot be bypassed downstream.
     assert.equal(
       src.split("multimodalAvailable()").length - 1,

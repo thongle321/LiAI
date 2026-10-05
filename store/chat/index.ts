@@ -13,12 +13,13 @@ import { create } from "zustand";
 
 import type { SearchAuth } from "../../types/api.ts";
 import { useSearch } from "../search.ts";
-import { createSendSlice } from "./send.ts";
+import { createSendSlice, multimodalAvailable } from "./send.ts";
 import { createSessionsSlice } from "./sessions.ts";
 import { createDraftSlice } from "./draft.ts";
 import type { ChatCtx, ChatDeps, ChatState, TurnRunner } from "./types.ts";
 import { selectEngineSource, type EngineSource } from "../../lib/inference/engine.ts";
 import { EngineManager } from "../../lib/inference/manager.ts";
+import { projectorPathForFileName } from "../../lib/inference/mmproj.ts";
 import { resolveSampler, type SamplerParams } from "../../lib/inference/sampler.ts";
 import { resolveThinking } from "../../lib/inference/thinking.ts";
 import {
@@ -278,7 +279,16 @@ async function defaultSystemPrompt(): Promise<string | undefined> {
 function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner {
   return (text, paths, onToken) => {
     const runTurn = createTurnRunner({
-      ensureEngine: async (source: EngineSource) => getManager().ensure(source),
+      ensureEngine: async (source: EngineSource) =>
+        // The projector rides the same resolution the image gate uses
+        // (lib/inference/mmproj.ts): the slot key includes it, so a model
+        // whose pair arrived mid-session cannot reuse the blind context.
+        getManager().ensure(
+          source,
+          source.kind === "local"
+            ? await projectorPathForFileName(source.fileName)
+            : undefined,
+        ),
       getEngineSource: () => defaultEngineSource(),
       getStore: () => defaultGetStore(),
       getSearch: async () => {
@@ -302,6 +312,7 @@ export function createChatStore(deps?: ChatDeps) {
     getSearchAuth,
     getEngineSource: deps?.getEngineSource ?? defaultEngineSource,
     runTurn: deps?.runTurn ?? defaultRunTurn(getSearchAuth),
+    multimodalAvailable: deps?.multimodalAvailable ?? multimodalAvailable,
     stopEngine: () => {
       void getManager().stopActive();
     },

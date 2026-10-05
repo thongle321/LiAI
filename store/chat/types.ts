@@ -56,6 +56,10 @@ export interface ChatDeps {
   runTurn?: TurnRunner;
   /** Screen wake lock. Injected so tests need no native module. */
   keepAwake?: (on: boolean) => void;
+  /** Can the active engine see images this turn? (vision-series 02).
+   *  Injected so tests decide capability without the modelStore graph
+   *  (its native imports cannot load under plain node). */
+  multimodalAvailable?: () => Promise<boolean>;
 }
 
 /** Per-factory mutable stream tracking (never in render state). */
@@ -64,6 +68,9 @@ export interface ChatCtx {
   getSearchAuth: () => Promise<SearchAuth | null>;
   getEngineSource: () => Promise<EngineSource | null>;
   runTurn: TurnRunner;
+  /** Can the active engine see images this turn? Defaults to the real
+   *  pair-probe (lib/inference/mmproj.ts); tests inject it. */
+  multimodalAvailable: () => Promise<boolean>;
   /** Stop the live generation; the loaded model stays cached. */
   stopEngine: () => void;
   /** Stop and free the loaded model (Unload). Drops the engine slot. */

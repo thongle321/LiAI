@@ -98,6 +98,29 @@ describe("EngineManager", () => {
     assert.equal(seenId, "api-1");
   });
 
+  it("keys the slot on the projector (vision-series 02)", async () => {
+    let loads = 0;
+    const seen: (string | undefined)[] = [];
+    const manager = new EngineManager(
+      {
+        loadLocal: async (_f, mmprojPath) => {
+          loads += 1;
+          seen.push(mmprojPath);
+          return { engine: fakeEngine(), release: async () => {} };
+        },
+        createRemote: () => fakeEngine(),
+      },
+      async () => null,
+    );
+    const source = { kind: "local", fileName: "a.gguf" } as const;
+    await manager.ensure(source, "mm/a.gguf");
+    await manager.ensure(source, "mm/a.gguf");
+    assert.equal(loads, 1, "same model + same projector reuses the slot");
+    await manager.ensure(source, undefined);
+    assert.equal(loads, 2, "detaching the projector must NOT reuse the stale context");
+    assert.deepEqual(seen, ["mm/a.gguf", undefined]);
+  });
+
   it("releaseAll drops the slot so the next ensure reloads", async () => {
     let loads = 0;
     const manager = new EngineManager(

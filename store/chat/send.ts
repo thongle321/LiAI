@@ -9,26 +9,27 @@ import type { ApiError } from "../../types/api.ts";
 import type { ChatMessage } from "../../types/chat.ts";
 import { newId } from "../../lib/chat/messages.ts";
 import type { SessionStore } from "../../lib/chat/session-store.ts";
+import { activeLocalProjectorPath } from "../../lib/inference/mmproj.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
 function llmError(message: string): ApiError {
   return { code: "llm_error", message };
 }
 
-/** Can the ACTIVE engine see an image this turn? (G12)
+/** Can the ACTIVE engine see an image this turn? (G12, vision-series 02)
  *
- * PocketPal asks `modelStore.activeModelCaps.visionActive` -- whether a
- * projector is loaded RIGHT NOW, not whether the model is declared
- * vision-capable. We have no projector pairing at all
- * (`components/models/HFModelSearch.tsx:393`: "LiAI cannot pair one"),
- * and the remote engine is wired for text only, so this is false for
- * every provider today. Kept as the ONE place that decides it, because
- * projector pairing is exactly what flips it (vision-series 02).
+ * PocketPal asks `modelStore.activeModelCaps.visionActive` — whether a
+ * projector is loaded RIGHT NOW. LiAI's engine slot is lazy (loaded at
+ * send time), so this answers the equivalent question predictively: the
+ * ACTIVE local model's spec is completed AND records its paired
+ * projector (ticket 01), which is exactly the path ensureEngine will
+ * attach (lib/inference/mmproj.ts). A declaration alone never flips it.
+ * Remote stays cannot-see until ticket 04.
  *
  * EXPORTED: the vision screen reads this same gate to show the can't-see
  * notice, so the strip and the notice can never disagree. */
-export function multimodalAvailable(): boolean {
-  return false;
+export async function multimodalAvailable(): Promise<boolean> {
+  return (await activeLocalProjectorPath()) !== undefined;
 }
 
 /** What PocketPal says when images ride a turn the model cannot see.
@@ -159,7 +160,14 @@ export function createSendSlice(
     // The guard sits HERE, not in each caller: send, retry, regenerate and
     // edit all route through runLocal, so one check covers every path and
     // none of them can drift into disagreeing about it.
-    const images = multimodalAvailable() ? opts.images : undefined;
+    // No images → the capability question never gets asked (and its
+    // native modelStore probe never fires for a text-only turn).
+    const images =
+      opts.images !== undefined &&
+      opts.images.length > 0 &&
+      (await ctx.multimodalAvailable())
+        ? opts.images
+        : undefined;
     if (opts.images !== undefined && opts.images.length > 0 && images === undefined) {
       set({
         chatWarning: {

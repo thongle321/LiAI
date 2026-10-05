@@ -12,6 +12,7 @@ import { useLocalModelImport } from "../../hooks/useLocalModelImport.ts";
 import { useShallow } from "zustand/shallow";
 import { useModelStore } from "../../store/modelStore.ts";
 import { useModelsUi } from "../../store/modelsUi.ts";
+import { DownloadErrorDialog } from "../../components/models/DownloadErrorDialog.tsx";
 import { ModelsHeaderRight } from "../../components/models/ModelsHeaderRight.tsx";
 import { FABGroup, FAB_STACK_HEIGHT } from "../../components/models/FABGroup.tsx";
 import { ReadyModels } from "../../components/models/ReadyModels.tsx";
@@ -25,6 +26,22 @@ export default function ModelsRoute() {
   // alone and preset/download writes never re-render this screen.
   const loadPersisted = useModelStore((s) => s.loadPersisted);
   const startDownload = useModelStore((s) => s.startDownload);
+  const clearDownloadError = useModelStore((s) => s.clearDownloadError);
+  const resumeInterruptedDownload = useModelStore((s) => s.resumeInterruptedDownload);
+  // C1: ONE failure slot for the whole screen — the dialog auto-opens
+  // from failed store state (PocketPal's dialog reaction), covering
+  // every card type that can fail. Narrow stable read: progress ticks
+  // re-render nothing unless the failure REASON itself changes.
+  const failedDownload = useModelStore(
+    useShallow((s) => {
+      const failed = s.models.find(
+        (m) => m.downloadStatus === "failed" && m.error,
+      );
+      return failed && failed.error
+        ? { id: failed.id, error: failed.error }
+        : null;
+    }),
+  );
   const router = useRouter();
   const importLocalModel = useLocalModelImport();
   // Stable selectors plus one useShallow read set: actions subscribe
@@ -115,6 +132,21 @@ export default function ModelsRoute() {
       <RemoteModelSheet visible={remoteModalOpen} onClose={() => setRemoteModalOpen(false)} />
 
       <ModelSettingsSheet modelId={settingsModelId} onClose={() => setSettingsModelId(null)} />
+
+      <DownloadErrorDialog
+        error={failedDownload?.error ?? null}
+        onDismiss={() => {
+          if (failedDownload !== null) clearDownloadError(failedDownload.id);
+        }}
+        onRetry={() => {
+          if (failedDownload === null) return;
+          // Clear first so the dialog closes even when the retry path
+          // early-returns (no file); the retry re-opens it on a fresh
+          // failure anyway.
+          clearDownloadError(failedDownload.id);
+          void resumeInterruptedDownload(failedDownload.id);
+        }}
+      />
     </SafeAreaView>
   );
 }

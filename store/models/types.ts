@@ -86,6 +86,10 @@ export interface DownloadsSlice {
   largestSuccessfulBytes: number;
 
   saveMemoryGuard: () => Promise<void>;
+  /** Dismiss the failure dialog: clears the stored reason WITHOUT
+   *  touching downloadStatus — the row keeps offering Retry (C1) —
+   *  and a re-failure writes a fresh reason, reopening the dialog. */
+  clearDownloadError: (specId: string) => void;
   startDownload: (
     modelId: string,
     file: HFModelFile | PresetModelFile,

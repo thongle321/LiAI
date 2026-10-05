@@ -468,7 +468,6 @@ export function HFModelSearch({
                 onPress={() => onDownload(result, file)}
                 onPause={() => void pauseModelDownload(specId)}
                 onResume={() => void resumeModelDownload(specId)}
-                error={spec?.error}
               />
             )}
           </View>

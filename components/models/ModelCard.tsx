@@ -142,7 +142,6 @@ export function ModelCard({
                 onPause={() => void pauseModelDownload(item.id)}
                 onResume={() => void resumeModelDownload(item.id)}
                 disabled={outOfSpace || item.downloadStatus === "completed"}
-                error={item.error}
               />
             )
           ) : (

@@ -61,6 +61,13 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
     }
   },
 
+  clearDownloadError: (specId) => {
+    // The reason only — the failed state stays, so the row still says
+    // Retry after the dialog is dismissed (C1).
+    if (get().getModel(specId)?.error === undefined) return;
+    get().updateModel(specId, { error: undefined });
+  },
+
   startDownload: async (modelId, file, token) => {
     const spec =
       "path" in file

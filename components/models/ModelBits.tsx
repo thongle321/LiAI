@@ -133,7 +133,6 @@ export function DownloadButton({
   onPause,
   onResume,
   disabled = false,
-  error,
 }: {
   status: string;
   progress: number;
@@ -142,15 +141,11 @@ export function DownloadButton({
   onPause?: () => void;
   onResume?: () => void;
   disabled?: boolean;
-  /** Stored failure reason (spec.error): shown with Retry when present. */
-  error?: string;
 }) {
   const isDownloading = status === "downloading";
   const isPaused = status === "paused";
   const isCompleted = status === "completed";
   const isFailed = status === "failed";
-  // Absent or empty reason must never render: bare "Retry" is the floor.
-  const reason = isFailed && error ? error : undefined;
   const label = isDownloading
     ? `${Math.round(progress)}%`
     : isPaused
@@ -183,7 +178,7 @@ export function DownloadButton({
           : isPaused
           ? "Resume download"
           : isFailed
-          ? `Retry download${reason ? `. ${reason}` : ""}`
+          ? "Retry download"
           : "Download model"
       }
     >
@@ -197,15 +192,6 @@ export function DownloadButton({
         )}
         <Text className="font-sans text-body-sm text-primary-text">{label}</Text>
       </View>
-      {/* The reason rides inside the button: as a sibling in the card's
-          action row it reflowed the neighbours. Capped so a long reason
-          wraps instead of widening the row; no numberOfLines, so it is
-          never truncated to nothing. */}
-      {reason ? (
-        <Text className="mt-0.5 max-w-[160px] text-center font-sans text-caption text-error">
-          {reason}
-        </Text>
-      ) : null}
     </Pressable>
   );
 }

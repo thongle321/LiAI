@@ -63,10 +63,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors } from "../themes/tokens.ts";
 
-// [DEBUG-a4f2] Temporary runtime probe for the nav-bar overlap question.
-// Flip to false (or delete the whole block) once the numbers are read.
-const DEBUG_INSETS = true;
-
 export function Sheet({
   visible,
   onClose,
@@ -119,25 +115,6 @@ export function Sheet({
   // v3's auto detent ignores the absolute footer, so the body reserves its
   // measured height; measured at runtime rather than guessed.
   const [footerHeight, setFooterHeight] = useState(0);
-
-  // [DEBUG-a4f2] Probe state. `sheetPosition` is TrueSheet's own reported
-  // sheet height; `bodyHeight` is what the React content actually measured.
-  // The DIFFERENCE is the bottom inset TrueSheet applied natively -- the one
-  // value `useSafeAreaInsets()` is suspected of dropping.
-  const [bodyHeight, setBodyHeight] = useState(0);
-  const debugLines = DEBUG_INSETS
-    ? [
-        `insets.bottom=${insets.bottom}`,
-        `bodyMaxHeight=${bodyMaxHeight}`,
-        `window=${windowHeight}`,
-        `body=${bodyHeight}`,
-        // NB: this label deliberately avoids the bare token `footer`.
-        // A sibling test slices this file between two sentinel literals to
-        // isolate TrueSheet's props block, and this array sits ABOVE the
-        // return — a match up here would come first and invert the slice.
-        `footerH=${footerHeight}`,
-      ]
-    : [];
 
   useEffect(() => {
     if (visible) {
@@ -218,7 +195,6 @@ export function Sheet({
         <ScrollView
           testID={testID}
           className="grow"
-          onLayout={(e) => setBodyHeight(e.nativeEvent.layout.height)}
           contentContainerClassName="px-4 pb-4"
           keyboardShouldPersistTaps="handled"
           style={{
@@ -247,20 +223,6 @@ export function Sheet({
         >
           {header}
           {children}
-        </View>
-      )}
-      {/* [DEBUG-a4f2] Probe overlay. Tap-through, and the LAST child so it
-          paints above the body. Removed in the cleanup pass. */}
-      {DEBUG_INSETS && (
-        <View
-          pointerEvents="none"
-          className="absolute left-0 right-0 top-0 z-50 rounded-b bg-black/85 px-2 py-1"
-        >
-          {debugLines.map((line) => (
-            <Text key={line} className="text-[10px] text-white">
-              {line}
-            </Text>
-          ))}
         </View>
       )}
     </TrueSheet>

@@ -86,6 +86,10 @@ export interface CompletionRequest {
   tools?: ToolDefinition[];
   /** Local file paths for multimodal turns (llama media_paths). */
   imagePaths?: string[];
+  /** Remote vision (04): the turn's images as data URIs — an HTTP server
+   *  cannot read app-local files, so OpenAI content arrays carry these.
+   *  Local engines ignore them (they read imagePaths). */
+  imageDataUris?: string[];
   /** Local-only: jinja thinking blocks on/off (native default true). */
   enableThinking?: boolean;
   /** Local-only: jinja chat template on/off (native default true). */

@@ -82,7 +82,8 @@ export async function probeRemoteCaps(
     // true`); we leave it UNKNOWN — absence cannot distinguish "no vision"
     // from "a server that never reports modalities", and an absent
     // capability field is never coerced to false here (types/models.ts).
-    // No consumer reads it yet. Decision recorded in issues/06-remote-caps-probe.md.
+    // Consumers: the remote-vision gate (vision-series 04).
+    // Decision recorded in issues/06-remote-caps-probe.md.
     const modalities = asRecord(body["modalities"]);
     if (modalities) caps.supportsVision = modalities["vision"] === true;
 

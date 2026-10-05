@@ -9,10 +9,12 @@
  */
 
 import { useModelStore } from "../store/modelStore.ts";
-import { specCanSeeImages } from "../lib/inference/mmproj.ts";
+import { remoteCapsCanSeeImages, specCanSeeImages } from "../lib/inference/mmproj.ts";
 
 export function useMultimodalAvailable(): boolean {
   return useModelStore((s) =>
-    specCanSeeImages(s.models, s.activeModelId, s.activeProviderType),
+    s.activeProviderType === "remote"
+      ? remoteCapsCanSeeImages(s.remoteCaps, s.activeModelId, s.activeProviderType)
+      : specCanSeeImages(s.models, s.activeModelId, s.activeProviderType),
   );
 }

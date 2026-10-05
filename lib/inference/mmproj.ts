@@ -57,6 +57,22 @@ export function projectorPathFromSpecs(
     : undefined;
 }
 
+/** Pure decision: can the ACTIVE REMOTE provider see images? (04)
+ *  True only when the provider's /props probe recorded vision for its
+ *  model — absent or false both mean cannot-see (a failed probe must
+ *  not promise vision). */
+export function remoteCapsCanSeeImages(
+  remoteCaps: Record<string, { supportsVision?: boolean }>,
+  activeModelId: string | null,
+  providerType: "local" | "remote" | null,
+): boolean {
+  if (providerType !== "remote" || activeModelId === null) return false;
+  const providerId = activeModelId.startsWith("remote-")
+    ? activeModelId.slice("remote-".length)
+    : activeModelId;
+  return remoteCaps[providerId]?.supportsVision === true;
+}
+
 /** The ACTIVE local model's projector path — the image gate's answer. */
 export async function activeLocalProjectorPath(): Promise<string | undefined> {
   try {

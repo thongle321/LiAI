@@ -36,9 +36,30 @@ function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function toWireMessages(request: CompletionRequest): Record<string, unknown>[] {
-  return request.messages.map((m) => {
-    const base: Record<string, unknown> = { role: m.role, content: m.content };
+/** OpenAI wire messages. Remote vision (04): when the turn carries data
+ *  URIs, the LAST user message becomes a content array
+ *  ([{type:'text'},…{type:'image_url'}]) — PocketPal's exact shape
+ *  (useChatSession.ts:87-97). Exported for the request-builder tests. */
+export function toWireMessages(request: CompletionRequest): Record<string, unknown>[] {
+  const images = request.imageDataUris ?? [];
+  const lastUser =
+    images.length > 0
+      ? request.messages.reduce(
+          (found, m, i) => (m.role === "user" ? i : found),
+          -1,
+        )
+      : -1;
+  return request.messages.map((m, i) => {
+    const base: Record<string, unknown> = {
+      role: m.role,
+      content:
+        i === lastUser
+          ? [
+              { type: "text", text: m.content },
+              ...images.map((url) => ({ type: "image_url", image_url: { url } })),
+            ]
+          : m.content,
+    };
     if (m.tool_calls !== undefined) {
       base["tool_calls"] = m.tool_calls.map((c) => ({
         id: c.id,

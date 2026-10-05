@@ -9,7 +9,7 @@ import type { ApiError } from "../../types/api.ts";
 import type { ChatMessage } from "../../types/chat.ts";
 import { newId } from "../../lib/chat/messages.ts";
 import type { SessionStore } from "../../lib/chat/session-store.ts";
-import { activeLocalProjectorPath } from "../../lib/inference/mmproj.ts";
+import { activeLocalProjectorPath, remoteCapsCanSeeImages } from "../../lib/inference/mmproj.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
 function llmError(message: string): ApiError {
@@ -29,7 +29,14 @@ function llmError(message: string): ApiError {
  * EXPORTED: the vision screen reads this same gate to show the can't-see
  * notice, so the strip and the notice can never disagree. */
 export async function multimodalAvailable(): Promise<boolean> {
-  return (await activeLocalProjectorPath()) !== undefined;
+  if ((await activeLocalProjectorPath()) !== undefined) return true;
+  try {
+    const models = await import("../../store/modelStore.ts");
+    const m = models.useModelStore.getState();
+    return remoteCapsCanSeeImages(m.remoteCaps, m.activeModelId, m.activeProviderType);
+  } catch {
+    return false;
+  }
 }
 
 /** What PocketPal says when images ride a turn the model cannot see.

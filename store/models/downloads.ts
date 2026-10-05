@@ -22,6 +22,7 @@ import {
 import { downloadService } from "../../lib/download-service";
 import { latestJobForModel } from "../../lib/models/download-jobs.ts";
 import { resumeDataForPartial } from "../../lib/models/resume-state.ts";
+import { findProjectorFile, pairDownloadStep } from "../../lib/models/vision-pairing.ts";
 import { asyncStorage, MEMORY_GUARD_KEY, generateId } from "./storage";
 
 function hfRefFor(modelId: string, results: HFModelSearchResult[]) {
@@ -69,10 +70,26 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
   },
 
   startDownload: async (modelId, file, token) => {
-    const spec =
-      "path" in file
-        ? buildHfModelSpec(hfRefFor(modelId, get().searchResults), file)
-        : buildPresetModelSpec(presetFor(modelId, get().presets), file);
+    const isHf = "path" in file;
+    const spec = isHf
+      ? buildHfModelSpec(hfRefFor(modelId, get().searchResults), file)
+      : buildPresetModelSpec(presetFor(modelId, get().presets), file);
+    // Vision pairing (vision-series 01): the card already promises the
+    // pair — now the downloader fetches it. Same helper as the card, so
+    // the promise and the fetch can never drift. A repo with no mmproj
+    // records no projector, and nothing about the download changes.
+    const siblings = isHf
+      ? (get().searchResults.find((r) => r.modelId === modelId)?.ggufFiles ??
+        [])
+      : presetFor(modelId, get().presets).files;
+    const projector = findProjectorFile(file, siblings);
+    if (projector) {
+      spec.projector = {
+        name: projector.name,
+        size: projector.size,
+        downloadUrl: projector.downloadUrl,
+      };
+    }
     await get().startSpecDownload(spec, file, token);
   },
 
@@ -89,56 +106,92 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       downloadService.removeJob(stale.id);
     }
 
-    // Create the spec once; a re-download keeps its existing row.
-    if (!get().getModel(specId)) {
+    // Create the spec once; a re-download keeps its existing row. A row
+    // from before the pairing ticket heals its projector record here.
+    const existing = get().getModel(specId);
+    if (!existing) {
       get().addModel(spec);
+    } else if (spec.projector && !existing.projector) {
+      get().updateModel(specId, { projector: spec.projector });
     }
 
+    // Bytes on disk per file, so the pair's legs resume independently.
     // A partial file means the app died mid-flight: continue from its
     // bytes (Range resume) instead of restarting from zero.
-    let partialBytes = 0;
-    try {
-      const info = await LegacyFileSystem.getInfoAsync(
-        `${LegacyFileSystem.documentDirectory}models/${file.name}`,
-      );
-      if (info.exists && "size" in info && typeof info.size === "number") {
-        partialBytes = info.size;
+    const onDiskBytes = async (name: string): Promise<number> => {
+      try {
+        const info = await LegacyFileSystem.getInfoAsync(
+          `${LegacyFileSystem.documentDirectory}models/${name}`,
+        );
+        return info.exists && "size" in info && typeof info.size === "number"
+          ? info.size
+          : 0;
+      } catch {
+        // Unreadable destination: the transfer reports the truth.
+        return 0;
       }
-    } catch {
-      // Unreadable destination: the transfer reports the truth.
+    };
+    const mainBytes = await onDiskBytes(file.name);
+    const projectorBytes = spec.projector
+      ? await onDiskBytes(spec.projector.name)
+      : 0;
+
+    // Pair sequencing (vision-series 01): a whole main file on disk starts
+    // the projector leg (the post-main handoff and the Retry path after a
+    // projector failure); EVERYTHING on disk means "completed" — never a
+    // full re-download of a finished file.
+    const step = pairDownloadStep(
+      spec.projector !== undefined,
+      file.size > 0 && mainBytes >= file.size,
+      spec.projector !== undefined && projectorBytes >= (spec.projector?.size ?? 1),
+    );
+    if (step === "complete") {
+      get().updateModel(specId, {
+        downloadStatus: "completed",
+        downloadProgress: 100,
+        downloadedBytes: file.size,
+        totalBytes: file.size,
+        localPath: `${LegacyFileSystem.documentDirectory}models/${file.name}`,
+        error: undefined,
+      });
+      return;
     }
-    const resume = resumeDataForPartial(partialBytes, file.size);
+
+    // This leg's file: the projector after the main leg, else the main.
+    const activeFile = step === "projector" && spec.projector ? spec.projector : file;
+    const partialBytes = activeFile === file ? mainBytes : projectorBytes;
+    const resume = resumeDataForPartial(partialBytes, activeFile.size);
     const resumeProgress =
-      resume !== null && file.size > 0
-        ? Math.round((partialBytes / file.size) * 100)
+      resume !== null && activeFile.size > 0
+        ? Math.round((partialBytes / activeFile.size) * 100)
         : 0;
     const auth = get().activeHfToken(token) ?? undefined;
 
     const job: DownloadJob = {
       id: `download-${generateId()}`,
       modelId: specId,
-      fileName: file.name,
-      downloadUrl: file.downloadUrl,
+      fileName: activeFile.name,
+      downloadUrl: activeFile.downloadUrl,
       // HF's CDN refuses anonymous clients: always identify (PocketPal
       // parity); the Bearer token rides along only to huggingface.co.
       headers: {
         "User-Agent": HF_USER_AGENT,
-        ...(auth && isHuggingFaceUrl(file.downloadUrl)
+        ...(auth && isHuggingFaceUrl(activeFile.downloadUrl)
           ? { Authorization: `Bearer ${auth}` }
           : {}),
       },
-      destinationPath: `${LegacyFileSystem.documentDirectory}models/${file.name}`,
+      destinationPath: `${LegacyFileSystem.documentDirectory}models/${activeFile.name}`,
       status: "downloading",
       progress: resumeProgress,
       downloadedBytes: partialBytes,
-      totalBytes: file.size,
+      totalBytes: activeFile.size,
       resumable: true,
     };
 
     get().updateModel(specId, {
       downloadStatus: "downloading",
       downloadProgress: resumeProgress,
-      totalBytes: file.size,
+      totalBytes: activeFile.size,
       downloadedBytes: partialBytes,
       error: undefined,
     });
@@ -146,7 +199,7 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
     // PocketPal parity: refuse before bytes move when the disk can't fit it.
     try {
       const free = await LegacyFileSystem.getFreeDiskStorageAsync();
-      if (Number.isFinite(free) && free < file.size) {
+      if (Number.isFinite(free) && free < activeFile.size) {
         get().updateModel(specId, {
           downloadStatus: "failed",
           error: "Not enough storage space to download the model",
@@ -193,12 +246,38 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
     });
 
     downloadService.setCompleteCallback((downloadJob, success) => {
+      const specNow = get().getModel(downloadJob.modelId);
+      // Pair handoff (vision-series 01): the MAIN leg finishing while a
+      // projector is still missing does NOT complete the model — the
+      // projector leg starts (startSpecDownload re-reads the disk and
+      // takes the "projector" step), and completion belongs to THAT leg.
+      if (
+        success &&
+        specNow?.projector !== undefined &&
+        downloadJob.fileName === specNow?.files[0]?.name
+      ) {
+        void get().startSpecDownload(
+          specNow,
+          specNow.files[0],
+          get().activeHfToken() ?? undefined,
+        );
+        return;
+      }
       if (success) {
+        // Final completion (main-only model, or the projector leg): the
+        // row carries the MAIN file's stats — the load-guard ceiling is
+        // the model's footprint, not the projector's, and localPath is
+        // where the engine loads from.
+        const mainFile = specNow?.files[0];
+        const mainSize = mainFile?.size ?? downloadJob.totalBytes;
         get().updateModel(downloadJob.modelId, {
           downloadStatus: "completed",
           downloadProgress: 100,
-          downloadedBytes: downloadJob.totalBytes,
-          localPath: downloadJob.destinationPath,
+          downloadedBytes: mainSize,
+          totalBytes: mainSize,
+          localPath: mainFile
+            ? `${LegacyFileSystem.documentDirectory}models/${mainFile.name}`
+            : downloadJob.destinationPath,
         });
         // First download activates itself: no manual step, and a working
         // chat is never yanked away (only-when-none scope).
@@ -206,17 +285,24 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
           get().setActiveModel(downloadJob.modelId, "local");
         }
         // ponytail: learn the ceiling from what actually succeeded.
-        if (downloadJob.totalBytes > get().largestSuccessfulBytes) {
-          set({ largestSuccessfulBytes: downloadJob.totalBytes });
+        if (mainSize > get().largestSuccessfulBytes) {
+          set({ largestSuccessfulBytes: mainSize });
           void get().saveMemoryGuard();
         }
       } else if (downloadJob.status !== "cancelled") {
         // A cancelled job is a user action, not a failure: without this
         // guard the cancel flow's own callback re-marked the row failed and
         // the card offered "Retry" instead of a clean "Download".
+        // A projector-leg failure names itself, so the retry story is
+        // readable (Retry re-runs only the projector leg).
+        const message =
+          specNow?.projector !== undefined &&
+          downloadJob.fileName === specNow?.projector?.name
+            ? `The projector for this vision model failed: ${downloadJob.error ?? "download failed"}`
+            : downloadJob.error;
         get().updateModel(downloadJob.modelId, {
           downloadStatus: "failed",
-          error: downloadJob.error,
+          error: message,
         });
       }
       get().syncDownloadStatus();

@@ -30,6 +30,7 @@ import { useVoice } from "../store/voice.ts";
 import { VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
 import { snapshotToBase64 } from "../lib/snapshot.ts";
 import { useChatStore } from "../store/chat.ts";
+import { multimodalAvailable, MULTIMODAL_WARNING } from "../store/chat/send.ts";
 
 const NOTHING_HEARD = "Didn't hear anything — tap the mic to try again.";
 const NO_FRAME = "Couldn't capture a frame — try again.";
@@ -182,6 +183,14 @@ export function useVisionTurn(
       return;
     }
     speak(replyMsg.text);
+    // The frame went out with the turn — if the model could not actually
+    // SEE it, say so HERE on the vision screen (the chat screen's
+    // chatWarning never reaches this tab). Reads the send path's own
+    // gate, so the strip and this notice can never disagree (and the
+    // notice silences itself when vision becomes real).
+    if (!multimodalAvailable()) {
+      setIssue(MULTIMODAL_WARNING);
+    }
   }
 
   function speak(text: string): void {

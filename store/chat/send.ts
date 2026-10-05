@@ -22,14 +22,18 @@ function llmError(message: string): ApiError {
  * vision-capable. We have no projector pairing at all
  * (`components/models/HFModelSearch.tsx:393`: "LiAI cannot pair one"),
  * and the remote engine is wired for text only, so this is false for
- * every provider today. Kept as the one place that decides it, because
- * projector pairing is exactly what flips it. */
-function multimodalAvailable(): boolean {
+ * every provider today. Kept as the ONE place that decides it, because
+ * projector pairing is exactly what flips it (vision-series 02).
+ *
+ * EXPORTED: the vision screen reads this same gate to show the can't-see
+ * notice, so the strip and the notice can never disagree. */
+export function multimodalAvailable(): boolean {
   return false;
 }
 
-/** What PocketPal says when images ride a turn the model cannot see. */
-const MULTIMODAL_WARNING = "This model can't see images, so it was sent the text only.";
+/** What PocketPal says when images ride a turn the model cannot see.
+ *  Shared with the vision screen's own notice surface (vision-series 01). */
+export const MULTIMODAL_WARNING = "This model can't see images, so it was sent the text only.";
 
 /** PocketPal parity (useChatSession.ts:722, YIELD_INTERVAL_MS): while a
  *  turn streams, hand the JS thread a macrotask beat every 100ms so touch

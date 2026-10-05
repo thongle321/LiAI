@@ -65,6 +65,18 @@ export function upgradeModelSpec(raw: unknown): ModelSpec | null {
 
   const type = v.type === "vision" || v.type === "projection" ? v.type : "llm";
 
+  // The paired projector record (vision-series 01): same guard shape as
+  // files — a malformed pair is NO pair (undefined), never repaired into
+  // a guess.
+  const pr = asRecord(v.projector);
+  const projector =
+    pr &&
+    typeof pr.name === "string" &&
+    typeof pr.size === "number" &&
+    typeof pr.downloadUrl === "string"
+      ? { name: pr.name, size: pr.size, downloadUrl: pr.downloadUrl }
+      : undefined;
+
   return {
     id: v.id,
     name: v.name,
@@ -73,6 +85,7 @@ export function upgradeModelSpec(raw: unknown): ModelSpec | null {
     origin,
     type,
     files,
+    ...(projector !== undefined ? { projector } : {}),
     providerType: v.providerType === "openrouter" || v.providerType === "custom_openai" || v.providerType === "local_gguf"
       ? v.providerType
       : undefined,

@@ -31,6 +31,10 @@ export interface ModelSpec {
   origin: ModelOrigin;
   type: ModelType;
   files: ModelFile[];
+  /** The paired mmproj projector for a vision model (vision-series 01):
+   *  recorded at download time from the repo's siblings and fetched right
+   *  after the LLM lands, so ticket 02 can attach it at engine load. */
+  projector?: ModelFile;
   // For remote API providers
   providerType?: ProviderType;
   baseUrl?: string;

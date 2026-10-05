@@ -9,12 +9,12 @@
  * always lands on Chat — vision's only entry point is the tab bar, so
  * there is no "previous screen" to return to.
  *
- * Frame rule: a 500ms JS interval snapshots and uploads frames while
- * idle/listening; the worklet frame processor is a bridge-free heartbeat
- * only (no JS calls — the worklet→JS bridge proved unreliable). A voice
- * or text question pauses uploads, sends the current frame + question,
- * then resumes after the answer and TTS finish. The preview itself
- * never freezes.
+ * Question rule: one frame per question — snapshot-on-question. A voice
+ * or text question snapshots the CURRENT frame at ask time and sends it
+ * through the ordinary chat turn (no frame stream, no capture timer —
+ * the chat pipeline carries the image), then speaks the answer back. The model answers ONLY when the user asks (recorded
+ * product decision; the reference app's auto-send-per-frame loop is
+ * explicitly rejected). The preview itself never freezes.
  */
 
 import { useState, useEffect } from "react";

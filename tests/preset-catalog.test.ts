@@ -4,6 +4,12 @@
  * this locks the shape that verdict depends on: exact-URL well-formedness,
  * known quants, positive sizes, unique ids, tier coverage. Anonymous
  * reachability itself was verified out-of-band with a HEAD probe loop.
+ *
+ * Tier-coverage decision (C9): a preset missing from every tier FAILS
+ * THIS SUITE (option c). AvailableModels deliberately has no runtime
+ * fallback — (a) would dump a too-large model under "Light", (b) adds a
+ * group UI for a state these tests already prevent, and both catalog and
+ * tiers ship as bundled assets that cannot drift once tests pass.
  * Run: node --test tests/preset-catalog.test.ts
  */
 import { describe, it } from "node:test";
@@ -42,5 +48,22 @@ describe("preset catalog", () => {
     for (const p of presets) {
       assert.ok(covered.has(p.id), `${p.id} missing from tiers`);
     }
+  });
+
+  it("tier preset ids all exist in the catalog", async () => {
+    // The reverse of coverage: a stale tier id (catalog entry removed)
+    // renders nothing forever and no other test notices — the hardcoded
+    // list in device-tiers.test.ts tracks the tiers, not the catalog.
+    const catalog = new Set((await getPresets()).map((p) => p.id));
+    const ids = tiers.flatMap((t: { presetIds: string[] }) => t.presetIds);
+    for (const id of ids) {
+      assert.ok(catalog.has(id), `tier lists a preset absent from the catalog: ${id}`);
+    }
+  });
+
+  it("no preset is listed in two tiers", async () => {
+    // Duplicates render the same card in two groups on the Models screen.
+    const ids = tiers.flatMap((t: { presetIds: string[] }) => t.presetIds);
+    assert.equal(ids.length, new Set(ids).size, "a preset appears in two tiers");
   });
 });

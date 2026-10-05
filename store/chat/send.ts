@@ -31,6 +31,42 @@ function multimodalAvailable(): boolean {
 /** What PocketPal says when images ride a turn the model cannot see. */
 const MULTIMODAL_WARNING = "This model can't see images, so it was sent the text only.";
 
+/** PocketPal parity (useChatSession.ts:722, YIELD_INTERVAL_MS): while a
+ *  turn streams, hand the JS thread a macrotask beat every 100ms so touch
+ *  dispatch — notably Stop — gets a turn during long streams. LiAI's token
+ *  path is native callbacks all the way down (no async loop to hang
+ *  PocketPal's in-chain `await setTimeout(0)` on), so the beat is held for
+ *  exactly the streaming span of runLocal instead. Idle holds no timer at
+ *  all. The token path never touches this: output ordering, coalescing and
+ *  the blank-space animation cannot shift because of it.
+ *
+ *  ponytail: static analysis cannot prove this beat is what makes Stop
+ *  dispatch — native token callbacks are separate JS tasks, so FIFO may
+ *  already interleave touches. The ticket pre-admits device confirmation
+ *  is the real check; if a device shows Stop responding without it, the
+ *  upgrade path is DELETING this (the release handle and finally go with
+ *  it), not growing it.
+ *
+ *  `onTick` is the test seam; production never passes it. Returns the
+ *  release handle — every exit path calls it. */
+export function startStreamYield(
+  intervalMs = 100,
+  onTick?: () => void,
+): () => void {
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const tick = () => {
+    if (stopped) return;
+    onTick?.();
+    timer = setTimeout(tick, intervalMs);
+  };
+  timer = setTimeout(tick, intervalMs);
+  return () => {
+    stopped = true;
+    if (timer !== undefined) clearTimeout(timer);
+  };
+}
+
 export function createSendSlice(
   set: ChatSet,
   get: ChatGet,
@@ -131,6 +167,8 @@ export function createSendSlice(
         },
       });
     }
+    // C16: the macrotask beat lives exactly as long as this turn.
+    const endStreamYield = startStreamYield();
     try {
       const outcome = await ctx.runTurn(
         opts.text,
@@ -182,6 +220,9 @@ export function createSendSlice(
       });
       set({ sending: false, turnStartedAt: null });
       ctx.keepAwake(false);
+    } finally {
+      // Success, failure or supersede: idle must hold no timer.
+      endStreamYield();
     }
   }
 

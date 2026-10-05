@@ -939,6 +939,46 @@ describe("session import (G10)", () => {
   });
 });
 
+describe("streaming yield (C16)", () => {
+  it("yields periodically while held, and never after release", async () => {
+    const { startStreamYield } = await import("../store/chat/send.ts");
+    let ticks = 0;
+    const release = startStreamYield(5, () => {
+      ticks += 1;
+    });
+    await new Promise((r) => setTimeout(r, 100));
+    release();
+    const atRelease = ticks;
+    assert.ok(
+      atRelease >= 3,
+      `expected periodic yields while streaming, got ${atRelease}`,
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(
+      ticks,
+      atRelease,
+      "the yield must not fire once the turn is over",
+    );
+  });
+
+  it("runLocal holds the yield for the whole turn and releases it on exit", () => {
+    // Stop must be dispatchable mid-stream: the beat exists only while a
+    // turn runs. Released in `finally` so every exit path — success,
+    // failure, supersede — ends it and idle holds no timer at all.
+    const src = readFileSync("store/chat/send.ts", "utf8");
+    assert.match(
+      src,
+      /= startStreamYield\(\)/,
+      "runLocal must start the streaming beat",
+    );
+    assert.match(
+      src,
+      /finally\s*{[^}]*endStreamYield\(\);?\s*}/,
+      "the beat must be released on every exit path",
+    );
+  });
+});
+
 describe("message identity", () => {
   it("gives every bubble the row id it was persisted under", async () => {
     // The one-identity contract (Q9): a bubble's id IS its row id, so a

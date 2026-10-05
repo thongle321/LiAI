@@ -32,16 +32,20 @@ export function effectiveNCtx(input: {
   return positiveFinite(input.remoteContextLength);
 }
 
-/** A threshold warning while the thread is still usable (C4): fill at or
- *  above NEAR_LIMIT_FILL_PCT. Absent occupancy or an unknown window is
- *  NOT evidence of fullness — never warn blind. Uses `fillPercent`, so
- *  the trigger and the displayed percent can never disagree. */
+/** A threshold warning while the thread is still usable (C4): the RAW
+ *  fill ratio at or above NEAR_LIMIT_FILL_PCT/100 — PocketPal's
+ *  `used / nCtx >= WARNING_THRESHOLD`, compared unrounded (parity
+ *  fact-check: the old rounded-percent compare fired up to 0.5pp
+ *  early, showing 80 while the thread was still under it). Absent
+ *  occupancy or an unknown window is NOT evidence of fullness — never
+ *  warn blind. */
 export function isNearLimit(
   promptTokens: number | undefined,
   windowSize: number | undefined,
 ): boolean {
   if (windowSize === undefined || windowSize <= 0) return false;
-  return fillPercent(promptTokens, windowSize) >= NEAR_LIMIT_FILL_PCT;
+  if (promptTokens === undefined) return false;
+  return promptTokens / windowSize >= NEAR_LIMIT_FILL_PCT / 100;
 }
 
 /** 0-100, clamped for display.

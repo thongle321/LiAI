@@ -106,6 +106,15 @@ describe("isNearLimit", () => {
     assert.equal(isNearLimit(5000, 4096), true); // overflow clamps to 100
   });
 
+  it("compares the RAW ratio — the rounded band must not warn", () => {
+    // 3276/4096 = 79.98%: rounds to the displayed 80 but sits below
+    // PocketPal's raw `ratio >= 0.8`. The meter may show 80 while the
+    // thread is still under it; only the raw compare keeps parity.
+    assert.equal(isNearLimit(3276, 4096), false);
+    // …and exactly at the ratio it fires.
+    assert.equal(isNearLimit(3277, 4096), true);
+  });
+
   it("never warns blind: unknown occupancy or unknown window is not evidence", () => {
     assert.equal(isNearLimit(undefined, 4096), false);
     assert.equal(isNearLimit(3277, undefined), false);

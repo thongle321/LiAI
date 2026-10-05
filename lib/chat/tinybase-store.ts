@@ -11,7 +11,8 @@
  * typed contract lives on the SessionStore port):
  *   sessions  { title, pinned, updatedAt }
  *   messages  { sessionId, role, content, type, at, seq, usage* }
- *   toolRuns  { messageId, position, tool, input?, result? }
+ *   toolRuns  { messageId, position, tool, input?, result?, ok?, data?,
+ *               metrics? }
  *   drafts    { text }
  *   Values    { activeSessionId, seq }
  *
@@ -218,6 +219,18 @@ export class TinyBaseSessionStore implements SessionStore {
     // written before the discriminant existed.
     ...(step.ok !== undefined ? { ok: step.ok } : {}),
     ...(step.data !== undefined ? { data: step.data } : {}),
+    // C15: per-call cost, a JSON object column like input/data, with its
+    // two numbers normalized on the way in so a malformed step cannot
+    // poison the cell. Absent stays absent — an old row reads as "no
+    // metrics", which is exactly what the renderer needs to show none.
+    ...(step.metrics !== undefined
+      ? {
+          metrics: {
+            tokens: step.metrics.tokens,
+            durationMs: step.metrics.durationMs,
+          },
+        }
+      : {}),
       });
     }
     this.touch(sessionId);
@@ -291,6 +304,18 @@ export class TinyBaseSessionStore implements SessionStore {
     // Mirrors `input`: a JSON object column, read back only when it really
     // is an object, so a malformed cell cannot reach a renderer.
     ...(isRecord(raw["data"]) ? { data: raw["data"] } : {}),
+    // Mirrors `data`: numbers only, or the step reads as having no
+    // metrics at all (C15).
+    ...(isRecord(raw["metrics"]) &&
+    typeof raw["metrics"]["tokens"] === "number" &&
+    typeof raw["metrics"]["durationMs"] === "number"
+      ? {
+          metrics: {
+            tokens: raw["metrics"]["tokens"],
+            durationMs: raw["metrics"]["durationMs"],
+          },
+        }
+      : {}),
       });
     }
     return steps.sort((a, b) => a.position - b.position);

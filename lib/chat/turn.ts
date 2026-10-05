@@ -171,6 +171,14 @@ export function createTurnRunner(deps: TurnDeps) {
       position,
       ...(s.input ? { input: s.input } : {}),
       ...(s.result !== undefined ? { result: s.result } : {}),
+      // The runner's full step contract (C15 + REGRESSION): this map
+      // picked only some fields for the store's life, so `ok` and
+      // `data` never reached the renderer from a LIVE turn — a failed
+      // tool could not render as failed and structured surfaces always
+      // looked empty. Metrics would have died in the same slot.
+      ...(s.ok !== undefined ? { ok: s.ok } : {}),
+      ...(s.data !== undefined ? { data: s.data } : {}),
+      ...(s.metrics !== undefined ? { metrics: s.metrics } : {}),
     }));
     const usage = {
       promptTokens: result.promptTokens,

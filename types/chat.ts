@@ -28,8 +28,19 @@ export interface AgentStep {
   /** Structured result for the renderer, never for the model. Absent for a
    *  tool with no structured shape, and for every row written before it. */
   data?: Record<string, unknown>;
+  /** Per-call cost of the GENERATION turn that produced this call (C15,
+   *  PocketPal ToolMetricsFooter semantics): the tokens the model spent
+   *  producing it and that turn's wall-clock. Absent on rows written
+   *  before the column existed — absence renders nothing, and that is
+   *  the cue. A multi-tool turn replicates its total onto each call. */
+  metrics?: ToolMetrics;
   position: number;
 }
+
+/** One tool call's cost (C15): generation tokens + wall-clock. Named
+ *  so the store, the engine loop and the formatter share ONE shape
+ *  instead of restating it. */
+export type ToolMetrics = { tokens: number; durationMs: number };
 
 export interface MessageUsage {
   promptTokens: number;

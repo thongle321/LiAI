@@ -14,7 +14,7 @@ import type {
   ToolDefinition,
 } from "../inference/engine.ts";
 import type { SamplerParams } from "../inference/sampler.ts";
-import type { TurnOutcomeFlags } from "../../types/chat.ts";
+import type { TurnOutcomeFlags, ToolMetrics } from "../../types/chat.ts";
 import { runTalent, type TalentSearchAuth } from "./registry.ts";
 
 export interface AgentStep {
@@ -27,6 +27,15 @@ export interface AgentStep {
    *  as true: absent means the row predates the discriminant, and renders
    *  conservatively rather than claiming a success nobody recorded. */
   ok?: boolean;
+  /** Structured result for the renderer, never for the model. Rode an
+   *  unchecked spread until C15 typed it, because the turn's step map
+   *  reads it. */
+  data?: Record<string, unknown>;
+  /** Per-call cost of the GENERATION turn that produced this call (C15):
+   *  the tokens the model spent producing it + that turn's wall-clock.
+   *  Absent when the engine reported no generated tokens — absence is
+   *  the cue. */
+  metrics?: ToolMetrics;
 }
 
 export type AgentEvent =
@@ -117,6 +126,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
 
   try {
     for (let turn = 0; ; turn += 1) {
+      const turnStartedAt = Date.now();
       const forcedFinal = turn >= maxTurns;
       const requestMessages =
         forcedFinal && turn > 0
@@ -188,6 +198,19 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
       if (outcome.toolCalls.length > 0) turnCalls = outcome.toolCalls;
       text = turnText;
 
+      // C15: per-call cost of THIS generation turn — the tokens the
+      // model spent producing these calls and that turn's wall-clock,
+      // replicated onto each call of a multi-tool turn (the same
+      // overstatement PocketPal's ToolMetricsFooter accepts rather than
+      // omitting multi-tool metrics). Absent when the engine reported
+      // no generated tokens: absence is the cue.
+      const stepMetrics =
+        outcome.completionTokens > 0
+          ? {
+              tokens: outcome.completionTokens,
+              durationMs: Date.now() - turnStartedAt,
+            }
+          : undefined;
       const allowed = forcedFinal
         ? []
         : turnCalls.filter((c) => advertisedName(c, tools));
@@ -203,6 +226,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
           status: "done",
           result: rejectedReason,
           ok: false,
+          ...(stepMetrics !== undefined ? { metrics: stepMetrics } : {}),
         });
       }
       if (allowed.length === 0) {
@@ -246,6 +270,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
           // Rides to the store so a settled turn's renderer can draw the
           // structured shape instead of parsing the fenced markdown.
           ...(talent.data !== undefined ? { data: talent.data } : {}),
+          ...(stepMetrics !== undefined ? { metrics: stepMetrics } : {}),
         });
         onEvent({
           type: "tool_call_finished",

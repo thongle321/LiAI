@@ -138,6 +138,14 @@ function asNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+/** `asNumber` for a field whose ABSENCE is meaningful. A rate the engine
+ *  did not report (or reported as NaN) becomes absent rather than 0, so
+ *  the footer can omit the segment instead of printing a fabricated
+ *  zero. A REPORTED 0 stays 0 — that is a measurement. */
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 /** Wrap an (already loaded) native context as a CompletionEngine. */
 export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
   return {
@@ -223,6 +231,7 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
           ? toEngineCalls(result.tool_calls)
           : seen;
       const t = result.timings;
+      const promptTokensPerSecond = optionalNumber(t?.prompt_per_second);
       const timings =
         t === undefined
           ? undefined
@@ -230,6 +239,7 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
               promptMs: asNumber(t.prompt_ms),
               tokensPerSecond: asNumber(t.predicted_per_second),
               msPerToken: asNumber(t.predicted_per_token_ms),
+              ...(promptTokensPerSecond !== undefined ? { promptTokensPerSecond } : {}),
             };
       // C3 — `tokens_cached` is authoritative for occupancy, by the
       // engine's own definition: it is `n_past` at completion end —

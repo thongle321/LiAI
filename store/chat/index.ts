@@ -73,6 +73,29 @@ export async function defaultGetStore(): Promise<SessionStore | null> {
   }
 }
 
+/** Reload the local model at the CURRENT inference settings, now.
+ *
+ *  `EngineManager.ensure()` keys the slot on n_ctx, so changing nCtx alone
+ *  would reload on the NEXT turn — which is the wrong moment to discover
+ *  that the new size cannot be loaded. The context ladder calls this right
+ *  after setting the size, so a failure is caught while the user is still
+ *  looking at the sheet.
+ *
+ *  Throws on a failed load, and leaves the slot EMPTY in that case (ensure()
+ *  drops it before loading), which is why the caller re-initialises. */
+export async function reloadLocalEngine(): Promise<void> {
+  const source = await defaultEngineSource();
+  // No source means no model is selected — nothing to reload, and the
+  // caller's try/catch must not fire over a state it cannot fix.
+  if (!source) return;
+  await getManager().ensure(
+    source,
+    source.kind === "local"
+      ? await projectorPathForFileName(source.fileName)
+      : undefined,
+  );
+}
+
 /** One process-wide engine slot (local context cached by file). */
 let manager: EngineManager | null = null;
 

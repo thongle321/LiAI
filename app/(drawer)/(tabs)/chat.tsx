@@ -55,6 +55,8 @@ import {
   ContextLadderSheet,
 } from "../../../components/chat/ContextFullBanner.tsx";
 import { effectiveNCtx, fillPercent } from "../../../lib/chat/context-fill.ts";
+import { labelTokens } from "../../../lib/chat/context-ladder.ts";
+import { useContextLadder } from "../../../hooks/useContextLadder.ts";
 import {
   type BannerVariant,
   consecutiveFullFailures,
@@ -242,7 +244,9 @@ export default function ChatRoute() {
   }, [turnCount]);
   const [ladderOpen, setLadderOpen] = useState(false);
   const nCtx = useInference((s) => s.nCtx);
-  const setNCtx = useInference((s) => s.setNCtx);
+  // The same ladder the sheet draws, so the banner's more-room action and
+  // the sheet's picker can never disagree about what fits.
+  const ladder = useContextLadder(nCtx);
   // C4: the window this thread divides by. Local = configured nCtx;
   // remote = the C7 /props contextLength, which is unknown until a probe
   // lands — and an unknown window never warns and never fills.
@@ -669,6 +673,9 @@ export default function ChatRoute() {
       heavyToolName={banner.heavyToolName}
       fill={fillPercent(newestAssistant?.usage?.promptTokens, windowSize ?? 0)}
       onMoreRoom={() => setLadderOpen(true)}
+      // The banner keeps the local/remote rule for this action; we add only
+      // the ladder's verdict, so it is absent when nothing larger fits.
+      canIncrease={banner.copy !== "remote" && ladder.anyFits}
       onNewChat={() => {
         setDismissed(dismissBanner(dismissed, banner.variant));
         void newConversation();
@@ -687,15 +694,20 @@ export default function ChatRoute() {
       <ContextLadderSheet
         visible={ladderOpen}
         currentNctx={nCtx}
-        onPick={(n) => {
-          // The engine reloads on the NEXT send: EngineManager keys its
-          // slot on n_ctx, so a changed value transparently releases and
-          // re-inits. No explicit reload needed.
-          setNCtx(n);
-          setLadderOpen(false);
+        onResult={(success, tokens) =>
+          setChatWarning({
+            message: success
+              ? `Context set to ${labelTokens(tokens)}. The model reloaded.`
+              : `Couldn't load ${labelTokens(tokens)} — back at ${labelTokens(nCtx)} context.`,
+            severity: success ? "warning" : "error",
+            recoverable: false,
+          })
+        }
+        onNewChat={() => {
           if (banner.variant !== "none") {
             setDismissed(dismissBanner(dismissed, banner.variant));
           }
+          void newConversation();
         }}
         onClose={() => setLadderOpen(false)}
       />

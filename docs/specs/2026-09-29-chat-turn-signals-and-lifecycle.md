@@ -181,6 +181,21 @@ is precisely the thing that costs trust when the model OOMs anyway.
 Populating `ggufMetadata` and building a real verdict is legitimate work — it just belongs
 in the model-metadata path, not smuggled in under a chat feature. Tracked separately.
 
+> **Superseded (2026-10-06).** The 2026-10-06 chat-message-ui-parity work did exactly that
+> separate work, so the blocker named above no longer holds: the GGUF header is read at
+> download/import time (`lib/models/gguf-metadata.ts`, `maxContextLength`), the KV-cache
+> math reads real metadata so the estimate moves with `n_ctx`
+> (`lib/models/memoryEstimator.ts`), and `lib/models/context-fit.ts` classifies a candidate
+> size as fits / tight / won't-fit against device RAM and a calibrated ceiling. The
+> context ladder sheet (ticket 07) therefore does ship the verdict chip, per stop, for
+> this device. This note records the supersession; the reasoning above is left as it was
+> written.
+>
+> One line above still stands on its own merits: changing `nCtx` alone reloads on the
+> NEXT send. The ladder reloads at once so a size the device cannot load is discovered
+> while the user is still in the sheet, and rolls the size back and re-initialises if
+> that load fails.
+
 ### Non-goals
 
 - Context **summarisation / compaction**. Neither app does it. Out of scope.

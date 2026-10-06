@@ -121,6 +121,12 @@ export interface DownloadsSlice {
   startProjectorDownload: (specId: string) => Promise<void>;
   /** Mark partial on-disk files paused after launch so Resume continues them. */
   reconcileInterrupted: () => Promise<void>;
+  /** Read the model's GGUF header at rest and store what it says, so the
+   *  max trained context and the real KV-cache cost are known without
+   *  loading the model. A no-op for remote models (their context length
+   *  is the server's setting, not a model fact) and for rows that
+   *  already carry metadata. */
+  refreshGgufMetadata: (specId: string) => Promise<void>;
   pauseDownload: (jobId: string) => Promise<void>;
   resumeDownload: (jobId: string) => Promise<void>;
   cancelDownload: (jobId: string) => Promise<void>;

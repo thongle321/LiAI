@@ -3,10 +3,11 @@
  * buffer, × runtime overhead). Pure: every input is a value, so
  * node --test covers it with hand-computed byte totals.
  *
- * LiAI's stored ggufMetadata is an untyped record that is never
- * populated, so callers map it through `toMemoryMetadata` first —
- * anything unparseable reads as absent and the estimate falls back to
- * weights × overhead, exactly like PocketPal without metadata.
+ * LiAI's stored ggufMetadata is an untyped record, so callers map it
+ * through `toMemoryMetadata` first — anything unparseable reads as
+ * absent and the estimate falls back to weights × overhead, exactly like
+ * PocketPal without metadata. The record is populated by
+ * `readGgufMetadata` at download, import or reconcile time.
  */
 
 /** The GGUF fields the math reads (subset of PocketPal's GGUFMetadata). */
@@ -108,8 +109,7 @@ function calculateComputeBuffer(
 
 /** Bridge from LiAI's untyped stored record to the estimator input.
  * Anything unparseable reads as absent — the estimator then falls back
- * to weights × overhead. The record is never populated today, so this
- * is future-proofing for GGUF metadata plumbing, not live behavior. */
+ * to weights × overhead. */
 export function toMemoryMetadata(
   record: Record<string, unknown> | undefined,
 ): GgufMemoryMetadata | undefined {

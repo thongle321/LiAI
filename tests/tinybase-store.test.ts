@@ -88,6 +88,40 @@ it("round-trips contextFull and timings", async () => {
     assert.equal((await store.get(id))?.[0].outcome, undefined);
   });
 
+  it("round-trips prompt throughput, and an old row reads as none", async () => {
+    // The timings live in FLAT columns, so a new field only survives a
+    // restart if every projection names it. A row written before the
+    // field existed must read as "not reported" rather than 0.
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, {
+      role: "assistant",
+      content: "hi",
+      outcome: {
+        timings: {
+          promptMs: 120,
+          tokensPerSecond: 25,
+          msPerToken: 40,
+          promptTokensPerSecond: 640.5,
+        },
+      },
+    });
+    assert.deepEqual((await store.get(id))?.[0].outcome?.timings, {
+      promptMs: 120,
+      tokensPerSecond: 25,
+      msPerToken: 40,
+      promptTokensPerSecond: 640.5,
+    });
+    await store.append(id, {
+      role: "assistant",
+      content: "older",
+      outcome: { timings: { promptMs: 120, tokensPerSecond: 25, msPerToken: 40 } },
+    });
+    const older = (await store.get(id))?.[1].outcome?.timings;
+    assert.equal(older?.promptTokensPerSecond, undefined);
+    assert.equal("promptTokensPerSecond" in (older ?? {}), false);
+  });
+
   it("keeps timings even when every figure is zero", async () => {
     // A very fast turn legitimately measures 0; dropping it would hide
     // that we DID measure.

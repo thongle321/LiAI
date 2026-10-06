@@ -17,31 +17,100 @@ import { Pressable, Text, View } from "react-native";
 import type { ReactNode } from "react";
 
 import { usePressFeedback } from "../../lib/motion.ts";
+import {
+  ESCALATED_AFTER_FAILURES,
+  type BannerVariant,
+  type ContextFullCopy,
+} from "../../lib/chat/banner-variant.ts";
 
 /** Context sizes offered by the ladder, ascending. Sized from the two
  *  bounds the inference store already declares (MIN_CONTEXT 512,
  *  DEFAULT_INFERENCE.nCtx 4096) rather than a second ladder of our own. */
 const LADDER = [2048, 4096, 8192, 16384, 32768, 65536, 131072];
 
+/** One surface, five variants. `lib/chat/banner-variant.ts` decides which
+ *  of these renders and, for context-full, which wording — this component
+ *  only draws it. PocketParity: ChatView/BannerRow.tsx. */
+const COPY: Record<
+  BannerVariant,
+  { title: string; body: string; meter?: boolean }
+> = {
+  "context-full": {
+    title: "Context full",
+    body: "This thread has used the room the model has. Start a new chat, or give the model more.",
+    meter: true,
+  },
+  "context-warning": {
+    title: "Context running low",
+    body: "This conversation is getting long and may soon run out of room.",
+    meter: true,
+  },
+  "remote-cut-off": {
+    title: "This reply may be cut off",
+    body: "The remote model stopped mid-sentence. Ask it to carry on.",
+  },
+  "html-soft-cap": {
+    title: "Previews are piling up",
+    body: "This conversation has several HTML previews in it, which is part of why it feels slow.",
+  },
+  none: { title: "", body: "" },
+};
+
+/** The context-full wording, in the resolver's precedence order: remote
+ *  first (raising the context size is not ours to offer), then the tool
+ *  that needs the room, then the repeated-failure escalation, then the
+ *  default the resolver already selected. */
+function fullBody(
+  copy: ContextFullCopy,
+  heavyToolName: string | undefined,
+): string {
+  if (copy === "remote") {
+    return "This remote model has run out of room. Start a new chat — there is no context size to raise here.";
+  }
+  if (copy === "heavy-tool") {
+    return `${heavyToolName ?? "That tool"} takes a lot of room in this conversation. Start a new chat, or give the model more.`;
+  }
+  if (copy === "escalated") {
+    return `This thread has run out of room ${ESCALATED_AFTER_FAILURES} turns in a row. Start a new chat, or give the model more.`;
+  }
+  return COPY["context-full"].body;
+}
+
 export function ContextFullBanner({
-  variant = "full",
+  variant = "context-full",
+  copy,
+  heavyToolName,
   fill,
   onMoreRoom,
   onNewChat,
   onDismiss,
 }: {
-  /** "full" is the post-failure banner (unchanged); "warning" is the C4
-   *  pre-failure alert — same surface, same actions, softer meter. */
-  variant?: "full" | "warning";
-  /** 0-100. */
+  /** Which variant the resolver chose. "full" is the post-failure banner;
+   *  "warning" the C4 pre-failure alert — same surface, same actions,
+   *  softer meter. */
+  variant?: BannerVariant;
+  /** context-full only: which wording to use. */
+  copy?: ContextFullCopy;
+  /** The heavy tool to name, when the copy names one. */
+  heavyToolName?: string;
+  /** 0-100. Read by the two window-driven variants only. */
   fill: number;
   onMoreRoom: () => void;
   onNewChat: () => void;
   onDismiss: () => void;
 }) {
-  const warning = variant === "warning";
+  // No `variant === "none"` early return: the hooks below are
+  // unconditional by contract, and the caller only mounts a real variant.
+  const warning = variant === "context-warning";
+  const spec = COPY[variant];
   const moreRoom = usePressFeedback();
   const newChat = usePressFeedback();
+  // "More room" is a local model control. A remote full banner says so
+  // and offers the conversation instead, rather than a button that would
+  // raise a setting the endpoint does not read.
+  const canIncrease =
+    variant === "context-warning" ||
+    (variant === "context-full" && copy !== "remote");
   return (
     <View
       className={`mb-2 rounded-lg border p-3 ${
@@ -50,37 +119,43 @@ export function ContextFullBanner({
     >
       <View className="flex-row items-center justify-between">
         <Text className="font-sans-semibold text-body-sm text-primary-text">
-          {warning ? "Context running low" : "Context full"}
+          {spec.title}
         </Text>
-        <Text className="font-sans text-caption text-secondary-text">{fill}%</Text>
+        {spec.meter === true ? (
+          <Text className="font-sans text-caption text-secondary-text">{fill}%</Text>
+        ) : null}
       </View>
       {/* The fill meter: the one thing that tells the user this is about
           room, not about the model being broken. The warning variant
           tints the whole card amber at the same lighter strength
           PocketPal gives its warning banner (BannerRow tint.warning), so
           "soon" and "now" are not the same surface. */}
-      <View className="mt-2 h-1 overflow-hidden rounded-full bg-surface-3">
-        <View
-          className={`h-full rounded-full ${warning ? "bg-warning" : "bg-error"}`}
-          style={{ width: `${Math.max(2, fill)}%` }}
-        />
-      </View>
+      {spec.meter === true ? (
+        <View className="mt-2 h-1 overflow-hidden rounded-full bg-surface-3">
+          <View
+            className={`h-full rounded-full ${warning ? "bg-warning" : "bg-error"}`}
+            style={{ width: `${Math.max(2, fill)}%` }}
+          />
+        </View>
+      ) : null}
       <Text className="mt-2 font-sans text-caption text-secondary-text">
-        {warning
-          ? "This conversation is getting long and may soon run out of room."
-          : "This thread has used the room the model has. Start a new chat, or give the model more."}
+        {variant === "context-full" ? fullBody(copy ?? "default", heavyToolName) : spec.body}
       </Text>
       <View className="mt-2 flex-row items-center gap-2">
-        <AnimatedPress press={moreRoom} onPress={onMoreRoom} label="More room">
-          <Text className="font-sans-semibold text-body-sm text-primary">
-            More room
-          </Text>
-        </AnimatedPress>
-        <AnimatedPress press={newChat} onPress={onNewChat} label="New chat">
-          <Text className="font-sans-semibold text-body-sm text-primary">
-            New chat
-          </Text>
-        </AnimatedPress>
+        {canIncrease ? (
+          <AnimatedPress press={moreRoom} onPress={onMoreRoom} label="More room">
+            <Text className="font-sans-semibold text-body-sm text-primary">
+              More room
+            </Text>
+          </AnimatedPress>
+        ) : null}
+        {variant !== "html-soft-cap" ? (
+          <AnimatedPress press={newChat} onPress={onNewChat} label="New chat">
+            <Text className="font-sans-semibold text-body-sm text-primary">
+              New chat
+            </Text>
+          </AnimatedPress>
+        ) : null}
         <Pressable
           onPress={onDismiss}
           className="ml-auto min-h-12 justify-center px-2"

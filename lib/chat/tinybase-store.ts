@@ -72,6 +72,7 @@ interface MessageRow {
    *  not a nested object. */
   contextFull?: boolean;
   interrupted?: boolean;
+  stoppedEarly?: boolean;
   promptMs?: number;
   tokensPerSecond?: number;
   msPerToken?: number;
@@ -98,6 +99,7 @@ function messageRowFrom(raw: unknown): MessageRow | null {
     totalTokens: usage("totalTokens"),
     ...(raw["contextFull"] === true ? { contextFull: true } : {}),
     ...(raw["interrupted"] === true ? { interrupted: true } : {}),
+    ...(raw["stoppedEarly"] === true ? { stoppedEarly: true } : {}),
     ...(typeof raw["promptMs"] === "number"
       ? {
           promptMs: raw["promptMs"],
@@ -229,6 +231,7 @@ export class TinyBaseSessionStore implements SessionStore {
       // Flat, like usage: TinyBase has no nested cell.
       ...(turn.outcome?.contextFull === true ? { contextFull: true } : {}),
       ...(turn.outcome?.interrupted === true ? { interrupted: true } : {}),
+    ...(turn.outcome?.stoppedEarly === true ? { stoppedEarly: true } : {}),
       ...(turn.outcome?.timings !== undefined
         ? {
             promptMs: turn.outcome.timings.promptMs,
@@ -282,12 +285,14 @@ export class TinyBaseSessionStore implements SessionStore {
       // Rebuilt as the nested shape the port declares, from the flat
       // columns. Omitted entirely when the engine reported nothing, so an
       // old row simply has no `outcome` key.
-      ...(row.contextFull !== undefined || row.interrupted !== undefined
-      || row.promptMs !== undefined
+...(row.contextFull !== undefined || row.interrupted !== undefined
+        || row.stoppedEarly !== undefined
+        || row.promptMs !== undefined
         ? {
             outcome: {
               ...(row.contextFull !== undefined ? { contextFull: row.contextFull } : {}),
               ...(row.interrupted !== undefined ? { interrupted: row.interrupted } : {}),
+              ...(row.stoppedEarly !== undefined ? { stoppedEarly: row.stoppedEarly } : {}),
               ...(row.promptMs !== undefined && row.promptMs !== null
                 ? {
                     timings: {

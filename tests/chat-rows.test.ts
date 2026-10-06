@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { buildRows } from "../lib/chat/rows.ts";
+import type { ApiError } from "../types/api.ts";
 import type { ChatMessage } from "../types/chat.ts";
 
 function user(text: string, at: number): ChatMessage {
@@ -149,6 +150,57 @@ describe("buildRows", () => {
     assert.equal(
       solo.find((r) => r.kind === "message")?.status,
       "sending",
+    );
+  });
+});
+
+/** Statuses of the user rows only, in order: assistant rows carry no
+ * delivery state of their own. */
+function userStatuses(messages: ChatMessage[], sending = false): unknown[] {
+  return buildRows(messages, { sending })
+    .filter((r) => r.kind === "message" && r.message.role === "user")
+    .map((r) => (r.kind === "message" ? r.status : null));
+}
+
+describe("delivery state", () => {
+  const now = atMidday(2026, 9, 27);
+  const failed: ApiError = { code: "llm_error", message: "boom" };
+
+  it("marks the question failed when its own turn errored", () => {
+    // The store records a failed send on the turn's assistant stub — that
+    // IS this question's delivery failure. The assistant-side error card is
+    // untouched; the row only learns it.
+    assert.deepEqual(
+      userStatuses([user("q", now), assistant("", now, { error: failed })]),
+      ["failed"],
+    );
+  });
+
+  it("clears the failed state once the retry succeeds", () => {
+    // retry() clears the stub's error before rerunning, so the same
+    // messages minus the error read as sent again.
+    assert.deepEqual(
+      userStatuses([user("q", now), assistant("a", now)]),
+      ["sent"],
+    );
+  });
+
+  it("keeps sending and sent as they were", () => {
+    assert.deepEqual(userStatuses([user("q", now)], true), ["sending"]);
+    assert.deepEqual(userStatuses([user("q", now)], false), ["sent"]);
+  });
+
+  it("does not let one turn's failure bleed into the next question", () => {
+    // Only the turn IMMEDIATELY following a question is that question's
+    // reply; the one after belongs to the next question.
+    assert.deepEqual(
+      userStatuses([
+        user("q1", now),
+        assistant("", now, { error: failed }),
+        user("q2", now),
+        assistant("a", now),
+      ]),
+      ["failed", "sent"],
     );
   });
 });

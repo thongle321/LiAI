@@ -76,6 +76,9 @@ interface MessageRow {
   promptMs?: number;
   tokensPerSecond?: number;
   msPerToken?: number;
+  /** Flat sibling of the other timings -- TinyBase has no nested cell.
+   *  Absent on rows written before the field existed. */
+  promptTokensPerSecond?: number;
 }
 
 function messageRowFrom(raw: unknown): MessageRow | null {
@@ -105,6 +108,9 @@ function messageRowFrom(raw: unknown): MessageRow | null {
           promptMs: raw["promptMs"],
           tokensPerSecond: num(raw["tokensPerSecond"]),
           msPerToken: num(raw["msPerToken"]),
+          ...(typeof raw["promptTokensPerSecond"] === "number"
+            ? { promptTokensPerSecond: raw["promptTokensPerSecond"] }
+            : {}),
         }
       : {}),
   };
@@ -237,6 +243,11 @@ export class TinyBaseSessionStore implements SessionStore {
             promptMs: turn.outcome.timings.promptMs,
             tokensPerSecond: turn.outcome.timings.tokensPerSecond,
             msPerToken: turn.outcome.timings.msPerToken,
+            // Optional: an old turn carries no prompt throughput, and
+            // writing an absent cell as 0 would invent a measurement.
+            ...(turn.outcome.timings.promptTokensPerSecond !== undefined
+              ? { promptTokensPerSecond: turn.outcome.timings.promptTokensPerSecond }
+              : {}),
           }
         : {}),
     });
@@ -299,6 +310,9 @@ export class TinyBaseSessionStore implements SessionStore {
                       promptMs: row.promptMs,
                       tokensPerSecond: row.tokensPerSecond ?? 0,
                       msPerToken: row.msPerToken ?? 0,
+                      ...(row.promptTokensPerSecond !== undefined
+                        ? { promptTokensPerSecond: row.promptTokensPerSecond }
+                        : {}),
                     },
                   }
                 : {}),

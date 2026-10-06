@@ -77,7 +77,7 @@ PocketPal metrics we lack, only **one** survives scrutiny:
 
 Source: `AssistantTurnFooter.tsx:53-118,145-155`. **Ticket 04.**
 
-### 3.3 Markdown table `align` support — **probably already working**
+### 3.3 Markdown table `align` support — **closed, verified by test**
 We render tables in a horizontal ScrollView with a fixed `COLUMN_WIDTH`
 (`MarkdownView.tsx:56-59,78-101`); PocketPal honours `align=center|right|left`
 (`TableRenderers.tsx:105-160`). Completes deferred issue **09**.
@@ -89,6 +89,18 @@ so the alignment is already inside the `ReactNode`s our `MarkdownTable` renders.
 The audit was reading the wrong layer — alignment is not a missing parameter, it
 is an absent one. **Ticket 01** is a proof, not a feature: test it, and either
 close §3.3 or fix the cell renderer.
+
+**Closed (ticket 01, verified).** Both halves were asserted and both pass against
+the code as it stands, so nothing in `MarkdownView.tsx` changed — the library was
+already right. The guard lives in `tests/markdown-tables.test.ts`:
+`getTableColAlignmentStyle` (imported from the installed library, pure JS) maps
+each GFM delimiter form to its `textAlign`, a missing delimiter to `left`, and
+`Parser.js` is pinned as spreading that style into every header and body cell
+*before* calling our renderer. Our `TableCell` is pinned at source level to
+render `{children}` untouched and to carry no `textAlign` of its own — that half
+is source-level on purpose, because by the time our wrapper runs there is no
+node-observable alignment left to assert without mounting react-native.
+Horizontal scroll for wide tables is unchanged (`ScrollView horizontal`).
 
 ### 3.4 `ContentReportSheet` — **dropped, blocked on backend**
 "Report Content" menu action + a 5-category sheet with a description field, an
@@ -176,7 +188,7 @@ talent surface becomes a sibling block rather than an inline row).
 | **04** streaming macrotask yield | **Closed, different mechanism.** 100ms macrotask beat held for the streaming span (`store/chat/send.ts:58-74,186`) vs PocketPal's per-token `setTimeout(0)` |
 | **11** session bulk actions | **Closed** (this session's drawer work) |
 | **10** date grouping | **Closed** (`lib/chat/session-groups.ts`) |
-| **14** lazy message hydration | **Ticketed.** FlatList defaults vs PocketPal's `initialNumToRender:10`, `maxToRenderPerBatch:6` (`ChatView.tsx:931-932`) — ticket 10 |
+| **14** lazy message hydration | **Closed** (`MessageList.tsx` — `initialNumToRender:10`, `maxToRenderPerBatch:6`, PocketPal `ChatView.tsx:997,1001`) |
 
 ---
 
@@ -187,7 +199,7 @@ Four can start immediately: **01, 02, 04, 05**.
 
 | Ticket | Audit § | Blocked by |
 | --- | --- | --- |
-| 01 table alignment — prove it, close §3.3 | 3.3 | — |
+| 01 table alignment — prove it, close §3.3 | 3.3 | **Done — verified, no code change.** Test in `tests/markdown-tables.test.ts` |
 | 02 pending row names the phase | 3.1 | — |
 | 03 `Stopping…` + live tool-call token count | 3.1 | 02 |
 | 04 footer prompt throughput | 3.2 | — |

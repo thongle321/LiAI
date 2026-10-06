@@ -166,6 +166,14 @@ export function MessageList({
           ? { minIndexForVisible: 1, autoscrollToTopThreshold: 20 }
           : undefined
       }
+      // Render windowing at PocketPal's values (ChatView.tsx:997,1001):
+      // a long conversation opens and scrolls without mounting every row.
+      // The per-batch cap only throttles cells ENTERING the window while
+      // scrolling; rows already inside it — which the streaming bubble and
+      // pending row always are, since follow keeps them on screen — render
+      // in the same commit, so streaming is unaffected.
+      initialNumToRender={10}
+      maxToRenderPerBatch={6}
       contentContainerClassName="p-5"
       className="flex-1"
     />

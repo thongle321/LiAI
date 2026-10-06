@@ -28,17 +28,45 @@ export function phaseLabel(toolName?: string): string | undefined {
   return PHASE_LABELS[name] ?? GENERIC_LABEL;
 }
 
+/** Below this the count is noise ("1 tokens"); at it, the row starts
+ *  speaking. PocketPal's MIN_TOKENS (PendingIndicator.tsx:16). */
+export const MIN_TOOL_TOKENS = 10;
+
+/** The row's label while a stopped turn unwinds. Shown ALONE. */
+export const STOPPING_LABEL = "Stopping…";
+
 /** The row's suffix. Parts are joined with a middle dot and absent
  *  parts are dropped, so `{ elapsed: 0 }` reads exactly as the row did
- *  before phases existed. */
+ *  before phases existed. The token count shows once it reaches
+ *  MIN_TOOL_TOKENS, with locale separators. */
 export function formatPendingSuffix(parts: {
   phase?: string;
+  /** Tool-call fragments generated this call — never reply text. */
+  tokens?: number;
   elapsed: number;
 }): string {
   return [
     parts.phase,
+    parts.tokens !== undefined && parts.tokens >= MIN_TOOL_TOKENS
+      ? `${parts.tokens.toLocaleString()} tokens`
+      : undefined,
     parts.elapsed > 0 ? `${parts.elapsed}s` : undefined,
   ]
     .filter((part): part is string => part !== undefined)
     .join(" · ");
+}
+
+/** The row's whole text. A stopping turn suppresses everything else —
+ *  phase, token count and elapsed describe a RUNNING turn, and this one
+ *  is unwinding. Independent of the in-flight flag (the store clears
+ *  `sending` the moment Stop is pressed, so this flag can only exist
+ *  separately). */
+export function formatPendingRow(parts: {
+  stopping?: boolean;
+  phase?: string;
+  tokens?: number;
+  elapsed: number;
+}): string {
+  if (parts.stopping === true) return STOPPING_LABEL;
+  return formatPendingSuffix(parts);
 }

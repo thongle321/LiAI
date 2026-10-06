@@ -51,8 +51,8 @@ describe("message list stability", () => {
     );
     assert.doesNotMatch(list, /renderBubble/, "rows replaced the message-only render prop");
     const chat = read("app/(drawer)/(tabs)/chat.tsx");
-    assert.match(chat, /buildRows\(visible, \{ sending \}\)/);
-    assert.match(chat, /useMemo\(\(\) => buildRows/, "rows memoized: new identity must not retrigger follow");
+    assert.match(chat, /buildRows\(visible, \{ sending, stopping \}\)/);
+    assert.match(chat, /useMemo\(\s*\(\) => buildRows/, "rows memoized: new identity must not retrigger follow");
     assert.match(chat, /<DateHeader label=\{row\.label\} \/>/);
     const item = read("components/chat/MessageListItem.tsx");
     // One row in, not three flags: the adapter's flags travel together.

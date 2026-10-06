@@ -7,6 +7,7 @@ import type { EngineSource } from "../../lib/inference/engine.ts";
 import type { SessionStore } from "../../lib/chat/session-store.ts";
 import type { ImportResult } from "../../lib/chat/import.ts";
 import type { AgentStep, ChatMessage, ChatSession, TurnOutcomeFlags } from "../../types/chat.ts";
+import type { ToolTokenCounter } from "../../lib/chat/tool-token-count.ts";
 
 export type Connection = "unknown" | "up" | "down";
 
@@ -42,6 +43,11 @@ export interface TurnRunner {
      *  pending row shows the tool's phase for exactly this span
      *  (ticket 02). */
     onToolStart?: (toolName: string) => void,
+    /** One fragment of an in-progress tool call arrived (llama.rn fires
+     *  per streamed token while the model assembles the call). The
+     *  counter that only these deltas feed is ticket 03's honesty
+     *  invariant; reply text streams through onToken and never counts. */
+    onToolDelta?: () => void,
   ): Promise<{
     reply: string;
     reasoning?: string;
@@ -84,6 +90,13 @@ export interface ChatCtx {
   keepAwake: (on: boolean) => void;
   active: { handle: { cancel(): void } | null };
   streamGen: number;
+  /** The generation a Stop was pressed against; the stopped run's
+   *  finally clears `stopping` once it matches. */
+  stoppingGen: number | null;
+  /** The tool-call fragment counter. Lives OUTSIDE React state: the
+   *  slice ticks it per delta and mirrors the total into the store, so
+   *  ticking never re-renders the message list. */
+  toolTokens: ToolTokenCounter;
 }
 
 /** A transient chat notice (G7). Kept deliberately small: PocketPal's
@@ -113,6 +126,15 @@ export interface ChatState {
    *  row names a phase only while a tool genuinely runs, never while
    *  the model is merely writing text (ticket 02). */
   pendingToolName: string | null;
+  /** True between Stop being pressed and the turn's loop actually
+   *  exiting. SEPARATE from `sending`: Stop clears `sending` immediately
+   *  so the composer frees, and this flag keeps the acknowledgement
+   *  without holding the composer. While set the pending row reads
+   *  "Stopping…" alone (ticket 03). */
+  stopping: boolean;
+  /** Fragments spent on the current tool call's assembly, mirrored from
+   *  the ctx counter each delta. Never counts reply text (ticket 03). */
+  toolTokenCount: number;
   /** A transient chat notice, or null. Distinct from an errored message:
    *  an errored message means the turn FAILED, while this means it went
    *  through in a degraded state the user should know about. PocketParity

@@ -17,6 +17,7 @@ import { createSendSlice, multimodalAvailable } from "./send.ts";
 import { createSessionsSlice } from "./sessions.ts";
 import { createDraftSlice } from "./draft.ts";
 import type { ChatCtx, ChatDeps, ChatState, TurnRunner } from "./types.ts";
+import { createToolTokenCounter } from "../../lib/chat/tool-token-count.ts";
 import { selectEngineSource, type EngineSource } from "../../lib/inference/engine.ts";
 import { EngineManager } from "../../lib/inference/manager.ts";
 import { projectorPathForFileName } from "../../lib/inference/mmproj.ts";
@@ -384,7 +385,7 @@ async function defaultAddGenerationPrompt(): Promise<boolean | undefined> {
 
 /** Default on-device turn: engine slot + agent loop + persisted turns. */
 function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner {
-  return (text, paths, onToken, onReasoning, onToolStart) => {
+  return (text, paths, onToken, onReasoning, onToolStart, onToolDelta) => {
     const runTurn = createTurnRunner({
       ensureEngine: async (source: EngineSource) =>
         // The projector rides the same resolution the image gate uses
@@ -411,7 +412,7 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
     getSampler: (sid) => defaultSampler(sid),
       saveImage: (uri: string) => defaultSaveImage(uri),
     });
-    return runTurn(text, paths, onToken, onReasoning, onToolStart);
+    return runTurn(text, paths, onToken, onReasoning, onToolStart, onToolDelta);
   };
 }
 
@@ -437,6 +438,8 @@ releaseEngine: () => {
       }),
     active: { handle: null },
     streamGen: 0,
+    stoppingGen: null,
+    toolTokens: createToolTokenCounter(),
   };
   return create<ChatState>()((set, get) => ({
     messages: [],

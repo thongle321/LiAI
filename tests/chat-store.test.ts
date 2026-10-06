@@ -1047,7 +1047,7 @@ describe("streaming yield (C16)", () => {
     );
     assert.match(
       src,
-      /finally\s*{[^}]*endStreamYield\(\);?\s*}/,
+      /finally\s*{[^}]*endStreamYield\(\);[\s\S]*?}/,
       "the beat must be released on every exit path",
     );
   });

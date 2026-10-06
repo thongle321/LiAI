@@ -82,6 +82,8 @@ export function createSendSlice(
   | "sending"
   | "turnStartedAt"
   | "pendingToolName"
+  | "stopping"
+  | "toolTokenCount"
   | "chatWarning"
   | "setChatWarning"
   | "send"
@@ -140,6 +142,9 @@ export function createSendSlice(
     // place that has to know a turn started.
     ctx.keepAwake(true);
     set({ turnStartedAt: Date.now() });
+    // Ticket 03: each turn's tool-call token count starts from zero.
+    ctx.toolTokens.turnStart();
+    set({ toolTokenCount: 0 });
     if (opts.clearOnFirst) {
       updateBubble(opts.assistantId, {
         text: "",
@@ -206,7 +211,18 @@ export function createSendSlice(
         },
         (toolName) => {
           if (gen !== ctx.streamGen) return;
+          // The call's fragments are done: the next assembly starts the
+          // count over (the reset lives at the start of each tool call).
+          ctx.toolTokens.settleCall();
           set({ pendingToolName: toolName });
+        },
+        // onToolDelta callback: the store's count ticks ONLY on
+        // tool-call assembly deltas — reply-text deltas flow through
+        // onToken, which never touches the counter. That distinction
+        // is the count's honesty.
+        () => {
+          if (gen !== ctx.streamGen) return;
+          set({ toolTokenCount: ctx.toolTokens.delta("tool") });
         },
       );
       if (gen !== ctx.streamGen) return;
@@ -241,6 +257,12 @@ export function createSendSlice(
     } finally {
       // Success, failure or supersede: idle must hold no timer.
       endStreamYield();
+      // A stopped turn acknowledging goes clear exactly when ITS loop
+      // exits — a later turn's finally must not clear a NEWER stop.
+      if (ctx.stoppingGen === gen) {
+        ctx.stoppingGen = null;
+        set({ stopping: false });
+      }
     }
   }
 
@@ -263,6 +285,8 @@ export function createSendSlice(
     sending: false,
     turnStartedAt: null,
     pendingToolName: null,
+    stopping: false,
+    toolTokenCount: 0,
     chatWarning: null,
     setChatWarning: (warning) => set({ chatWarning: warning }),
     editingTurnId: null,
@@ -295,6 +319,9 @@ export function createSendSlice(
 
     stop: () => {
       if (!get().sending) return;
+      // Mark the run this Stop belongs to BEFORE invalidating its
+      // callbacks; its finally clears `stopping` when it unwinds.
+      ctx.stoppingGen = ctx.streamGen;
       // Invalidate in-flight token callbacks, then halt the engine.
       // The partial reply stays in its bubble as the turn's text.
       ctx.streamGen += 1;
@@ -309,6 +336,10 @@ export function createSendSlice(
         // The turn is no longer running: a stale name would mislabel
         // the next turn's text-only span (phaseLabel's undefined case).
         pendingToolName: null,
+        // ...but the row must keep acknowledging the stop while the
+        // engine unwinds: a distinct flag, NOT the in-flight one (which
+        // we just cleared, so the composer stays usable).
+        stopping: true,
         messages: s.messages.map((m) =>
           m.streaming === true ? { ...m, streaming: false, at: Date.now() } : m,
         ),

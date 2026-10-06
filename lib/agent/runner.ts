@@ -44,6 +44,7 @@ export type AgentEvent =
   | { type: "token"; text: string }
   | { type: "reasoning"; text: string }
   | { type: "tool_call_started"; call: EngineToolCall }
+  | { type: "tool_call_delta" }
   | { type: "tool_call_finished"; outcome: { callId: string; tool: string; result: string; ok: boolean } }
   | { type: "run_finished" }
   | { type: "run_failed"; error: string };
@@ -196,6 +197,10 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
               if (calls.length > 0) {
                 toolFragmentCalls += 1;
                 firstToolCallAt ??= Date.now();
+                // llama.rn fires once per streamed token while args
+                // assemble — this event IS the token count's honest
+                // source. Reply text travels onToken, never this one.
+                onEvent({ type: "tool_call_delta" });
               }
               turnCalls = calls;
             },

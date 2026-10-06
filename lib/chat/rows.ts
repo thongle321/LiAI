@@ -83,10 +83,11 @@ function deliveryStatus(
 /** Rows for the list: a date header opening each day, then its turns. */
 export function buildRows(
   messages: ChatMessage[],
-  opts?: { now?: number; sending?: boolean },
+  opts?: { now?: number; sending?: boolean; stopping?: boolean },
 ): ChatRow[] {
   const now = opts?.now ?? Date.now();
   const sending = opts?.sending ?? false;
+  const stopping = opts?.stopping ?? false;
   const rows: ChatRow[] = [];
   let lastDay = "";
   messages.forEach((message, index) => {
@@ -112,8 +113,11 @@ export function buildRows(
   });
   // The pending row anchors on the active run, not on a second read of
   // the messages: one predicate, or the two disagree about what streams.
+  // While a stopped turn unwinds nothing is streaming, but the row must
+  // still show — the stopping flag keeps it mounted (ticket 03).
   const tail = rows[rows.length - 1];
-  if (tail !== undefined && tail.kind === "message" && tail.isActiveRun) {
+  const activeRun = tail !== undefined && tail.kind === "message" && tail.isActiveRun;
+  if (activeRun || stopping) {
     rows.push({ kind: "pending", id: "pending" });
   }
   return rows;

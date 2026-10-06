@@ -114,6 +114,7 @@ export function createTurnRunner(deps: TurnDeps) {
     onToken?: (text: string) => void,
     onReasoning?: (cumulative: string) => void,
     onToolStart?: (toolName: string) => void,
+    onToolDelta?: () => void,
   ): Promise<TurnOutcome> => {
     const trimmed = text.trim();
     if (trimmed === "") throw new Error("empty message");
@@ -180,6 +181,7 @@ export function createTurnRunner(deps: TurnDeps) {
           onReasoning?.(event.text);
         }
         if (event.type === "tool_call_started") onToolStart?.(event.call.name);
+        if (event.type === "tool_call_delta") onToolDelta?.();
       },
     });
 

@@ -109,6 +109,7 @@ export default function ChatRoute() {
   }, [deepLinkPrompt, setDraft]);
   const connection = useChatStore((s) => s.connection);
   const sending = useChatStore((s) => s.sending);
+  const stopping = useChatStore((s) => s.stopping);
   const loadSession = useChatStore((s) => s.loadSession);
   const checkHealth = useChatStore((s) => s.checkHealth);
   const send = useChatStore((s) => s.send);
@@ -179,7 +180,10 @@ export default function ChatRoute() {
   // Adapter rows for the list: date headers + group/avatar/status flags.
   // Memoized so the list's row-count follow effect can't retrigger on
   // identity churn — a re-render alone must never move the list.
-  const rows = useMemo(() => buildRows(visible, { sending }), [visible, sending]);
+  const rows = useMemo(
+    () => buildRows(visible, { sending, stopping }),
+    [visible, sending, stopping],
+  );
   const matchLabel =
     searchOpen && query.trim() !== ""
       ? `${visible.length} of ${messages.length}`

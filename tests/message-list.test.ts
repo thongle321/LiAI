@@ -95,7 +95,7 @@ describe("message list stability", () => {
     );
   });
 
-  it("renders all three user-row delivery states", () => {
+it("renders all three user-row delivery states", () => {
     // Source assertion, not a render: the only claim is which JSX branch a
     // status takes, and the node runner has no React Native to render it.
     // The state values themselves are tested as logic in chat-rows.test.ts.
@@ -109,6 +109,17 @@ describe("message list stability", () => {
     // row's status, not a downgrade of LiAI's tap-to-retry card.
     assert.match(item, /message\.error/);
     assert.match(item, /tap to retry/);
+  });
+
+  it("windows the render pass at PocketPal's caps", () => {
+    // PocketPal ChatView.tsx:997,1001 — initialNumToRender:10,
+    // maxToRenderPerBatch:6 (audit item 14, ticket 10).
+    // These are FlatList virtualization knobs: they only mean anything to a
+    // mounted RN list, so their behaviour is unreachable from `node --test`
+    // — pin the values by source assertion instead of faking a render.
+    const list = read("components/chat/MessageList.tsx");
+    assert.match(list, /initialNumToRender=\{10\}/);
+    assert.match(list, /maxToRenderPerBatch=\{6\}/);
   });
 
   it("tracks the end with STICK/LEAVE hysteresis from one source", () => {

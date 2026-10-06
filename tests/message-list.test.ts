@@ -95,6 +95,22 @@ describe("message list stability", () => {
     );
   });
 
+  it("renders all three user-row delivery states", () => {
+    // Source assertion, not a render: the only claim is which JSX branch a
+    // status takes, and the node runner has no React Native to render it.
+    // The state values themselves are tested as logic in chat-rows.test.ts.
+    const item = read("components/chat/MessageListItem.tsx");
+    assert.match(item, /status === "sending"/, "sending keeps the spinner");
+    assert.match(item, /status === "failed"/, "failed takes its own branch");
+    assert.match(item, /<CircleAlert[^>]*color=\{colors\.error\}/, "Lucide, error token");
+    // No emoji or text glyphs standing in for the icon (repo icon rule).
+    assert.doesNotMatch(item, /[\u{1F300}-\u{1FAFF}\u{2700}-\u{27BF}]/u);
+    // The assistant-side error card is ours and stays: parity here is the
+    // row's status, not a downgrade of LiAI's tap-to-retry card.
+    assert.match(item, /message\.error/);
+    assert.match(item, /tap to retry/);
+  });
+
   it("tracks the end with STICK/LEAVE hysteresis from one source", () => {
     // PocketPal ChatView.tsx:451 — re-arm below 24px, leave above 40px.
     // The library flips on a single 20px line with no hysteresis

@@ -10,7 +10,7 @@ import { ActivityIndicator, Image as RNImage, Pressable, Text, View } from "reac
 import type { ReactNode } from "react";
 import { useState } from "react";
 import Animated from "react-native-reanimated";
-import { CheckCheck, Wrench } from "lucide-react-native";
+import { CheckCheck, CircleAlert, Wrench } from "lucide-react-native";
 
 import { APP_NAME } from "../../constants/app.ts";
 
@@ -161,8 +161,17 @@ export function MessageListItem({
               <Text className="font-sans text-caption text-secondary-text">
                 {formatTime(message.at)}
               </Text>
+              {/* Three states, one row. The error icon is the row's own
+                  record that this question never landed -- the assistant
+                  turn below still owns the tap-to-retry card. */}
               {status === "sending" ? (
                 <ActivityIndicator size="small" color={colors.secondaryText} />
+              ) : status === "failed" ? (
+                <CircleAlert
+                  size={12}
+                  color={colors.error}
+                  accessibilityLabel="Failed to send"
+                />
               ) : (
                 <CheckCheck size={12} color={colors.secondaryText} />
               )}

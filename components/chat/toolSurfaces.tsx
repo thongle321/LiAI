@@ -30,6 +30,7 @@ import { ChevronRight, ExternalLink, Search, Wrench } from "lucide-react-native"
 import type { AgentStep } from "../../types/chat.ts";
 import { formatToolMetrics } from "../../lib/format.ts";
 import { colors } from "../../themes/tokens.ts";
+import { HtmlPreviewBubble } from "./HtmlPreviewBubble.tsx";
 
 export interface ToolSurfaceProps {
   step: AgentStep;
@@ -285,9 +286,24 @@ function PlainSurface({ step }: ToolSurfaceProps) {
   );
 }
 
+/** Model-authored HTML (PocketParity: RenderHtmlTalentUI). The html
+ *  arrives on `data` — the model was shown only the fixed success summary,
+ *  never its own markup echoed back. */
+function RenderHtmlSurface({ step }: ToolSurfaceProps) {
+  const html = typeof step.data?.html === "string" ? step.data.html : "";
+  const title = typeof step.data?.title === "string" ? step.data.title : undefined;
+  // A registered surface renders unconditionally here (this registry has no
+  // `node != null` fall-through, because calling a surface as a function to
+  // get one would break the useState surfaces' hooks). So an empty result
+  // states itself rather than rendering nothing — same rule as ReadUrl.
+  if (html === "") return <StaticRow label="No preview" metrics={step.metrics} />;
+  return <HtmlPreviewBubble html={html} title={title} />;
+}
+
 // Module load, not first render: the chat screen must never be the thing
 // that decides a renderer exists.
 registerToolSurface("web_search", WebSearchSurface);
 registerToolSurface("read_url", ReadUrlSurface);
 registerToolSurface("calculate", PlainSurface);
 registerToolSurface("datetime", PlainSurface);
+registerToolSurface("render_html", RenderHtmlSurface);

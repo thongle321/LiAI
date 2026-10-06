@@ -13,9 +13,18 @@ function fakeFetch(body: unknown, status = 200): typeof fetch {
 }
 
 describe("talentDefinitions", () => {
-  it("advertises the four on-device talents as function tools", () => {
+  it("advertises the on-device talents as function tools", () => {
     const names = talentDefinitions().map((d) => d.function.name);
-    assert.deepEqual(names, ["datetime", "calculate", "web_search", "read_url"]);
+    // render_html joined this list with the HTML preview port. It is
+    // pass-through — the model authors the markup — so it needs no key,
+    // which is why it carries no search-auth dependency.
+    assert.deepEqual(names, [
+      "datetime",
+      "calculate",
+      "web_search",
+      "read_url",
+      "render_html",
+    ]);
   });
 });
 

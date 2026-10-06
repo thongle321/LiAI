@@ -87,13 +87,25 @@ PocketPal resolves five: `context-warning`, `context-full`,
 `consecutiveFullFailures >= 2` (`BannerRow.tsx:76-243`). We have two
 (`ContextFullBanner.tsx:24-104`).
 
-### 3.7 `HtmlPreviewBubble` — **mechanism settled (WebView), producer still missing**
+### 3.7 `HtmlPreviewBubble` — **PORTED**
 WebView HTML rendering: JS disabled by default with a strict CSP, toggle to
 highlighted source, copy HTML, fullscreen modal with JS enabled
 (`HtmlPreviewBubble.tsx:29-338`), wired through a talent surface
-(`RenderHtmlTalentUI.tsx:13-18`). `react-native-webview` is the accepted
-mechanism (§7.1); **no producer exists on our side** — we have no `render_html`
-talent — so the item stays blocked until one is added.
+(`RenderHtmlTalentUI.tsx:13-18`). Shipped as `components/chat/HtmlPreviewBubble.tsx`
++ `lib/html/preview-document.ts` (pure wrapping, node-tested) + the
+`render_html` talent (`lib/agent/registry.ts`), registered as a tool surface
+(`toolSurfaces.tsx`). Sandbox flags pinned by `tests/html-preview-bubble.test.ts`
+because a WebView cannot be exercised under node.
+
+Two corrections to the original audit, both found while porting:
+- The `render_html` talent **fetches nothing** — the model authors the HTML
+  and the talent is a pure pass-through (`RenderHtmlEngine.ts:20-40`).
+- There is **no WebView-count or memory guard** in pocketpal; the earlier
+  recollection of one was wrong, and none was ported.
+
+Deviations: the source view reuses our `CodeBlock` (light theme) rather than
+pocketpal's atomOneDark, and `renderPending` was not ported — it is dead code
+upstream (declared, never called).
 
 ### 3.8 Multi-block-per-row rendering — **large, architectural**
 Reasoning → text → tool → text interleaved within one turn. Today our data model
@@ -152,7 +164,7 @@ Cheap, high-value first; each is independently shippable.
 5. **3.5** `IncreaseContextSheet` — reuses `estimateModelMemory`.
 6. **3.4** `ContentReportSheet`.
 7. **3.8** multi-block rows — **only** once 3.7's fate is settled, since it changes where a talent surface lives.
-8. **3.7** `HtmlPreviewBubble` — mechanism settled (WebView); blocked only on a `render_html` producer (§7.1).
+8. **3.7** `HtmlPreviewBubble` — **ported** (talent + bubble + surface).
 
 ---
 
@@ -164,11 +176,12 @@ Cheap, high-value first; each is independently shippable.
    (`expo/expo:packages/html-elements/package.json`), it renders HTML elements as
    native views, ships no HTML parser, and cannot run JS — so it also cannot do
    pocketpal's fullscreen-with-JS mode (`HtmlPreviewBubble.tsx:29-338`).
-   **Install `react-native-webview` via `npx expo install react-native-webview`
-   (let Expo pick the SDK-57 version), in the SAME commit as the feature — not
-   ahead of it.** Still unresolved, and it gates the whole item: **we have no
-   `render_html` talent**, so a WebView on its own renders nothing. The bubble is
-   useless until something produces HTML.
+   **RESOLVED — shipped.** `react-native-webview@13.16.1` was installed via
+   `npx expo install` (Expo's SDK-57 pick) together with the `render_html`
+   talent, so the dependency landed with the feature that uses it rather than
+   ahead of it. `@expo/html-elements` was rejected: it is not a WebView
+   substitute (peers are `react` / `react-native` / `react-native-web` only),
+   ships no HTML parser, and cannot run JS.
 2. **Multi-block rows?** 3.8 is a data-model change to `AgentStep`/`ChatMessage`,
    not a UI task. Worth its own ticket.
 3. **i18n — out of scope.** Pocketpal routes every string through `l10n` +

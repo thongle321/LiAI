@@ -227,6 +227,7 @@ export function VisionBottomPanel({
   needsSettings,
   onOpenSettings,
   onRetry,
+  issueAction,
   phase,
   answer,
   statusLabel,
@@ -244,6 +245,9 @@ export function VisionBottomPanel({
   needsSettings: boolean;
   onOpenSettings: () => void;
   onRetry: () => void;
+  /** Replaces "Try again" when the failure has somewhere better to go —
+   *  e.g. "Open Models" when the active model has vision switched off. */
+  issueAction?: { label: string; onPress: () => void } | null;
   phase: VoicePhase;
   answer: string;
   statusLabel: string;
@@ -308,14 +312,16 @@ export function VisionBottomPanel({
                   Default radius per the button spec, and a real 48px target. */}
               <Animated.View style={retryPress.animatedStyle}>
                 <Pressable
-                  onPress={onRetry}
+                  onPress={issueAction ? issueAction.onPress : onRetry}
                   onPressIn={retryPress.onPressIn}
                   onPressOut={retryPress.onPressOut}
                   className="btn btn--ghost mt-2 min-h-12 min-w-24"
                   accessibilityRole="button"
-                  accessibilityLabel="Try again"
+                  accessibilityLabel={issueAction ? issueAction.label : "Try again"}
                 >
-                  <Text className="font-sans text-body-md text-primary">Try again</Text>
+                  <Text className="font-sans text-body-md text-primary">
+                    {issueAction ? issueAction.label : "Try again"}
+                  </Text>
                 </Pressable>
               </Animated.View>
             </View>

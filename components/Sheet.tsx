@@ -170,6 +170,22 @@ export function Sheet({
       cornerRadius={12}
       // NO `scrollable` prop on TrueSheet — v3's flag makes auto measure
       // the screen (see header). Bodies bound themselves below.
+      //
+      // `scrollingExpandsSheet: false` (device-observed): its DEFAULT is
+      // true, and true means a scroll gesture belongs to the SHEET, not
+      // the content. Android's TrueSheetBottomSheetBehavior.kt consumes
+      // the nested scroll (onNestedPreScroll) to grow the sheet, and
+      // swallows the fling (onNestedFling returns true) so the list never
+      // coasts; iOS maps it to prefersScrollingExpandsWhenScrolledToEdge
+      // (TrueSheetViewController.mm). With `detents={["auto"]}` there is
+      // no taller detent to grow into, so the gesture just MOVED the
+      // sheet — "scrolling scrolls the sheet, not the content".
+      //
+      // This prop is independent of `scrollable`: the JS passes it to the
+      // native view unconditionally (TrueSheet.js), and Android applies
+      // it to the behavior in both the setter and sheet creation. So the
+      // auto-detent measurement above stays intact.
+      scrollableOptions={{ scrollingExpandsSheet: false }}
       footer={
         footer ? (
           <View

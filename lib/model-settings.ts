@@ -6,6 +6,11 @@ export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
   displayName: "",
   systemPrompt: "",
   stopWords: [],
+  addBosToken: false,
+  addEosToken: false,
+  bosToken: "",
+  eosToken: "",
+  chatTemplate: "",
 };
 
 export function parseModelSettings(value: unknown): ModelSettings {
@@ -19,6 +24,15 @@ export function parseModelSettings(value: unknown): ModelSettings {
     stopWords: Array.isArray(v.stopWords)
       ? v.stopWords.filter((w): w is string => typeof w === "string")
       : [],
+    addBosToken: v.addBosToken === true,
+    addEosToken: v.addEosToken === true,
+    bosToken: typeof v.bosToken === "string" ? v.bosToken : "",
+    eosToken: typeof v.eosToken === "string" ? v.eosToken : "",
+    // Tri-state: absent stays absent (model default), never coerced to false.
+    ...(typeof v.addGenerationPrompt === "boolean"
+      ? { addGenerationPrompt: v.addGenerationPrompt }
+      : {}),
+    chatTemplate: typeof v.chatTemplate === "string" ? v.chatTemplate : "",
   };
 }
 

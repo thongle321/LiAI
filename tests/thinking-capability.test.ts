@@ -47,26 +47,14 @@ function memoryStorage(data: Record<string, string> = {}) {
 }
 
 describe("resolveThinking (C6)", () => {
-  it("keeps today's default for every unclassified model", () => {
+  it("sends NOTHING for an unclassified model — the template decides", () => {
     // THE critical acceptance: no override, no detected capability →
-    // the global flag decides, exactly as before this ticket.
-    const on = resolveThinking({
-      modelId: "m",
-      overrides: {},
-      globalEnabled: true,
-    });
-    assert.deepEqual(on, {
-      enabled: true,
-      source: "unknown",
-    });
-    assert.equal(
-      resolveThinking({
-        modelId: "m",
-        overrides: {},
-        globalEnabled: false,
-      }).enabled,
-      false,
-      "and the global off stays off",
+    // undefined. This used to fall back to a global `true`, which forced
+    // enable_thinking onto every model nobody had classified (and made
+    // an empty reply unfixable from the UI).
+    assert.deepEqual(
+      resolveThinking({ modelId: "m", overrides: {} }),
+      { enabled: undefined, source: "unknown" },
     );
   });
 
@@ -75,18 +63,16 @@ describe("resolveThinking (C6)", () => {
       modelId: "m",
       reasoning: false,
       overrides: {},
-      globalEnabled: true,
     });
     assert.equal(resolved.enabled, false);
     assert.equal(resolved.source, "detected");
   });
 
-  it("resolves a known reasoner on, regardless of the global", () => {
+  it("resolves a known reasoner on", () => {
     const resolved = resolveThinking({
       modelId: "m",
       reasoning: true,
       overrides: {},
-      globalEnabled: false,
     });
     assert.equal(resolved.enabled, true);
     assert.equal(resolved.source, "detected");
@@ -98,7 +84,6 @@ describe("resolveThinking (C6)", () => {
         modelId: "m",
         reasoning: false,
         overrides: { m: true },
-        globalEnabled: false,
       }).enabled,
       true,
       "user forces thinking on a model flagged non-reasoning",
@@ -108,7 +93,6 @@ describe("resolveThinking (C6)", () => {
         modelId: "m",
         reasoning: true,
         overrides: { m: false },
-        globalEnabled: true,
       }).enabled,
       false,
       "user silences a model flagged as a reasoner",
@@ -118,29 +102,26 @@ describe("resolveThinking (C6)", () => {
         modelId: "m",
         reasoning: true,
         overrides: { m: false },
-        globalEnabled: true,
       }).source,
       "user",
     );
   });
 
-  it("ignores other models' overrides and falls back to the global", () => {
+  it("ignores other models' overrides", () => {
     assert.equal(
       resolveThinking({
         modelId: null,
         overrides: { other: false },
-        globalEnabled: true,
       }).enabled,
-      true,
-      "no active model → the global, overrides never leak",
+      undefined,
+      "no active model → nothing is sent, overrides never leak",
     );
     assert.equal(
       resolveThinking({
         modelId: "b",
         overrides: { a: false },
-        globalEnabled: true,
       }).enabled,
-      true,
+      undefined,
       "an override is keyed to its own model",
     );
   });

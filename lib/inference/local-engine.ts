@@ -86,6 +86,12 @@ export interface LlamaCompletionParams extends Partial<LlamaSamplerParams> {
   /** Flat top-level sibling like enable_thinking — never nested: llama.rn's
    *  converter drops unknown keys. */
   jinja?: boolean;
+  /** Caller's stop strings (ModelSettings), forwarded flat like jinja. */
+  stop?: Array<string>;
+  /** Per-model chat-template override, forwarded flat like jinja. */
+  chat_template?: string;
+  /** Per-model generation-prompt override, forwarded flat like jinja. */
+  add_generation_prompt?: boolean;
   // The sampler's 16 fields arrive as FLAT, top-level siblings here — they
   // extend from LlamaSamplerParams rather than being restated, so the names
   // are defined once. They are NOT nested under a key: llama.rn's converter
@@ -101,6 +107,14 @@ export interface LlamaContextLike {
   stopCompletion(): Promise<void>;
   release(): Promise<void>;
   initMultimodal?(opts: { path: string }): Promise<boolean>;
+  /** Thinking-capability probe (lib/inference/thinking-detection.ts).
+   *  Optional so every existing fake stays valid — a partial build reports
+   *  "could not tell" rather than "does not think". */
+  getFormattedChat?: (
+    messages: Array<{ role: string; content: string }>,
+    template?: string | null,
+    params?: { jinja?: boolean; enable_thinking?: boolean },
+  ) => Promise<unknown>;
 }
 
 function toEngineCalls(
@@ -165,6 +179,17 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
           // `sampler:` compiles, type-checks, passes every test, and does
           // nothing at runtime.
           ...(request.sampler ? toLlamaSampler(request.sampler) : {}),
+          // Caller's stop words (ModelSettings) — flat, like the sampler:
+          // llama.rn drops nested unknown keys.
+          ...(request.stop && request.stop.length > 0
+            ? { stop: request.stop }
+            : {}),
+          ...(request.chatTemplate && request.chatTemplate.trim() !== ""
+            ? { chat_template: request.chatTemplate }
+            : {}),
+          ...(request.addGenerationPrompt !== undefined
+            ? { add_generation_prompt: request.addGenerationPrompt }
+            : {}),
         },
         (data) => {
           const reasoning = data.reasoning_content ?? "";

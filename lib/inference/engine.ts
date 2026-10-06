@@ -98,6 +98,15 @@ export interface CompletionRequest {
    *  compatible endpoint has its own defaults and no equivalent for the
    *  llama-only knobs (typical-p, XTC, mirostat). */
   sampler?: SamplerParams;
+  /** Per-model stop words from ModelSettings (PocketPal `stop`). Both
+   *  engines honor it: llama.rn's `stop` strings and OpenAI's `stop`. */
+  stop?: string[];
+  /** Per-model chat-template override (PocketPal chatTemplate). llama.rn
+   *  only; remote engines use the provider's own template. "" = default. */
+  chatTemplate?: string;
+  /** Per-model add-generation-prompt override (PocketPal parity).
+   *  llama.rn only. */
+  addGenerationPrompt?: boolean;
 }
 
 /** PocketPal's CompletionEngine shape: stream + stop. */

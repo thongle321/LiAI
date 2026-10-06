@@ -27,8 +27,8 @@ test("the composer carries the thinking toggle", () => {
   assert.match(src, />\s*Think\s*</, "and it carries the word, per DESIGN.md");
   assert.match(
     src,
-    /setThinkingOverride\(activeModelId, next\)/,
-    "a press writes the PER-MODEL override (C6); the global stays the fallback for untouched models",
+    /setThinkingOverride\(activeModelId, !resolved\.enabled\)/,
+    "a press writes the PER-MODEL override (C6); there is no global fallback, so an unclassified model sends no flag at all",
   );
   assert.match(
     src,
@@ -65,7 +65,30 @@ test("the pill is local-only", () => {
     /activeProviderType\) === "local"/,
     "gated on the active provider being local",
   );
-  assert.match(src, /\{thinkingLocal && \(/, "and hidden entirely when not local");
+  assert.match(src, /\{thinkingSupported && \(/, "and hidden entirely when not local");
+});
+
+test("the pill appears only where thinking actually exists", () => {
+  // A model that doesn't think has no thinking to turn off, so the
+  // control must not be offered. Two ways in: positively classified as a
+  // reasoner, or an override the user already set (nobody loses a
+  // control they are using). Unclassified models get neither — the chat
+  // template decides for them (lib/inference/thinking.ts).
+  assert.match(
+    src,
+    /const thinkingSupported =[\s\S]*?thinkingLocal &&/,
+    "visibility is decided once, not per-render",
+  );
+  assert.match(
+    src,
+    /activeSpec\?\.reasoning === true/,
+    "a model known to reason is eligible",
+  );
+  assert.match(
+    src,
+    /thinkingOverrides\[activeModelId\] !== undefined/,
+    "so is one the user already overrode",
+  );
 });
 
 test("no effort cycle", () => {

@@ -2,7 +2,14 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { findProjectorFile, pairDownloadStep } from "../lib/models/vision-pairing.ts";
+import {
+  findProjectorFile,
+  mmprojSiblings,
+  modelsUsingProjector,
+  pairDownloadStep,
+  projectorStatus,
+  visionActive,
+} from "../lib/models/vision-pairing.ts";
 import { upgradeModelSpec } from "../lib/model-upgrade.ts";
 
 // vision-series 01: the models card promises a vision pair ("LLM + projector")
@@ -50,7 +57,97 @@ describe("pairDownloadStep", () => {
   });
 });
 
+// The vision switch + selector (Q1-Q3): the rules the card's UI reads.
+// Pinned here because a wrong answer is a card that lies — "Ready" over a
+// missing projector, or a toggle that no-ops.
+describe("mmprojSiblings", () => {
+  const files = [
+    { name: "model-Q4_K_M.gguf" },
+    { name: "mmproj-model-f16.gguf" },
+    { name: "MMPROJ-Other-f16.gguf" },
+  ];
+
+  it("lists every projector, case-insensitively", () => {
+    assert.deepEqual(
+      mmprojSiblings(files).map((f) => f.name),
+      ["mmproj-model-f16.gguf", "MMPROJ-Other-f16.gguf"],
+    );
+  });
+
+  it("is empty for a text-only repo", () => {
+    assert.deepEqual(mmprojSiblings([{ name: "model.gguf" }]), []);
+  });
+});
+
+describe("projectorStatus / visionActive", () => {
+  it("needs no projector when none is recorded", () => {
+    assert.equal(projectorStatus({ hasProjector: false, projectorBytes: 0 }), "not_needed");
+  });
+
+  it("is missing when recorded but nothing is on disk", () => {
+    assert.equal(projectorStatus({ hasProjector: true, projectorBytes: 0 }), "missing");
+  });
+
+  it("is downloaded once bytes landed", () => {
+    assert.equal(projectorStatus({ hasProjector: true, projectorBytes: 90 }), "downloaded");
+  });
+
+  it("vision is off if the switch is off, whatever the projector says", () => {
+    assert.equal(visionActive({ visionEnabled: false, status: "downloaded" }), false);
+    assert.equal(visionActive({ visionEnabled: true, status: "downloaded" }), true);
+    assert.equal(visionActive({ visionEnabled: true, status: "missing" }), false);
+    assert.equal(visionActive({ visionEnabled: true, status: "not_needed" }), false);
+  });
+});
+
+describe("modelsUsingProjector", () => {
+  it("names the models that would lose vision if it is detached", () => {
+    const models = [
+      { name: "A", projector: { name: "mmproj-x.gguf" } },
+      { name: "B", projector: { name: "mmproj-y.gguf" } },
+      { name: "C", projector: undefined },
+    ];
+    assert.deepEqual(
+      modelsUsingProjector(models, "mmproj-x.gguf").map((m) => m.name),
+      ["A"],
+    );
+  });
+});
+
 describe("ModelSpec.projector hydration", () => {
+  it("keeps selector candidates and the vision switch", () => {
+    const out = upgradeModelSpec({
+      id: "m1",
+      name: "M",
+      supportsVision: true,
+      visionEnabled: false,
+      projectorCandidates: [
+        { name: "mmproj-a.gguf", size: 90, downloadUrl: "u" },
+        { name: "bad", size: "90", downloadUrl: "u" },
+      ],
+    });
+    assert.equal(out?.supportsVision, true);
+    assert.equal(out?.visionEnabled, false);
+    assert.deepEqual(out?.projectorCandidates, [
+      { name: "mmproj-a.gguf", size: 90, downloadUrl: "u" },
+    ]);
+  });
+
+  it("infers vision-capability for rows saved before the switch existed", () => {
+    assert.equal(
+      upgradeModelSpec({
+        id: "m1",
+        name: "M",
+        projector: { name: "mmproj-x.gguf", size: 90, downloadUrl: "u" },
+      })?.supportsVision,
+      true,
+    );
+    assert.equal(
+      upgradeModelSpec({ id: "m1", name: "M", type: "vision" })?.supportsVision,
+      true,
+    );
+    assert.equal(upgradeModelSpec({ id: "m1", name: "M" })?.supportsVision, false);
+  });
   it("keeps a valid projector record (name, size, downloadUrl)", () => {
     const out = upgradeModelSpec({
       id: "m1",

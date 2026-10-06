@@ -34,6 +34,7 @@ import { VOICE_STATUS_LABEL } from "../../../lib/voiceStatus.ts";
 import { useVisionTurn } from "../../../hooks/useVisionTurn.ts";
 import { useWatchMode } from "../../../hooks/useWatchMode.ts";
 import { useModelReady } from "../../../hooks/useModelReady.ts";
+import { useModelStore } from "../../../store/modelStore";
 import {
   VisionBottomPanel,
   VisionPreview,
@@ -50,6 +51,17 @@ export default function VisionScreen() {
   // No model: talk and type are disabled so the mic can't open a turn that
   // can never answer.
   const modelReady = useModelReady();
+  // Vision switched off on the active model: the frame would go out and
+  // come back unprocessed, so the tab says so up front and offers the one
+  // place that can fix it (Q5).
+  const visionOff = useModelStore(
+    (s) =>
+      s.activeProviderType === "local" &&
+      s.activeModelId !== null &&
+      s.models.find(
+        (m) => m.id === s.activeModelId && m.downloadStatus === "completed",
+      )?.visionEnabled === false,
+  );
 
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice(position);
@@ -153,7 +165,12 @@ export default function VisionScreen() {
 
             <VisionBottomPanel
               bottom={panelBottom}
-              issue={issue}
+              issue={issue ?? (visionOff ? "Vision is off for this model." : null)}
+              issueAction={
+                visionOff && issue === null
+                  ? { label: "Open Models", onPress: () => router.navigate("/models") }
+                  : null
+              }
               needsSettings={needsSettings}
               onOpenSettings={goToSettings}
               onRetry={() => void retry()}

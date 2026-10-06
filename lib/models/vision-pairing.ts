@@ -54,3 +54,43 @@ export function pairDownloadStep(
   if (hasProjector && !projectorComplete) return "projector";
   return "complete";
 }
+
+/** Every mmproj in a repo — the selector's list and the candidates a spec
+ *  records at build time. One filter, so the picker and the pairer can
+ *  never disagree about what counts as a projector. */
+export function mmprojSiblings<T extends { name: string }>(files: T[]): T[] {
+  return files.filter((f) => f.name.toLowerCase().includes("mmproj"));
+}
+
+/** Where a model's projector stands (pocketpal getProjectionModelStatus,
+ *  minus the downloading case: our projector leg rides the SAME download
+ *  job as the LLM, so the row's status already says it). */
+export type ProjectorStatus = "not_needed" | "downloaded" | "missing";
+
+export function projectorStatus(input: {
+  /** A projector is recorded on the spec. */
+  hasProjector: boolean;
+  /** Bytes of that projector actually on disk. */
+  projectorBytes: number;
+}): ProjectorStatus {
+  if (!input.hasProjector) return "not_needed";
+  return input.projectorBytes > 0 ? "downloaded" : "missing";
+}
+
+/** Does this model see images right now? Three inputs, one answer: vision
+ *  switched off, no projector, or nothing on disk — each is "no". */
+export function visionActive(input: {
+  visionEnabled: boolean;
+  status: ProjectorStatus;
+}): boolean {
+  return input.visionEnabled && input.status === "downloaded";
+}
+
+/** Models that would lose vision if `projectorName` were detached. Used
+ *  by the detach confirmation so the copy can name them (pocketpal's
+ *  dependent list) instead of warning about "some models". */
+export function modelsUsingProjector<
+  T extends { projector?: { name: string } | undefined },
+>(models: T[], projectorName: string): T[] {
+  return models.filter((m) => m.projector?.name === projectorName);
+}

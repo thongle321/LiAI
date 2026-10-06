@@ -19,12 +19,22 @@ describe("parseModelSettings", () => {
   it("fills missing fields, drops non-string stop words", () => {
     assert.deepEqual(
       parseModelSettings({ displayName: "Mini", stopWords: ["a", 1, null] }),
-      { displayName: "Mini", systemPrompt: "", stopWords: ["a"] },
+      { ...DEFAULT_MODEL_SETTINGS, displayName: "Mini", stopWords: ["a"] },
     );
   });
 
   it("keeps a full valid entry", () => {
-    const full = { displayName: "N", systemPrompt: "Be nice", stopWords: ["x"] };
+    const full = {
+      displayName: "N",
+      systemPrompt: "Be nice",
+      stopWords: ["x"],
+      addBosToken: true,
+      addEosToken: true,
+      bosToken: "<s>",
+      eosToken: "</s>",
+      addGenerationPrompt: true,
+      chatTemplate: "{{ messages }}",
+    };
     assert.deepEqual(parseModelSettings(full), full);
   });
 });
@@ -40,7 +50,10 @@ describe("parseModelSettingsMap", () => {
   it("sanitizes each entry", () => {
     assert.deepEqual(
       parseModelSettingsMap(JSON.stringify({ m1: { displayName: "A" }, m2: 7 })),
-      { m1: { displayName: "A", systemPrompt: "", stopWords: [] }, m2: { ...DEFAULT_MODEL_SETTINGS } },
+      {
+        m1: { ...DEFAULT_MODEL_SETTINGS, displayName: "A" },
+        m2: { ...DEFAULT_MODEL_SETTINGS },
+      },
     );
   });
 });

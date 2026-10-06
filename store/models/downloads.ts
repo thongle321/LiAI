@@ -69,7 +69,7 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
     get().updateModel(specId, { error: undefined });
   },
 
-  startDownload: async (modelId, file, token) => {
+  startDownload: async (modelId, file, token, options) => {
     const isHf = "path" in file;
     const spec = isHf
       ? buildHfModelSpec(hfRefFor(modelId, get().searchResults), file)
@@ -82,13 +82,21 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       ? (get().searchResults.find((r) => r.modelId === modelId)?.ggufFiles ??
         [])
       : presetFor(modelId, get().presets).files;
-    const projector = findProjectorFile(file, siblings);
+    // "Download text only" (VisionDownloadSheet): no pair at all, and the
+    // switch is persisted so the card shows the model as text-only.
+    const visionEnabled = options?.visionEnabled !== false;
+    const projector = visionEnabled
+      ? (options?.projector ?? findProjectorFile(file, siblings))
+      : undefined;
     if (projector) {
       spec.projector = {
         name: projector.name,
         size: projector.size,
         downloadUrl: projector.downloadUrl,
       };
+    }
+    if (spec.supportsVision) {
+      spec.visionEnabled = visionEnabled;
     }
     await get().startSpecDownload(spec, file, token);
   },
@@ -372,6 +380,23 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       file,
       get().activeHfToken() ?? undefined,
     );
+    } catch {
+      // Best-effort: the row keeps its state, tapping retries.
+    }
+  },
+
+  startProjectorDownload: async (specId) => {
+    try {
+      const spec = get().getModel(specId);
+      const file = spec?.files[0];
+      if (!spec || !file || !spec.projector) return;
+      // startSpecDownload already sequences: the main file is whole, so
+      // pairDownloadStep picks the "projector" leg. No second downloader.
+      await get().startSpecDownload(
+        spec,
+        file,
+        get().activeHfToken() ?? undefined,
+      );
     } catch {
       // Best-effort: the row keeps its state, tapping retries.
     }

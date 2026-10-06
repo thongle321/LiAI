@@ -1,21 +1,28 @@
 /** Per-model thinking resolution (C6): one pure function decides what
  *  the engine receives.
  *
- *  Precedence mirrors PocketPal's provenance minus `learned` (LiAI has
- *  no stream-learning): user override > detected capability > the
- *  global default. An unclassified model — no override, no
- *  `ModelSpec.reasoning` — resolves to the global flag, exactly what
- *  the app sent before this ticket existed; that unchanged-default
- *  behaviour is asserted in tests/thinking-capability.test.ts, not
- *  assumed.
+ * Precedence mirrors PocketPal's provenance minus `learned` (LiAI has
+ * no stream-learning): user override > detected capability > NOTHING.
+ *
+ * The third rung changed. It used to fall back to a global
+ * `thinkingEnabled` flag, which meant an UNCLASSIFIED model got
+ * `enable_thinking: true` forced onto it — overriding the GGUF chat
+ * template's own choice for every model nobody had classified. A model
+ * whose template has no thinking branch then answers with an empty
+ * completion ("empty reply"), and there was no way to turn the flag off
+ * for it. So unknown now resolves to `undefined`: the flag is NOT sent,
+ * and llama.cpp uses the template's own default. Absence is the honest
+ * answer to "we don't know whether this model reasons".
+ *
+ * `globalEnabled` is gone from the input for the same reason: with no UI
+ * row for it (GenerationSettingsSheet carries none by design), a global
+ * can only force a value the model may not support.
  */
 
 export interface ThinkingResolution {
-  /** What the engine should receive for this model. */
-  enabled: boolean;
-  /** Where the answer came from. `unknown` means "the global decides" —
-   *  a user override can only exist for a model id, and detection only
-   *  when the spec carries a capability. */
+  /** What the engine should receive; `undefined` = send nothing. */
+  enabled: boolean | undefined;
+  /** Where the answer came from. `unknown` means "the template decides". */
   source: "user" | "detected" | "unknown";
 }
 
@@ -26,7 +33,6 @@ export function resolveThinking(input: {
   /** Typed capability from the model spec; absent = unknown. */
   reasoning?: boolean;
   overrides: Record<string, boolean>;
-  globalEnabled: boolean;
 }): ThinkingResolution {
   const override =
     input.modelId !== null ? input.overrides[input.modelId] : undefined;
@@ -37,5 +43,5 @@ export function resolveThinking(input: {
   if (input.reasoning !== undefined) {
     return { enabled: input.reasoning, source: "detected" };
   }
-  return { enabled: input.globalEnabled, source: "unknown" };
+  return { enabled: undefined, source: "unknown" };
 }

@@ -127,6 +127,9 @@ export function createRemoteEngine(
             ...(request.tools && request.tools.length > 0
               ? { tools: request.tools }
               : {}),
+            ...(request.stop && request.stop.length > 0
+              ? { stop: request.stop }
+              : {}),
           }),
           signal: controller.signal,
         });

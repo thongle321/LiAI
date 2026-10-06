@@ -77,6 +77,30 @@ export function upgradeModelSpec(raw: unknown): ModelSpec | null {
       ? { name: pr.name, size: pr.size, downloadUrl: pr.downloadUrl }
       : undefined;
 
+  // Selector candidates (same guard as files). Older rows never recorded
+  // them; they re-derive from the next HF search result.
+  const projectorCandidates = Array.isArray(v.projectorCandidates)
+    ? v.projectorCandidates.filter(
+        (f): f is ModelSpec["files"][number] => {
+          const r = asRecord(f);
+          return (
+            !!r &&
+            typeof r.name === "string" &&
+            typeof r.size === "number" &&
+            typeof r.downloadUrl === "string"
+          );
+        },
+      )
+    : undefined;
+
+  // Rows saved before the vision switch existed: infer vision-capability
+  // from what the row already proves (a recorded pair, or the old
+  // filename-derived type) rather than leaving the toggle invisible.
+  const supportsVision =
+    typeof v.supportsVision === "boolean"
+      ? v.supportsVision
+      : projector !== undefined || type === "vision";
+
   return {
     id: v.id,
     name: v.name,
@@ -85,6 +109,13 @@ export function upgradeModelSpec(raw: unknown): ModelSpec | null {
     origin,
     type,
     files,
+    supportsVision,
+    ...(typeof v.visionEnabled === "boolean"
+      ? { visionEnabled: v.visionEnabled }
+      : {}),
+    ...(projectorCandidates !== undefined && projectorCandidates.length > 0
+      ? { projectorCandidates }
+      : {}),
     ...(projector !== undefined ? { projector } : {}),
     providerType: v.providerType === "openrouter" || v.providerType === "custom_openai" || v.providerType === "local_gguf"
       ? v.providerType

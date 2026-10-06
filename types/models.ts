@@ -31,6 +31,19 @@ export interface ModelSpec {
   origin: ModelOrigin;
   type: ModelType;
   files: ModelFile[];
+  /** HF tags/siblings said this repo is a vision model. Recorded at build
+   *  time so the toggle appears before a projector is ever paired — the
+   *  filename-derived `type` misses repos like `gemma-3-4b-it`. */
+  supportsVision?: boolean;
+  /** Per-model vision switch: false loads the LLM blind even when a
+   *  projector is paired. Absent = on (pocketpal parity). */
+  visionEnabled?: boolean;
+  /** The sibling mmproj files this model could be paired with, recorded at
+   *  build time so the selector never re-hits the Hub. */
+  projectorCandidates?: ModelFile[];
+  /** HuggingFace repo page for this model (PocketPal `hfUrl`); absent
+   *  for local/preset-only specs. */
+  hfUrl?: string;
   /** The paired mmproj projector for a vision model (vision-series 01):
    *  recorded at download time from the repo's siblings and fetched right
    *  after the LLM lands, so ticket 02 can attach it at engine load. */
@@ -170,4 +183,17 @@ export interface ModelSettings {
   displayName: string;
   systemPrompt: string;
   stopWords: string[];
+  /** Token overrides (PocketPal parity). BOS is persisted but not
+   *  injected today — llama.rn applies the GGUF template's own BOS. */
+  addBosToken: boolean;
+  addEosToken: boolean;
+  bosToken: string;
+  eosToken: string;
+  /** Forwarded to llama.rn's add_generation_prompt. Tri-state on purpose:
+   *  absent = the user never touched it, so the model default (llama.cpp
+   *  sends true) stands; an explicit false only arrives after the toggle
+   *  is switched off, which is the whole point of the switch. */
+  addGenerationPrompt?: boolean;
+  /** Forwarded to llama.rn's chat_template; "" = model default. */
+  chatTemplate: string;
 }

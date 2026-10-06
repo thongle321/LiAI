@@ -9,6 +9,7 @@ import type {
   ModelStore,
 } from "./types";
 import { buildLocalModelSpec } from "../../lib/local-model.ts";
+import { modelsUsingProjector } from "../../lib/models/vision-pairing.ts";
 import {
   buildHfModelSpec,
   getModelFiles as hfGetModelFiles,
@@ -225,6 +226,40 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
       ),
     }));
     get().saveModels();
+  },
+
+  setVisionEnabled: (modelId, enabled) => {
+    get().updateModel(modelId, { visionEnabled: enabled });
+  },
+
+  setProjector: (modelId, projector) => {
+    get().updateModel(modelId, { projector, visionEnabled: true });
+  },
+
+  detachProjector: async (modelId) => {
+    const model = get().getModel(modelId);
+    const projector = model?.projector;
+    if (!model || !projector) return [];
+    // Dependents FIRST: the confirm copy names them, and a shared projector
+    // is a real case (two LLMs of one repo can pair the same mmproj).
+    const dependents = modelsUsingProjector(get().models, projector.name)
+      .filter((m) => m.id !== modelId)
+      .map((m) => m.name);
+    const fs = await legacyFs();
+    try {
+      await fs.deleteAsync(
+        `${fs.documentDirectory}models/${projector.name}`,
+        { idempotent: true },
+      );
+    } catch {
+      // The record is what vision reads; an undeletable file is harmless
+      // (nothing loads it) and reported nowhere.
+    }
+    get().updateModel(modelId, {
+      projector: undefined,
+      visionEnabled: false,
+    });
+    return dependents;
   },
 
   // Download ticks fire many times a second; persisting each one

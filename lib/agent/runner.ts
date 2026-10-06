@@ -77,6 +77,12 @@ export interface AgentRunOptions {
   jinja?: boolean;
   /** Local-only: resolved sampling params for every loop turn. */
   sampler?: SamplerParams;
+  /** Per-model stop words applied to every loop turn. */
+  stop?: string[];
+  /** Per-model chat-template override (llama.rn only). */
+  chatTemplate?: string;
+  /** Per-model generation-prompt override (llama.rn only). */
+  addGenerationPrompt?: boolean;
   fetchImpl: typeof fetch;
   search: TalentSearchAuth | null;
   userTexts?: string[];
@@ -164,6 +170,15 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
               : {}),
             ...(options.jinja !== undefined ? { jinja: options.jinja } : {}),
             ...(options.sampler ? { sampler: options.sampler } : {}),
+            ...(options.stop && options.stop.length > 0
+              ? { stop: options.stop }
+              : {}),
+            ...(options.chatTemplate && options.chatTemplate.trim() !== ""
+              ? { chatTemplate: options.chatTemplate }
+              : {}),
+            ...(options.addGenerationPrompt !== undefined
+              ? { addGenerationPrompt: options.addGenerationPrompt }
+              : {}),
           },
           {
             onToken: (delta) => {

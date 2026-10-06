@@ -23,7 +23,7 @@ import { colors } from "../themes/tokens.ts";
 import { useChatStore } from "../store/chat.ts";
 import {
   exportFilename,
-  toAllSessionsJson,
+  toSessionJson,
 } from "../lib/chat/export.ts";
 import { readExportSessions } from "../lib/chat/export-read.ts";
 import { shareExportedFile } from "../lib/chat/share-export.ts";
@@ -41,18 +41,27 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
   const renameSession = useChatStore((s) => s.renameSession);
   const setPinned = useChatStore((s) => s.setPinned);
 
-  /** Bulk export of exactly the selected sessions — one JSON through
-   *  the SAME serializer and read path as ChatMenu's "Export all"
-   *  (toAllSessionsJson + readExportSessions), never a second one.
+  /** Export exactly these sessions, one JSON per conversation through the
+   *  SAME serializer and read path as ChatMenu's single-session export
+   *  (toSessionJson + readExportSessions), never a second format.
+   *
+   *  PocketParity: pocketpal shares ONE file per session, not a bundle
+   *  (ChatSessionStore.bulkExportSessions -> exportSessions). The share
+   *  sheets are awaited one at a time on purpose — a second sheet opened
+   *  over an open one is dropped by the OS, so a fast loop silently loses
+   *  every file after the first.
    *  Returns an error message for the drawer's inline notice, or null. */
   async function exportSelected(ids: string[]): Promise<string | null> {
     try {
-      const chosen = await readExportSessions(ids);
-      await shareExportedFile(
-        exportFilename(chosen[0], "all"),
-        toAllSessionsJson(chosen),
-        "all",
-      );
+      for (const id of ids) {
+        const session = (await readExportSessions([id]))[0];
+        if (session === undefined) continue;
+        await shareExportedFile(
+          exportFilename(session, "session"),
+          toSessionJson(session),
+          "session",
+        );
+      }
       return null;
     } catch (err) {
       return err instanceof Error ? err.message : "Export failed.";

@@ -92,18 +92,16 @@ export function MessageInput({
   // `enableThinking` is a llama.rn jinja flag (lib/inference/engine.ts),
   // so offering it under a remote API would promise something the remote
   // engine cannot honour.
-  const thinkingGlobal = useInference((s) => s.thinkingEnabled);
   const thinkingOverrides = useInference((s) => s.thinkingOverrides);
-  const setThinkingEnabled = useInference((s) => s.setThinkingEnabled);
   const setThinkingOverride = useInference((s) => s.setThinkingOverride);
   const activeModelId = useModelStore((s) => s.activeModelId);
   const activeModels = useModelStore((s) => s.models);
   const thinkingLocal =
     useModelStore((s) => s.activeProviderType) === "local";
   // The pill shows the RESOLVED state for the active model — user
-  // override, then the spec's detected capability, then the global —
-  // never the global alone (C6). Absent capability renders it exactly
-  // as today rather than hiding it.
+  // override, then the spec's detected capability — never a global
+  // (C6). Absent capability resolves to UNDEFINED, which is why the
+  // pill is gated below rather than rendered for every model.
   const activeSpec = thinkingLocal
     ? activeModels.find((m) => m.id === activeModelId)
     : undefined;
@@ -111,9 +109,19 @@ export function MessageInput({
     modelId: thinkingLocal ? activeModelId : null,
     reasoning: activeSpec?.reasoning,
     overrides: thinkingOverrides,
-    globalEnabled: thinkingGlobal,
   });
-  const thinkingEnabled = resolved.enabled;
+  // Undefined means "the model decides" (lib/inference/thinking.ts); the
+  // pill can only appear where a real value exists, so this is the one
+  // case that never renders while undefined.
+  const thinkingEnabled = resolved.enabled ?? false;
+  // Visibility: a model that KNOWNLY reasons, or one the user already
+  // set an override for (nobody loses a control they are using). A model
+  // that is known not to reason — and one nobody has classified — gets no
+  // pill, because there is no thinking for it to turn off.
+  const thinkingSupported =
+    thinkingLocal &&
+    (activeSpec?.reasoning === true ||
+      (activeModelId !== null && thinkingOverrides[activeModelId] !== undefined));
   // A switch's label names the THING, not the action: VoiceOver reads
   // "label, switch, checked". An imperative label that flipped to
   // "Disable thinking" announced "Disable thinking, switch, on" -- an
@@ -493,7 +501,7 @@ export function MessageInput({
         accessibilityHint={modelReady ? undefined : composerPlaceholder}
         />
         <View className="flex-row items-center gap-2">
-          {thinkingLocal && (
+          {thinkingSupported && (
             // PocketPal's composer pill (ChatInput.tsx:588-640). State is
             // carried by the fill AND the icon, per DESIGN.md's "pair every
             // status colour with a glyph and a word" rule -- so it never
@@ -505,17 +513,13 @@ export function MessageInput({
             // behind it.
             <Pressable
               onPress={
-                modelReady
+                modelReady && activeModelId !== null
                   ? () => {
-                      const next = !resolved.enabled;
-                      // With a model loaded a press is a PER-MODEL
-                      // decision; the global stays the default for
-                      // models never touched (C6).
-                      if (activeModelId !== null) {
-                        setThinkingOverride(activeModelId, next);
-                      } else {
-                        setThinkingEnabled(next);
-                      }
+                      // A press is a PER-MODEL decision, both directions.
+                      // There is no global fallback any more: an
+                      // unclassified model sends no flag at all, so the
+                      // template decides (lib/inference/thinking.ts).
+                      setThinkingOverride(activeModelId, !resolved.enabled);
                     }
                   : undefined
               }

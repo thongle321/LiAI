@@ -16,9 +16,10 @@ import type { ModelSpec } from "../../types/models.ts";
 import { resolveLocalFile } from "./engine.ts";
 
 /** Pure decision: can the ACTIVE local model see images? (vision-series 03)
- *  True only for a completed spec that records its projector — ticket 01
- *  guarantees "completed" means the pair landed. This is the ONE rule;
- *  the path resolver, the send gate, and the composer all read it. */
+ *  True only for a completed spec that records its projector AND has vision
+ *  switched on — `visionEnabled: false` loads the LLM blind even with a
+ *  projector on disk. This is the ONE rule; the path resolver, the send
+ *  gate, the composer and the vision screen all read it. */
 export function specCanSeeImages(
   specs: ReadonlyArray<CapabilityModel>,
   activeModelId: string | null,
@@ -31,7 +32,8 @@ export function specCanSeeImages(
       (m) =>
         m.id === activeModelId &&
         m.downloadStatus === "completed" &&
-        m.projector !== undefined,
+        m.projector !== undefined &&
+        m.visionEnabled !== false,
     )
   );
 }
@@ -74,7 +76,7 @@ export function remoteCapsCanSeeImages(
  *  surfaces cannot drift (code-review 04). */
 export type CapabilityModel = Pick<
   ModelSpec,
-  "id" | "downloadStatus" | "projector"
+  "id" | "downloadStatus" | "projector" | "visionEnabled"
 > & {
   files?: ReadonlyArray<Pick<ModelSpec["files"][number], "name">>;
 };

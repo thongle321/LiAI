@@ -3,10 +3,11 @@
  *
  * The drawer screen needs react-native to load, so this suite reads the
  * touched files as TEXT and pins the acceptance decisions:
- * explicit selection mode (not a gesture), per-row checkbox +
- * select-all, count-confirmed bulk delete, ONE export serializer path,
- * selection cleared on switch/close, and the mid-turn guard inherited
- * from the single-row delete.
+ * long-press menu as the entry (PocketParity), a LEADING per-row
+ * checkbox + a full-width Select All row, count-confirmed bulk delete,
+ * ONE export serializer path, selection that SURVIVES drawer close and
+ * session switch, and the mid-turn guard inherited from the single-row
+ * delete.
  */
 
 import { describe, it } from "node:test";
@@ -23,21 +24,43 @@ function read(rel: string): string {
 describe("selection mode (C12)", () => {
   const src = read("components/chat/SessionList.tsx");
 
-  it("has an explicit entry, not a long-press-only gesture", () => {
-    assert.match(src, /Select conversations/, "a visible Select control");
-    assert.doesNotMatch(src, /onLongPress/, "no gesture-only path");
+  it("enters through the long-press menu, not a header button", () => {
+    // PocketParity (SidebarContent.tsx:184-192): the row menu carries a
+    // "Select..." item, and there is NO always-visible Select control.
+    assert.match(src, /onLongPress/, "the row menu is gesture-entered");
+    assert.match(src, /label="Select\.\.\."/, "the menu item that starts it");
+    assert.doesNotMatch(
+      src,
+      /accessibilityLabel="Select conversations"/,
+      "no always-visible Select button in the header",
+    );
+    assert.match(
+      src,
+      /setSelected\(new Set\(\[id\]\)\);\s*setSelecting\(true\)/,
+      "the long-pressed row is already selected when mode opens",
+    );
   });
 
-  it("offers a per-row checkbox and select-all", () => {
+  it("offers a LEADING per-row checkbox and a full-width Select All row", () => {
     assert.match(src, /accessibilityRole="checkbox"/);
     assert.match(src, /accessibilityState=\{\{ checked:/);
-    assert.match(src, /Select all/);
+    // A full-width row under the header (SelectAllRow), not a header control.
+    assert.match(src, />\s*Select All\s*</);
+    assert.match(src, /className="flex-row items-center px-5 py-3"/);
   });
 
-  it("exits without touching the single-row actions", () => {
-    // Leaving selection restores pin/rename/delete exactly as they were.
-    assert.match(src, /onTogglePin\(item\.id/, "the row actions still exist");
-    assert.match(src, /accessibilityLabel="Done"/);
+  it("keeps the row's single-row actions in the menu", () => {
+    // Pin/Rename/Delete moved into the long-press menu; the row carries
+    // only the pin star. The menu is absent while selecting.
+    assert.match(src, /label=\{menuSession\.pinned \? "Unpin" : "Pin"\}/);
+    assert.match(src, /label="Rename"/);
+    assert.match(src, /label="Delete"/);
+    assert.doesNotMatch(
+      src,
+      /onTogglePin\(item\.id/,
+      "the row no longer carries a Pin button",
+    );
+    assert.match(src, /accessibilityLabel="Cancel selection"/, "Cancel, not Done");
   });
 
   it("confirms bulk delete with an explicit count, never a generic ask", () => {
@@ -52,16 +75,24 @@ describe("selection mode (C12)", () => {
     assert.match(src, /deleted < ids\.length/, "skipped rows are reported");
   });
 
-  it("clears selection on session switch and drawer close", () => {
-    assert.match(
+  it("keeps the selection across drawer close and session switch", () => {
+    // PocketParity: selection is store state there and survives the panel
+    // closing. Two exits only — Cancel, and a completed bulk action.
+    assert.doesNotMatch(
+      src,
+      /drawerStatus/,
+      "nothing wipes the selection when the drawer closes",
+    );
+    assert.doesNotMatch(
       src,
       /exitSelection\(\);\s*\}, \[sessionId\]\)/,
-      "a switch wipes the selection",
+      "nor on a session switch",
     );
+    assert.match(src, /onPress=\{exitSelection\}/, "Cancel is the way out");
     assert.match(
       src,
-      /drawerStatus === "closed"/,
-      "closing the drawer wipes it too",
+      /if \(error !== null\) setNotice\(error\);[\s\S]{0,200}?else exitSelection\(\);/,
+      "a completed export also leaves the mode",
     );
   });
 
@@ -78,10 +109,15 @@ describe("one export path (C12)", () => {
     assert.doesNotMatch(menu, /store\.get\(id\)/, "the second read loop is gone");
   });
 
-  it("the drawer reuses toAllSessionsJson — no second serializer", () => {
+  it("the drawer reuses the single-session serializer — no second format", () => {
+    // PocketParity: one file PER conversation, so the shared path is
+    // toSessionJson (ChatMenu's single export), not a bundle serializer.
     const drawer = read("components/AppDrawer.tsx");
     assert.match(drawer, /readExportSessions\(/);
-    assert.match(drawer, /toAllSessionsJson\(/);
+    assert.match(drawer, /toSessionJson\(/);
+    assert.doesNotMatch(drawer, /toAllSessionsJson\(/, "the bundle is gone");
+    // Sequential: a second share sheet opened over an open one is dropped.
+    assert.match(drawer, /for \(const id of ids\)[\s\S]{0,400}?await shareExportedFile\(/);
   });
 });
 

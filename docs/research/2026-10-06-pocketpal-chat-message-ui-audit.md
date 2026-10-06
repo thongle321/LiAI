@@ -59,21 +59,48 @@ PocketPal: a **suffix that names the current phase** — `Stopping…` /
 (`ChatView.tsx:838-849`).
 **Cost:** one phase label per talent + a token count. No architecture change.
 
-### 3.2 Turn-footer metrics — **small**
-We show TTFT, tok/s, ms/token (`MessageActions.tsx:118-152`). Missing:
-`prompt_per_second`, `cache_n`, draft acceptance. Source:
-`AssistantTurnFooter.tsx:53-118,145-155`. Our engine already receives
-`tokens_cached` (C3) and timings, so most of this is plumbing, not new data.
+**Parity accepted (2026-10-06): tickets 02 + 03.** Both local decisions are
+**deliberately reversed**. PocketPal's count is narrower than ours — it counts
+*tool-call-generation* fragments, not streamed reply text — so it is honest where
+our original objection was aimed. The `Stopping…` cost (holding the in-flight
+state through teardown) is a real trade-off, taken knowingly.
 
-### 3.3 Markdown table `align` support — **small**
+### 3.2 Turn-footer metrics — **small, narrowed to one metric**
+We show TTFT, tok/s, ms/token (`MessageActions.tsx:118-152`). Of the three
+PocketPal metrics we lack, only **one** survives scrutiny:
+
+| Metric | Verdict |
+| --- | --- |
+| `prompt_per_second` | **Port.** Present in `LlamaTimings` (`local-engine.ts:68`) but never mapped into the three-field `TurnTimings` (`types/chat.ts:55-62`). Plumbing, not new data. |
+| `cache_n` ("N cached") | **Do not port.** Already rejected on the record: `tokens_cached` is authoritative and `cache_n` is a llama-server wire formula that would double-count (`local-engine.ts:234-240`). PocketPal gates it to remote turns anyway. |
+| draft acceptance | **Do not port.** Speculative-decode only; we run no speculative decoding, so the row would never appear. |
+
+Source: `AssistantTurnFooter.tsx:53-118,145-155`. **Ticket 04.**
+
+### 3.3 Markdown table `align` support — **probably already working**
 We render tables in a horizontal ScrollView with a fixed `COLUMN_WIDTH`
 (`MarkdownView.tsx:56-59,78-101`); PocketPal honours `align=center|right|left`
 (`TableRenderers.tsx:105-160`). Completes deferred issue **09**.
 
-### 3.4 `ContentReportSheet` — **medium**
+**Correction (2026-10-06):** `react-native-marked` already does this. Its parser
+reads `token.align[i]` per column and spreads `getTableColAlignmentStyle()` into
+each cell's parsed nodes (`Parser.js:179-184`) **before** calling our renderer,
+so the alignment is already inside the `ReactNode`s our `MarkdownTable` renders.
+The audit was reading the wrong layer — alignment is not a missing parameter, it
+is an absent one. **Ticket 01** is a proof, not a feature: test it, and either
+close §3.3 or fix the cell renderer.
+
+### 3.4 `ContentReportSheet` — **dropped, blocked on backend**
 "Report Content" menu action + a 5-category sheet with a description field, an
 include-model-info switch and submit (`ContentReportSheet.tsx:24-215`, wired at
 `ChatView.tsx:669-742`). Needs an endpoint or a mail/share fallback.
+
+**Dropped (2026-10-06).** Upstream POSTs to a Firebase `/feedback` endpoint behind
+App Check with a 10s timeout (`api/feedback.ts:88-108`) — there is no mail or
+share fallback. LiAI has no backend (Supabase removed; persistence is TinyBase +
+SQLite), so this is infrastructure, not a UI port. Recording it as blocked rather
+than as a gap to close opportunistically. Revisit only alongside a decision to
+stand up a reporting service.
 
 ### 3.5 `IncreaseContextSheet` — **medium**
 A context ladder with a RAM estimate and **fits / tight / won't-fit** per stop
@@ -134,7 +161,7 @@ talent surface becomes a sibling block rather than an inline row).
 | Markdown selectable on/off | Opposite calls, both defensible; ours is the better one |
 | h1–h6 scale vs PocketPal's unstyled defaults | Ours is pinned to DESIGN.md |
 | Link preview on assistant replies | Ours is strictly more capable |
-| `Stopping…` omitted | Documented choice (`PendingIndicator.tsx:11-24`) — revisit only if 3.1 lands |
+| `Stopping…` omitted | **Superseded 2026-10-06.** Reversed for parity — ticket 03. The composable trade-off (holding the in-flight state through teardown) is now taken knowingly. |
 | Metrics under error blocks | PocketPal's omission is arguably a gap, not a standard |
 | Timestamps on assistant messages | Ours shows time + app header per group; PocketPal shows no time at all |
 
@@ -149,21 +176,29 @@ talent surface becomes a sibling block rather than an inline row).
 | **04** streaming macrotask yield | **Closed, different mechanism.** 100ms macrotask beat held for the streaming span (`store/chat/send.ts:58-74,186`) vs PocketPal's per-token `setTimeout(0)` |
 | **11** session bulk actions | **Closed** (this session's drawer work) |
 | **10** date grouping | **Closed** (`lib/chat/session-groups.ts`) |
-| **14** lazy message hydration | **Open.** We use FlatList defaults; PocketPal sets `initialNumToRender:10`, `maxToRenderPerBatch:6` (`ChatView.tsx:931-932`) |
+| **14** lazy message hydration | **Ticketed.** FlatList defaults vs PocketPal's `initialNumToRender:10`, `maxToRenderPerBatch:6` (`ChatView.tsx:931-932`) — ticket 10 |
 
 ---
 
-## 6. Recommended port order
+## 6. Port order — ticketed
 
-Cheap, high-value first; each is independently shippable.
+Broken into tracer-bullet tickets under `.scratch/chat-message-ui-parity/issues/`.
+Four can start immediately: **01, 02, 04, 05**.
 
-1. **3.1** pending phase labels + token count — the pending row currently tells the user nothing about what the model is doing.
-2. **3.3** table `align` — finishes issue 09.
-3. **3.2** footer metrics (`prompt_per_second`, `cache_n`) — data already arrives.
-4. **3.6** context-banner variants (remote-hedged + escalation).
-5. **3.5** `IncreaseContextSheet` — reuses `estimateModelMemory`.
-6. **3.4** `ContentReportSheet`.
-7. **3.8** multi-block rows — **only** once 3.7's fate is settled, since it changes where a talent surface lives.
+| Ticket | Audit § | Blocked by |
+| --- | --- | --- |
+| 01 table alignment — prove it, close §3.3 | 3.3 | — |
+| 02 pending row names the phase | 3.1 | — |
+| 03 `Stopping…` + live tool-call token count | 3.1 | 02 |
+| 04 footer prompt throughput | 3.2 | — |
+| 05 remaining context banner variants | 3.6 | — |
+| 06 context fit classifier (pure) | 3.5 | — |
+| 07 increase-context ladder sheet | 3.5 | 05, 06 |
+| 08 multi-block assistant rows | 3.8 | 03 |
+| 09 user-row delivery status | 3.9 | — |
+| 10 message list render windowing | 5 (item 14) | — |
+
+**§3.4 dropped** (no backend — see its entry). **§3.7 ported** — talent + bubble + surface.
 8. **3.7** `HtmlPreviewBubble` — **ported** (talent + bubble + surface).
 
 ---

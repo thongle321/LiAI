@@ -49,7 +49,7 @@ const MAX_TOOL_CHARS = 80;
  *  data loss happens. */
 const SUPPORTED_VERSION = 1;
 
-export interface ImportedSession {
+interface ImportedSession {
   title: string;
   pinned: boolean;
   /** StoredTurn, never StoredMessage -- import mints its own ids. */

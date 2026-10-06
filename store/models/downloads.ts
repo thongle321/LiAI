@@ -23,6 +23,7 @@ import { downloadService } from "../../lib/download-service";
 import { latestJobForModel } from "../../lib/models/download-jobs.ts";
 import { resumeDataForPartial } from "../../lib/models/resume-state.ts";
 import { findProjectorFile, pairDownloadStep } from "../../lib/models/vision-pairing.ts";
+import { readGgufMetadata } from "../../lib/models/gguf-header.ts";
 import { asyncStorage, MEMORY_GUARD_KEY, generateId } from "./storage";
 
 function hfRefFor(modelId: string, results: HFModelSearchResult[]) {
@@ -294,6 +295,10 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
         if (!get().activeModelId) {
           get().setActiveModel(downloadJob.modelId, "local");
         }
+        // The file is whole: read what it says about itself while it is
+        // still known-fresh. Fire-and-forget — metadata is a bonus, and
+        // the row is already correct without it.
+        void get().refreshGgufMetadata(downloadJob.modelId);
         // ponytail: learn the ceiling from what actually succeeded.
         if (mainSize > get().largestSuccessfulBytes) {
           set({ largestSuccessfulBytes: mainSize });
@@ -405,7 +410,17 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
   reconcileInterrupted: async () => {
     const dir = `${LegacyFileSystem.documentDirectory}models/`;
     for (const spec of get().models) {
-      if (spec.downloadStatus === "completed" || spec.origin === "remote_api") continue;
+      // Already whole: nothing to reconcile, but it may predate the GGUF
+      // metadata read — backfill it here, once, from the file at rest.
+      // That is the whole point of the second hook: a model downloaded
+      // before this feature gains its metadata without a re-fetch.
+      if (spec.downloadStatus === "completed") {
+        if (spec.origin !== "remote_api" && !spec.ggufMetadata) {
+          await get().refreshGgufMetadata(spec.id);
+        }
+        continue;
+      }
+      if (spec.origin === "remote_api") continue;
       const file = spec.files[0];
       if (!file || !(file.size > 0)) continue;
       try {
@@ -436,6 +451,23 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       }
     }
     get().syncDownloadStatus();
+  },
+
+  refreshGgufMetadata: async (specId) => {
+    const spec = get().getModel(specId);
+    const file = spec?.files[0];
+    // Remote models have no file at rest, and their context length is the
+    // server's configured setting — a different fact from a trained
+    // maximum, so it must never be written here. Already-populated rows
+    // are left alone: this is a read, not a re-read on every start.
+    if (!spec || !file || spec.origin === "remote_api" || spec.ggufMetadata) {
+      return;
+    }
+    const metadata = await readGgufMetadata(
+      LegacyFileSystem.documentDirectory ?? "",
+      file.name,
+    );
+    if (metadata) get().updateModel(specId, { ggufMetadata: metadata });
   },
 
   cancelDownload: async (jobId) => {

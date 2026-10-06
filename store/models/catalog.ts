@@ -298,9 +298,11 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
         (m) => !(m.origin === "local" && m.files[0]?.name === fileName),
       ),
     }));
-    get().addModel(
-      buildLocalModelSpec({ id: `local-${generateId()}`, fileName, size }),
-    );
+    const id = `local-${generateId()}`;
+    get().addModel(buildLocalModelSpec({ id, fileName, size }));
+    // The copy is at rest and complete — read what it says about itself,
+    // so an imported model is not second-class to a downloaded one.
+    await get().refreshGgufMetadata(id);
   },
 
   saveModels: async () => {

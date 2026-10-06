@@ -141,6 +141,13 @@ function TurnFooter({
     parts.push(`${t.promptMs} ms to first token`);
     if (t.tokensPerSecond > 0) parts.push(`${t.tokensPerSecond.toFixed(1)} tok/s`);
     if (t.msPerToken > 0) parts.push(`${t.msPerToken.toFixed(1)} ms/token`);
+    // Prompt throughput: two decimals, because prompt rates run to the
+    // hundreds and one decimal would read as the same number as the
+    // generation rate beside it. Gated on present AND finite -- absent
+    // is "the engine did not report it", not zero.
+    if (t.promptTokensPerSecond !== undefined && Number.isFinite(t.promptTokensPerSecond)) {
+      parts.push(`${t.promptTokensPerSecond.toFixed(2)} prompt tok/s`);
+    }
   }
 
   return (

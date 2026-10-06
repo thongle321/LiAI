@@ -128,18 +128,20 @@ describe("chat wiring (C4)", () => {
 
   it("divides the corrected figure by the effective window", () => {
     // Occupancy is 05's figure, not a second calculation…
-    assert.match(chat, /fillPercent\(newestAssistant\?\.usage\?\.promptTokens/);
+    assert.match(chat, /promptTokens: newestAssistant\.usage\.promptTokens/);
     // …and the denominator resolves remote n_ctx from the C7 caps.
     assert.match(chat, /effectiveNCtx\(/);
     assert.match(chat, /contextLength/, "remote denominator comes from /props caps");
   });
 
-  it("warns through the shared threshold, with full-banner precedence", () => {
-    assert.match(chat, /isNearLimit\(/, "the threshold lives in one place");
+  it("hands the threshold and the precedence to the one resolver", () => {
+    // The near-limit compare and the full-over-warning order now live in
+    // lib/chat/banner-variant.ts (tested there against real inputs); the
+    // screen only collects state and draws the single variant it names.
     assert.match(
       chat,
-      /contextFullTurnId \?\? nearLimitTurnId/,
-      "an already-full thread keeps today's banner, never the warning instead",
+      /resolveBannerVariant\(/,
+      "the threshold lives in one place",
     );
   });
 });

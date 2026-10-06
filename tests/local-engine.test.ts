@@ -309,6 +309,41 @@ describe("completion stop signals (G1/G4)", () => {
     assert.equal(out.timings?.msPerToken, 40);
   });
 
+  it("projects prompt throughput for the footer, when the engine reports it", async () => {
+    const out = await run({
+      timings: { prompt_ms: 120, prompt_per_second: 640.5, prompt_n: 5 },
+    });
+    assert.equal(out.timings?.promptTokensPerSecond, 640.5);
+  });
+
+  it("leaves prompt throughput ABSENT, not zero, when unreported", async () => {
+    // "the engine did not report it" and "the engine reported zero" are
+    // different facts, and only one of them should reach the footer.
+    const out = await run({ timings: { prompt_ms: 120 } });
+    assert.equal(out.timings?.promptTokensPerSecond, undefined);
+    assert.equal(
+      "promptTokensPerSecond" in (out.timings ?? {}),
+      false,
+      "an unreported rate must not become 0",
+    );
+  });
+
+  it("keeps a REPORTED zero, so a measured zero is not mistaken for silence", async () => {
+    const out = await run({ timings: { prompt_ms: 120, prompt_per_second: 0 } });
+    assert.equal(out.timings?.promptTokensPerSecond, 0);
+  });
+
+  it("drops a non-finite prompt throughput rather than carrying NaN", async () => {
+    const out = await run({
+      timings: { prompt_ms: 120, prompt_per_second: Number.NaN },
+    });
+    assert.equal(out.timings?.promptTokensPerSecond, undefined);
+    const inf = await run({
+      timings: { prompt_ms: 120, prompt_per_second: Number.POSITIVE_INFINITY },
+    });
+    assert.equal(inf.timings?.promptTokensPerSecond, undefined);
+  });
+
   it("leaves timings undefined when the engine reports none", async () => {
     const out = await run({});
     assert.equal(out.timings, undefined);

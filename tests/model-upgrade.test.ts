@@ -9,6 +9,7 @@ import {
   upgradeRemoteApis,
   upgradeRemoteCaps,
 } from "../lib/model-upgrade.ts";
+import { sanitizeGgufMetadata } from "../lib/model-upgrade.ts";
 import { HF_TOKEN_SS_KEY, providerKeySS } from "../lib/secrets.ts";
 
 describe("upgradeModelSpec", () => {
@@ -66,6 +67,24 @@ describe("upgradeModelSpec", () => {
     });
     assert.equal(out?.params, 135_000_000);
     assert.deepEqual(out?.capabilities, ["chat"]);
+  });
+
+  it("sanitises the GGUF record on the way in and out", () => {
+    // Same rule, one home: what a header read writes is exactly what a
+    // load accepts, so nothing is stored that a restart would drop.
+    assert.deepEqual(
+      sanitizeGgufMetadata({ n_layers: 32, architecture: "llama" }),
+      { n_layers: 32, architecture: "llama" },
+    );
+    for (const bad of [null, 42, "x", []]) {
+      assert.equal(sanitizeGgufMetadata(bad), undefined);
+    }
+    const written = sanitizeGgufMetadata({ context_length: 131072 });
+    assert.deepEqual(
+      upgradeModelSpec({ id: "m1", name: "M", ggufMetadata: written })?.ggufMetadata,
+      written,
+      "a sanitised record survives the round trip unchanged",
+    );
   });
 });
 

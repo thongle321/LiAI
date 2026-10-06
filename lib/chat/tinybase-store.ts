@@ -72,9 +72,13 @@ interface MessageRow {
    *  not a nested object. */
   contextFull?: boolean;
   interrupted?: boolean;
+  stoppedEarly?: boolean;
   promptMs?: number;
   tokensPerSecond?: number;
   msPerToken?: number;
+  /** Flat sibling of the other timings -- TinyBase has no nested cell.
+   *  Absent on rows written before the field existed. */
+  promptTokensPerSecond?: number;
 }
 
 function messageRowFrom(raw: unknown): MessageRow | null {
@@ -98,11 +102,15 @@ function messageRowFrom(raw: unknown): MessageRow | null {
     totalTokens: usage("totalTokens"),
     ...(raw["contextFull"] === true ? { contextFull: true } : {}),
     ...(raw["interrupted"] === true ? { interrupted: true } : {}),
+    ...(raw["stoppedEarly"] === true ? { stoppedEarly: true } : {}),
     ...(typeof raw["promptMs"] === "number"
       ? {
           promptMs: raw["promptMs"],
           tokensPerSecond: num(raw["tokensPerSecond"]),
           msPerToken: num(raw["msPerToken"]),
+          ...(typeof raw["promptTokensPerSecond"] === "number"
+            ? { promptTokensPerSecond: raw["promptTokensPerSecond"] }
+            : {}),
         }
       : {}),
   };
@@ -229,11 +237,17 @@ export class TinyBaseSessionStore implements SessionStore {
       // Flat, like usage: TinyBase has no nested cell.
       ...(turn.outcome?.contextFull === true ? { contextFull: true } : {}),
       ...(turn.outcome?.interrupted === true ? { interrupted: true } : {}),
+    ...(turn.outcome?.stoppedEarly === true ? { stoppedEarly: true } : {}),
       ...(turn.outcome?.timings !== undefined
         ? {
             promptMs: turn.outcome.timings.promptMs,
             tokensPerSecond: turn.outcome.timings.tokensPerSecond,
             msPerToken: turn.outcome.timings.msPerToken,
+            // Optional: an old turn carries no prompt throughput, and
+            // writing an absent cell as 0 would invent a measurement.
+            ...(turn.outcome.timings.promptTokensPerSecond !== undefined
+              ? { promptTokensPerSecond: turn.outcome.timings.promptTokensPerSecond }
+              : {}),
           }
         : {}),
     });
@@ -282,18 +296,23 @@ export class TinyBaseSessionStore implements SessionStore {
       // Rebuilt as the nested shape the port declares, from the flat
       // columns. Omitted entirely when the engine reported nothing, so an
       // old row simply has no `outcome` key.
-      ...(row.contextFull !== undefined || row.interrupted !== undefined
-      || row.promptMs !== undefined
+...(row.contextFull !== undefined || row.interrupted !== undefined
+        || row.stoppedEarly !== undefined
+        || row.promptMs !== undefined
         ? {
             outcome: {
               ...(row.contextFull !== undefined ? { contextFull: row.contextFull } : {}),
               ...(row.interrupted !== undefined ? { interrupted: row.interrupted } : {}),
+              ...(row.stoppedEarly !== undefined ? { stoppedEarly: row.stoppedEarly } : {}),
               ...(row.promptMs !== undefined && row.promptMs !== null
                 ? {
                     timings: {
                       promptMs: row.promptMs,
                       tokensPerSecond: row.tokensPerSecond ?? 0,
                       msPerToken: row.msPerToken ?? 0,
+                      ...(row.promptTokensPerSecond !== undefined
+                        ? { promptTokensPerSecond: row.promptTokensPerSecond }
+                        : {}),
                     },
                   }
                 : {}),

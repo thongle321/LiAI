@@ -59,6 +59,11 @@ export interface TurnTimings {
   tokensPerSecond: number;
   /** Per-token generation cost, ms. */
   msPerToken: number;
+  /** Prompt throughput, tokens/s — the reading that explains a slow
+   *  first token. OPTIONAL, not zero-defaulted, so "the engine did not
+   *  report it" (most remote endpoints) stays distinguishable from "the
+   *  engine measured zero". The footer omits the segment when absent. */
+  promptTokensPerSecond?: number;
 }
 
 /** How a turn ENDED, distinct from what it said. Persisted with the turn
@@ -67,6 +72,10 @@ export interface TurnOutcomeFlags {
   /** The reply could not fit the context window. Drives the context-full
    *  banner and its "More room" recovery. */
   contextFull?: boolean;
+  /** The engine declared a length stop. A remote reply that stopped for
+   *  any OTHER reason, mid-sentence and long, is the cut-off notice's
+   *  subject (lib/chat/banner-variant.ts). */
+  stoppedEarly?: boolean;
   /** The user pressed Stop, so this reply is a deliberate stopping point
    *  rather than a finished answer. */
   interrupted?: boolean;

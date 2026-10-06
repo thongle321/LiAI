@@ -25,6 +25,20 @@ function asNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+/** The one rule for ModelSpec.ggufMetadata: a plain record or nothing.
+ *
+ * Shared by the load path and by the GGUF header read, so a record is
+ * never written that a restart would drop. A GGUF header is a native
+ * read that has already been narrowed to scalars before it gets here;
+ * this guards the shape of the field itself, not the header's contents. */
+export function sanitizeGgufMetadata(
+  raw: unknown,
+): Record<string, unknown> | undefined {
+  return raw && typeof raw === "object" && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)
+    : undefined;
+}
+
 /** Upgrade one persisted model; null = prune (unrecognizable). */
 export function upgradeModelSpec(raw: unknown): ModelSpec | null {
   const v = asRecord(raw);
@@ -134,10 +148,7 @@ export function upgradeModelSpec(raw: unknown): ModelSpec | null {
       ? v.capabilities.filter((c): c is string => typeof c === "string")
       : undefined,
     reasoning: typeof v.reasoning === "boolean" ? v.reasoning : undefined,
-    ggufMetadata:
-      v.ggufMetadata && typeof v.ggufMetadata === "object" && !Array.isArray(v.ggufMetadata)
-        ? (v.ggufMetadata as Record<string, unknown>)
-        : undefined,
+    ggufMetadata: sanitizeGgufMetadata(v.ggufMetadata),
   };
 }
 

@@ -218,12 +218,18 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
       // tracked separately: a forced final turn is a truncation too, but
       // of the tool loop rather than the context window, and the two mean
       // different things to a reader.
-      endFlags = {
-        ...(outcome.contextFull !== undefined || outcome.interrupted !== undefined
-          ? { contextFull: outcome.contextFull, interrupted: outcome.interrupted }
-          : {}),
-        ...(outcome.timings !== undefined ? { timings: outcome.timings } : {}),
-      };
+endFlags = {
+      ...(outcome.contextFull !== undefined ||
+      outcome.interrupted !== undefined ||
+      outcome.stoppedEarly !== undefined
+        ? {
+            contextFull: outcome.contextFull,
+            interrupted: outcome.interrupted,
+            stoppedEarly: outcome.stoppedEarly,
+          }
+        : {}),
+      ...(outcome.timings !== undefined ? { timings: outcome.timings } : {}),
+    };
       // Outcome text wins (scripted engines); streamed tokens fill the gap.
       if (outcome.text) turnText = outcome.text;
       if (outcome.reasoning) reasoning = outcome.reasoning;

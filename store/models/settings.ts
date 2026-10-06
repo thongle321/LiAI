@@ -55,6 +55,11 @@ export const createSettingsSlice: StateCreator<ModelStore, [], [], SettingsSlice
     return activeHfToken({ hfToken, useHfToken }, override);
   },
 
+  resetModelSettings: async () => {
+    set({ modelSettings: {} });
+    await get().saveModelSettings();
+  },
+
   getModelSettings: (modelId) => parseModelSettings(get().modelSettings[modelId]),
 
   updateModelSettings: (modelId, updates) => {

@@ -62,6 +62,7 @@ describe("inference store", () => {
         specDraftCacheK: s.specDraftCacheK,
         specDraftCacheV: s.specDraftCacheV,
         thinkingEnabled: s.thinkingEnabled,
+        thinkingOverrides: s.thinkingOverrides,
         jinjaEnabled: s.jinjaEnabled,
         sampler: s.sampler,
         useHexagonNpu: s.useHexagonNpu,

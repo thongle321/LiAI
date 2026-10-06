@@ -9,6 +9,7 @@
 import { create } from "zustand";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "../lib/storage";
+import { clampWatchInterval, WATCH_INTERVAL_DEFAULT_MS } from "../lib/vision-watch.ts";
 
 export const VOICE_KEY = "liai_voice_v1";
 
@@ -24,12 +25,16 @@ export interface VoiceState {
   rate: number;
   pitch: number;
   autoSpeak: boolean;
+  /** Vision watch-mode capture interval (05): a USER setting — never a
+   *  profile field (the product decision keeps profiles chat-only). */
+  watchIntervalMs: number;
   loaded: boolean;
   load: () => Promise<void>;
   setVoice: (voiceId: string | null) => void;
   setRate: (rate: number) => void;
   setPitch: (pitch: number) => void;
   setAutoSpeak: (autoSpeak: boolean) => void;
+  setWatchIntervalMs: (ms: number) => void;
 }
 
 function clamp(n: number, lo: number, hi: number, fallback: number): number {
@@ -43,12 +48,14 @@ function parseVoiceState(raw: string | null): {
   rate: number;
   pitch: number;
   autoSpeak: boolean;
+  watchIntervalMs: number;
 } {
   const fallback = {
     voiceId: null as string | null,
     rate: DEFAULT_RATE,
     pitch: DEFAULT_PITCH,
     autoSpeak: true,
+    watchIntervalMs: WATCH_INTERVAL_DEFAULT_MS,
   };
   if (!raw) return fallback;
   try {
@@ -60,6 +67,8 @@ function parseVoiceState(raw: string | null): {
       rate: clamp(r.rate as number, MIN_RATE, MAX_RATE, DEFAULT_RATE),
       pitch: clamp(r.pitch as number, MIN_PITCH, MAX_PITCH, DEFAULT_PITCH),
       autoSpeak: typeof r.autoSpeak === "boolean" ? r.autoSpeak : true,
+      // Older payloads have no interval: clamp(NaN) lands on the default.
+      watchIntervalMs: clampWatchInterval(r.watchIntervalMs as number),
     };
   } catch {
     return fallback;
@@ -69,11 +78,11 @@ function parseVoiceState(raw: string | null): {
 export function createVoiceStore(storage: KeyValueStorage) {
   return create<VoiceState>()((set, get) => {
     async function persist(): Promise<void> {
-      const { voiceId, rate, pitch, autoSpeak } = get();
+      const { voiceId, rate, pitch, autoSpeak, watchIntervalMs } = get();
       try {
         await storage.setItem(
           VOICE_KEY,
-          JSON.stringify({ voiceId, rate, pitch, autoSpeak }),
+          JSON.stringify({ voiceId, rate, pitch, autoSpeak, watchIntervalMs }),
         );
       } catch {
         // Ignore persistence failures; voice settings are non-critical.
@@ -85,6 +94,7 @@ export function createVoiceStore(storage: KeyValueStorage) {
       rate: DEFAULT_RATE,
       pitch: DEFAULT_PITCH,
       autoSpeak: true,
+      watchIntervalMs: WATCH_INTERVAL_DEFAULT_MS,
       loaded: false,
       load: async () => {
         set({ ...parseVoiceState(await storage.getItem(VOICE_KEY)), loaded: true });
@@ -103,6 +113,10 @@ export function createVoiceStore(storage: KeyValueStorage) {
       },
       setAutoSpeak: (autoSpeak) => {
         set({ autoSpeak });
+        void persist();
+      },
+      setWatchIntervalMs: (ms) => {
+        set({ watchIntervalMs: clampWatchInterval(ms) });
         void persist();
       },
     };

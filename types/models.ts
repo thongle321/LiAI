@@ -31,6 +31,23 @@ export interface ModelSpec {
   origin: ModelOrigin;
   type: ModelType;
   files: ModelFile[];
+  /** HF tags/siblings said this repo is a vision model. Recorded at build
+   *  time so the toggle appears before a projector is ever paired — the
+   *  filename-derived `type` misses repos like `gemma-3-4b-it`. */
+  supportsVision?: boolean;
+  /** Per-model vision switch: false loads the LLM blind even when a
+   *  projector is paired. Absent = on (pocketpal parity). */
+  visionEnabled?: boolean;
+  /** The sibling mmproj files this model could be paired with, recorded at
+   *  build time so the selector never re-hits the Hub. */
+  projectorCandidates?: ModelFile[];
+  /** HuggingFace repo page for this model (PocketPal `hfUrl`); absent
+   *  for local/preset-only specs. */
+  hfUrl?: string;
+  /** The paired mmproj projector for a vision model (vision-series 01):
+   *  recorded at download time from the repo's siblings and fetched right
+   *  after the LLM lands, so ticket 02 can attach it at engine load. */
+  projector?: ModelFile;
   // For remote API providers
   providerType?: ProviderType;
   baseUrl?: string;
@@ -49,6 +66,13 @@ export interface ModelSpec {
   // Catalog metadata (PocketPal parity, minus pal features)
   params?: number; // parameter count, e.g. 135_000_000
   capabilities?: string[];
+  /** Whether this model reasons at all (C6): true = known reasoner,
+   *  false = known NON-reasoner, absent = unknown — which is the app's
+   *  historic behaviour, unchanged for every model never classified.
+   *  Typed on purpose: C6's schema decision rejected parsing the
+   *  free-form `capabilities` above. User overrides live in the
+   *  inference store's thinkingOverrides, not here. */
+  reasoning?: boolean;
   ggufMetadata?: Record<string, unknown>;
 }
 
@@ -125,12 +149,33 @@ export interface RemoteApiProvider {
   apiKey: string;
   modelName: string;
   isActive: boolean;
+  /** Per-provider request timeout in ms; absent/invalid = engine default.
+   *  Rule lives in one place: lib/guards.ts positiveFinite — remote-engine
+   *  re-exports it as normalizeTimeoutMs. */
+  timeoutMs?: number;
 }
 
-/** Probed capability snapshot per provider (PocketPal remoteCaps parity). */
+/** Probed capability snapshot per provider (PocketPal remoteCaps parity).
+ *  Capability fields describe ONE model — `model` records which — so a
+ *  provider that switches models starts fresh (store strips them) and a
+ *  merge never carries a field across models. An ABSENT capability field
+ *  means UNKNOWN: never coerced to zero or false ("unsupported" is a
+ *  claim a failed probe must not make). */
 export interface RemoteCaps {
   reachable: boolean;
   checkedAt: number;
+  /** The model this snapshot describes; absent on legacy records. */
+  model?: string;
+  /** Context window (n_ctx) as reported by /props; absent = unknown. */
+  contextLength?: number;
+  /** Vision modality, only when the body described a loaded model AND
+   *  reported modalities; absent = unknown. */
+  supportsVision?: boolean;
+  /** The server's OWN generation defaults under wire names (06b,
+   *  PocketPal props.ts readSamplerDefaults): informational only —
+   *  remote turns never send sampler overrides, so these ARE the
+   *  values in effect. Absent when the probe reported none. */
+  samplerDefaults?: Record<string, number>;
 }
 
 /** Per-model overrides edited on the Models screen. */
@@ -138,4 +183,17 @@ export interface ModelSettings {
   displayName: string;
   systemPrompt: string;
   stopWords: string[];
+  /** Token overrides (PocketPal parity). BOS is persisted but not
+   *  injected today — llama.rn applies the GGUF template's own BOS. */
+  addBosToken: boolean;
+  addEosToken: boolean;
+  bosToken: string;
+  eosToken: string;
+  /** Forwarded to llama.rn's add_generation_prompt. Tri-state on purpose:
+   *  absent = the user never touched it, so the model default (llama.cpp
+   *  sends true) stands; an explicit false only arrives after the toggle
+   *  is switched off, which is the whole point of the switch. */
+  addGenerationPrompt?: boolean;
+  /** Forwarded to llama.rn's chat_template; "" = model default. */
+  chatTemplate: string;
 }

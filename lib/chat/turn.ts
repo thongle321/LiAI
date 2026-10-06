@@ -53,8 +53,9 @@ export interface TurnDeps {
   getStore(): Promise<TurnSessionStore | null>;
   getSearch(): Promise<TalentSearchAuth | null>;
   getSystemPrompt(): Promise<string | undefined>;
-  /** Local-only thinking preference; omitted keeps the native default. */
-  getThinking?: () => Promise<boolean>;
+  /** Local-only thinking preference; `undefined` sends NO flag, leaving
+   *  the model's chat template to decide (lib/inference/thinking.ts). */
+  getThinking?: () => Promise<boolean | undefined>;
   /** Local-only jinja template preference; omitted keeps the native default. */
   getJinja?: () => Promise<boolean>;
   /** Local-only sampling params for THIS session, already resolved
@@ -62,6 +63,12 @@ export interface TurnDeps {
    *  id rather than reading the active pointer, because a turn that mints
    *  its own session is not the pointer until after it runs. */
   getSampler?: (sessionId: string) => Promise<SamplerParams | null>;
+  /** Per-model stop words for THIS model; empty/absent sends none. */
+  getStopWords?: () => Promise<string[]>;
+  /** Per-model chat-template override; empty/absent uses the default. */
+  getChatTemplate?: () => Promise<string>;
+  /** Per-model generation-prompt override; undefined keeps default. */
+  getAddGenerationPrompt?: () => Promise<boolean | undefined>;
   /** Data-uri → temp file path for multimodal turns; null = text-only. */
   saveImage(dataUri: string): Promise<string | null>;
 }
@@ -121,6 +128,11 @@ export function createTurnRunner(deps: TurnDeps) {
     const thinking = await deps.getThinking?.().catch(() => undefined);
     const jinja = await deps.getJinja?.().catch(() => undefined);
     const sampler = await deps.getSampler?.(sessionId).catch(() => null);
+    const stopWords = (await deps.getStopWords?.().catch(() => [])) ?? [];
+    const chatTemplate = (await deps.getChatTemplate?.().catch(() => "")) ?? "";
+    const addGenerationPrompt = await deps
+      .getAddGenerationPrompt?.()
+      .catch(() => undefined);
 // G8: every attached photo becomes a media path. One that fails to
     // save is dropped rather than failing the turn -- the text still went,
     // and losing a photo is better than losing the message.
@@ -144,11 +156,20 @@ export function createTurnRunner(deps: TurnDeps) {
         sampler?.includeThinkingInContext !== false,
       ),
       tools: talentDefinitions(),
-      // Local reads imagePaths (llama media_paths); remote stays text-only.
+      // Local reads imagePaths (llama media_paths); remote reads the
+      // data URIs (OpenAI content arrays — a server can't read our files).
       ...(imagePaths ? { imagePaths } : {}),
+      ...(paths.images && paths.images.length > 0
+        ? { imageDataUris: paths.images }
+        : {}),
       ...(thinking !== undefined ? { enableThinking: thinking } : {}),
       ...(jinja !== undefined ? { jinja } : {}),
     ...(sampler ? { sampler } : {}),
+      ...(stopWords.length > 0 ? { stop: stopWords } : {}),
+      ...(chatTemplate.trim() !== "" ? { chatTemplate } : {}),
+      ...(addGenerationPrompt !== undefined
+        ? { addGenerationPrompt }
+        : {}),
       fetchImpl: fetch,
       search,
       userTexts: userTextsOf(paths.history),
@@ -171,6 +192,14 @@ export function createTurnRunner(deps: TurnDeps) {
       position,
       ...(s.input ? { input: s.input } : {}),
       ...(s.result !== undefined ? { result: s.result } : {}),
+      // The runner's full step contract (C15 + REGRESSION): this map
+      // picked only some fields for the store's life, so `ok` and
+      // `data` never reached the renderer from a LIVE turn — a failed
+      // tool could not render as failed and structured surfaces always
+      // looked empty. Metrics would have died in the same slot.
+      ...(s.ok !== undefined ? { ok: s.ok } : {}),
+      ...(s.data !== undefined ? { data: s.data } : {}),
+      ...(s.metrics !== undefined ? { metrics: s.metrics } : {}),
     }));
     const usage = {
       promptTokens: result.promptTokens,

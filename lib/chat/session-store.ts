@@ -69,7 +69,10 @@ export interface SessionStore {
   /** Mint a session and return its id. */
   create(): Promise<string>;
   /** Turns in call order, or null when the session does not exist. Each
-   *  carries the row id it can be addressed by. */
+   *  carries the row id it can be addressed by. Hydrate-once (C17): the
+   *  first open reads, later re-opens are served from memory — every
+   *  writer in the store invalidates its own session first, so a
+   *  cached transcript can never show a stale or empty conversation. */
   get(sessionId: string): Promise<StoredMessage[] | null>;
   /** Append one turn, creating the session row if it is not there yet.
    *  Pass `id` to pin the row id — the chat slice mints it up front so a

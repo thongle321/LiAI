@@ -57,7 +57,9 @@ export function useLocalModelImport(): () => Promise<void> {
     if (!confirmed) return;
 
     try {
+      showSnackbar("Copying model…", { type: "info", duration: 60000 });
       await addLocalModel(asset.uri, fileName, size);
+      showSnackbar("Model added.", { type: "success" });
     } catch {
       showSnackbar("Could not copy the file into models.", { type: "error" });
     }

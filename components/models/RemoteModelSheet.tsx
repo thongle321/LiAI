@@ -13,6 +13,7 @@ import { CheckCircle2, Circle } from "lucide-react-native";
 import { colors } from "../../themes/tokens.ts";
 import { useModelStore } from "../../store/modelStore";
 import { Sheet } from "../Sheet.tsx";
+import { normalizeTimeoutMs } from "../../lib/inference/remote-engine.ts";
 import type { RemoteApiProvider } from "../../types/models";
 
 export function RemoteModelSheet({
@@ -32,6 +33,8 @@ export function RemoteModelSheet({
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [modelName, setModelName] = useState("");
+  // Seconds in the field, ms on the provider; empty = engine default.
+  const [timeoutSecs, setTimeoutSecs] = useState("");
   const [providerType, setProviderType] = useState<"custom_openai" | "openrouter">(
     "custom_openai",
   );
@@ -47,6 +50,19 @@ export function RemoteModelSheet({
     setFormError(null);
     setValidationWarning(null);
 
+    // The one rule (normalizeTimeoutMs) decides what may be stored:
+    // empty means unset (default), anything non-positive/non-finite is
+    // a form error, never a stored value.
+    const trimmedTimeout = timeoutSecs.trim();
+    const timeoutMs =
+      trimmedTimeout === ""
+        ? undefined
+        : normalizeTimeoutMs(Math.round(Number(trimmedTimeout) * 1000));
+    if (trimmedTimeout !== "" && timeoutMs === undefined) {
+      setFormError("Timeout must be a positive number of seconds");
+      return;
+    }
+
     setValidating(true);
     const provider: RemoteApiProvider = {
       id: `api-${Date.now()}`,
@@ -56,6 +72,7 @@ export function RemoteModelSheet({
       apiKey: apiKey || "not-required",
       modelName,
       isActive: false,
+      timeoutMs,
     };
 
     const isValid = await validateAndRecord(provider);
@@ -70,6 +87,7 @@ export function RemoteModelSheet({
     setBaseUrl("");
     setApiKey("");
     setModelName("");
+    setTimeoutSecs("");
     setValidating(false);
   };
 
@@ -209,6 +227,20 @@ export function RemoteModelSheet({
             value={modelName}
             onChangeText={setModelName}
             placeholder="gpt-4o-mini / llama3.2 / qwen2.5"
+            className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
+          />
+        </View>
+
+        <View>
+          <Text className="font-sans text-body-sm text-secondary-text mb-1">
+            Request Timeout (seconds)
+          </Text>
+          <TextInput
+            value={timeoutSecs}
+            onChangeText={setTimeoutSecs}
+            placeholder="Leave empty for default"
+            keyboardType="decimal-pad"
+            accessibilityLabel="Request timeout in seconds"
             className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
           />
         </View>

@@ -37,6 +37,7 @@ import {
 } from "../../lib/inference/sampler.ts";
 import { useShallow } from "zustand/shallow";
 import { useInference } from "../../store/inference.ts";
+import { useModelStore } from "../../store/modelStore.ts";
 import { useChatStore, defaultGetStore } from "../../store/chat";
 import { SamplerRows } from "../SamplerRows.tsx";
 import { Sheet } from "../Sheet.tsx";
@@ -93,6 +94,32 @@ export function GenerationSettingsSheet({
   const [override, setOverride] = useState<Partial<SamplerParams> | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [errors, setErrors] = useState<Partial<Record<"seed" | "nPredict", string>>>({});
+
+  // 06b: for a remote model every knob here is decoration — remote
+  // turns NULL the sampler (store/chat/index.ts) — so the honest line
+  // is what actually applies: the server's own defaults, read from the
+  // C7 /props probe. Keys are provider ids (caps are keyed per
+  // provider, the remote- prefix stripped like chat.tsx does).
+  const activeProviderType = useModelStore((s) => s.activeProviderType);
+  const activeModelId = useModelStore((s) => s.activeModelId);
+  const remoteCaps = useModelStore((s) => s.remoteCaps);
+  const isRemote = activeProviderType === "remote";
+  const providerId =
+    activeModelId !== null && activeModelId.startsWith("remote-")
+      ? activeModelId.slice("remote-".length)
+      : null;
+  const serverDefaults =
+    providerId !== null ? remoteCaps[providerId]?.samplerDefaults : undefined;
+  const examples =
+    serverDefaults === undefined
+      ? ""
+      : ["temperature", "top_p", "top_k"]
+          .filter((name) => serverDefaults[name] !== undefined)
+          .map((name) => `${name} ${serverDefaults[name]}`)
+          .join(" · ");
+  const serverDefaultsNote = !isRemote
+    ? null
+    : `Remote server: its own defaults${examples === "" ? "" : ` (${examples})`} — the knobs below apply to local models only.`;
 
   useEffect(() => {
     void load();
@@ -242,6 +269,11 @@ export function GenerationSettingsSheet({
           />
         </RowSizeProvider>
       </View>
+      {serverDefaultsNote !== null ? (
+        <Text className="px-1 pb-2 font-sans text-caption text-secondary-text">
+          {serverDefaultsNote}
+        </Text>
+      ) : null}
       {/* One divider-less card, 24px rhythm — CompletionSettings' shape. */}
       <SettingsSection plain>
         {draft ? (

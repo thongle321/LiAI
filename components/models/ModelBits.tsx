@@ -145,11 +145,12 @@ export function DownloadButton({
   const isDownloading = status === "downloading";
   const isPaused = status === "paused";
   const isCompleted = status === "completed";
+  const isFailed = status === "failed";
   const label = isDownloading
     ? `${Math.round(progress)}%`
     : isPaused
     ? "Paused"
-    : status === "failed"
+    : isFailed
     ? "Retry"
     : "Download";
 
@@ -169,26 +170,28 @@ export function DownloadButton({
     <Pressable
       onPress={isDownloading ? onPause ?? onPress : isPaused ? onResume ?? onPress : onPress}
       disabled={disabled}
-      className="min-h-12 flex-row items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
+      className="min-h-12 items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
       accessibilityRole="button"
       accessibilityLabel={
         isDownloading
           ? `Pause download, ${Math.round(progress)} percent`
           : isPaused
           ? "Resume download"
-          : status === "failed"
+          : isFailed
           ? "Retry download"
           : "Download model"
       }
     >
-      {isDownloading ? (
-        <Pause size={16} color={colors.primary} />
-      ) : isPaused ? (
-        <Play size={16} color={colors.primary} />
-      ) : (
-        <Download size={16} color={colors.primary} />
-      )}
-      <Text className="ml-2 font-sans text-body-sm text-primary-text">{label}</Text>
+      <View className="flex-row items-center gap-2">
+        {isDownloading ? (
+          <Pause size={16} color={colors.primary} />
+        ) : isPaused ? (
+          <Play size={16} color={colors.primary} />
+        ) : (
+          <Download size={16} color={colors.primary} />
+        )}
+        <Text className="font-sans text-body-sm text-primary-text">{label}</Text>
+      </View>
     </Pressable>
   );
 }

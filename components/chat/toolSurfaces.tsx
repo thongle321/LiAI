@@ -28,7 +28,9 @@ import { Linking, Modal, Pressable, ScrollView, Text, View } from "react-native"
 import { ChevronRight, ExternalLink, Search, Wrench } from "lucide-react-native";
 
 import type { AgentStep } from "../../types/chat.ts";
+import { formatToolMetrics } from "../../lib/format.ts";
 import { colors } from "../../themes/tokens.ts";
+import { HtmlPreviewBubble } from "./HtmlPreviewBubble.tsx";
 
 export interface ToolSurfaceProps {
   step: AgentStep;
@@ -47,6 +49,24 @@ export function toolSurfaceFor(name: string): ToolSurfaceRenderer | undefined {
   return renderers.get(name);
 }
 
+/** `1,500 tokens · 35s` beneath a tool result (C15). Renders NOTHING
+ *  when there is nothing to report — an older persisted call, or a
+ *  tokens-0 engine — because absence is itself the cue. Shared by the
+ *  sheet surfaces, the error block, and (as a suffix) the chip. */
+export function ToolMetricsLine({
+  metrics,
+}: {
+  metrics?: AgentStep["metrics"];
+}): ReactNode {
+  const text = formatToolMetrics(metrics);
+  if (text === null) return null;
+  return (
+    <Text className="pb-1 pl-7 font-sans text-caption text-secondary-text">
+      {text}
+    </Text>
+  );
+}
+
 /** The collapsed row that opens a sheet. The whole row is the control, with
  *  hitSlop rather than padding -- pocketpal's shape. */
 function TriggerRow({
@@ -54,46 +74,60 @@ function TriggerRow({
   count,
   onPress,
   accessibilityLabel,
+  metrics,
 }: {
   label: string;
   /** Rendered as its own non-wrapping element so it survives a long label. */
   count?: string;
   onPress: () => void;
   accessibilityLabel: string;
+  metrics?: AgentStep["metrics"];
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      className="min-h-12 w-full flex-row items-center gap-2 rounded-lg px-2 py-1"
-      hitSlop={{ top: 12, bottom: 12 }}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityHint="Opens the full result"
-    >
-      <Search size={14} color={colors.secondaryText} />
-      {/* Split so a long query truncates but the count never does. */}
-      <Text numberOfLines={1} className="flex-1 font-sans text-caption text-secondary-text">
-        {label}
-      </Text>
-      {count !== undefined && (
-        <Text numberOfLines={1} className="font-sans text-caption text-secondary-text">
-          {count}
+    <View className="w-full">
+      <Pressable
+        onPress={onPress}
+        className="min-h-12 w-full flex-row items-center gap-2 rounded-lg px-2 py-1"
+        hitSlop={{ top: 12, bottom: 12 }}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint="Opens the full result"
+      >
+        <Search size={14} color={colors.secondaryText} />
+        {/* Split so a long query truncates but the count never does. */}
+        <Text numberOfLines={1} className="flex-1 font-sans text-caption text-secondary-text">
+          {label}
         </Text>
-      )}
-      <ChevronRight size={14} color={colors.secondaryText} />
-    </Pressable>
+        {count !== undefined && (
+          <Text numberOfLines={1} className="font-sans text-caption text-secondary-text">
+            {count}
+          </Text>
+        )}
+        <ChevronRight size={14} color={colors.secondaryText} />
+      </Pressable>
+      <ToolMetricsLine metrics={metrics} />
+    </View>
   );
 }
 
 /** A static row: no control, because there is nothing to expand. Pocketpal's
  *  ToolUsedChip is the same shape -- a plain View with a glyph and a label. */
-function StaticRow({ label }: { label: string }) {
+function StaticRow({
+  label,
+  metrics,
+}: {
+  label: string;
+  metrics?: AgentStep["metrics"];
+}) {
   return (
-    <View className="min-h-12 w-full flex-row items-center gap-2 rounded-lg px-2 py-1">
-      <Wrench size={14} color={colors.secondaryText} />
-      <Text numberOfLines={1} className="flex-1 font-sans text-caption text-secondary-text">
-        {label}
-      </Text>
+    <View className="w-full">
+      <View className="min-h-12 w-full flex-row items-center gap-2 rounded-lg px-2 py-1">
+        <Wrench size={14} color={colors.secondaryText} />
+        <Text numberOfLines={1} className="flex-1 font-sans text-caption text-secondary-text">
+          {label}
+        </Text>
+      </View>
+      <ToolMetricsLine metrics={metrics} />
     </View>
   );
 }
@@ -184,7 +218,7 @@ function WebSearchSurface({ step }: ToolSurfaceProps) {
   // Zero results is a STATIC row: there is nothing to open, and an
   // expandable empty list is worse than saying so.
   if (hits.length === 0) {
-    return <StaticRow label={`No results for ${query}`.trim()} />;
+    return <StaticRow label={`No results for ${query}`.trim()} metrics={step.metrics} />;
   }
   return (
     <>
@@ -193,6 +227,7 @@ function WebSearchSurface({ step }: ToolSurfaceProps) {
         count={hits.length === 1 ? "· 1 result" : `·  ${hits.length} results`}
         onPress={() => setOpen(true)}
         accessibilityLabel={query === "" ? "Show results" : `Show results for ${query}`}
+        metrics={step.metrics}
       />
       <Sheet visible={open} onDismiss={() => setOpen(false)}>
         <Text className="mb-2 font-sans-semibold text-body-md text-primary-text">
@@ -226,6 +261,7 @@ function ReadUrlSurface({ step }: ToolSurfaceProps) {
         count={truncated ? "·  cut off" : undefined}
         onPress={() => setOpen(true)}
         accessibilityLabel="Show the page text"
+        metrics={step.metrics}
       />
       <Sheet visible={open} onDismiss={() => setOpen(false)}>
         {truncated && (
@@ -242,7 +278,26 @@ function ReadUrlSurface({ step }: ToolSurfaceProps) {
 /** A short plain result: nothing to expand, so a static row. */
 function PlainSurface({ step }: ToolSurfaceProps) {
   const text = step.result ?? "";
-  return <StaticRow label={text === "" ? step.tool : `${step.tool} — ${text}`} />;
+  return (
+    <StaticRow
+      label={text === "" ? step.tool : `${step.tool} — ${text}`}
+      metrics={step.metrics}
+    />
+  );
+}
+
+/** Model-authored HTML (PocketParity: RenderHtmlTalentUI). The html
+ *  arrives on `data` — the model was shown only the fixed success summary,
+ *  never its own markup echoed back. */
+function RenderHtmlSurface({ step }: ToolSurfaceProps) {
+  const html = typeof step.data?.html === "string" ? step.data.html : "";
+  const title = typeof step.data?.title === "string" ? step.data.title : undefined;
+  // A registered surface renders unconditionally here (this registry has no
+  // `node != null` fall-through, because calling a surface as a function to
+  // get one would break the useState surfaces' hooks). So an empty result
+  // states itself rather than rendering nothing — same rule as ReadUrl.
+  if (html === "") return <StaticRow label="No preview" metrics={step.metrics} />;
+  return <HtmlPreviewBubble html={html} title={title} />;
 }
 
 // Module load, not first render: the chat screen must never be the thing
@@ -251,3 +306,4 @@ registerToolSurface("web_search", WebSearchSurface);
 registerToolSurface("read_url", ReadUrlSurface);
 registerToolSurface("calculate", PlainSurface);
 registerToolSurface("datetime", PlainSurface);
+registerToolSurface("render_html", RenderHtmlSurface);

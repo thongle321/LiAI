@@ -1,26 +1,181 @@
 /** Markdown renderer for assistant bubbles (Wave 1 chat).
  *
  * react-native-marked parses to native views directly (no HTML layer);
- * the code renderer override plugs syntax highlighting + copy in.
+ * the code renderer override plugs syntax highlighting + copy in, and
+ * the link overrides open http(s) only, loudly (C2).
  * The renderer instance is module-level: stable identity across the
  * token-by-token re-parses of a streaming reply.
  */
 
 import { Fragment, type ReactNode } from "react";
 import {
+  Dimensions,
+  Linking,
+  ScrollView,
+  Text,
+  TouchableHighlight,
+  View,
+  type ImageStyle,
+  type TextStyle,
+} from "react-native";
+import {
   Renderer,
   useMarkdown,
   type RendererInterface,
 } from "react-native-marked";
 
+import { isOpenableUrl } from "../../lib/chat/links.ts";
+import { useChatStore } from "../../store/chat";
 import { colors, font } from "../../themes/tokens.ts";
 import { CodeBlock } from "./CodeBlock.tsx";
 
+/** One guarded open shared by both link overrides: Linking, then the
+ *  chat's inline notice on failure. The base renderer swallows failures
+ *  into console.warn — silence to the user (C2). Never throws. */
+function openLink(href: string): void {
+  void Linking.openURL(href).catch(() => {
+    useChatStore.getState().setChatWarning({
+      message: "Couldn't open that link.",
+      severity: "warning",
+      recoverable: false,
+    });
+  });
+}
+
+/** Fixed shared column width — the library's own layout math
+ *  (react-native-marked utils/table.ts getTableWidthArr): ~43% of the
+ *  window per column. One width for every row keeps the vertical grid
+ *  lines aligned (content-sizing each row let them drift and the grid
+ *  read broken), and a multi-column table overflows into the horizontal
+ *  ScrollView instead of wrapping cells into narrow unreadable columns.
+ *  Measured once at module load, as the base renderer measures once per
+ *  instance; Dimensions is the sanctioned inline-style exception. */
+const COLUMN_WIDTH = Math.floor(Dimensions.get("window").width * (1.3 / 3));
+
+/** One cell: the shared column width plus its two grid borders. Header
+ *  and body cells are identical — their rows differ by fill. */
+function TableCell({ children }: { children: ReactNode }) {
+  return (
+    <View
+      className="border-b border-r border-border px-2 py-1.5"
+      style={{ width: COLUMN_WIDTH }}
+    >
+      {children}
+    </View>
+  );
+}
+
+/** One GFM table (C13): header fill so the first row is distinguishable,
+ *  a 1px cell grid, and a horizontal ScrollView so wide tables scroll
+ *  instead of clipping — cells size to content, so narrow tables stay
+ *  put. Cell borders draw right+bottom and each row draws its left, so
+ *  every grid edge is exactly one line (a full container border would
+ *  double them). Plain Views on purpose: the library's MDTable leans on
+ *  react-native-reanimated-table, which is its dependency, not ours. */
+function MarkdownTable({
+  header,
+  rows,
+}: {
+  header: ReactNode[][];
+  rows: ReactNode[][][];
+}) {
+  return (
+    <View className="mb-2">
+      <ScrollView horizontal>
+        <View>
+          <View className="flex-row border-l border-t border-border bg-surface-2">
+            {header.map((cells, i) => (
+              <TableCell key={`h-${i}`}>{cells}</TableCell>
+            ))}
+          </View>
+          {rows.map((row, i) => (
+            <View key={`r-${i}`} className="flex-row border-l border-border">
+              {row.map((cell, j) => (
+                <TableCell key={`c-${j}`}>{cell}</TableCell>
+              ))}
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
 class ChatRenderer extends Renderer implements RendererInterface {
+  /** The base keeps `selectable` private; mirror the constructor option
+   *  here so link text keeps long-press selection (C2). */
+  private readonly selectableText: boolean;
+
+  constructor(options?: { selectable?: boolean }) {
+    super(options);
+    this.selectableText = options?.selectable ?? true;
+  }
+
   code(text: string, language?: string): ReactNode {
     return (
       <CodeBlock key={this.getKey()} language={language || "text"} text={text} />
     );
+  }
+
+  /** C2: only plain http(s) is pressable. A markdown body is untrusted,
+   *  so `file:`/`javascript:`/bare schemes render as plain text — no
+   *  link styling, no press, never an inert-looking link. */
+  link(
+    children: string | ReactNode[],
+    href: string,
+    styles?: TextStyle,
+  ): ReactNode {
+    if (!isOpenableUrl(href)) {
+      return this.text(children);
+    }
+    return (
+      <Text
+        key={this.getKey()}
+        selectable={this.selectableText}
+        onPress={() => openLink(href)}
+        accessibilityRole="link"
+        accessibilityHint={href}
+        style={styles}
+      >
+        {children}
+      </Text>
+    );
+  }
+
+  /** Linked images carry the same hazard as linked text — the base
+   *  implementation presses any scheme — so they share the guard and the
+   *  one open. An unopenable href drops the press, keeping the image. */
+  linkImage(
+    href: string,
+    imageUrl: string,
+    alt?: string,
+    style?: ImageStyle,
+    title?: string,
+  ): ReactNode {
+    const imageNode = this.image(imageUrl, alt, style, title);
+    if (!isOpenableUrl(href)) {
+      return imageNode;
+    }
+    return (
+      <TouchableHighlight
+        key={this.getKey()}
+        accessibilityRole="link"
+        accessibilityHint={href}
+        onPress={() => openLink(href)}
+      >
+        {imageNode}
+      </TouchableHighlight>
+    );
+  }
+
+  /** C13: the base Renderer DOES expose a table hook (verified at the
+   *  library's lib/types.ts:86) — so we override rather than reinvent.
+   *  The override exists for styling: no second table path, and the one
+   *  renderer serves both the body and the reasoning block (dense), so
+   *  tables render in both by construction. The module-level renderer
+   *  identity below keeps streaming re-parses from remounting them. */
+  table(header: ReactNode[][], rows: ReactNode[][][]): ReactNode {
+    return <MarkdownTable header={header} rows={rows} />;
   }
 }
 

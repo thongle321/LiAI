@@ -65,6 +65,44 @@ describe("chat store sessions", () => {
     assert.deepEqual(useStore.getState().sessions, []);
   });
 
+  it("reconciles a stored pointer to a session that is gone (C17)", async () => {
+    // The pointer names a session the list no longer contains: loadSession
+    // must clear it rather than leave an active id with nothing behind it.
+    const { getStore, runTurn } = storeWith([], "gone");
+    const useStore = createChatStore({ getStore, runTurn });
+    await useStore.getState().loadSession();
+    assert.equal(useStore.getState().sessionId, null);
+    assert.deepEqual(useStore.getState().messages, []);
+    assert.equal(await (await getStore()).getActiveSessionId(), null);
+  });
+
+  it("still opens the conversation when the draft write fails (C17)", async () => {
+    // switchSession persists the old draft BEFORE hydrating the next
+    // transcript. That write is best-effort: if it throws the conversation
+    // must still resolve — an empty view that looks like lost data is the
+    // failure this guards.
+    const base = fakeSessionStore([
+      { id: "s2", title: "Two", turns: [{ role: "user", content: "hi" }] },
+    ]);
+    const useStore = createChatStore({
+      getStore: async () => ({
+        ...base.store,
+        setDraft: async () => {
+          throw new Error("disk full");
+        },
+      }),
+      runTurn: idleRunTurn,
+    });
+    await useStore.getState().loadSession();
+    assert.equal(await useStore.getState().switchSession("s2"), true);
+    assert.equal(useStore.getState().sessionId, "s2");
+    assert.equal(
+      useStore.getState().messages.length,
+      1,
+      "the transcript resolved despite the failing write",
+    );
+  });
+
   it("switchSession loads history with steps and usage", async () => {
     const { getStore, runTurn, store } = storeWith([
       {
@@ -630,6 +668,25 @@ describe("chat store edit mode", () => {
     await sent;
   });
 
+  it("refuses to switch sessions mid-turn (C17)", async () => {
+    // The switch guard is the other half of the mid-turn refusal (the
+    // delete side is pinned elsewhere): moving the view to another
+    // conversation while tokens stream would orphan the incoming
+    // bubbles on the old one.
+    const gate = gatedRunTurn();
+    const { getStore } = storeWith([
+      { id: "s1", title: "One" },
+      { id: "s2", title: "Two" },
+    ]);
+    const useStore = createChatStore({ getStore, runTurn: gate.runTurn });
+    await useStore.getState().loadSession();
+    const sent = useStore.getState().send("hi");
+    assert.equal(await useStore.getState().switchSession("s2"), false);
+    assert.notEqual(useStore.getState().sessionId, "s2", "still where it was");
+    gate.release("done");
+    await sent;
+  });
+
   it("restores the composer to the turn's text on cancel", async () => {
     const seeded = pair();
     const useStore = createChatStore({ getStore: seeded.getStore, runTurn: fakeRunTurn([]).runTurn });
@@ -839,6 +896,7 @@ describe("multimodal warning (G12)", () => {
     const useStore = createChatStore({
       getStore: async () => fakeSessionStore([]).store,
       runTurn,
+      multimodalAvailable: async () => false,
     });
     await useStore.getState().send("what is this?", [
       "data:image/jpeg;base64,AAAA",
@@ -870,15 +928,31 @@ describe("multimodal warning (G12)", () => {
     );
   });
 
+  it("hands images through when the model can see (vision-series 02)", async () => {
+    const { runTurn, calls } = fakeRunTurn([{ reply: "a cat" }]);
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+      multimodalAvailable: async () => true,
+    });
+    await useStore.getState().send("what is this?", [
+      "data:image/jpeg;base64,AAAA",
+    ]);
+    assert.deepEqual(
+      calls.images[0],
+      ["data:image/jpeg;base64,AAAA"],
+      "the image reaches the turn",
+    );
+    assert.equal(useStore.getState().chatWarning, null, "no false alarm");
+  });
+
   it("the guard lives in runLocal, so every re-run path shares it", () => {
     // send, retry, regenerate and edit all funnel through runLocal. A
     // guard written per-caller would let one of them drift into handing a
     // text-only model an image again -- so pin the shape, not four copies.
     const src = readFileSync("store/chat/send.ts", "utf8");
-    assert.match(
-      src,
-      /const images = multimodalAvailable\(\) \? opts\.images : undefined;/,
-    );
+    assert.match(src, /await ctx\.multimodalAvailable\(\)/);
+    assert.match(src, /\? opts\.images[\s\S]{0,20}?: undefined;/);
     // Exactly one place decides, so it cannot be bypassed downstream.
     assert.equal(
       src.split("multimodalAvailable()").length - 1,
@@ -935,6 +1009,46 @@ describe("session import (G10)", () => {
       useStore.getState().sessions.filter((s) => s.title === "Twice").length,
       2,
       "ids must not collide and overwrite",
+    );
+  });
+});
+
+describe("streaming yield (C16)", () => {
+  it("yields periodically while held, and never after release", async () => {
+    const { startStreamYield } = await import("../store/chat/send.ts");
+    let ticks = 0;
+    const release = startStreamYield(5, () => {
+      ticks += 1;
+    });
+    await new Promise((r) => setTimeout(r, 100));
+    release();
+    const atRelease = ticks;
+    assert.ok(
+      atRelease >= 3,
+      `expected periodic yields while streaming, got ${atRelease}`,
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(
+      ticks,
+      atRelease,
+      "the yield must not fire once the turn is over",
+    );
+  });
+
+  it("runLocal holds the yield for the whole turn and releases it on exit", () => {
+    // Stop must be dispatchable mid-stream: the beat exists only while a
+    // turn runs. Released in `finally` so every exit path — success,
+    // failure, supersede — ends it and idle holds no timer at all.
+    const src = readFileSync("store/chat/send.ts", "utf8");
+    assert.match(
+      src,
+      /= startStreamYield\(\)/,
+      "runLocal must start the streaming beat",
+    );
+    assert.match(
+      src,
+      /finally\s*{[^}]*endStreamYield\(\);?\s*}/,
+      "the beat must be released on every exit path",
     );
   });
 });

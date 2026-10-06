@@ -8,6 +8,7 @@ import type {
   HFModelFile,
   HFModelSearchResult,
   ModelDownloadStatus,
+  ModelFile,
   ModelSettings,
   ModelSpec,
   PresetModel,
@@ -70,6 +71,15 @@ export interface CatalogSlice {
   addModel: (model: ModelSpec) => void;
   removeModel: (modelId: string) => Promise<void>;
   updateModel: (modelId: string, updates: Partial<ModelSpec>) => void;
+  /** Per-model vision switch. false = load blind even with a projector. */
+  setVisionEnabled: (modelId: string, enabled: boolean) => void;
+  /** Pair a different sibling projector and mark it as the active one.
+   *  The fetch is a separate action (DownloadsSlice): recording and
+   *  downloading are different jobs and the UI wants both. */
+  setProjector: (modelId: string, projector: ModelFile) => void;
+  /** Unpair + delete the projector file. Dependents (models sharing that
+   *  exact file) are returned so the caller can name them in the confirm. */
+  detachProjector: (modelId: string) => Promise<string[]>;
   /** Transient progress update: state only, NO disk write. For the
    *  high-frequency download tick, where persisting every byte thrashes
    *  AsyncStorage. Real status changes go through updateModel. */
@@ -86,10 +96,17 @@ export interface DownloadsSlice {
   largestSuccessfulBytes: number;
 
   saveMemoryGuard: () => Promise<void>;
+  /** Dismiss the failure dialog: clears the stored reason WITHOUT
+   *  touching downloadStatus — the row keeps offering Retry (C1) —
+   *  and a re-failure writes a fresh reason, reopening the dialog. */
+  clearDownloadError: (specId: string) => void;
   startDownload: (
     modelId: string,
     file: HFModelFile | PresetModelFile,
     token?: string,
+    /** VisionDownloadSheet's answer: text-only skips the projector leg, an
+     *  explicit projector overrides the pairing rule. */
+    options?: { visionEnabled?: boolean; projector?: ModelFile },
   ) => Promise<void>;
   /** Start from an already-built spec (interrupted-resume re-entry). */
   startSpecDownload: (
@@ -99,6 +116,9 @@ export interface DownloadsSlice {
   ) => Promise<void>;
   /** Resume a killed download from its partial file (manual Resume). */
   resumeInterruptedDownload: (specId: string) => Promise<void>;
+  /** Fetch ONLY the projector leg of a model whose LLM is already whole —
+   *  the "Download projection model" action on a card. */
+  startProjectorDownload: (specId: string) => Promise<void>;
   /** Mark partial on-disk files paused after launch so Resume continues them. */
   reconcileInterrupted: () => Promise<void>;
   pauseDownload: (jobId: string) => Promise<void>;
@@ -141,6 +161,10 @@ export interface SettingsSlice {
   modelSettings: Record<string, ModelSettings>;
 
   saveModelSettings: () => Promise<void>;
+  /** Drop every per-model override (name/prompt/stop words) — PocketPal's
+   *  resetModels restores each model's default settings; ours are stored
+   *  centrally, so resetting = clearing the map. */
+  resetModelSettings: () => Promise<void>;
   setHfToken: (token: string | null) => Promise<void>;
   setUseHfToken: (on: boolean) => Promise<void>;
   /** The token to send, honouring the Use HF Token switch. An explicit

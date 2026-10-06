@@ -14,7 +14,7 @@ import type {
   ToolDefinition,
 } from "../inference/engine.ts";
 import type { SamplerParams } from "../inference/sampler.ts";
-import type { TurnOutcomeFlags } from "../../types/chat.ts";
+import type { TurnOutcomeFlags, ToolMetrics } from "../../types/chat.ts";
 import { runTalent, type TalentSearchAuth } from "./registry.ts";
 
 export interface AgentStep {
@@ -27,6 +27,16 @@ export interface AgentStep {
    *  as true: absent means the row predates the discriminant, and renders
    *  conservatively rather than claiming a success nobody recorded. */
   ok?: boolean;
+  /** Structured result for the renderer, never for the model. Rode an
+   *  unchecked spread until C15 typed it, because the turn's step map
+   *  reads it. */
+  data?: Record<string, unknown>;
+  /** Per-call cost of the GENERATION turn that produced this call (C15):
+   *  streamed args → the tool-fragment count and the window from the
+   *  first fragment; otherwise whole-turn usage from the turn start
+   *  (the non-streaming remote path). Absent when neither was seen —
+   *  absence is the cue. */
+  metrics?: ToolMetrics;
 }
 
 export type AgentEvent =
@@ -58,12 +68,21 @@ export interface AgentRunOptions {
   tools: ToolDefinition[];
   /** Local file paths for a multimodal first turn (llama media_paths). */
   imagePaths?: string[];
+  /** Remote vision (04): the turn's images as data URIs for OpenAI
+   *  content arrays; local engines ignore these. */
+  imageDataUris?: string[];
   /** Local-only: jinja thinking blocks on/off for every loop turn. */
   enableThinking?: boolean;
   /** Local-only: jinja chat template on/off for every loop turn. */
   jinja?: boolean;
   /** Local-only: resolved sampling params for every loop turn. */
   sampler?: SamplerParams;
+  /** Per-model stop words applied to every loop turn. */
+  stop?: string[];
+  /** Per-model chat-template override (llama.rn only). */
+  chatTemplate?: string;
+  /** Per-model generation-prompt override (llama.rn only). */
+  addGenerationPrompt?: boolean;
   fetchImpl: typeof fetch;
   search: TalentSearchAuth | null;
   userTexts?: string[];
@@ -117,6 +136,13 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
 
   try {
     for (let turn = 0; ; turn += 1) {
+      const turnStartedAt = Date.now();
+      // Parity fact-check (C15): llama.rn fires onToolCalls once per
+      // token while tool args stream, each with the accumulated set —
+      // the count of those fires is PocketPal's tool-carrying-delta
+      // count. Per turn, reset with the turn.
+      let toolFragmentCalls = 0;
+      let firstToolCallAt: number | null = null;
       const forcedFinal = turn >= maxTurns;
       const requestMessages =
         forcedFinal && turn > 0
@@ -136,11 +162,23 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
             ...(turn === 0 && options.imagePaths && options.imagePaths.length > 0
               ? { imagePaths: options.imagePaths }
               : {}),
+            ...(turn === 0 && options.imageDataUris && options.imageDataUris.length > 0
+              ? { imageDataUris: options.imageDataUris }
+              : {}),
             ...(options.enableThinking !== undefined
               ? { enableThinking: options.enableThinking }
               : {}),
             ...(options.jinja !== undefined ? { jinja: options.jinja } : {}),
             ...(options.sampler ? { sampler: options.sampler } : {}),
+            ...(options.stop && options.stop.length > 0
+              ? { stop: options.stop }
+              : {}),
+            ...(options.chatTemplate && options.chatTemplate.trim() !== ""
+              ? { chatTemplate: options.chatTemplate }
+              : {}),
+            ...(options.addGenerationPrompt !== undefined
+              ? { addGenerationPrompt: options.addGenerationPrompt }
+              : {}),
           },
           {
             onToken: (delta) => {
@@ -155,6 +193,10 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
               onEvent({ type: "reasoning", text: cumulative });
             },
             onToolCalls: (calls) => {
+              if (calls.length > 0) {
+                toolFragmentCalls += 1;
+                firstToolCallAt ??= Date.now();
+              }
               turnCalls = calls;
             },
           },
@@ -166,7 +208,11 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
         });
         return { text, steps, promptTokens, completionTokens, hitMaxTurns: false };
       }
-      promptTokens += outcome.promptTokens;
+      // C3: promptTokens is occupancy — tokens HELD against the window —
+      // so the LAST step's figure is the thread's (every step shares one
+      // KV cache; summing per-step residency would multiply-count it).
+      // Generated tokens are genuinely per-step work: those add up.
+      promptTokens = outcome.promptTokens;
       completionTokens += outcome.completionTokens;
       // The LAST turn's ending is this answer's ending. `hitMaxTurns` is
       // tracked separately: a forced final turn is a truncation too, but
@@ -184,6 +230,25 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
       if (outcome.toolCalls.length > 0) turnCalls = outcome.toolCalls;
       text = turnText;
 
+      // C15 + parity fact-check: per-call cost of THIS generation turn,
+      // replicated onto each call of a multi-tool turn (the same
+      // overstatement PocketPal's ToolMetricsFooter accepts).
+      //
+      // Tokens: two or more fragment fires PROVE the args streamed
+      // token-by-token, so their count is PocketPal's delta count — the
+      // tokens actually spent producing the call. A single fire is the
+      // non-streaming remote path (whole body at once) or an
+      // outcome-only engine, where whole-turn usage is the only
+      // measurable figure. Duration anchors at the first fragment when
+      // streaming, else at the turn start — PocketPal's two windows.
+      // Absent when neither fragments nor tokens were seen: absence is
+      // the cue.
+      const streamed = toolFragmentCalls >= 2;
+      const anchor =
+        streamed && firstToolCallAt !== null ? firstToolCallAt : turnStartedAt;
+      const tokens = streamed ? toolFragmentCalls : outcome.completionTokens;
+      const stepMetrics =
+        tokens > 0 ? { tokens, durationMs: Date.now() - anchor } : undefined;
       const allowed = forcedFinal
         ? []
         : turnCalls.filter((c) => advertisedName(c, tools));
@@ -199,6 +264,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
           status: "done",
           result: rejectedReason,
           ok: false,
+          ...(stepMetrics !== undefined ? { metrics: stepMetrics } : {}),
         });
       }
       if (allowed.length === 0) {
@@ -242,6 +308,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
           // Rides to the store so a settled turn's renderer can draw the
           // structured shape instead of parsing the fenced markdown.
           ...(talent.data !== undefined ? { data: talent.data } : {}),
+          ...(stepMetrics !== undefined ? { metrics: stepMetrics } : {}),
         });
         onEvent({
           type: "tool_call_finished",

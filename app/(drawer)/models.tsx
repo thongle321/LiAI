@@ -1,7 +1,7 @@
 /** Models screen: Ready to use + Available to download, header filters, add FAB. */
 
 import { useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { Alert, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
@@ -12,6 +12,7 @@ import { useLocalModelImport } from "../../hooks/useLocalModelImport.ts";
 import { useShallow } from "zustand/shallow";
 import { useModelStore } from "../../store/modelStore.ts";
 import { useModelsUi } from "../../store/modelsUi.ts";
+import { DownloadErrorDialog } from "../../components/models/DownloadErrorDialog.tsx";
 import { ModelsHeaderRight } from "../../components/models/ModelsHeaderRight.tsx";
 import { FABGroup, FAB_STACK_HEIGHT } from "../../components/models/FABGroup.tsx";
 import { ReadyModels } from "../../components/models/ReadyModels.tsx";
@@ -25,6 +26,27 @@ export default function ModelsRoute() {
   // alone and preset/download writes never re-render this screen.
   const loadPersisted = useModelStore((s) => s.loadPersisted);
   const startDownload = useModelStore((s) => s.startDownload);
+  const clearDownloadError = useModelStore((s) => s.clearDownloadError);
+  const resumeInterruptedDownload = useModelStore((s) => s.resumeInterruptedDownload);
+  // Pull-to-refresh (PocketPal parity): re-stat the disk so rows that
+  // finished off-screen snap to their real state, and re-fetch presets.
+  const reconcileInterrupted = useModelStore((s) => s.reconcileInterrupted);
+  const loadPresets = useModelStore((s) => s.loadPresets);
+  const resetModelSettings = useModelStore((s) => s.resetModelSettings);
+  // C1: ONE failure slot for the whole screen — the dialog auto-opens
+  // from failed store state (PocketPal's dialog reaction), covering
+  // every card type that can fail. Narrow stable read: progress ticks
+  // re-render nothing unless the failure REASON itself changes.
+  const failedDownload = useModelStore(
+    useShallow((s) => {
+      const failed = s.models.find(
+        (m) => m.downloadStatus === "failed" && m.error,
+      );
+      return failed && failed.error
+        ? { id: failed.id, error: failed.error }
+        : null;
+    }),
+  );
   const router = useRouter();
   const importLocalModel = useLocalModelImport();
   // Stable selectors plus one useShallow read set: actions subscribe
@@ -53,6 +75,21 @@ export default function ModelsRoute() {
   const [hfOpen, setHfOpen] = useState(false);
   const [remoteModalOpen, setRemoteModalOpen] = useState(false);
   const [settingsModelId, setSettingsModelId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  // Both groups self-hide when empty: pocketpal drops filter-empty groups,
+  // so a fresh install would show a blank list. This is the empty state.
+  // A number selector: re-renders only when the count changes, not on
+  // every download-progress tick.
+  const catalogCount = useModelStore((s) => s.models.length + s.remoteApis.length);
+
+  async function handleRefresh(): Promise<void> {
+    setRefreshing(true);
+    try {
+      await Promise.all([reconcileInterrupted(), loadPresets()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
@@ -69,11 +106,35 @@ export default function ModelsRoute() {
             }}
             onExpandAll={() => setAllOpen(true)}
             onCollapseAll={() => setAllOpen(false)}
+            onResetModels={() =>
+              Alert.alert(
+                "Reset models",
+                "Restore every model's name, system prompt, and stop words to defaults? Downloaded files are kept.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Reset",
+                    style: "destructive",
+                    onPress: () => void resetModelSettings(),
+                  },
+                ],
+              )
+            }
           />
         }
       />
       <View className="flex-1">
-        <ScrollView className="flex-1" contentContainerClassName="w-full">
+        <ScrollView
+          className="flex-1"
+          contentContainerClassName="w-full"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void handleRefresh()}
+              tintColor={colors.primary}
+            />
+          }
+        >
           {/* paddingBottom is an inline style, not a class: it is derived from
               FAB_STACK_HEIGHT, and a dynamically-composed Uniwind class has
               failed to resolve on device before (see ModelsHeaderRight). */}
@@ -100,6 +161,13 @@ export default function ModelsRoute() {
                 grouped={grouped}
               />
             )}
+            {catalogCount === 0 ? (
+              <View className="items-center py-10">
+                <Text className="font-sans text-body-md text-secondary-text text-center">
+                  No models yet. Add one from the + button or search Hugging Face.
+                </Text>
+              </View>
+            ) : null}
           </ContentColumn>
         </ScrollView>
 
@@ -115,6 +183,21 @@ export default function ModelsRoute() {
       <RemoteModelSheet visible={remoteModalOpen} onClose={() => setRemoteModalOpen(false)} />
 
       <ModelSettingsSheet modelId={settingsModelId} onClose={() => setSettingsModelId(null)} />
+
+      <DownloadErrorDialog
+        error={failedDownload?.error ?? null}
+        onDismiss={() => {
+          if (failedDownload !== null) clearDownloadError(failedDownload.id);
+        }}
+        onRetry={() => {
+          if (failedDownload === null) return;
+          // Clear first so the dialog closes even when the retry path
+          // early-returns (no file); the retry re-opens it on a fresh
+          // failure anyway.
+          clearDownloadError(failedDownload.id);
+          void resumeInterruptedDownload(failedDownload.id);
+        }}
+      />
     </SafeAreaView>
   );
 }

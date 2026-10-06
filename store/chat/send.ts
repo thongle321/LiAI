@@ -9,27 +9,69 @@ import type { ApiError } from "../../types/api.ts";
 import type { ChatMessage } from "../../types/chat.ts";
 import { newId } from "../../lib/chat/messages.ts";
 import type { SessionStore } from "../../lib/chat/session-store.ts";
+import { canSeeImages, loadModelState } from "../../lib/inference/mmproj.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
 function llmError(message: string): ApiError {
   return { code: "llm_error", message };
 }
 
-/** Can the ACTIVE engine see an image this turn? (G12)
+/** Can the ACTIVE engine see an image this turn? (G12, vision-series 02)
  *
- * PocketPal asks `modelStore.activeModelCaps.visionActive` -- whether a
- * projector is loaded RIGHT NOW, not whether the model is declared
- * vision-capable. We have no projector pairing at all
- * (`components/models/HFModelSearch.tsx:393`: "LiAI cannot pair one"),
- * and the remote engine is wired for text only, so this is false for
- * every provider today. Kept as the one place that decides it, because
- * projector pairing is exactly what flips it. */
-function multimodalAvailable(): boolean {
-  return false;
+ * PocketPal asks `modelStore.activeModelCaps.visionActive` — whether a
+ * projector is loaded RIGHT NOW. LiAI's engine slot is lazy (loaded at
+ * send time), so this answers the equivalent question predictively: the
+ * ACTIVE local model's spec is completed AND records its paired
+ * projector (ticket 01), which is exactly the path ensureEngine will
+ * attach (lib/inference/mmproj.ts). A declaration alone never flips it.
+ * Remote stays cannot-see until ticket 04.
+ *
+ * EXPORTED: the vision screen reads this same gate to show the can't-see
+ * notice, so the strip and the notice can never disagree. */
+export async function multimodalAvailable(): Promise<boolean> {
+  const st = await loadModelState();
+  return st !== undefined && canSeeImages(st);
 }
 
-/** What PocketPal says when images ride a turn the model cannot see. */
-const MULTIMODAL_WARNING = "This model can't see images, so it was sent the text only.";
+/** What PocketPal says when images ride a turn the model cannot see.
+ *  Shared with the vision screen's own notice surface (vision-series 01). */
+export const MULTIMODAL_WARNING = "This model can't see images, so it was sent the text only.";
+
+/** PocketPal parity (useChatSession.ts:722, YIELD_INTERVAL_MS): while a
+ *  turn streams, hand the JS thread a macrotask beat every 100ms so touch
+ *  dispatch — notably Stop — gets a turn during long streams. LiAI's token
+ *  path is native callbacks all the way down (no async loop to hang
+ *  PocketPal's in-chain `await setTimeout(0)` on), so the beat is held for
+ *  exactly the streaming span of runLocal instead. Idle holds no timer at
+ *  all. The token path never touches this: output ordering, coalescing and
+ *  the blank-space animation cannot shift because of it.
+ *
+ *  ponytail: static analysis cannot prove this beat is what makes Stop
+ *  dispatch — native token callbacks are separate JS tasks, so FIFO may
+ *  already interleave touches. The ticket pre-admits device confirmation
+ *  is the real check; if a device shows Stop responding without it, the
+ *  upgrade path is DELETING this (the release handle and finally go with
+ *  it), not growing it.
+ *
+ *  `onTick` is the test seam; production never passes it. Returns the
+ *  release handle — every exit path calls it. */
+export function startStreamYield(
+  intervalMs = 100,
+  onTick?: () => void,
+): () => void {
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const tick = () => {
+    if (stopped) return;
+    onTick?.();
+    timer = setTimeout(tick, intervalMs);
+  };
+  timer = setTimeout(tick, intervalMs);
+  return () => {
+    stopped = true;
+    if (timer !== undefined) clearTimeout(timer);
+  };
+}
 
 export function createSendSlice(
   set: ChatSet,
@@ -119,7 +161,14 @@ export function createSendSlice(
     // The guard sits HERE, not in each caller: send, retry, regenerate and
     // edit all route through runLocal, so one check covers every path and
     // none of them can drift into disagreeing about it.
-    const images = multimodalAvailable() ? opts.images : undefined;
+    // No images → the capability question never gets asked (and its
+    // native modelStore probe never fires for a text-only turn).
+    const images =
+      opts.images !== undefined &&
+      opts.images.length > 0 &&
+      (await ctx.multimodalAvailable())
+        ? opts.images
+        : undefined;
     if (opts.images !== undefined && opts.images.length > 0 && images === undefined) {
       set({
         chatWarning: {
@@ -131,6 +180,8 @@ export function createSendSlice(
         },
       });
     }
+    // C16: the macrotask beat lives exactly as long as this turn.
+    const endStreamYield = startStreamYield();
     try {
       const outcome = await ctx.runTurn(
         opts.text,
@@ -182,6 +233,9 @@ export function createSendSlice(
       });
       set({ sending: false, turnStartedAt: null });
       ctx.keepAwake(false);
+    } finally {
+      // Success, failure or supersede: idle must hold no timer.
+      endStreamYield();
     }
   }
 

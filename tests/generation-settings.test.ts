@@ -34,6 +34,17 @@ function between(source: string, start: string, end: string): string {
 }
 
 describe("generation settings parity", () => {
+  it("tells remote models the truth: the knobs are local-only (06b)", () => {
+    // The sheet is provider-blind and remote turns null the sampler —
+    // without this line every knob is decoration a remote user believes
+    // in. The probed server defaults make the note concrete.
+    const src = read(GEN);
+    assert.match(src, /samplerDefaults/, "reads the probed server defaults");
+    assert.match(src, /remoteCaps/, "from the C7 probe caps");
+    assert.match(src, /own defaults/, "names what actually applies");
+    assert.match(src, /local models only/, "and what the knobs below govern");
+  });
+
   it("buffers edits and only commits on Save (Q4)", () => {
     const src = read(GEN);
     // apply() may touch the local draft only — no store writes, or the

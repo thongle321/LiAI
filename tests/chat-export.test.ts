@@ -162,8 +162,19 @@ it("strips row ids when exporting every session too", () => {
 describe("export filenames", () => {
   it("names each kind distinctly", () => {
     assert.equal(exportFilename(session, "markdown"), "Kitting a shelf.md");
-    assert.equal(exportFilename(session, "session"), "liai-session.json");
+    // Per-session JSON is title-named: a bulk export writes one file per
+    // conversation, and a fixed name would overwrite each previous file.
+    assert.equal(exportFilename(session, "session"), "Kitting a shelf.json");
     assert.equal(exportFilename(session, "all"), "liai-sessions.json");
+  });
+
+  it("gives each session its own JSON name", () => {
+    const other: ExportSession = { ...session, title: "Another chat" };
+    assert.notEqual(
+      exportFilename(session, "session"),
+      exportFilename(other, "session"),
+      "two sessions in one bulk export must not collide",
+    );
   });
 
   it("falls back when a title would make a bad filename", () => {
@@ -171,6 +182,9 @@ describe("export filenames", () => {
     // most Android filesystems reject these characters outright.
     const nasty: ExportSession = { ...session, title: "a/b:c*d?e" };
     assert.equal(exportFilename(nasty, "markdown"), "a-b-c-d-e.md");
+    // Same guarantee on the JSON name — it is now title-derived.
+    assert.equal(exportFilename(nasty, "session"), "a-b-c-d-e.json");
     assert.equal(exportFilename({ ...session, title: "" }, "markdown"), "liai-chat.md");
+    assert.equal(exportFilename({ ...session, title: "" }, "session"), "liai-chat.json");
   });
 });

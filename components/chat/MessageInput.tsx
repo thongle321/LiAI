@@ -32,7 +32,9 @@ import { useChatStore } from "../../store/chat.ts";
 import { useInference } from "../../store/inference.ts";
 import { suspendBackgroundRelease } from "../../lib/inference/offload.ts";
 import { useModelReady } from "../../hooks/useModelReady.ts";
+import { useMultimodalAvailable } from "../../hooks/useMultimodalAvailable.ts";
 import { useModelStore } from "../../store/modelStore";
+import { resolveThinking } from "../../lib/inference/thinking.ts";
 import { mergeDictation, VOICE_LISTEN_OPTS } from "../../lib/voiceListen.ts";
 import { ensureMicAccess } from "../../lib/micAccess.ts";
 import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../../lib/voiceStatus.ts";
@@ -90,10 +92,36 @@ export function MessageInput({
   // `enableThinking` is a llama.rn jinja flag (lib/inference/engine.ts),
   // so offering it under a remote API would promise something the remote
   // engine cannot honour.
-  const thinkingEnabled = useInference((s) => s.thinkingEnabled);
-  const setThinkingEnabled = useInference((s) => s.setThinkingEnabled);
+  const thinkingOverrides = useInference((s) => s.thinkingOverrides);
+  const setThinkingOverride = useInference((s) => s.setThinkingOverride);
+  const activeModelId = useModelStore((s) => s.activeModelId);
+  const activeModels = useModelStore((s) => s.models);
   const thinkingLocal =
     useModelStore((s) => s.activeProviderType) === "local";
+  // The pill shows the RESOLVED state for the active model — user
+  // override, then the spec's detected capability — never a global
+  // (C6). Absent capability resolves to UNDEFINED, which is why the
+  // pill is gated below rather than rendered for every model.
+  const activeSpec = thinkingLocal
+    ? activeModels.find((m) => m.id === activeModelId)
+    : undefined;
+  const resolved = resolveThinking({
+    modelId: thinkingLocal ? activeModelId : null,
+    reasoning: activeSpec?.reasoning,
+    overrides: thinkingOverrides,
+  });
+  // Undefined means "the model decides" (lib/inference/thinking.ts); the
+  // pill can only appear where a real value exists, so this is the one
+  // case that never renders while undefined.
+  const thinkingEnabled = resolved.enabled ?? false;
+  // Visibility: a model that KNOWNLY reasons, or one the user already
+  // set an override for (nobody loses a control they are using). A model
+  // that is known not to reason — and one nobody has classified — gets no
+  // pill, because there is no thinking for it to turn off.
+  const thinkingSupported =
+    thinkingLocal &&
+    (activeSpec?.reasoning === true ||
+      (activeModelId !== null && thinkingOverrides[activeModelId] !== undefined));
   // A switch's label names the THING, not the action: VoiceOver reads
   // "label, switch, checked". An imperative label that flipped to
   // "Disable thinking" announced "Disable thinking, switch, on" -- an
@@ -261,6 +289,11 @@ export function MessageInput({
   const stopPress = usePressFeedback();
   const micPress = usePressFeedback();
   const plusPress = usePressFeedback();
+  // Capability-gated attach (vision-series 03, PocketPal's
+  // isPlusButtonEnabled shape): always rendered, disabled-with-hint when
+  // the active model cannot see — no path hands the pipeline an image it
+  // would silently strip. Same rule as the send gate, read live.
+  const canSee = useMultimodalAvailable();
 
   async function handleAttach(source: ImageSource): Promise<void> {
     setPlusOpen(false);
@@ -416,16 +449,22 @@ export function MessageInput({
         <View>
           <Animated.View style={plusPress.animatedStyle}>
             <Pressable
-              onPress={modelReady ? () => setPlusOpen((o) => !o) : undefined}
+              onPress={modelReady && canSee ? () => setPlusOpen((o) => !o) : undefined}
               onPressIn={plusPress.onPressIn}
               onPressOut={plusPress.onPressOut}
-              disabled={!modelReady}
+              disabled={!modelReady || !canSee}
               className="h-12 w-12 items-center justify-center rounded-full bg-surface-3"
               accessibilityRole="button"
-              accessibilityState={{ disabled: !modelReady }}
-              accessibilityLabel={modelReady ? "Attach a photo" : "Load a model to attach a photo"}
+              accessibilityState={{ disabled: !modelReady || !canSee }}
+              accessibilityLabel={
+                modelReady && canSee
+                  ? "Attach a photo"
+                  : modelReady
+                    ? "This model can't see images"
+                    : "Load a model to attach a photo"
+              }
             >
-              <Plus size={20} color={modelReady ? colors.primary : colors.secondaryText} />
+              <Plus size={20} color={modelReady && canSee ? colors.primary : colors.secondaryText} />
             </Pressable>
           </Animated.View>
           {plusOpen && (
@@ -462,7 +501,7 @@ export function MessageInput({
         accessibilityHint={modelReady ? undefined : composerPlaceholder}
         />
         <View className="flex-row items-center gap-2">
-          {thinkingLocal && (
+          {thinkingSupported && (
             // PocketPal's composer pill (ChatInput.tsx:588-640). State is
             // carried by the fill AND the icon, per DESIGN.md's "pair every
             // status colour with a glyph and a word" rule -- so it never
@@ -473,7 +512,17 @@ export function MessageInput({
             // inventing levels here would ship a control with nothing
             // behind it.
             <Pressable
-              onPress={modelReady ? () => setThinkingEnabled(!thinkingEnabled) : undefined}
+              onPress={
+                modelReady && activeModelId !== null
+                  ? () => {
+                      // A press is a PER-MODEL decision, both directions.
+                      // There is no global fallback any more: an
+                      // unclassified model sends no flag at all, so the
+                      // template decides (lib/inference/thinking.ts).
+                      setThinkingOverride(activeModelId, !resolved.enabled);
+                    }
+                  : undefined
+              }
               disabled={!modelReady}
               className={
                 thinkingEnabled

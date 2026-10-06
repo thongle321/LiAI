@@ -87,6 +87,22 @@ describe("upgradeRemoteApis", () => {
     assert.equal(out[0].apiKey, "");
     assert.equal(out[0].providerType, "openrouter");
   });
+
+  it("keeps a valid stored timeout, drops a non-positive or non-finite one", () => {
+    const out = upgradeRemoteApis([
+      { id: "p1", name: "P", baseUrl: "u", modelName: "m", timeoutMs: 45_000 },
+      { id: "p2", name: "Q", baseUrl: "u", modelName: "m", timeoutMs: 0 },
+      { id: "p3", name: "R", baseUrl: "u", modelName: "m", timeoutMs: -5 },
+      { id: "p4", name: "S", baseUrl: "u", modelName: "m", timeoutMs: null },
+      { id: "p5", name: "T", baseUrl: "u", modelName: "m" },
+    ]);
+    assert.equal(out[0].timeoutMs, 45_000);
+    // Unset means "use the default", never zero.
+    assert.equal(out[1].timeoutMs, undefined);
+    assert.equal(out[2].timeoutMs, undefined);
+    assert.equal(out[3].timeoutMs, undefined);
+    assert.equal(out[4].timeoutMs, undefined);
+  });
 });
 
 describe("upgradeRemoteCaps", () => {
@@ -97,6 +113,37 @@ describe("upgradeRemoteCaps", () => {
     });
     assert.deepEqual(out, { p1: { reachable: false, checkedAt: 123 } });
     assert.deepEqual(upgradeRemoteCaps(null), {});
+  });
+
+  it("hydrates the C7 model-keyed fields, guarding each on its own", () => {
+    const out = upgradeRemoteCaps({
+      p1: {
+        reachable: true,
+        checkedAt: 1,
+        model: "qwen",
+        contextLength: 8192,
+        supportsVision: true,
+      },
+      // Invalid values drop; capability fields without a model drop too
+      // (caps are keyed per model — unkeyed fields could not be trusted).
+      p2: {
+        reachable: true,
+        checkedAt: 2,
+        model: "qwen",
+        contextLength: 0,
+        supportsVision: "yes",
+      },
+      p3: { reachable: true, checkedAt: 3, contextLength: 4096 },
+    });
+    assert.deepEqual(out.p1, {
+      reachable: true,
+      checkedAt: 1,
+      model: "qwen",
+      contextLength: 8192,
+      supportsVision: true,
+    });
+    assert.deepEqual(out.p2, { reachable: true, checkedAt: 2, model: "qwen" });
+    assert.deepEqual(out.p3, { reachable: true, checkedAt: 3 });
   });
 });
 

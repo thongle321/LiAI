@@ -37,6 +37,9 @@ export interface CompletionOutcome {
   /** Final parsed reasoning; "" when the model emitted none. */
   reasoning?: string;
   toolCalls: EngineToolCall[];
+  /** Tokens held against the window, for the fill meter: local = KV
+   *  residency (`tokens_cached`), remote = `prompt_tokens` (which
+   *  includes the cached subset). C3. */
   promptTokens: number;
   completionTokens: number;
   /** The sampler stopped the turn early — n_predict hit. Distinct from
@@ -83,6 +86,10 @@ export interface CompletionRequest {
   tools?: ToolDefinition[];
   /** Local file paths for multimodal turns (llama media_paths). */
   imagePaths?: string[];
+  /** Remote vision (04): the turn's images as data URIs — an HTTP server
+   *  cannot read app-local files, so OpenAI content arrays carry these.
+   *  Local engines ignore them (they read imagePaths). */
+  imageDataUris?: string[];
   /** Local-only: jinja thinking blocks on/off (native default true). */
   enableThinking?: boolean;
   /** Local-only: jinja chat template on/off (native default true). */
@@ -91,6 +98,15 @@ export interface CompletionRequest {
    *  compatible endpoint has its own defaults and no equivalent for the
    *  llama-only knobs (typical-p, XTC, mirostat). */
   sampler?: SamplerParams;
+  /** Per-model stop words from ModelSettings (PocketPal `stop`). Both
+   *  engines honor it: llama.rn's `stop` strings and OpenAI's `stop`. */
+  stop?: string[];
+  /** Per-model chat-template override (PocketPal chatTemplate). llama.rn
+   *  only; remote engines use the provider's own template. "" = default. */
+  chatTemplate?: string;
+  /** Per-model add-generation-prompt override (PocketPal parity).
+   *  llama.rn only. */
+  addGenerationPrompt?: boolean;
 }
 
 /** PocketPal's CompletionEngine shape: stream + stop. */

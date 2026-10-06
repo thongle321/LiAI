@@ -175,12 +175,48 @@ describe("sheet library", () => {
       /keyboard-controller|KeyboardAwareScrollView/,
       "the shared Sheet must not use keyboard-controller: its padding voids auto-detent bodies",
     );
-    const body = sheet.match(/<ScrollView[\s\S]*?>/);
+    // Match the opening tag by its TERMINATOR (a '>' alone on its own line),
+    // not by the first '>': a prop holding an arrow function -- onLayout
+    //={(e) => ...} -- supplies a '>' mid-tag and a lazy match would stop
+    // there, silently truncating the props under test.
+    const body = sheet.match(/<ScrollView[\s\S]*?^\s*>/m);
     assert.ok(body, "the sheet's body must be a plain ScrollView");
     assert.match(
       body[0],
       /keyboardShouldPersistTaps="handled"/,
       "the body must keep tap-to-persist so a tap outside the field dismisses the keyboard",
+    );
+  });
+
+  it("pads the bottom of BOTH bodies with the nav-bar inset", () => {
+    // REGRESSION, twice over.
+    //
+    // 1. The scrollable={false} branch resolved its bottom pad to
+    //    `undefined` where the ScrollView branch used `insets.bottom`, so
+    //    hf search and hf details dropped the inset entirely and sat under
+    //    the navigation bar.
+    //
+    // 2. An attempt to derive the inset from onPositionChange shipped a
+    //    worse bug and was reverted. That event's `position` is the sheet's
+    //    TOP OFFSET, not its height (on device it equalled the top inset
+    //    to the decimal), and its FIRST firing lands mid-present-animation
+    //    — freezing it captured a 476px phantom that made sheets taller
+    //    than their content and floated footers over their own fields.
+    //    Neither the value nor the moment is trustworthy; insets.bottom
+    //    reports the 3-button bar correctly on this device (47.87).
+    const sheet = read("components/Sheet.tsx")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/[^\n]*/g, "");
+    assert.doesNotMatch(
+      sheet,
+      /onPositionChange/,
+      "the bottom inset must not be derived from an animated sheet position",
+    );
+    const pads = sheet.match(/paddingBottom: footer \? footerHeight : insets\.bottom/g) ?? [];
+    assert.equal(
+      pads.length,
+      2,
+      "both the ScrollView body and the scrollable={false} body must pad with insets.bottom",
     );
   });
 

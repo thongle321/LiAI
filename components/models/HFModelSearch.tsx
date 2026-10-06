@@ -62,6 +62,10 @@ import {
   formatBytes,
   isProgressVisible,
 } from "./ModelBits.tsx";
+import {
+  VisionDownloadSheet,
+  type VisionDownloadChoice,
+} from "./VisionDownloadSheet.tsx";
 
 const SORT_OPTIONS: { value: "relevance" | "downloads" | "lastModified" | "likes"; label: string }[] = [
   { value: "relevance", label: "Relevance" },
@@ -103,6 +107,25 @@ function StatChip({
       <Text className="font-sans text-caption text-secondary-text">{label}</Text>
     </View>
   );
+}
+
+function SearchErrorSnackbar({
+  error,
+  onRetry,
+}: {
+  error: { message: string } | null;
+  onRetry: () => void;
+}) {
+  const { showSnackbar } = useSnackbar();
+  useEffect(() => {
+    if (!error) return;
+    showSnackbar(error.message, {
+      type: "error",
+      duration: 8000,
+      action: { label: "Retry", onPress: onRetry },
+    });
+  }, [error, onRetry, showSnackbar]);
+  return null;
 }
 
 /** Warnings are numbered here because they are a list the user has to act
@@ -235,6 +258,7 @@ export function HFModelSearch({
   const searchLoading = useModelStore((s) => s.searchLoading);
   const searchLoadingMore = useModelStore((s) => s.searchLoadingMore);
   const searchError = useModelStore((s) => s.searchError);
+  const searchQuery = useModelStore((s) => s.searchQuery);
   const searchFilters = useModelStore((s) => s.searchFilters);
   const setSearchFilters = useModelStore((s) => s.setSearchFilters);
   const getModelFiles = useModelStore((s) => s.getModelFiles);
@@ -277,6 +301,11 @@ export function HFModelSearch({
   const [sortOpen, setSortOpen] = useState(false);
   const [authorOpen, setAuthorOpen] = useState(false);
   const [snackWarnings, setSnackWarnings] = useState<string[] | null>(null);
+  // The vision download sheet is per-FILE: it decides the pair for one
+  // repo file, so the file being configured is the sheet's whole state.
+  const [visionSheetFile, setVisionSheetFile] = useState<HFModelFile | null>(
+    null,
+  );
   const [freeBytes, setFreeBytes] = useState<number | null>(null);
   // Bumped by the filter sheets so the debounce effect re-runs: the store
   // holds the filters, and its identity never changes.
@@ -336,7 +365,11 @@ export function HFModelSearch({
     setSnackWarnings(null);
   };
 
-  const onDownload = (result: HFModelSearchResult, file: HFModelFile) => {
+  const onDownload = (
+    result: HFModelSearchResult,
+    file: HFModelFile,
+    opts?: VisionDownloadChoice,
+  ) => {
     const breakdown = visionSizeBreakdown(file, files);
     const warnings = hfFileWarnings({
       fileName: file.name,
@@ -350,7 +383,12 @@ export function HFModelSearch({
       setSnackWarnings(warnings.map((w) => w.label));
     }
     guard(breakdown.total, () => {
-      void startDownload(result.modelId, file, activeHfToken() ?? undefined);
+      void startDownload(
+        result.modelId,
+        file,
+        activeHfToken() ?? undefined,
+        opts,
+      );
     });
   };
 
@@ -390,8 +428,10 @@ export function HFModelSearch({
   const isVision = selected
     ? isVisionModel(selected.tags, files.map((f) => f.name))
     : false;
-  // Projectors stay out of the list: LiAI cannot pair one (ADR-0011), so
-  // offering the file would be a download that can never be used.
+  // Projectors stay out of the FILE LIST: a standalone mmproj row would be
+  // a download nothing can use, since a projector is only meaningful
+  // paired to an LLM. They ARE reachable — the Vision sheet above lists
+  // them as pairing choices for this file.
   const visibleFiles = files.filter(
     (f) => !f.name.toLowerCase().includes("mmproj"),
   );
@@ -421,9 +461,21 @@ export function HFModelSearch({
             <Text className="font-sans text-body-md text-primary-text">{file.name}</Text>
             <View className="flex-row flex-wrap items-center gap-2 mt-2">
               <Chip label="GGUF" />
-              {/* Informational, never pressable: pairing a projector is
-                  deferred (ADR-0011), so a button here would lie. */}
-              {breakdown.isVision ? <Chip label="Vision" /> : null}
+              {/* Vision is a DECISION, not a label: it opens the sheet that
+                  downloads the pair (or deliberately skips it). The plain
+                  Download button beside it still takes the default. */}
+              {breakdown.isVision ? (
+                <Pressable
+                  onPress={() => setVisionSheetFile(file)}
+                  className="min-h-8 rounded bg-surface-2 px-2 py-0.5"
+                  accessibilityRole="button"
+                  accessibilityLabel={`Choose vision setup for ${file.name}`}
+                >
+                  <Text className="font-sans text-caption text-primary">
+                    Vision
+                  </Text>
+                </Pressable>
+              ) : null}
               {/* A vision model's real footprint is the pair, so the
                   projector is priced into the number next to the button. */}
               <Text className="font-sans text-body-sm text-secondary-text/70">
@@ -721,6 +773,19 @@ export function HFModelSearch({
         ) : null}
         {snackWarnings ? (
           <WarningSnackbar warnings={snackWarnings} onDone={() => setSnackWarnings(null)} />
+        ) : null}
+        <SearchErrorSnackbar
+          error={searchError}
+          onRetry={() => void searchModels(searchQuery)}
+        />
+        {selected && visionSheetFile !== null ? (
+          <VisionDownloadSheet
+            visible={visionSheetFile !== null}
+            file={visionSheetFile}
+            siblings={files}
+            onClose={() => setVisionSheetFile(null)}
+            onConfirm={(file, opts) => onDownload(selected, file, opts)}
+          />
         ) : null}
       </Sheet>
     </>

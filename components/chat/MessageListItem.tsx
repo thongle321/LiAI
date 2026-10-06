@@ -19,7 +19,7 @@ import { APP_NAME } from "../../constants/app.ts";
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 import { colors } from "../../themes/tokens.ts";
-import { formatTime } from "../../lib/format.ts";
+import { formatTime, formatToolMetrics } from "../../lib/format.ts";
 import {
   MOTION_DURATION_MS,
   bubbleEntering,
@@ -34,7 +34,7 @@ import { LinkPreviewCard } from "./LinkPreview.tsx";
 import { ReasoningBlock } from "./ReasoningBlock.tsx";
 import { MessageMenu } from "./MessageMenu.tsx";
 import { ToolErrorBlock } from "./ToolErrorBlock.tsx";
-import { toolSurfaceFor } from "./toolSurfaces.tsx";
+import { ToolMetricsLine, toolSurfaceFor } from "./toolSurfaces.tsx";
 import { ImageViewer } from "./ImageViewer.tsx";
 import type { PickableModel } from "../../lib/chat/models.ts";
 
@@ -216,11 +216,13 @@ export function MessageListItem({
                   // and that is not a failure.
                   if (step.ok === false) {
                     return (
-                      <ToolErrorBlock
-                        key={step.id}
-                        tool={step.tool}
-                        message={step.result ?? ""}
-                      />
+                      <View key={step.id} className="w-full">
+                        <ToolErrorBlock tool={step.tool} message={step.result ?? ""} />
+                        {/* C15: cost belongs under the RESULT, not in
+                            the turn footer — per-tool cost must be
+                            attributable. */}
+                        <ToolMetricsLine metrics={step.metrics} />
+                      </View>
                     );
                   }
                   const Renderer = toolSurfaceFor(step.tool);
@@ -230,8 +232,13 @@ export function MessageListItem({
                     // plus a sheet, exactly as pocketpal does. Keeping the
                     // flag in the bubble would make the bubble responsible
                     // for something it cannot see.
-                    return <Renderer key={step.id} step={step} />;
+                    return (
+                    <View key={step.id} className="w-full">
+                      <Renderer step={step} />
+                    </View>
+                  );
                   }
+                  const metricsText = formatToolMetrics(step.metrics);
                   return (
                     <View
                       key={step.id}
@@ -240,6 +247,9 @@ export function MessageListItem({
                       <Wrench size={11} color={colors.secondaryText} />
                       <Text className="font-sans text-caption text-secondary-text">
                         {step.tool}
+                        {/* PocketPal's chip suffix: same formatter, so
+                            the chip and the footer can never disagree. */}
+                        {metricsText === null ? "" : ` · ${metricsText}`}
                       </Text>
                     </View>
                   );

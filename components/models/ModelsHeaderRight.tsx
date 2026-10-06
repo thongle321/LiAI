@@ -16,6 +16,7 @@ import {
   Cloud,
   Download,
   Layers,
+  RotateCcw,
   SlidersHorizontal,
 } from "lucide-react-native";
 
@@ -87,6 +88,7 @@ export function ModelsHeaderRight({
   onToggleFilter,
   onExpandAll,
   onCollapseAll,
+  onResetModels,
 }: {
   downloadedOnly: boolean;
   hfOnly: boolean;
@@ -94,6 +96,7 @@ export function ModelsHeaderRight({
   onToggleFilter: (filter: ModelsUiFilter) => void;
   onExpandAll: () => void;
   onCollapseAll: () => void;
+  onResetModels?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   // RN tears a modal down the instant `visible` flips false, which would
@@ -211,6 +214,24 @@ export function ModelsHeaderRight({
               onPress={() => run(() => onToggleFilter("grouped"))}
             />
             <View className="h-px bg-border mx-4" />
+            {onResetModels ? (
+              <Pressable
+                onPress={() => run(onResetModels)}
+                className="menu-row"
+                accessibilityRole="button"
+                accessibilityLabel="Reset models"
+              >
+                <View className="mr-3 w-7 items-center justify-center">
+                  <RotateCcw size={16} color={colors.secondaryText} />
+                </View>
+                <Text
+                  numberOfLines={1}
+                  className="mr-2 flex-1 font-sans text-body-md text-primary-text"
+                >
+                  Reset models
+                </Text>
+              </Pressable>
+            ) : null}
             <Pressable
               onPress={() => run(onExpandAll)}
               className="menu-row"

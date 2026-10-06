@@ -102,6 +102,10 @@ function toStep(value: unknown, position: number): AgentStep | null {
     : position;
 
   const result = str(value.result, MAX_CONTENT_CHARS);
+  // C15: per-call cost rides the same whitelist. A step field this
+  // validator drops is a field a restore silently loses — the exact
+  // mistake this module exists to avoid.
+  const metrics = isRecord(value.metrics) ? value.metrics : null;
   return {
     id: newId(),
     tool,
@@ -110,6 +114,11 @@ function toStep(value: unknown, position: number): AgentStep | null {
     ...(result !== null ? { result } : {}),
     ...(typeof value.ok === "boolean" ? { ok: value.ok } : {}),
     ...(isRecord(value.data) ? { data: value.data } : {}),
+    ...(metrics !== null &&
+    typeof metrics["tokens"] === "number" &&
+    typeof metrics["durationMs"] === "number"
+      ? { metrics: { tokens: metrics["tokens"], durationMs: metrics["durationMs"] } }
+      : {}),
   };
 }
 

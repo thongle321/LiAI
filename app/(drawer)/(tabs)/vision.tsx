@@ -9,12 +9,13 @@
  * always lands on Chat — vision's only entry point is the tab bar, so
  * there is no "previous screen" to return to.
  *
- * Frame rule: a 500ms JS interval snapshots and uploads frames while
- * idle/listening; the worklet frame processor is a bridge-free heartbeat
- * only (no JS calls — the worklet→JS bridge proved unreliable). A voice
- * or text question pauses uploads, sends the current frame + question,
- * then resumes after the answer and TTS finish. The preview itself
- * never freezes.
+ * Question rule: one frame per question — snapshot-on-question. A voice
+ * or text question snapshots the CURRENT frame at ask time and sends it
+ * through the ordinary chat turn (no frame stream, no capture timer —
+ * the chat pipeline carries the image), then speaks the answer back.
+ * Watch mode (opt-in, 05) keeps a rolling buffer of recent frames so the
+ * next question can ride the window — still nothing is inferred until
+ * the user asks. The preview itself never freezes.
  */
 
 import { useState, useEffect } from "react";
@@ -31,7 +32,9 @@ import { colors } from "../../../themes/tokens.ts";
 import { TAB_BAR_HEIGHT } from "../../../components/BottomNav.tsx";
 import { VOICE_STATUS_LABEL } from "../../../lib/voiceStatus.ts";
 import { useVisionTurn } from "../../../hooks/useVisionTurn.ts";
+import { useWatchMode } from "../../../hooks/useWatchMode.ts";
 import { useModelReady } from "../../../hooks/useModelReady.ts";
+import { useModelStore } from "../../../store/modelStore";
 import {
   VisionBottomPanel,
   VisionPreview,
@@ -48,10 +51,28 @@ export default function VisionScreen() {
   // No model: talk and type are disabled so the mic can't open a turn that
   // can never answer.
   const modelReady = useModelReady();
+  // Vision switched off on the active model: the frame would go out and
+  // come back unprocessed, so the tab says so up front and offers the one
+  // place that can fix it (Q5).
+  const visionOff = useModelStore(
+    (s) =>
+      s.activeProviderType === "local" &&
+      s.activeModelId !== null &&
+      s.models.find(
+        (m) => m.id === s.activeModelId && m.downloadStatus === "completed",
+      )?.visionEnabled === false,
+  );
 
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice(position);
   const focused = useIsFocused();
+  // Watch mode (05): captures into a rolling buffer while active; the
+  // ask path reads frames() and answers ONLY on an explicit question.
+  const watch = useWatchMode(
+    camera,
+    () => camLive && device !== undefined,
+    focused && camLive,
+  );
   // Android owns the permission prompt: opening this tab is the intent to
   // use the camera, so the system dialog is raised here instead of behind
   // an in-app button the user has to find. Re-entering the tab after a
@@ -86,7 +107,11 @@ export default function VisionScreen() {
     retry,
     sendText,
     stopAll,
-  } = useVisionTurn(camera, () => camLive && device !== undefined);
+  } = useVisionTurn(
+    camera,
+    () => camLive && device !== undefined,
+    watch.frames,
+  );
 
   function flip(): void {
     setCamLive(false);
@@ -96,6 +121,7 @@ export default function VisionScreen() {
 
   function exit(): void {
     stopAll();
+    watch.stopWatch();
     // A tab has no "back": the only way in is the tab bar, so the only
     // way out is a known tab. Chat is the home tab.
     router.navigate("/chat");
@@ -131,11 +157,20 @@ export default function VisionScreen() {
               top={insets.top + 8}
               onExit={exit}
               onFlip={flip}
+              watchOn={watch.watchOn}
+              onToggleWatch={watch.toggleWatch}
+              intervalMs={watch.intervalMs}
+              onIntervalStep={(d) => watch.setWatchIntervalMs(watch.intervalMs + d)}
             />
 
             <VisionBottomPanel
               bottom={panelBottom}
-              issue={issue}
+              issue={issue ?? (visionOff ? "Vision is off for this model." : null)}
+              issueAction={
+                visionOff && issue === null
+                  ? { label: "Open Models", onPress: () => router.navigate("/models") }
+                  : null
+              }
               needsSettings={needsSettings}
               onOpenSettings={goToSettings}
               onRetry={() => void retry()}

@@ -13,13 +13,16 @@ import { create } from "zustand";
 
 import type { SearchAuth } from "../../types/api.ts";
 import { useSearch } from "../search.ts";
-import { createSendSlice } from "./send.ts";
+import { createSendSlice, multimodalAvailable } from "./send.ts";
 import { createSessionsSlice } from "./sessions.ts";
 import { createDraftSlice } from "./draft.ts";
 import type { ChatCtx, ChatDeps, ChatState, TurnRunner } from "./types.ts";
 import { selectEngineSource, type EngineSource } from "../../lib/inference/engine.ts";
 import { EngineManager } from "../../lib/inference/manager.ts";
+import { projectorPathForFileName } from "../../lib/inference/mmproj.ts";
 import { resolveSampler, type SamplerParams } from "../../lib/inference/sampler.ts";
+import { resolveThinking } from "../../lib/inference/thinking.ts";
+import type { ThinkingChatProbe } from "../../lib/inference/thinking-detection.ts";
 import {
   getAvailableDevices,
   resolveComputeDevices,
@@ -144,12 +147,17 @@ function getManager(): EngineManager {
               image_max_tokens: params.imageMaxTokens,
             },
           );
+          // Thinking capability (PocketParity: updateModelThinkingCapabilities,
+            // ModelStore.ts:3280): probe once per load and persist the verdict.
+            // Off the critical path — never delays the first turn.
+            void recordThinkingCapability(fileName, ctx);
           return {
             engine: local.createLocalEngine(ctx),
             release: () => local.releaseLocalEngine(ctx),
           };
         },
-        createRemote: (provider, getKey) => createRemoteEngine(provider, getKey),
+        createRemote: (provider, getKey) =>
+          createRemoteEngine(provider, getKey, { timeoutMs: provider.timeoutMs }),
       },
       async (providerId: string) => {
         try {
@@ -167,6 +175,40 @@ function getManager(): EngineManager {
     );
   }
   return manager;
+}
+
+/** Probe a freshly loaded context for thinking support and record it
+ *  (PocketParity: `updateModelThinkingCapabilities`, ModelStore.ts:3280).
+ *
+ *  Runs ONCE per load, off the critical path — the probe is a template
+ *  format, not generation, so a slow or failing probe must never delay the
+ *  first turn. `undefined` (could not tell) writes nothing: downgrading an
+ *  unprobeable model to `reasoning: false` would hide the thinking toggle
+ *  from a real reasoner forever.
+ *
+ *  Precedence: a per-model user override always wins, so detection never
+ *  overwrites one. */
+async function recordThinkingCapability(
+  fileName: string,
+  ctx: { getFormattedChat?: ThinkingChatProbe["getFormattedChat"] },
+): Promise<void> {
+  try {
+    const [{ detectThinkingCapability }, { useModelStore }, { useInference }] =
+      await Promise.all([
+        import("../../lib/inference/thinking-detection.ts"),
+        import("../modelStore.ts"),
+        import("../inference.ts"),
+      ]);
+    const verdict = await detectThinkingCapability(ctx);
+    if (verdict === undefined) return;
+    const m = useModelStore.getState();
+    const spec = m.models.find((model) => model.files[0]?.name === fileName);
+    if (!spec) return;
+    if (useInference.getState().thinkingOverrides[spec.id] !== undefined) return;
+    m.updateModel(spec.id, { reasoning: verdict });
+  } catch {
+    // Detection is a nicety; the model works without it.
+  }
 }
 
 /** Data-uri JPEG → temp file for multimodal turns; null = text-only. */
@@ -190,13 +232,31 @@ async function defaultSaveImage(dataUri: string): Promise<string | null> {
   }
 }
 
-/** Local-only thinking preference from the inference store. */
-async function defaultThinking(): Promise<boolean> {
+/** Resolved thinking state for the ACTIVE model (C6): a user
+ *  override, then the spec's detected capability, then the global
+ *  preference. An unclassified model gets the global flag, exactly as
+ *  before this ticket. */
+async function defaultThinking(): Promise<boolean | undefined> {
   try {
     const { useInference } = await import("../inference.ts");
-    return useInference.getState().thinkingEnabled;
+    const { useModelStore } = await import("../modelStore.ts");
+    const inf = useInference.getState();
+    const m = useModelStore.getState();
+    // Remote engines have no enable_thinking flag (the toggle is local
+    // only); resolving with a null id keeps them on the template default.
+    const local = m.activeProviderType === "local";
+    const spec =
+      local && m.activeModelId !== null
+        ? m.models.find((model) => model.id === m.activeModelId)
+        : undefined;
+    return resolveThinking({
+      modelId: local && m.activeModelId !== null ? m.activeModelId : null,
+      reasoning: spec?.reasoning,
+      overrides: inf.thinkingOverrides,
+    }).enabled;
   } catch {
-    return true;
+    // Unknown sends nothing: see resolveThinking's contract.
+    return undefined;
   }
 }
 
@@ -254,11 +314,65 @@ async function defaultSystemPrompt(): Promise<string | undefined> {
   }
 }
 
+/** Per-model stop words plus the EOS token when enabled (PocketPal parity:
+ *  the configured EOS string joins the stop list). */
+async function defaultStopWords(): Promise<string[]> {
+  try {
+    const { useModelStore } = await import("../modelStore.ts");
+    const m = useModelStore.getState();
+    if (!m.activeModelId) return [];
+    const s = m.getModelSettings(m.activeModelId);
+    const words = s.stopWords.map((w) => w.trim()).filter((w) => w !== "");
+    if (s.addEosToken && s.eosToken.trim() !== "") {
+      words.push(s.eosToken.trim());
+    }
+    return words;
+  } catch {
+    return [];
+  }
+}
+
+/** Per-model chat-template override; "" keeps the model default. */
+async function defaultChatTemplate(): Promise<string> {
+  try {
+    const { useModelStore } = await import("../modelStore.ts");
+    const m = useModelStore.getState();
+    if (!m.activeModelId) return "";
+    return m.getModelSettings(m.activeModelId).chatTemplate;
+  } catch {
+    return "";
+  }
+}
+
+/** Per-model add-generation-prompt override; undefined keeps default. */
+async function defaultAddGenerationPrompt(): Promise<boolean | undefined> {
+  try {
+    const { useModelStore } = await import("../modelStore.ts");
+    const m = useModelStore.getState();
+    if (!m.activeModelId) return undefined;
+    // Tri-state passthrough: true AND false are both user choices that must
+    // reach the engine (llama.cpp defaults to true, so a coerced false
+    // would silently strip every model's assistant cue).
+    return m.getModelSettings(m.activeModelId).addGenerationPrompt;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Default on-device turn: engine slot + agent loop + persisted turns. */
 function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner {
   return (text, paths, onToken) => {
     const runTurn = createTurnRunner({
-      ensureEngine: async (source: EngineSource) => getManager().ensure(source),
+      ensureEngine: async (source: EngineSource) =>
+        // The projector rides the same resolution the image gate uses
+        // (lib/inference/mmproj.ts): the slot key includes it, so a model
+        // whose pair arrived mid-session cannot reuse the blind context.
+        getManager().ensure(
+          source,
+          source.kind === "local"
+            ? await projectorPathForFileName(source.fileName)
+            : undefined,
+        ),
       getEngineSource: () => defaultEngineSource(),
       getStore: () => defaultGetStore(),
       getSearch: async () => {
@@ -266,6 +380,9 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
         return auth ? { provider: auth.provider, key: auth.key, count: auth.count } : null;
       },
       getSystemPrompt: () => defaultSystemPrompt(),
+      getStopWords: () => defaultStopWords(),
+      getChatTemplate: () => defaultChatTemplate(),
+      getAddGenerationPrompt: () => defaultAddGenerationPrompt(),
       getThinking: () => defaultThinking(),
       getJinja: () => defaultJinja(),
     getSampler: (sid) => defaultSampler(sid),
@@ -282,6 +399,7 @@ export function createChatStore(deps?: ChatDeps) {
     getSearchAuth,
     getEngineSource: deps?.getEngineSource ?? defaultEngineSource,
     runTurn: deps?.runTurn ?? defaultRunTurn(getSearchAuth),
+    multimodalAvailable: deps?.multimodalAvailable ?? multimodalAvailable,
     stopEngine: () => {
       void getManager().stopActive();
     },

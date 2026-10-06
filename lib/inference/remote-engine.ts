@@ -13,6 +13,7 @@ import type {
   EngineToolCall,
 } from "./engine.ts";
 import type { RemoteApiProvider } from "../../types/models.ts";
+import { asRecord, positiveFinite } from "../guards.ts";
 
 export interface RemoteEngineOptions {
   fetchImpl?: typeof fetch;
@@ -21,11 +22,11 @@ export interface RemoteEngineOptions {
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
+/** The one rule for a stored timeout: finite and positive, else unset.
+ *  Unset means "use the default" — never zero, never a negative timer.
+ *  The predicate itself lives in lib/guards.ts; it is re-exported under
+ *  this name so the issue-02 seam and its test stay put. */
+export const normalizeTimeoutMs = positiveFinite;
 
 function asString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
@@ -35,9 +36,30 @@ function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function toWireMessages(request: CompletionRequest): Record<string, unknown>[] {
-  return request.messages.map((m) => {
-    const base: Record<string, unknown> = { role: m.role, content: m.content };
+/** OpenAI wire messages. Remote vision (04): when the turn carries data
+ *  URIs, the LAST user message becomes a content array
+ *  ([{type:'text'},…{type:'image_url'}]) — PocketPal's exact shape
+ *  (useChatSession.ts:87-97). Exported for the request-builder tests. */
+export function toWireMessages(request: CompletionRequest): Record<string, unknown>[] {
+  const images = request.imageDataUris ?? [];
+  const lastUser =
+    images.length > 0
+      ? request.messages.reduce(
+          (found, m, i) => (m.role === "user" ? i : found),
+          -1,
+        )
+      : -1;
+  return request.messages.map((m, i) => {
+    const base: Record<string, unknown> = {
+      role: m.role,
+      content:
+        i === lastUser
+          ? [
+              { type: "text", text: m.content },
+              ...images.map((url) => ({ type: "image_url", image_url: { url } })),
+            ]
+          : m.content,
+    };
     if (m.tool_calls !== undefined) {
       base["tool_calls"] = m.tool_calls.map((c) => ({
         id: c.id,
@@ -71,8 +93,7 @@ export function createRemoteEngine(
   options: RemoteEngineOptions = {},
 ): CompletionEngine {
   const fetchImpl = options.fetchImpl ?? fetch;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  let controller: AbortController | null = null;
+  const timeoutMs = normalizeTimeoutMs(options.timeoutMs) ?? DEFAULT_TIMEOUT_MS;  let controller: AbortController | null = null;
   // A stop can land while the async key lookup is still in flight —
   // remember it so the fetch below aborts instead of escaping.
   let stopped = false;
@@ -106,6 +127,9 @@ export function createRemoteEngine(
             ...(request.tools && request.tools.length > 0
               ? { tools: request.tools }
               : {}),
+            ...(request.stop && request.stop.length > 0
+              ? { stop: request.stop }
+              : {}),
           }),
           signal: controller.signal,
         });
@@ -123,8 +147,17 @@ export function createRemoteEngine(
         const message = choice ? asRecord(choice["message"]) : null;
         const text = message ? (asString(message["content"]) ?? "") : "";
         const toolCalls = message ? toEngineCalls(message["tool_calls"]) : [];
-const usage = asRecord(payload) ? asRecord((payload as Record<string, unknown>)["usage"]) : null;
-        const promptTokens = usage ? (asNumber(usage["prompt_tokens"]) ?? 0) : 0;
+        const usage = asRecord(payload) ? asRecord((payload as Record<string, unknown>)["usage"]) : null;
+        // C3: OpenAI's contract makes prompt_tokens INCLUDE the cached
+        // subset in prompt_tokens_details — summing both would double
+        // count. Each key is guarded on its own: a server that omits the
+        // total but reports the subset still yields real occupancy, and
+        // only "nothing reported at all" lands on zero.
+        const details = usage ? asRecord(usage["prompt_tokens_details"]) : null;
+        const promptTokens =
+          asNumber(usage?.["prompt_tokens"]) ??
+          asNumber(details?.["cached_tokens"]) ??
+          0;
         const completionTokens = usage ? (asNumber(usage["completion_tokens"]) ?? 0) : 0;
         // `finish_reason: "length"` means the response hit SOME token cap. On
         // an OpenAI-compatible endpoint we cannot tell the model's context

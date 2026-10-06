@@ -11,6 +11,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createStore } from "tinybase";
 
 import { TinyBaseSessionStore } from "../lib/chat/tinybase-store.ts";
@@ -795,5 +796,108 @@ await store.append(id, { role: "user", content: "hi", at });
     const b = await store.create();
     await store.append(a, { role: "user", content: "only a" });
     assert.deepEqual(await store.get(b), []);
+  });
+});
+
+describe("lazy hydration (C17)", () => {
+  const src = readFileSync(
+    new URL("../lib/chat/tinybase-store.ts", import.meta.url),
+    "utf8",
+  );
+
+  it("lists sessions without reading turn bodies", async () => {
+    const { store, tiny } = newStoreRaw();
+    const id = await store.create();
+    await store.append(id, { role: "user", content: "hi", at: 1 });
+    // Wipe the bodies: the list must not need them...
+    tiny.setTable("messages", {});
+    const listed = await store.listSessions();
+    assert.equal(listed.length, 1);
+    assert.equal(listed[0].id, id);
+    // ...and the source-level guard — the list path never maps a turn.
+    const start = src.indexOf("async listSessions");
+    const ends = ["\n  async ", "\n  private "]
+      .map((marker) => src.indexOf(marker, start + 10))
+      .filter((i) => i > 0);
+    const body = src.slice(start, ends.length > 0 ? Math.min(...ends) : start + 500);
+    assert.match(body, /getTable\("sessions"\)/);
+    assert.doesNotMatch(body, /rowsOf|toTurn|this\.get\(/);
+  });
+
+  it("hydrates once: a re-open serves the first read", async () => {
+    const { store, tiny } = newStoreRaw();
+    const id = await store.create();
+    await store.append(id, { role: "user", content: "hello", at: 1 });
+    const first = await store.get(id);
+    assert.equal(first?.[0].content, "hello");
+    // Write BEHIND the port: the port is the ONLY writer (ADR-0012), so
+    // a hydrate-once guard must not see this — re-reading is exactly
+    // what "re-opening does not re-read" forbids.
+    tiny.setCell("messages", first![0].id, "content", "ghost");
+    const second = await store.get(id);
+    assert.equal(
+      second?.[0].content,
+      "hello",
+      "the second open must be the hydrated transcript, not a re-read",
+    );
+  });
+
+  it("never hides a write: append after hydration is visible", async () => {
+    // THE data-loss guard. A stale cache showing an old transcript
+    // looks exactly like lost data — every writer must invalidate.
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, { role: "user", content: "one", at: 1 });
+    await store.get(id); // hydrate
+    await store.append(id, { role: "assistant", content: "two", at: 2 });
+    const turns = await store.get(id);
+    assert.equal(turns?.length, 2, "the appended turn is not swallowed");
+    assert.equal(turns?.[1].content, "two");
+  });
+
+  it("never hides truncate or pop either", async () => {
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, { role: "user", content: "q", at: 1 });
+    await store.append(id, { role: "assistant", content: "a", at: 2 });
+    const hydrated = await store.get(id);
+    assert.equal(hydrated?.length, 2);
+    assert.equal(await store.truncateFrom(id, hydrated![0].id), true);
+    assert.equal(
+      (await store.get(id))?.length,
+      0,
+      "truncate must not be hidden by the cache",
+    );
+
+    await store.append(id, { role: "user", content: "q2", at: 3 });
+    await store.append(id, { role: "assistant", content: "a2", at: 4 });
+    await store.get(id); // hydrate again
+    assert.equal(await store.popLastAssistant(id), true);
+    assert.equal(
+      (await store.get(id))?.length,
+      1,
+      "pop must not be hidden by the cache (q2 alone remains)",
+    );
+  });
+
+  it("a deleted session reads as gone, never as its cached transcript", async () => {
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, { role: "user", content: "bye", at: 1 });
+    await store.get(id);
+    assert.equal(await store.deleteSession(id), true);
+    assert.equal(await store.get(id), null);
+  });
+
+  it("duplicates the hydrated transcript exactly", async () => {
+    const store = newStore();
+    const id = await store.create();
+    await store.append(id, { role: "user", content: "src", at: 1 });
+    await store.get(id); // hydrate the source first
+    const copy = await store.duplicateSession(id);
+    assert.ok(copy);
+    const copied = await store.get(copy);
+    assert.equal(copied?.length, 1);
+    assert.equal(copied?.[0].content, "src");
   });
 });

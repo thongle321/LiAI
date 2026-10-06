@@ -4,6 +4,8 @@
  * React — everything here is unit-tested in tests/hf-format.test.ts.
  */
 
+import { findProjectorFile } from "./vision-pairing.ts";
+
 /** "lmstudio-community/Qwen3-0.6B-GGUF" → "Qwen3-0.6B" */
 export function extractHFModelTitle(modelId: string): string {
   const sanitized = modelId.replace(/[-_]?[Gg][Gg][Uu][Ff]$/, "");
@@ -114,21 +116,17 @@ export interface VisionSize {
 }
 
 /** A vision model's real footprint is the LLM PLUS its projector. The
- * projector is matched by shared family prefix (mmproj-Qwen3-0.6B-… for
- * Qwen3-0.6B-…); the smallest mmproj is the fallback when no family
- * matches, so an unrelated 500MB projector never inflates a 400MB model. */
+ * pairing rule itself lives in lib/models/vision-pairing.ts (family
+ * prefix, smallest-matching fallback) and is shared with the downloader
+ * so the card's promise and the fetch can never drift. */
 export function visionSizeBreakdown(
   file: { name: string; size: number },
   siblings: { name: string; size: number }[],
 ): VisionSize {
-  const mmprojs = siblings.filter((s) => s.name.toLowerCase().includes("mmproj"));
-  if (mmprojs.length === 0) {
+  const paired = findProjectorFile(file, siblings);
+  if (paired === undefined) {
     return { llmSize: file.size, mmprojSize: null, total: file.size, isVision: false };
   }
-  const family = file.name.replace(/[-_.]?(Q\d|q\d|F\d|f\d|B\d|b\d).*$/, "");
-  const paired =
-    mmprojs.find((m) => m.name.includes(family)) ??
-    mmprojs.reduce((smallest, m) => (m.size < smallest.size ? m : smallest));
   return {
     llmSize: file.size,
     mmprojSize: paired.size,

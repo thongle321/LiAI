@@ -248,6 +248,10 @@ export function AvailableModels({
         </View>
       ) : null}
       {grouped ? (
+        // Only tier-listed presets render here — the coverage invariant is
+        // a test-time decision (C9, option c): a catalog preset missing
+        // from every tier fails tests/preset-catalog.test.ts rather than
+        // silently vanishing at runtime.
         tiers.map((tier) => {
           const tierPresets = visible.filter((p) => tier.presetIds.includes(p.id));
           if (tierPresets.length === 0) return null;

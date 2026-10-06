@@ -11,7 +11,8 @@
  * typed contract lives on the SessionStore port):
  *   sessions  { title, pinned, updatedAt }
  *   messages  { sessionId, role, content, type, at, seq, usage* }
- *   toolRuns  { messageId, position, tool, input?, result? }
+ *   toolRuns  { messageId, position, tool, input?, result?, ok?, data?,
+ *               metrics? }
  *   drafts    { text }
  *   Values    { activeSessionId, seq }
  *
@@ -114,6 +115,23 @@ export function createChatStore(): Store {
 export class TinyBaseSessionStore implements SessionStore {
   private readonly store: Store;
 
+  /** Hydrated transcripts, served on re-open without re-reading (C17).
+   *
+   *  THE STALENESS CONTRACT, and the whole of it: the port is the only
+   *  writer (ADR-0012), so every method that mutates turn bodies clears
+   *  its session's entry BEFORE writing — append, popLastAssistant,
+   *  truncateFrom, deleteSession — unconditionally, even on refusal
+   *  paths. Clearing costs one re-read; a MISSED clear costs a
+   *  conversation that looks lost. The persister restores the tables
+   *  BEFORE this instance exists (lib/tinybase.ts awaits
+   *  startAutoPersisting first), so an entry can never predate the
+   *  data it would serve.
+   *
+   *  ponytail: unbounded — an entry lives until its session is next
+   *  written or deleted. Realistic open-session counts are small; add
+   *  an LRU only if memory ever shows up in a profile. */
+  private readonly hydrated = new Map<string, StoredMessage[]>();
+
   constructor(store: Store) {
     this.store = store;
   }
@@ -154,10 +172,22 @@ export class TinyBaseSessionStore implements SessionStore {
   }
 
   async get(sessionId: string): Promise<StoredMessage[] | null> {
-    if (!this.store.hasRow("sessions", sessionId)) return null;
-    return this.rowsOf(sessionId)
-      .sort((a, b) => a.row.seq - b.row.seq)
-      .map((entry) => this.toTurn(entry.id, entry.row));
+    if (!this.store.hasRow("sessions", sessionId)) {
+      this.hydrated.delete(sessionId);
+      return null;
+    }
+    // C17: hydrate once — the first open reads, later re-opens are
+    // served from memory.
+    let turns = this.hydrated.get(sessionId);
+    if (turns === undefined) {
+      turns = this.rowsOf(sessionId)
+        .sort((a, b) => a.row.seq - b.row.seq)
+        .map((entry) => this.toTurn(entry.id, entry.row));
+      this.hydrated.set(sessionId, turns);
+    }
+    // A fresh array per caller: the cached one must never be sorted or
+    // pushed on by a reader.
+    return [...turns];
   }
 
   /** One pass over the table, keeping each row's id with it. */
@@ -171,6 +201,8 @@ export class TinyBaseSessionStore implements SessionStore {
   }
 
   async append(sessionId: string, turn: StoredTurn, id?: string): Promise<void> {
+    // C17: invalidate first — see the `hydrated` contract.
+    this.hydrated.delete(sessionId);
     if (!this.store.hasRow("sessions", sessionId)) {
       this.newSessionRow(sessionId, "");
     }
@@ -218,6 +250,18 @@ export class TinyBaseSessionStore implements SessionStore {
     // written before the discriminant existed.
     ...(step.ok !== undefined ? { ok: step.ok } : {}),
     ...(step.data !== undefined ? { data: step.data } : {}),
+    // C15: per-call cost, a JSON object column like input/data, with its
+    // two numbers normalized on the way in so a malformed step cannot
+    // poison the cell. Absent stays absent — an old row reads as "no
+    // metrics", which is exactly what the renderer needs to show none.
+    ...(step.metrics !== undefined
+      ? {
+          metrics: {
+            tokens: step.metrics.tokens,
+            durationMs: step.metrics.durationMs,
+          },
+        }
+      : {}),
       });
     }
     this.touch(sessionId);
@@ -291,6 +335,18 @@ export class TinyBaseSessionStore implements SessionStore {
     // Mirrors `input`: a JSON object column, read back only when it really
     // is an object, so a malformed cell cannot reach a renderer.
     ...(isRecord(raw["data"]) ? { data: raw["data"] } : {}),
+    // Mirrors `data`: numbers only, or the step reads as having no
+    // metrics at all (C15).
+    ...(isRecord(raw["metrics"]) &&
+    typeof raw["metrics"]["tokens"] === "number" &&
+    typeof raw["metrics"]["durationMs"] === "number"
+      ? {
+          metrics: {
+            tokens: raw["metrics"]["tokens"],
+            durationMs: raw["metrics"]["durationMs"],
+          },
+        }
+      : {}),
       });
     }
     return steps.sort((a, b) => a.position - b.position);
@@ -327,6 +383,8 @@ export class TinyBaseSessionStore implements SessionStore {
   }
 
   async deleteSession(sessionId: string): Promise<boolean> {
+    // C17: invalidate first — see the `hydrated` contract.
+    this.hydrated.delete(sessionId);
     if (!this.store.hasRow("sessions", sessionId)) return false;
     // Tool calls are keyed independently of their message, so they are
     // collected first: deleting the message rows would orphan them.
@@ -358,6 +416,8 @@ export class TinyBaseSessionStore implements SessionStore {
   }
 
   async popLastAssistant(sessionId: string): Promise<boolean> {
+    // C17: invalidate first — see the `hydrated` contract.
+    this.hydrated.delete(sessionId);
     const last = this.rowsOf(sessionId).sort((a, b) => a.row.seq - b.row.seq).pop();
     if (last === undefined || last.row.role !== "assistant") return false;
     this.deleteStepsOf(last.id);
@@ -374,6 +434,8 @@ export class TinyBaseSessionStore implements SessionStore {
   }
 
   async truncateFrom(sessionId: string, messageId: string): Promise<boolean> {
+    // C17: invalidate first — see the `hydrated` contract.
+    this.hydrated.delete(sessionId);
     if (!this.store.hasRow("sessions", sessionId)) return false;
     const ordered = this.rowsOf(sessionId).sort((a, b) => a.row.seq - b.row.seq);
     const index = ordered.findIndex((entry) => entry.id === messageId);

@@ -34,6 +34,7 @@ export function createSessionsSlice(
   | "newConversation"
   | "switchSession"
   | "deleteSession"
+  | "deleteSessions"
   | "duplicateSession"
   | "renameSession"
   | "setPinned"
@@ -172,7 +173,6 @@ if (store) await quiet(store.setActiveSessionId(null));
     },
 
     deleteSession: async (id: string) => {
-      // Never pull the rug on an in-flight turn.
       if (get().sending && get().sessionId === id) return;
       const store = await storeOf(ctx);
       // deleteSession also clears the session's draft and the pointer to
@@ -191,6 +191,20 @@ if (store) await quiet(store.setActiveSessionId(null));
           draft: await readDraftFor(ctx, null),
         });
       }
+    },
+
+    // Bulk path: one row at a time through deleteSession, so its
+    // mid-turn guard (never pull the rug on an in-flight turn) then
+    // applies per id. The pre-check MIRRORS that guard so the returned
+    // count stays honest — deleteSession itself stays authoritative.
+    deleteSessions: async (ids: string[]) => {
+      let deleted = 0;
+      for (const id of ids) {
+        if (get().sending && get().sessionId === id) continue;
+        await get().deleteSession(id);
+        deleted += 1;
+      }
+      return deleted;
     },
 
     duplicateSession: async (id: string) => {

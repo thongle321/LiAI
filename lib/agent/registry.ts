@@ -115,6 +115,25 @@ export function talentDefinitions(): ToolDefinition[] {
         },
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "render_html",
+        description:
+          "Render an HTML document inline as a visual preview in the chat.",
+        parameters: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "Short label shown above the preview." },
+            html: {
+              type: "string",
+              description: "Complete, self-contained HTML document or fragment to render.",
+            },
+          },
+          required: ["html"],
+        },
+      },
+    },
   ];
 }
 
@@ -141,7 +160,13 @@ export async function runTalent(
   argsJson: string,
   ctx: TalentContext,
 ): Promise<TalentOutcome> {
-  if (name !== "datetime" && name !== "calculate" && name !== "web_search" && name !== "read_url") {
+  if (
+    name !== "datetime" &&
+    name !== "calculate" &&
+    name !== "web_search" &&
+    name !== "read_url" &&
+    name !== "render_html"
+  ) {
     return fail(`Talent "${name}" is not enabled for this run`);
   }
   let args: Record<string, unknown>;
@@ -162,6 +187,20 @@ export async function runTalent(
   if (name === "calculate") {
     const expression = typeof args.expression === "string" ? args.expression : undefined;
     return done(calculate(expression ? { expression } : {}));
+  }
+  if (name === "render_html") {
+    // Pure pass-through (PocketParity: RenderHtmlEngine.ts:20-40) — the
+    // MODEL authors the html, nothing is fetched. `data` carries it to
+    // the renderer; the model reads `content` only, so it never gets its
+    // own html echoed back (a large echo would crowd the context for no
+    // benefit — it can see what it just wrote).
+    const html = typeof args.html === "string" ? args.html : "";
+    const title = typeof args.title === "string" ? args.title : undefined;
+    if (!html) return fail('render_html: missing or empty "html" argument');
+    return done(
+      "[render_html SUCCESS] The html has been rendered into a preview above, and the user can see and toggle to see the code. \nReply with at most one short sentence what you build",
+      title !== undefined ? { html, title } : { html },
+    );
   }
   if (name === "web_search") {
     const query = typeof args.query === "string" ? args.query.trim() : "";

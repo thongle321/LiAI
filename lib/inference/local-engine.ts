@@ -51,6 +51,10 @@ export interface LlamaCompletionResult {
   interrupted?: boolean;
   /** >0 when the sampler stopped the turn (n_predict). */
   stopped_limit?: number;
+  /** C3: llama.rn's `n_past` at completion end — every token resident
+   *  in the KV cache (prompt reused + re-processed, and generated),
+   *  after any context shift. See the occupancy comment in `completion`. */
+  tokens_cached?: number;
   timings?: LlamaTimings;
 }
 
@@ -82,6 +86,12 @@ export interface LlamaCompletionParams extends Partial<LlamaSamplerParams> {
   /** Flat top-level sibling like enable_thinking — never nested: llama.rn's
    *  converter drops unknown keys. */
   jinja?: boolean;
+  /** Caller's stop strings (ModelSettings), forwarded flat like jinja. */
+  stop?: Array<string>;
+  /** Per-model chat-template override, forwarded flat like jinja. */
+  chat_template?: string;
+  /** Per-model generation-prompt override, forwarded flat like jinja. */
+  add_generation_prompt?: boolean;
   // The sampler's 16 fields arrive as FLAT, top-level siblings here — they
   // extend from LlamaSamplerParams rather than being restated, so the names
   // are defined once. They are NOT nested under a key: llama.rn's converter
@@ -97,6 +107,14 @@ export interface LlamaContextLike {
   stopCompletion(): Promise<void>;
   release(): Promise<void>;
   initMultimodal?(opts: { path: string }): Promise<boolean>;
+  /** Thinking-capability probe (lib/inference/thinking-detection.ts).
+   *  Optional so every existing fake stays valid — a partial build reports
+   *  "could not tell" rather than "does not think". */
+  getFormattedChat?: (
+    messages: Array<{ role: string; content: string }>,
+    template?: string | null,
+    params?: { jinja?: boolean; enable_thinking?: boolean },
+  ) => Promise<unknown>;
 }
 
 function toEngineCalls(
@@ -161,6 +179,17 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
           // `sampler:` compiles, type-checks, passes every test, and does
           // nothing at runtime.
           ...(request.sampler ? toLlamaSampler(request.sampler) : {}),
+          // Caller's stop words (ModelSettings) — flat, like the sampler:
+          // llama.rn drops nested unknown keys.
+          ...(request.stop && request.stop.length > 0
+            ? { stop: request.stop }
+            : {}),
+          ...(request.chatTemplate && request.chatTemplate.trim() !== ""
+            ? { chat_template: request.chatTemplate }
+            : {}),
+          ...(request.addGenerationPrompt !== undefined
+            ? { add_generation_prompt: request.addGenerationPrompt }
+            : {}),
         },
         (data) => {
           const reasoning = data.reasoning_content ?? "";
@@ -202,11 +231,27 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
               tokensPerSecond: asNumber(t.predicted_per_second),
               msPerToken: asNumber(t.predicted_per_token_ms),
             };
+      // C3 — `tokens_cached` is authoritative for occupancy, by the
+      // engine's own definition: it is `n_past` at completion end —
+      // prompt (reused + re-processed) plus generated, after any context
+      // shift, on both native paths. The timings' `cache_n` is
+      // path-dependent (legacy aliases it to n_past; the slot flow sets
+      // it to the reused prompt prefix only), so PocketPal's
+      // `prompt_n + cache_n` — a llama-server WIRE formula — would
+      // over-count on one of our paths and miss generated tokens on the
+      // other; it is deliberately not read. Full trace: issue 05
+      // Decision (05-cached-token-accounting.md).
+      // Each key guarded on its own: a REPORTED 0 is a fact; only an
+      // ABSENT key falls back to the prompt total — never to zero.
+      const promptTokens =
+        typeof result.tokens_cached === "number"
+          ? result.tokens_cached
+          : asNumber(result.tokens_evaluated);
       return {
         text: result.content ?? result.text ?? "",
         reasoning: result.reasoning_content ?? "",
         toolCalls,
-        promptTokens: asNumber(result.tokens_evaluated),
+        promptTokens,
         completionTokens: asNumber(result.tokens_predicted),
         // Was hardcoded `false` for the life of the type.
         stoppedEarly: asNumber(result.stopped_limit) > 0,

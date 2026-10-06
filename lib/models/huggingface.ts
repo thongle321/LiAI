@@ -15,7 +15,13 @@ import type {
   HFModelFile,
 } from "../../types/models";
 
-import { hfSortParams, nextPageFromLink, type HFSortBy } from "./hf-format.ts";
+import {
+  hfSortParams,
+  isVisionModel,
+  nextPageFromLink,
+  type HFSortBy,
+} from "./hf-format.ts";
+import { mmprojSiblings } from "./vision-pairing.ts";
 
 const HF_HUB_BASE = "https://huggingface.co";
 const HF_API_BASE = "https://huggingface.co/api";
@@ -58,6 +64,11 @@ export interface HFModelRef {
   author: string;
   name: string;
   description: string;
+  /** Hub tags + sibling files when the ref came from a search result.
+   *  Absent for a bare id (hfRefFromId) — the vision facts are then
+   *  unknowable, never guessed. */
+  tags?: string[];
+  siblings?: HFModelFile[];
 }
 
 const PRESETS: PresetModel[] = [
@@ -588,6 +599,8 @@ export function hfRefFromSearch(result: HFModelSearchResult): HFModelRef {
     author: result.author,
     name: result.name,
     description: result.description,
+    tags: result.tags,
+    siblings: result.ggufFiles,
   };
 }
 
@@ -613,6 +626,19 @@ export function hfSpecId(modelId: string, fileName: string): string {
 }
 
 export function buildHfModelSpec(ref: HFModelRef, file: HFModelFile): ModelSpec {
+  // Vision facts recorded ONCE here, so the card's toggle, the selector and
+  // the downloader all read the same answer instead of re-deriving it (the
+  // old filename-derived `type` misses repos like `gemma-3-4b-it`).
+  const siblings = ref.siblings;
+  const supportsVision =
+    siblings !== undefined
+      ? isVisionModel(ref.tags ?? [], siblings.map((f) => f.name))
+      : false;
+  const projectorCandidates = mmprojSiblings(siblings ?? []).map((f) => ({
+    name: f.name,
+    size: f.size,
+    downloadUrl: f.downloadUrl,
+  }));
   return {
     id: hfSpecId(ref.modelId, file.name),
     name: `${ref.name} (${file.name})`,
@@ -620,6 +646,10 @@ export function buildHfModelSpec(ref: HFModelRef, file: HFModelFile): ModelSpec 
     description: ref.description,
     origin: "huggingface",
     type: inferModelType(file.name),
+    supportsVision,
+    ...(supportsVision ? { visionEnabled: true } : {}),
+    ...(projectorCandidates.length > 0 ? { projectorCandidates } : {}),
+    hfUrl: `https://huggingface.co/${ref.modelId}`,
     files: [
       { name: file.name, size: file.size, downloadUrl: file.downloadUrl, oid: file.oid },
     ],

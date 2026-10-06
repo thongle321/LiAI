@@ -87,13 +87,12 @@ PocketPal resolves five: `context-warning`, `context-full`,
 `consecutiveFullFailures >= 2` (`BannerRow.tsx:76-243`). We have two
 (`ContextFullBanner.tsx:24-104`).
 
-### 3.7 `HtmlPreviewBubble` — **large, needs a new dependency**
+### 3.7 `HtmlPreviewBubble` — **deferred, see §7.1**
 WebView HTML rendering: JS disabled by default with a strict CSP, toggle to
 highlighted source, copy HTML, fullscreen modal with JS enabled
 (`HtmlPreviewBubble.tsx:29-338`), wired through a talent surface
-(`RenderHtmlTalentUI.tsx:13-18`). **Requires a WebView dependency — AGENTS.md
-requires approval before adding one, and `render_html` is currently deferred as
-out of scope.**
+(`RenderHtmlTalentUI.tsx:13-18`). **No producer exists on our side** — we have no
+`render_html` talent — so there is nothing to render and nothing to add.
 
 ### 3.8 Multi-block-per-row rendering — **large, architectural**
 Reasoning → text → tool → text interleaved within one turn. Today our data model
@@ -152,12 +151,24 @@ Cheap, high-value first; each is independently shippable.
 5. **3.5** `IncreaseContextSheet` — reuses `estimateModelMemory`.
 6. **3.4** `ContentReportSheet`.
 7. **3.8** multi-block rows — **only** once 3.7's fate is settled, since it changes where a talent surface lives.
-8. **3.7** `HtmlPreviewBubble` — blocked on a WebView dependency decision.
+8. **3.7** `HtmlPreviewBubble` — **deferred**: no producer (§7.1).
 
 ---
 
-## 7. Open questions for the user
+## 7. Resolved / open questions
 
-1. **WebView dependency?** 3.7 needs one; AGENTS.md requires approval. Without it, `render_html` stays deferred.
-2. **Multi-block rows?** 3.8 is a data-model change to `AgentStep`/`ChatMessage`, not a UI task. Worth its own ticket.
-3. **i18n** — the one parity item with a project-sized cost. Assume out of scope?
+1. **HTML preview (§3.7) — deferred, no dependency added.** `@expo/html-elements@57`
+   was proposed as a WebView replacement. It is not one: its peers are `react`,
+   `react-native`, `react-native-web` (no `react-native-webview` — see
+   `expo/expo:packages/html-elements/package.json`). It renders HTML *elements*
+   as native views, ships no HTML parser, and cannot run JS — so it also cannot
+   do pocketpal's fullscreen-with-JS mode (`HtmlPreviewBubble.tsx:29-338`).
+   **The blocking fact is upstream of both options: we have no `render_html`
+   talent**, so there is no HTML to render. Rendered as a highlighted code
+   block instead (we already depend on `react-native-code-highlighter`, zero new
+   deps). Revisit only when a producer exists.
+2. **Multi-block rows?** 3.8 is a data-model change to `AgentStep`/`ChatMessage`,
+   not a UI task. Worth its own ticket.
+3. **i18n — out of scope.** Pocketpal routes every string through `l10n` +
+   `locales/*.json` (20+ languages). LiAI stays English-only. Not a gap to
+   close without a decision to localise the product.

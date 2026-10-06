@@ -81,6 +81,7 @@ export function createSendSlice(
   ChatState,
   | "sending"
   | "turnStartedAt"
+  | "pendingToolName"
   | "chatWarning"
   | "setChatWarning"
   | "send"
@@ -203,6 +204,10 @@ export function createSendSlice(
           if (gen !== ctx.streamGen) return;
           updateBubble(opts.assistantId, { reasoning: cumulative });
         },
+        (toolName) => {
+          if (gen !== ctx.streamGen) return;
+          set({ pendingToolName: toolName });
+        },
       );
       if (gen !== ctx.streamGen) return;
       updateBubble(opts.assistantId, {
@@ -219,7 +224,7 @@ export function createSendSlice(
         ...(outcome.outcome !== undefined ? { outcome: outcome.outcome } : {}),
       });
       adoptSession(outcome.sessionId);
-      set({ sending: false, turnStartedAt: null });
+      set({ sending: false, turnStartedAt: null, pendingToolName: null });
       // Released with the turn. The `gen` guard above means a superseded
       // run never reaches this, so a NEW turn's lock is never stomped.
       ctx.keepAwake(false);
@@ -231,7 +236,7 @@ export function createSendSlice(
         streaming: false,
         error: llmError(message),
       });
-      set({ sending: false, turnStartedAt: null });
+      set({ sending: false, turnStartedAt: null, pendingToolName: null });
       ctx.keepAwake(false);
     } finally {
       // Success, failure or supersede: idle must hold no timer.
@@ -257,6 +262,7 @@ export function createSendSlice(
   return {
     sending: false,
     turnStartedAt: null,
+    pendingToolName: null,
     chatWarning: null,
     setChatWarning: (warning) => set({ chatWarning: warning }),
     editingTurnId: null,
@@ -300,6 +306,9 @@ export function createSendSlice(
       set((s) => ({
         sending: false,
         turnStartedAt: null,
+        // The turn is no longer running: a stale name would mislabel
+        // the next turn's text-only span (phaseLabel's undefined case).
+        pendingToolName: null,
         messages: s.messages.map((m) =>
           m.streaming === true ? { ...m, streaming: false, at: Date.now() } : m,
         ),

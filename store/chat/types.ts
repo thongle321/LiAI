@@ -38,6 +38,10 @@ export interface TurnRunner {
     onToken?: (text: string) => void,
     /** Cumulative reasoning so far — the bubble replaces, never appends. */
     onReasoning?: (text: string) => void,
+    /** A tool call started: `toolName` is the talent id. The store's
+     *  pending row shows the tool's phase for exactly this span
+     *  (ticket 02). */
+    onToolStart?: (toolName: string) => void,
   ): Promise<{
     reply: string;
     reasoning?: string;
@@ -104,6 +108,11 @@ export interface ChatState {
    *  show elapsed time — usage lands only on settle, and three anonymous
    *  dots are indistinguishable from a frozen screen. */
   turnStartedAt: number | null;
+  /** The talent whose tool call is in flight, or null. Set from the
+   *  runner's onToolStart, cleared when the turn settles — the pending
+   *  row names a phase only while a tool genuinely runs, never while
+   *  the model is merely writing text (ticket 02). */
+  pendingToolName: string | null;
   /** A transient chat notice, or null. Distinct from an errored message:
    *  an errored message means the turn FAILED, while this means it went
    *  through in a degraded state the user should know about. PocketParity

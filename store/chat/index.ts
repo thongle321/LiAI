@@ -361,7 +361,7 @@ async function defaultAddGenerationPrompt(): Promise<boolean | undefined> {
 
 /** Default on-device turn: engine slot + agent loop + persisted turns. */
 function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner {
-  return (text, paths, onToken) => {
+  return (text, paths, onToken, onReasoning, onToolStart) => {
     const runTurn = createTurnRunner({
       ensureEngine: async (source: EngineSource) =>
         // The projector rides the same resolution the image gate uses
@@ -388,7 +388,7 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
     getSampler: (sid) => defaultSampler(sid),
       saveImage: (uri: string) => defaultSaveImage(uri),
     });
-    return runTurn(text, paths, onToken);
+    return runTurn(text, paths, onToken, onReasoning, onToolStart);
   };
 }
 

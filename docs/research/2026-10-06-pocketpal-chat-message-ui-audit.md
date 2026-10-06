@@ -176,7 +176,7 @@ talent surface becomes a sibling block rather than an inline row).
 | **04** streaming macrotask yield | **Closed, different mechanism.** 100ms macrotask beat held for the streaming span (`store/chat/send.ts:58-74,186`) vs PocketPal's per-token `setTimeout(0)` |
 | **11** session bulk actions | **Closed** (this session's drawer work) |
 | **10** date grouping | **Closed** (`lib/chat/session-groups.ts`) |
-| **14** lazy message hydration | **Ticketed.** FlatList defaults vs PocketPal's `initialNumToRender:10`, `maxToRenderPerBatch:6` (`ChatView.tsx:931-932`) — ticket 10 |
+| **14** lazy message hydration | **Closed** (`MessageList.tsx` — `initialNumToRender:10`, `maxToRenderPerBatch:6`, PocketPal `ChatView.tsx:997,1001`) |
 
 ---
 

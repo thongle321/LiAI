@@ -95,6 +95,17 @@ describe("message list stability", () => {
     );
   });
 
+  it("windows the render pass at PocketPal's caps", () => {
+    // PocketPal ChatView.tsx:997,1001 — initialNumToRender:10,
+    // maxToRenderPerBatch:6 (audit item 14, ticket 10).
+    // These are FlatList virtualization knobs: they only mean anything to a
+    // mounted RN list, so their behaviour is unreachable from `node --test`
+    // — pin the values by source assertion instead of faking a render.
+    const list = read("components/chat/MessageList.tsx");
+    assert.match(list, /initialNumToRender=\{10\}/);
+    assert.match(list, /maxToRenderPerBatch=\{6\}/);
+  });
+
   it("tracks the end with STICK/LEAVE hysteresis from one source", () => {
     // PocketPal ChatView.tsx:451 — re-arm below 24px, leave above 40px.
     // The library flips on a single 20px line with no hysteresis

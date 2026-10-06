@@ -2,7 +2,9 @@
 
 **What to build:** A sheet offering larger context sizes for the current model as a ladder, each stop showing its memory cost, an approximate word capacity, and a fits / tight / won't-fit marker, defaulting to the first size that fits. Confirming reloads the model at the new size; if the reload fails the previous size is restored and the model is left loaded rather than unloaded.
 
-**Blocked by:** 05 — The remaining context banner variants; 06 — Context fit classifier
+**Blocked by:** 05 — The remaining context banner variants; 06 — Context fit classifier; **11 — Populate GGUF metadata from the model header**
+
+**Ticket 11 is a hard prerequisite, not a nicety.** Without it there is no maximum context length to bound the ladder, and the fit classifier it depends on compares byte figures that do not move when the context window grows. See `.scratch/chat-message-ui-parity/research/blockers.md`.
 
 **Status:** ready-for-agent
 

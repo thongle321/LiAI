@@ -150,6 +150,7 @@ export function createSendSlice(
         text: "",
         reasoning: undefined,
         steps: undefined,
+        blocks: undefined,
         usage: undefined,
         // A rerun replaces the turn's ending: keeping the old flags would
         // claim the new answer finished the way the old one did.
@@ -232,6 +233,7 @@ export function createSendSlice(
         streaming: false,
         at: Date.now(),
         ...(outcome.steps.length > 0 ? { steps: outcome.steps } : {}),
+        ...(outcome.blocks !== undefined ? { blocks: outcome.blocks } : {}),
         usage: {
           promptTokens: outcome.promptTokens,
           completionTokens: outcome.completionTokens,

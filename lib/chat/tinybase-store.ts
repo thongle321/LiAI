@@ -24,13 +24,14 @@
 
 import { createStore, type Store } from "tinybase";
 
-import type { AgentStep, SessionInfo } from "../../types/chat.ts";
+import type { AgentStep, SessionInfo, TurnBlock } from "../../types/chat.ts";
 import type {
   SessionStore,
   StoredMessage,
   StoredTurn,
 } from "./session-store.ts";
 import { draftSlot } from "./session-store.ts";
+import { sanitizeBlocks } from "./blocks.ts";
 import { DEFAULT_SAMPLER, type SamplerParams } from "../inference/sampler.ts";
 import { newId } from "./messages.ts";
 
@@ -73,6 +74,9 @@ interface MessageRow {
   contextFull?: boolean;
   interrupted?: boolean;
   stoppedEarly?: boolean;
+  /** Ordered blocks, stored as a JSON cell — the same JSON-object column
+   * shape `metrics` uses on toolRuns. One column, no schema migration. */
+  blocks?: TurnBlock[];
   promptMs?: number;
   tokensPerSecond?: number;
   msPerToken?: number;
@@ -103,6 +107,11 @@ function messageRowFrom(raw: unknown): MessageRow | null {
     ...(raw["contextFull"] === true ? { contextFull: true } : {}),
     ...(raw["interrupted"] === true ? { interrupted: true } : {}),
     ...(raw["stoppedEarly"] === true ? { stoppedEarly: true } : {}),
+    // Malformed cells degrade to "no blocks" and the turn reads through
+    // the splitter on load — never a crash in the renderer.
+    ...(sanitizeBlocks(raw["blocks"]) !== undefined
+      ? { blocks: sanitizeBlocks(raw["blocks"]) }
+      : {}),
     ...(typeof raw["promptMs"] === "number"
       ? {
           promptMs: raw["promptMs"],
@@ -227,6 +236,7 @@ export class TinyBaseSessionStore implements SessionStore {
       at: turn.at ?? Date.now(),
       seq,
       ...(turn.reasoning !== undefined ? { reasoning: turn.reasoning } : {}),
+      ...(turn.blocks !== undefined ? { blocks: turn.blocks } : {}),
       ...(turn.usage !== undefined
         ? {
             promptTokens: turn.usage.promptTokens,
@@ -293,6 +303,7 @@ export class TinyBaseSessionStore implements SessionStore {
       type: row.type,
       at: row.at,
       ...(row.reasoning !== undefined ? { reasoning: row.reasoning } : {}),
+      ...(row.blocks !== undefined ? { blocks: row.blocks } : {}),
       // Rebuilt as the nested shape the port declares, from the flat
       // columns. Omitted entirely when the engine reported nothing, so an
       // old row simply has no `outcome` key.
@@ -500,7 +511,29 @@ export class TinyBaseSessionStore implements SessionStore {
       // step overwrite the SOURCE's row with the copy's messageId. The
       // fork looked perfect and the original lost every tool call.
       const forked: StoredTurn = turn.steps
-        ? { ...turn, steps: turn.steps.map((s) => ({ ...s, id: newId() })) }
+        ? (() => {
+            const ids = new Map<string, string>();
+            const steps = turn.steps!.map((s) => {
+              const id = newId();
+              ids.set(s.id, id);
+              return { ...s, id };
+            });
+            // Blocks point at step ids, so the forked ids must be
+            // threaded through them or every tool block dangles.
+            return {
+              ...turn,
+              steps,
+              ...(turn.blocks !== undefined
+                ? {
+                    blocks: turn.blocks.map((b) =>
+                      b.kind === "tool"
+                        ? { kind: "tool", stepId: ids.get(b.stepId) ?? b.stepId }
+                        : b,
+                    ),
+                  }
+                : {}),
+            };
+          })()
         : turn;
       await this.append(copyId, forked);
     }

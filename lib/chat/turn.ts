@@ -6,7 +6,7 @@
  * are best-effort (the reply still renders); a missing engine rejects.
  */
 
-import type { AgentStep, TurnOutcomeFlags } from "../../types/chat.ts";
+import type { AgentStep, TurnBlock, TurnOutcomeFlags } from "../../types/chat.ts";
 import type { ChatMessage } from "../../types/chat.ts";
 import type { StoredTurn } from "./session-store.ts";
 import type { TurnPaths } from "../../store/chat/types.ts";
@@ -45,6 +45,8 @@ export interface TurnOutcome {
   /** How the turn ended, when the engine reported it. Omitted entirely
    *  otherwise, so an unflagged turn stores no empty object. */
   outcome?: TurnOutcomeFlags;
+  /** Ordered blocks as the model produced them. */
+  blocks?: TurnBlock[];
 }
 
 export interface TurnDeps {
@@ -232,6 +234,7 @@ export function createTurnRunner(deps: TurnDeps) {
             usage,
             steps,
             ...(result.outcome !== undefined ? { outcome: result.outcome } : {}),
+            ...(result.blocks !== undefined ? { blocks: result.blocks } : {}),
           },
           paths.assistantMessageId,
         );
@@ -247,6 +250,7 @@ export function createTurnRunner(deps: TurnDeps) {
       promptTokens: result.promptTokens,
       completionTokens: result.completionTokens,
       ...(result.outcome !== undefined ? { outcome: result.outcome } : {}),
+      ...(result.blocks !== undefined ? { blocks: result.blocks } : {}),
     };
   };
 }

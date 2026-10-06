@@ -83,6 +83,17 @@ export interface TurnOutcomeFlags {
   timings?: TurnTimings;
 }
 
+/** One segment of an assistant turn, in the order the model produced it.
+ *
+ * Tool blocks reference their call by `stepId` — the same id the
+ * turn's flat `steps` list carries — so the block list never copies
+ * step data: one copy, and the order is the only thing blocks add.
+ */
+export type TurnBlock =
+  | { kind: "reasoning"; text: string }
+  | { kind: "text"; text: string }
+  | { kind: "tool"; stepId: string };
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -103,6 +114,10 @@ export interface ChatMessage {
   outcome?: TurnOutcomeFlags;
   /** True while tokens are still arriving. */
   streaming?: boolean;
+  /** Ordered blocks (reasoning/text/tool) recorded at write time, when
+   * the turn was produced after blocks existed. Absent on older turns —
+   * those are read through blocksOf, which splits the legacy fields. */
+  blocks?: TurnBlock[];
 }
 
 /** One row of the session list, owned by the local Store (ADR-0012).

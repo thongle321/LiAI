@@ -6,7 +6,7 @@ import type { SearchAuth } from "../../types/api.ts";
 import type { EngineSource } from "../../lib/inference/engine.ts";
 import type { SessionStore } from "../../lib/chat/session-store.ts";
 import type { ImportResult } from "../../lib/chat/import.ts";
-import type { AgentStep, ChatMessage, ChatSession, TurnOutcomeFlags } from "../../types/chat.ts";
+import type { AgentStep, ChatMessage, ChatSession, TurnBlock, TurnOutcomeFlags } from "../../types/chat.ts";
 import type { ToolTokenCounter } from "../../lib/chat/tool-token-count.ts";
 
 export type Connection = "unknown" | "up" | "down";
@@ -56,6 +56,8 @@ export interface TurnRunner {
     promptTokens: number;
     completionTokens: number;
     outcome?: TurnOutcomeFlags;
+    /** Ordered blocks of the reply, when the runner recorded them. */
+    blocks?: TurnBlock[];
   }>;
 }
 

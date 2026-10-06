@@ -14,6 +14,7 @@ import type {
   AgentStep,
   MessageUsage,
   SessionInfo,
+  TurnBlock,
   TurnOutcomeFlags,
 } from "../../types/chat.ts";
 import type { SamplerParams } from "../inference/sampler.ts";
@@ -43,6 +44,9 @@ export interface StoredTurn {
    *  why a reply looks truncated — the G1 context banner and the G4 footer
    *  both read this, and neither can work off live state alone. */
   outcome?: TurnOutcomeFlags;
+  /** Ordered blocks for the reply, when the turn was written with them.
+   * Stored as a JSON column; old rows read through the blocksOf splitter. */
+  blocks?: TurnBlock[];
 }
 
 /** A stored turn AS READ BACK, carrying the row id it was persisted under.

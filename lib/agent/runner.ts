@@ -14,7 +14,7 @@ import type {
   ToolDefinition,
 } from "../inference/engine.ts";
 import type { SamplerParams } from "../inference/sampler.ts";
-import type { TurnOutcomeFlags, ToolMetrics } from "../../types/chat.ts";
+import type { TurnOutcomeFlags, ToolMetrics, TurnBlock } from "../../types/chat.ts";
 import { runTalent, type TalentSearchAuth } from "./registry.ts";
 
 export interface AgentStep {
@@ -50,10 +50,13 @@ export type AgentEvent =
   | { type: "run_failed"; error: string };
 
 export interface AgentResult {
+  /** The whole reply: every text segment, not only the last one. */
   text: string;
   /** Last non-empty reasoning the completions reported (cumulative). */
   reasoning?: string;
   steps: AgentStep[];
+  /** Ordered blocks the way the model produced them. */
+  blocks?: TurnBlock[];
   promptTokens: number;
   completionTokens: number;
   hitMaxTurns: boolean;
@@ -128,6 +131,13 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
   let completionTokens = 0;
   let text = "";
   let reasoning = "";
+  // Ordered narrative. A tool call ends the current text/reasoning
+  // segment: text spoken after the call is a NEW block, not more of the
+  // same paragraph. Tool segments reference the same id the flat steps
+  // list carries, so nothing is duplicated.
+  const blocks: TurnBlock[] = [];
+  let textSeg: { kind: "text"; text: string } | null = null;
+  let reasoningSeg: { kind: "reasoning"; text: string } | null = null;
   // Function-scoped, not per-iteration: the outer catch returns from
   // outside the loop, and the LAST turn's ending is what this answer's
   // ending is.
@@ -155,6 +165,10 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
       let turnText = "";
       let turnCalls: EngineToolCall[] = [];
       let outcome;
+      // This engine turn gets its OWN text and reasoning segments: text
+      // spoken after a tool call belongs to a different paragraph.
+      textSeg = null;
+      reasoningSeg = null;
       try {
         outcome = await engine.completion(
           {
@@ -184,6 +198,14 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
           {
             onToken: (delta) => {
               turnText += delta;
+              if (delta !== "") {
+                if (textSeg === null) {
+                  textSeg = { kind: "text", text: delta };
+                  blocks.push(textSeg);
+                } else {
+                  textSeg.text += delta;
+                }
+              }
               onEvent({ type: "token", text: delta });
             },
             // Cumulative, like llama.rn's reasoning_content: the store
@@ -191,6 +213,12 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
             onReasoning: (cumulative) => {
               if (cumulative === "") return;
               reasoning = cumulative;
+              if (reasoningSeg === null) {
+                reasoningSeg = { kind: "reasoning", text: cumulative };
+                blocks.push(reasoningSeg);
+              } else {
+                reasoningSeg.text = cumulative;
+              }
               onEvent({ type: "reasoning", text: cumulative });
             },
             onToolCalls: (calls) => {
@@ -211,7 +239,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
           type: "run_failed",
           error: err instanceof Error ? err.message : String(err),
         });
-        return { text, steps, promptTokens, completionTokens, hitMaxTurns: false };
+        return { text, steps, promptTokens, completionTokens, hitMaxTurns: false, ...(blocks.length > 0 ? { blocks } : {}) };
       }
       // C3: promptTokens is occupancy — tokens HELD against the window —
       // so the LAST step's figure is the thread's (every step shares one
@@ -239,7 +267,32 @@ endFlags = {
       if (outcome.text) turnText = outcome.text;
       if (outcome.reasoning) reasoning = outcome.reasoning;
       if (outcome.toolCalls.length > 0) turnCalls = outcome.toolCalls;
-      text = turnText;
+      // Reconcile the segment log with what the turn actually produced:
+      // a scripted engine can skip the streaming callbacks entirely.
+      if (turnText !== "") {
+        // A freshly-annotated alias: closure assignments above are
+        // invisible to the narrowing pass, which would otherwise keep
+        // `textSeg` pinned to null.
+        const seg = textSeg as { kind: "text"; text: string } | null;
+        if (seg === null) {
+          textSeg = { kind: "text", text: turnText };
+          blocks.push(textSeg);
+        } else {
+          seg.text = turnText;
+        }
+      }
+      if (outcome.reasoning) {
+        const seg = reasoningSeg as { kind: "reasoning"; text: string } | null;
+        if (seg === null) {
+          reasoningSeg = { kind: "reasoning", text: outcome.reasoning };
+          blocks.push(reasoningSeg);
+        } else {
+          seg.text = outcome.reasoning;
+        }
+      }
+      // Every segment speaks, not only the last one: the reply is the
+      // whole narrative the model produced around its tool calls.
+      text = text === "" ? turnText : turnText === "" ? text : `${text}\n\n${turnText}`;
 
       // C15 + parity fact-check: per-call cost of THIS generation turn,
       // replicated onto each call of a multi-tool turn (the same
@@ -277,6 +330,7 @@ endFlags = {
           ok: false,
           ...(stepMetrics !== undefined ? { metrics: stepMetrics } : {}),
         });
+        blocks.push({ kind: "tool", stepId: call.id });
       }
       if (allowed.length === 0) {
         onEvent({ type: "run_finished" });
@@ -288,6 +342,7 @@ endFlags = {
           completionTokens,
           hitMaxTurns: forcedFinal,
           ...(endFlags !== undefined ? { outcome: endFlags } : {}),
+          ...(blocks.length > 0 ? { blocks } : {}),
         };
       }
 
@@ -321,6 +376,7 @@ endFlags = {
           ...(talent.data !== undefined ? { data: talent.data } : {}),
           ...(stepMetrics !== undefined ? { metrics: stepMetrics } : {}),
         });
+        blocks.push({ kind: "tool", stepId: call.id });
         onEvent({
           type: "tool_call_finished",
           outcome: {
@@ -352,6 +408,7 @@ endFlags = {
       completionTokens,
       hitMaxTurns: false,
       ...(endFlags !== undefined ? { outcome: endFlags } : {}),
+      ...(blocks.length > 0 ? { blocks } : {}),
     };
   }
 }

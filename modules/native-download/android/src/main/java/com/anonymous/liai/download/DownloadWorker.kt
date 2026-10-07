@@ -336,8 +336,7 @@ class DownloadWorker(
 
     companion object {
         const val KEY_ID = "download_id"
-        const val STORE_NAME = "expo-downloads.json"
-        const val CHANNEL_ID = "expo-download"
+        const val CHANNEL_ID = "native-download"
         const val PROGRESS_INTERVAL_MS = 1000L
     }
 }

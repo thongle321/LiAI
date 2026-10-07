@@ -257,7 +257,7 @@ class NativeDownloadModule : Module() {
         )
     }
 
-    private fun workName(downloadId: String) = "expo-download-$downloadId"
+    private fun workName(downloadId: String) = "native-download-$downloadId"
 
     private companion object {
         const val EVENT = "onDownloadEvent"

@@ -19,6 +19,7 @@ import expo.modules.kotlin.records.Record
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -54,10 +55,12 @@ class ExpoDownloadModule : Module() {
     private val store: DownloadStore
         get() = DownloadStore(DownloadDatabase.get(ctx))
 
-    /** Room reads are suspend, so the start-of-observation re-emit needs a
-     *  scope. Module-scoped rather than per-listener so a JS reload does not
-     *  leave a coroutine behind. */
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    /** Module-scoped coroutine scope. Created in OnCreate rather than as a
+     *  class field: the Expo lifecycle docs say OnCreate is preferred over
+     *  class initializers, and OnDestroy is where the scope is cancelled — a
+     *  field-initialised SupervisorJob outlives the module and leaks a
+     *  collector on every reload. */
+    private var scope: CoroutineScope? = null
 
     /** The Room Flow collector, cancelled on the LAST listener leaving. */
     private var observeJob: kotlinx.coroutines.Job? = null
@@ -65,6 +68,17 @@ class ExpoDownloadModule : Module() {
     override fun definition() =
         ModuleDefinition {
             Name("ExpoDownload")
+
+            OnCreate {
+                scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+            }
+
+            OnDestroy {
+                observeJob?.cancel()
+                observeJob = null
+                scope?.cancel()
+                scope = null
+            }
 
             Events("onDownloadEvent")
 
@@ -180,8 +194,10 @@ class ExpoDownloadModule : Module() {
                 // Re-emit whatever the store already holds. Without this, a
                 // download that completed while JS was dead produces no event
                 // at all and the UI silently disagrees with the disk.
-                scope.launch {
-                    store.all().filterNot { isTerminal(it) }
+                scope?.launch {
+                    store
+                        .all()
+                        .filterNot { isTerminal(it) }
                         .forEach { sendEvent(EVENT, it.toWritableMap()) }
                 }
                 // Then keep pushing: the worker writes progress to the same
@@ -191,13 +207,14 @@ class ExpoDownloadModule : Module() {
                 // the case a background download exists for) — these events
                 // are the fast path on top of it, never the only path.
                 observeJob?.cancel()
-                observeJob = scope.launch {
-                    store.observeAll().collect { records ->
-                        records.filterNot { isTerminal(it) }.forEach {
-                            sendEvent(EVENT, it.toWritableMap())
+                observeJob =
+                    scope?.launch {
+                        store.observeAll().collect { records ->
+                            records.filterNot { isTerminal(it) }.forEach {
+                                sendEvent(EVENT, it.toWritableMap())
+                            }
                         }
                     }
-                }
             }
 
             // Cancels the COLLECTOR ONLY. An earlier version of this module

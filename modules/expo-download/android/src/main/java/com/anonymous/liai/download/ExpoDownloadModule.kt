@@ -82,8 +82,6 @@ class ExpoDownloadModule : Module() {
 
             Events("onDownloadEvent")
 
-            AsyncFunction("pingAsync") { "pong" }
-
             // The store is Room-backed and suspend, so every function that touches it
             // is declared Coroutine. Previously they were plain AsyncFunctions
             // against a synchronous JSON file; faking that back with
@@ -188,17 +186,6 @@ class ExpoDownloadModule : Module() {
 
             /** Await the terminal state of one download. Used by the retry
              *  path so JS does not have to poll on a timer. */
-            AsyncFunction("awaitDownload") Coroutine { downloadId: String ->
-                val info =
-                    workManager.getWorkInfosForUniqueWork(workName(downloadId)).await()
-                val live =
-                    info.firstOrNull {
-                        it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING ||
-                            it.state == WorkInfo.State.BLOCKED
-                    }
-                if (live == null) store.get(downloadId)?.toWritableMap() else null
-            }
-
             OnStartObserving {
                 // Re-emit whatever the store already holds. Without this, a
                 // download that completed while JS was dead produces no event

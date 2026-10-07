@@ -57,7 +57,6 @@ export interface NativeDownloadRequest {
 }
 
 declare class ExpoDownloadModule extends NativeModule<ExpoDownloadEvents> {
-  pingAsync(): Promise<string>;
   startDownload(request: NativeDownloadRequest): Promise<void>;
   pauseDownload(id: string): Promise<void>;
   resumeDownload(id: string): Promise<void>;
@@ -71,7 +70,6 @@ declare class ExpoDownloadModule extends NativeModule<ExpoDownloadEvents> {
    *  This is what a cold-started app calls to find downloads it never saw. */
   getActiveDownloads(): Promise<NativeDownload[]>;
   /** Resolves when the download is no longer live, or null if it still is. */
-  awaitDownload(id: string): Promise<NativeDownload | null>;
 }
 
 type ExpoDownloadEvents = {

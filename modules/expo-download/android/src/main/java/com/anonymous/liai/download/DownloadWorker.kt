@@ -105,7 +105,10 @@ class DownloadWorker(
      * and the user was shown an error for a transfer that was still going.
      * QUEUED is also what the UI already renders as "downloading".
      */
-    private suspend fun requeue(id: String, reason: String?) {
+    private suspend fun requeue(
+        id: String,
+        reason: String?,
+    ) {
         store.mutate(id) {
             it.copy(status = DownloadState.QUEUED, error = reason)
         }

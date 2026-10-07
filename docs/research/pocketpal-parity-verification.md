@@ -64,10 +64,22 @@ download forever).
   usage in its download manager, so LiAI matching it is parity, not a omission.
 - **`reattachDownloadObserver` absent.** Covered above — deliberate.
 
-## Still open, and not a parity question
+## Resolved: the Authorization header in Room
 
-The plaintext `Authorization` header in the Room table. `AGENTS.md` says
-SecureStore; the worker must authenticate with JS dead. Android SecureStore is
-Keystore-backed and natively readable, so the worker could hold a key *name*
-rather than the token. Unresolved by design — it is a security/product call, not
-a parity one.
+Flagged in review as a possible `AGENTS.md` violation ("Store user-provided keys in
+SecureStore"). Checked against pocketpal-ai, the reference implementation:
+
+PocketPal stores the token **plaintext in Room** too — `authToken: String? = null`
+(`DownloadEntity.kt:19`), read from the download config at start
+(`DownloadModule.kt:69`), applied as `Authorization: Bearer $token` in the worker
+(`DownloadWorker.kt:91`). No SecureStore, no EncryptedSharedPreferences, no cipher
+anywhere in their download package.
+
+LiAI is therefore already at parity: `headers: Map<String, String>` in Room
+(`DownloadEntity.kt:49`), applied via `record.headers.forEach { header(k, v) }`
+(`DownloadWorker.kt:138`). Both keep it in app-private storage, which is what the
+after-process-death requirement needs — the worker must authenticate with JS dead,
+and WorkManager's own inputData is itself persisted to disk.
+
+No change made. Adopting SecureStore here would diverge from the chosen reference
+and add a native key-lookup path for no security gain over PocketPal.

@@ -54,7 +54,16 @@ import {
   ContextFullBanner,
   ContextLadderSheet,
 } from "../../../components/chat/ContextFullBanner.tsx";
-import { effectiveNCtx, fillPercent, isNearLimit } from "../../../lib/chat/context-fill.ts";
+import { effectiveNCtx, fillPercent } from "../../../lib/chat/context-fill.ts";
+import { labelTokens } from "../../../lib/chat/context-ladder.ts";
+import { useContextLadder } from "../../../hooks/useContextLadder.ts";
+import {
+  type BannerVariant,
+  consecutiveFullFailures,
+  dismissBanner,
+  resolveBannerVariant,
+} from "../../../lib/chat/banner-variant.ts";
+import { talentDefinitions } from "../../../lib/agent/registry.ts";
 import { pickableModels } from "../../../lib/chat/models.ts";
 import { useModelReady } from "../../../hooks/useModelReady.ts";
 import { GenerationSettingsSheet } from "../../../components/chat/GenerationSettingsSheet.tsx";
@@ -100,6 +109,7 @@ export default function ChatRoute() {
   }, [deepLinkPrompt, setDraft]);
   const connection = useChatStore((s) => s.connection);
   const sending = useChatStore((s) => s.sending);
+  const stopping = useChatStore((s) => s.stopping);
   const loadSession = useChatStore((s) => s.loadSession);
   const checkHealth = useChatStore((s) => s.checkHealth);
   const send = useChatStore((s) => s.send);
@@ -170,7 +180,10 @@ export default function ChatRoute() {
   // Adapter rows for the list: date headers + group/avatar/status flags.
   // Memoized so the list's row-count follow effect can't retrigger on
   // identity churn — a re-render alone must never move the list.
-  const rows = useMemo(() => buildRows(visible, { sending }), [visible, sending]);
+  const rows = useMemo(
+    () => buildRows(visible, { sending, stopping }),
+    [visible, sending, stopping],
+  );
   const matchLabel =
     searchOpen && query.trim() !== ""
       ? `${visible.length} of ${messages.length}`
@@ -211,49 +224,130 @@ export default function ChatRoute() {
 
   const motionDuration = MOTION_DURATION_MS;
 
-  // ---- G1: the context-full banner -------------------------------------
+  // ---- The context banner slot -------------------------------------
   // It speaks for the NEWEST assistant turn and nothing else. Scoping it
   // that way makes it self-clearing: keep chatting, answer successfully,
-  // and the banner goes away on its own without a reset rule.
+  // and the banner goes away on its own without a reset rule. Which of
+  // the five variants renders is lib/chat/banner-variant.ts's decision —
+  // the screen only collects the state and draws the answer.
   const newestAssistant = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       if (messages[i].role === "assistant") return messages[i];
     }
     return null;
   }, [messages]);
-  const contextFullTurnId =
-    newestAssistant?.outcome?.contextFull === true ? newestAssistant.id : null;
-  // Dismissal is remembered PER TURN, so it survives a re-render but not
-  // the next context-full turn -- which is a different problem and needs
-  // saying again.
-  const [dismissedTurnId, setDismissedTurnId] = useState<string | null>(null);
+  // Dismissals are held PER SESSION and cleared when each turn is
+  // recorded, so a banner stays gone for exactly one turn and the next
+  // occurrence of the same problem speaks again.
+  const [dismissed, setDismissed] = useState<Set<BannerVariant>>(
+    () => new Set<BannerVariant>(),
+  );
+  const turnCount = messages.length;
+  useEffect(() => {
+    setDismissed(new Set<BannerVariant>());
+  }, [turnCount]);
   const [ladderOpen, setLadderOpen] = useState(false);
-  const contextFullShowing = contextFullTurnId !== null && contextFullTurnId !== dismissedTurnId;
   const nCtx = useInference((s) => s.nCtx);
-  const setNCtx = useInference((s) => s.setNCtx);
+  // The same ladder the sheet draws, so the banner's more-room action and
+  // the sheet's picker can never disagree about what fits.
+  const ladder = useContextLadder(nCtx);
   // C4: the window this thread divides by. Local = configured nCtx;
   // remote = the C7 /props contextLength, which is unknown until a probe
   // lands — and an unknown window never warns and never fills.
+  const isRemote = activeProviderType === "remote";
   const windowSize = effectiveNCtx({
-    isRemote: activeProviderType === "remote",
+    isRemote,
     localNCtx: nCtx,
     remoteContextLength:
       activeProviderType === "remote" && activeModelId?.startsWith("remote-")
         ? remoteCaps[activeModelId.slice("remote-".length)]?.contextLength
         : undefined,
   });
-  // The pre-failure warning (C4): 05's corrected occupancy against that
-  // window, same per-turn dismissal as the full banner, and full-banner
-  // precedence — an already-full thread keeps today's banner, never the
-  // softer one in its place.
-  const nearLimitTurnId =
-    contextFullTurnId === null &&
-    newestAssistant !== null &&
-    isNearLimit(newestAssistant.usage?.promptTokens, windowSize)
-      ? newestAssistant.id
-      : null;
-  const bannerTurnId = contextFullTurnId ?? nearLimitTurnId;
-  const bannerShowing = bannerTurnId !== null && bannerTurnId !== dismissedTurnId;
+  // Every HTML preview surface in the conversation. The soft-cap notice
+  // reads this and NO model state, which is why it can appear with no
+  // model loaded.
+  const htmlPreviewCount = useMemo(() => {
+    let n = 0;
+    for (const m of messages) {
+      for (const step of m.steps ?? []) {
+        if (step.tool === "render_html" && step.ok !== false) n += 1;
+      }
+    }
+    return n;
+  }, [messages]);
+  // The turn's LAST tool, when its definition declares a recommended
+  // context cost. No talent declares one yet, so this reads undefined
+  // until one does — the field is opt-in precisely so that day changes
+  // nothing else.
+  const heavyToolName = useMemo(() => {
+    const steps = newestAssistant?.steps ?? [];
+    let maxTokens = -1;
+    let maxTool: string | undefined;
+    for (const step of steps) {
+      const def = talentDefinitions().find(
+        (t) => t.function.name === step.tool,
+      );
+      if (!def) continue;
+      const tokens = def.function.recommendedContextTokens;
+      if (tokens !== undefined && tokens > maxTokens) {
+        maxTokens = tokens;
+        maxTool = def.function.name;
+      }
+    }
+    return maxTool;
+  }, [newestAssistant]);
+  const fullFailures = useMemo(
+    () =>
+      consecutiveFullFailures(
+        messages
+          .filter((m) => m.role === "assistant")
+          .map((m) => m.outcome ?? {}),
+      ),
+    [messages],
+  );
+  const banner = useMemo(
+    () =>
+      resolveBannerVariant(
+        newestAssistant
+          ? {
+              ...(newestAssistant.outcome?.contextFull !== undefined
+                ? { contextFull: newestAssistant.outcome.contextFull }
+                : {}),
+              ...(newestAssistant.usage !== undefined
+                ? {
+                    promptTokens: newestAssistant.usage.promptTokens,
+                    completionTokens: newestAssistant.usage.completionTokens,
+                  }
+                : {}),
+              ...(newestAssistant.outcome?.stoppedEarly !== undefined
+                ? { stoppedEarly: newestAssistant.outcome.stoppedEarly }
+                : {}),
+              content: newestAssistant.text,
+            }
+          : undefined,
+        {
+          windowSize,
+          isRemote,
+          modelLoaded: activeModelId !== null,
+          htmlPreviewCount,
+          dismissed,
+          consecutiveFullFailures: fullFailures,
+          ...(heavyToolName !== undefined ? { heavyToolName } : {}),
+        },
+      ),
+    [
+      newestAssistant,
+      windowSize,
+      isRemote,
+      activeModelId,
+      htmlPreviewCount,
+      dismissed,
+      fullFailures,
+      heavyToolName,
+    ],
+  );
+  const bannerShowing = banner.variant !== "none";
+  const contextFullShowing = banner.variant === "context-full";
   const navigation = useNavigation<{ openDrawer: () => void }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -322,6 +416,15 @@ export default function ChatRoute() {
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
 
+  // SafeAreaView comes from react-native-safe-area-context, which Uniwind
+  // does NOT patch: its className prop is ignored outright (Uniwind's own
+  // SafeAreaView wraps React Native's, reachable only via uniwind/components).
+  // So this box is styled with `style`, per the Style Exception List, and
+  // `flex: 1` is load-bearing rather than decoration: without it the box
+  // shrink-wraps its content and every `absolute bottom-0` inside it (the
+  // composer, the overlay group) resolves against a box that no longer
+  // reaches the bottom of the screen -- which put the composer at the top of
+  // the screen, on top of the header.
   return (
     <SafeAreaView
       edges={["top", "left", "right"]}
@@ -578,18 +681,24 @@ export default function ChatRoute() {
           />
   {/* `?? 0` is dead-in-practice: a FULL banner implies the local engine
       (remote hardcodes contextFull: false) so windowSize is nCtx there,
-      and the warning branch only renders when isNearLimit already saw a
-      real window. fillPercent(…, 0) would read 0 rather than divide blind. */}
+      and the warning branch only renders when the resolver already saw
+      a real window. fillPercent(…, 0) would read 0 rather than divide
+      blind. */}
   {bannerShowing && (
     <ContextFullBanner
-      variant={contextFullTurnId !== null ? "full" : "warning"}
+      variant={banner.variant}
+      copy={banner.copy}
+      heavyToolName={banner.heavyToolName}
       fill={fillPercent(newestAssistant?.usage?.promptTokens, windowSize ?? 0)}
       onMoreRoom={() => setLadderOpen(true)}
+      // The banner keeps the local/remote rule for this action; we add only
+      // the ladder's verdict, so it is absent when nothing larger fits.
+      canIncrease={banner.copy !== "remote" && ladder.anyFits}
       onNewChat={() => {
-        setDismissedTurnId(bannerTurnId);
+        setDismissed(dismissBanner(dismissed, banner.variant));
         void newConversation();
       }}
-      onDismiss={() => setDismissedTurnId(bannerTurnId)}
+      onDismiss={() => setDismissed(dismissBanner(dismissed, banner.variant))}
     />
   )}
         {ready && emptyState && (
@@ -603,13 +712,20 @@ export default function ChatRoute() {
       <ContextLadderSheet
         visible={ladderOpen}
         currentNctx={nCtx}
-        onPick={(n) => {
-          // The engine reloads on the NEXT send: EngineManager keys its
-          // slot on n_ctx, so a changed value transparently releases and
-          // re-inits. No explicit reload needed.
-          setNCtx(n);
-          setLadderOpen(false);
-          setDismissedTurnId(bannerTurnId);
+        onResult={(success, tokens) =>
+          setChatWarning({
+            message: success
+              ? `Context set to ${labelTokens(tokens)}. The model reloaded.`
+              : `Couldn't load ${labelTokens(tokens)} — back at ${labelTokens(nCtx)} context.`,
+            severity: success ? "warning" : "error",
+            recoverable: false,
+          })
+        }
+        onNewChat={() => {
+          if (banner.variant !== "none") {
+            setDismissed(dismissBanner(dismissed, banner.variant));
+          }
+          void newConversation();
         }}
         onClose={() => setLadderOpen(false)}
       />

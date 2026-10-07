@@ -59,6 +59,11 @@ export interface TurnTimings {
   tokensPerSecond: number;
   /** Per-token generation cost, ms. */
   msPerToken: number;
+  /** Prompt throughput, tokens/s — the reading that explains a slow
+   *  first token. OPTIONAL, not zero-defaulted, so "the engine did not
+   *  report it" (most remote endpoints) stays distinguishable from "the
+   *  engine measured zero". The footer omits the segment when absent. */
+  promptTokensPerSecond?: number;
 }
 
 /** How a turn ENDED, distinct from what it said. Persisted with the turn
@@ -67,12 +72,27 @@ export interface TurnOutcomeFlags {
   /** The reply could not fit the context window. Drives the context-full
    *  banner and its "More room" recovery. */
   contextFull?: boolean;
+  /** The engine declared a length stop. A remote reply that stopped for
+   *  any OTHER reason, mid-sentence and long, is the cut-off notice's
+   *  subject (lib/chat/banner-variant.ts). */
+  stoppedEarly?: boolean;
   /** The user pressed Stop, so this reply is a deliberate stopping point
    *  rather than a finished answer. */
   interrupted?: boolean;
   /** Present only when the engine reports timings. */
   timings?: TurnTimings;
 }
+
+/** One segment of an assistant turn, in the order the model produced it.
+ *
+ * Tool blocks reference their call by `stepId` — the same id the
+ * turn's flat `steps` list carries — so the block list never copies
+ * step data: one copy, and the order is the only thing blocks add.
+ */
+export type TurnBlock =
+  | { kind: "reasoning"; text: string }
+  | { kind: "text"; text: string }
+  | { kind: "tool"; stepId: string };
 
 export interface ChatMessage {
   id: string;
@@ -94,6 +114,10 @@ export interface ChatMessage {
   outcome?: TurnOutcomeFlags;
   /** True while tokens are still arriving. */
   streaming?: boolean;
+  /** Ordered blocks (reasoning/text/tool) recorded at write time, when
+   * the turn was produced after blocks existed. Absent on older turns —
+   * those are read through blocksOf, which splits the legacy fields. */
+  blocks?: TurnBlock[];
 }
 
 /** One row of the session list, owned by the local Store (ADR-0012).

@@ -51,8 +51,8 @@ describe("message list stability", () => {
     );
     assert.doesNotMatch(list, /renderBubble/, "rows replaced the message-only render prop");
     const chat = read("app/(drawer)/(tabs)/chat.tsx");
-    assert.match(chat, /buildRows\(visible, \{ sending \}\)/);
-    assert.match(chat, /useMemo\(\(\) => buildRows/, "rows memoized: new identity must not retrigger follow");
+    assert.match(chat, /buildRows\(visible, \{ sending, stopping \}\)/);
+    assert.match(chat, /useMemo\(\s*\(\) => buildRows/, "rows memoized: new identity must not retrigger follow");
     assert.match(chat, /<DateHeader label=\{row\.label\} \/>/);
     const item = read("components/chat/MessageListItem.tsx");
     // One row in, not three flags: the adapter's flags travel together.
@@ -93,6 +93,33 @@ describe("message list stability", () => {
       /useReducedMotion|ReducedMotion/,
       "dots always animate like PocketPal: no OS reduce-motion branch",
     );
+  });
+
+it("renders all three user-row delivery states", () => {
+    // Source assertion, not a render: the only claim is which JSX branch a
+    // status takes, and the node runner has no React Native to render it.
+    // The state values themselves are tested as logic in chat-rows.test.ts.
+    const item = read("components/chat/MessageListItem.tsx");
+    assert.match(item, /status === "sending"/, "sending keeps the spinner");
+    assert.match(item, /status === "failed"/, "failed takes its own branch");
+    assert.match(item, /<CircleAlert[^>]*color=\{colors\.error\}/, "Lucide, error token");
+    // No emoji or text glyphs standing in for the icon (repo icon rule).
+    assert.doesNotMatch(item, /[\u{1F300}-\u{1FAFF}\u{2700}-\u{27BF}]/u);
+    // The assistant-side error card is ours and stays: parity here is the
+    // row's status, not a downgrade of LiAI's tap-to-retry card.
+    assert.match(item, /message\.error/);
+    assert.match(item, /tap to retry/);
+  });
+
+  it("windows the render pass at PocketPal's caps", () => {
+    // PocketPal ChatView.tsx:997,1001 — initialNumToRender:10,
+    // maxToRenderPerBatch:6 (audit item 14, ticket 10).
+    // These are FlatList virtualization knobs: they only mean anything to a
+    // mounted RN list, so their behaviour is unreachable from `node --test`
+    // — pin the values by source assertion instead of faking a render.
+    const list = read("components/chat/MessageList.tsx");
+    assert.match(list, /initialNumToRender=\{10\}/);
+    assert.match(list, /maxToRenderPerBatch=\{6\}/);
   });
 
   it("tracks the end with STICK/LEAVE hysteresis from one source", () => {

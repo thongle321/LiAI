@@ -271,6 +271,60 @@ describe("keyboard avoidance", () => {
     assert.doesNotMatch(input, /className=\{`[^`]*\bpx-5\b/);
   });
 
+  it("the screen box the composer is anchored to still fills the screen", () => {
+    // The bug this file was extended for. The chat route's SafeAreaView comes
+    // from react-native-safe-area-context, and Uniwind does NOT patch that
+    // package: uniwind/components/SafeAreaView wraps React Native's own
+    // SafeAreaView and is only reachable by importing from "uniwind/components".
+    // So a className on this element is accepted by TypeScript and then
+    // ignored at runtime.
+    //
+    // A review rule ("prefer Uniwind over inline styles") was applied here
+    // without checking the Style Exception List, which exempts SafeAreaView by
+    // name. Swapping `style={{ flex: 1 }}` for `className="flex-1"` therefore
+    // DELETED flex: 1 rather than restating it: the box went from filling the
+    // screen to shrink-wrapping its content, and every `absolute bottom-0`
+    // inside it - the composer and the overlay group - stopped resolving
+    // against the bottom of the screen. Reported as the composer sitting at the
+    // TOP of the screen, on top of the header.
+    //
+    // Nothing else in the suite caught it, because the composer's own geometry
+    // is asserted from the other direction (`bottom-0` is present) and no test
+    // asked whether the box it is anchored to reaches the screen edge.
+    const chat = read("app/(drawer)/(tabs)/chat.tsx");
+
+    assert.match(
+      chat,
+      /import \{ SafeAreaView, useSafeAreaInsets \} from "react-native-safe-area-context"/,
+      "the chat route must import SafeAreaView from safe-area-context; importing it from uniwind/components instead would change which component this is",
+    );
+    assert.doesNotMatch(
+      chat,
+      /from "uniwind\/components/,
+      "Uniwind's SafeAreaView is a different component (it wraps RN's, not safe-area-context's)",
+    );
+
+    // Scoped to the opening tag: the file is full of classNames that ARE
+    // correct on Uniwind-patched components, so a file-wide scan would be
+    // noise rather than a guard.
+    const open = chat.indexOf("<SafeAreaView");
+    const close = chat.indexOf(">", open);
+    assert.notEqual(open, -1, "the chat route must render a SafeAreaView");
+    assert.notEqual(close, -1, "the SafeAreaView opening tag must close");
+    const tag = chat.slice(open, close);
+
+    assert.doesNotMatch(
+      tag,
+      /className=/,
+      "safe-area-context's SafeAreaView ignores className, so styling it with one silently drops the style",
+    );
+    assert.match(
+      tag,
+      /style=\{\{ flex: 1/,
+      "flex: 1 is load-bearing: without it the box shrink-wraps and every absolute bottom-0 inside it (the composer) lands at the top of the screen",
+    );
+  });
+
   it("the composer rises by the FULL keyboard height, not height minus the inset", () => {
     // The actual bug. The composer is `absolute inset-x-0 bottom-0`, so its
     // bottom edge IS the bottom of the screen and it has to rise by

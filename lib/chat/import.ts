@@ -31,6 +31,7 @@
 
 import type { StoredTurn } from "./session-store.ts";
 import { newId } from "./messages.ts";
+import { sanitizeBlocks } from "./blocks.ts";
 import type { AgentStep } from "../../types/chat.ts";
 
 /** Bounds. Deliberately generous -- these exist to stop a hostile or
@@ -48,7 +49,7 @@ const MAX_TOOL_CHARS = 80;
  *  data loss happens. */
 const SUPPORTED_VERSION = 1;
 
-export interface ImportedSession {
+interface ImportedSession {
   title: string;
   pinned: boolean;
   /** StoredTurn, never StoredMessage -- import mints its own ids. */
@@ -157,12 +158,21 @@ function toTurn(
   let droppedSteps = 0;
   const rawSteps = value.steps;
   const steps: AgentStep[] = [];
+  // Old step id -> fresh id, so the turn's blocks can keep pointing at
+  // their calls. Import ALWAYS mints fresh step ids (the toolRuns table
+  // is global), so without this remap every tool block would dangle.
+  const stepIds = new Map<string, string>();
   if (Array.isArray(rawSteps)) {
     let skippedSteps = 0;
     for (const [i, raw] of rawSteps.slice(0, MAX_STEPS_PER_TURN).entries()) {
       const step = toStep(raw, i);
       if (step === null) skippedSteps += 1;
-      else steps.push(step);
+      else {
+        steps.push(step);
+        if (isRecord(raw) && typeof raw["id"] === "string") {
+          stepIds.set(raw["id"], step.id);
+        }
+      }
     }
     if (rawSteps.length > MAX_STEPS_PER_TURN) {
       skippedSteps += rawSteps.length - MAX_STEPS_PER_TURN;
@@ -177,6 +187,18 @@ function toTurn(
     type,
   };
   if (steps.length > 0) turn.steps = steps;
+  // The additive representation rides the same validation: sanitized,
+  // and tool references remapped onto the fresh step ids above. Without
+  // this, a restore quietly flattens the interleaving the new model
+  // wrote — the exact silent-loss this module exists to prevent.
+  const blocks = sanitizeBlocks(value.blocks);
+  if (blocks !== undefined) {
+    turn.blocks = blocks.map((b) =>
+      b.kind === "tool"
+        ? { kind: "tool", stepId: stepIds.get(b.stepId) ?? b.stepId }
+        : b,
+    );
+  }
   // No image handling: `StoredTurn` has no image field, so export.ts
   // never writes one and an import cannot restore a photo that was never
   // in the file. Inventing one would be data the backup does not contain.

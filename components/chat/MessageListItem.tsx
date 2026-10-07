@@ -10,7 +10,7 @@ import { ActivityIndicator, Image as RNImage, Pressable, Text, View } from "reac
 import type { ReactNode } from "react";
 import { useState } from "react";
 import Animated from "react-native-reanimated";
-import { CheckCheck, Wrench } from "lucide-react-native";
+import { CheckCheck, CircleAlert, Wrench } from "lucide-react-native";
 
 import { APP_NAME } from "../../constants/app.ts";
 
@@ -27,6 +27,8 @@ import {
   usePressFeedback,
 } from "../../lib/motion.ts";
 import type { MessageRow } from "../../lib/chat/rows.ts";
+import { blocksOf, turnText } from "../../lib/chat/blocks.ts";
+import type { AgentStep } from "../../types/chat.ts";
 import { AssistantAvatar } from "./AssistantAvatar.tsx";
 import { MarkdownView } from "./MarkdownView.tsx";
 import { MessageActions } from "./MessageActions.tsx";
@@ -37,6 +39,53 @@ import { ToolErrorBlock } from "./ToolErrorBlock.tsx";
 import { ToolMetricsLine, toolSurfaceFor } from "./toolSurfaces.tsx";
 import { ImageViewer } from "./ImageViewer.tsx";
 import type { PickableModel } from "../../lib/chat/models.ts";
+
+/** One tool block, as a SIBLING of the text bubbles — never nested in
+ * one. THREE-WAY DISPATCH, in this order (G5):
+ *   1. a recorded FAILURE -> error block
+ *   2. a registered renderer for this tool name -> its surface
+ *   3. otherwise -> the "used X" chip
+ * An error must NEVER fall through to the chip or a renderer: that is
+ * how a failed tool came to look like a successful one.
+ *
+ * `ok === false` SPECIFICALLY. Undefined means "never recorded" -- a
+ * row written before the discriminant -- and that is not a failure. */
+function ToolBlock({ step }: { step: AgentStep }) {
+  if (step.ok === false) {
+    return (
+      <View className="w-full">
+        <ToolErrorBlock tool={step.tool} message={step.result ?? ""} />
+        {/* C15: cost belongs under the RESULT, not in the turn footer —
+            per-tool cost must be attributable. */}
+        <ToolMetricsLine metrics={step.metrics} />
+      </View>
+    );
+  }
+  const Renderer = toolSurfaceFor(step.tool);
+  if (Renderer !== undefined) {
+    // No expanded/onToggle here: a surface owns its own open/closed
+    // state and renders it as a collapsed row plus a sheet, exactly as
+    // pocketpal does. Keeping the flag in the bubble would make the
+    // bubble responsible for something it cannot see.
+    return (
+      <View className="w-full">
+        <Renderer step={step} />
+      </View>
+    );
+  }
+  const metricsText = formatToolMetrics(step.metrics);
+  return (
+    <View className="flex-row items-center gap-1 self-start rounded-full border border-border bg-surface-2 px-2 py-0.5">
+      <Wrench size={11} color={colors.secondaryText} />
+      <Text className="font-sans text-caption text-secondary-text">
+        {step.tool}
+        {/* PocketPal's chip suffix: same formatter, so the chip and the
+            footer can never disagree. */}
+        {metricsText === null ? "" : ` · ${metricsText}`}
+      </Text>
+    </View>
+  );
+}
 
 export function MessageListItem({
   row,
@@ -73,6 +122,13 @@ export function MessageListItem({
   // Previews and actions target settled turns: a half-streamed URL would
   // trigger a garbage preview fetch, and actions need final text.
   const settled = message.streaming !== true;
+  // Copy and read-aloud always mean the whole reply, never one segment.
+  const wholeText = turnText(message);
+  // The row renders as sibling blocks in the order the model produced
+  // them. A turn written by the previous model reads through the
+  // splitter, so its reasoning, whole reply and tools land the same way.
+  const blocks = blocksOf(message);
+  const stepById = new Map((message.steps ?? []).map((s) => [s.id, s]));
   // Which attached photo is open, or null. The image sits OUTSIDE
   // withMenu, so tapping it opens the viewer while the bubble's own
   // long-press still opens the menu.
@@ -88,7 +144,7 @@ export function MessageListItem({
   // One definition, so the two call sites cannot drift apart.
   const withMenu = (bubble: ReactNode) => (
     <MessageMenu
-      text={message.text}
+      text={wholeText}
       settled={settled}
       role={message.role}
       canRun={canRun}
@@ -161,8 +217,17 @@ export function MessageListItem({
               <Text className="font-sans text-caption text-secondary-text">
                 {formatTime(message.at)}
               </Text>
+              {/* Three states, one row. The error icon is the row's own
+                  record that this question never landed -- the assistant
+                  turn below still owns the tap-to-retry card. */}
               {status === "sending" ? (
                 <ActivityIndicator size="small" color={colors.secondaryText} />
+              ) : status === "failed" ? (
+                <CircleAlert
+                  size={12}
+                  color={colors.error}
+                  accessibilityLabel="Failed to send"
+                />
               ) : (
                 <CheckCheck size={12} color={colors.secondaryText} />
               )}
@@ -185,82 +250,41 @@ export function MessageListItem({
             </Text>
           </View>
         )}
-        {message.reasoning ? (
-          <ReasoningBlock
-            text={message.reasoning}
-            autoCollapse={settled || message.text.trim() !== ""}
-          />
-        ) : null}
         {withMenu(
-          <View
-            className={`border border-border bg-surface-1 px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-tl-sm"}`}
-          >
-            <MarkdownView text={message.text} />
-            {settled && <LinkPreviewCard text={message.text} />}
-            {message.steps !== undefined && message.steps.length > 0 && (
-              // One settled chip style: a step is only ever written after
-              // the call finished, so the old "running" variant had no
-              // writer. The key is the row id, not the array index.
-              <View className="mt-2 flex-row flex-wrap items-center gap-2">
-                {message.steps.map((step) => {
-                  // THREE-WAY DISPATCH, in this order (G5):
-                  //   1. a recorded FAILURE -> error block
-                  //   2. a registered renderer for this tool name -> its surface
-                  //   3. otherwise -> the "used X" chip
-                  // An error must NEVER fall through to the chip or a
-                  // renderer: that is how a failed tool came to look like
-                  // a successful one.
-                  //
-                  // `ok === false` SPECIFICALLY. Undefined means "never
-                  // recorded" -- a row written before the discriminant --
-                  // and that is not a failure.
-                  if (step.ok === false) {
-                    return (
-                      <View key={step.id} className="w-full">
-                        <ToolErrorBlock tool={step.tool} message={step.result ?? ""} />
-                        {/* C15: cost belongs under the RESULT, not in
-                            the turn footer — per-tool cost must be
-                            attributable. */}
-                        <ToolMetricsLine metrics={step.metrics} />
-                      </View>
-                    );
-                  }
-                  const Renderer = toolSurfaceFor(step.tool);
-                  if (Renderer !== undefined) {
-                    // No expanded/onToggle here: a surface owns its own
-                    // open/closed state and renders it as a collapsed row
-                    // plus a sheet, exactly as pocketpal does. Keeping the
-                    // flag in the bubble would make the bubble responsible
-                    // for something it cannot see.
-                    return (
-                    <View key={step.id} className="w-full">
-                      <Renderer step={step} />
-                    </View>
-                  );
-                  }
-                  const metricsText = formatToolMetrics(step.metrics);
-                  return (
-                    <View
-                      key={step.id}
-                      className="flex-row items-center gap-1 rounded-full border border-border bg-surface-2 px-2 py-0.5"
-                    >
-                      <Wrench size={11} color={colors.secondaryText} />
-                      <Text className="font-sans text-caption text-secondary-text">
-                        {step.tool}
-                        {/* PocketPal's chip suffix: same formatter, so
-                            the chip and the footer can never disagree. */}
-                        {metricsText === null ? "" : ` · ${metricsText}`}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-            )}
+          <View className="gap-2">
+            {blocks.map((block, index) => {
+              if (block.kind === "reasoning") {
+                return (
+                  <ReasoningBlock
+                    key={`reasoning-${index}`}
+                    text={block.text}
+                    autoCollapse={settled || wholeText.trim() !== ""}
+                  />
+                );
+              }
+              if (block.kind === "text") {
+                return (
+                  <View
+                    key={`text-${index}`}
+                    className={`border border-border bg-surface-1 px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-tl-sm"}`}
+                  >
+                    <MarkdownView text={block.text} />
+                    {settled && <LinkPreviewCard text={block.text} />}
+                  </View>
+                );
+              }
+              // A tool block resolves to its step by id; a dangling
+              // reference (a step the store skipped) renders nothing
+              // rather than guessing a surface.
+              const step = stepById.get(block.stepId);
+              if (step === undefined) return null;
+              return <ToolBlock key={step.id} step={step} />;
+            })}
           </View>,
         )}
         {onRegenerate !== null && settled && (
           <MessageActions
-            text={message.text}
+            text={wholeText}
             usage={message.usage}
             outcome={message.outcome}
             contextBannerVisible={contextBannerVisible}

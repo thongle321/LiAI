@@ -296,7 +296,9 @@ describe("display seam", () => {
     const markdown = item.indexOf("<MarkdownView");
     assert.ok(block > 0, "MessageListItem renders ReasoningBlock");
     assert.ok(block < markdown, "reasoning renders above the answer");
-    assert.match(item, /text=\{message\.reasoning\}/);
+    // The reasoning block receives its text from the block (which for
+    // legacy turns comes from message.reasoning via blocksOf).
+    assert.match(item, /text=\{block\.text\}/);
   });
 
   it("collapses the block once the answer exists", () => {

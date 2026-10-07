@@ -17,6 +17,7 @@ import { createSendSlice, multimodalAvailable } from "./send.ts";
 import { createSessionsSlice } from "./sessions.ts";
 import { createDraftSlice } from "./draft.ts";
 import type { ChatCtx, ChatDeps, ChatState, TurnRunner } from "./types.ts";
+import { createToolTokenCounter } from "../../lib/chat/tool-token-count.ts";
 import { selectEngineSource, type EngineSource } from "../../lib/inference/engine.ts";
 import { EngineManager } from "../../lib/inference/manager.ts";
 import { projectorPathForFileName } from "../../lib/inference/mmproj.ts";
@@ -71,6 +72,29 @@ export async function defaultGetStore(): Promise<SessionStore | null> {
   } catch {
     return null;
   }
+}
+
+/** Reload the local model at the CURRENT inference settings, now.
+ *
+ *  `EngineManager.ensure()` keys the slot on n_ctx, so changing nCtx alone
+ *  would reload on the NEXT turn — which is the wrong moment to discover
+ *  that the new size cannot be loaded. The context ladder calls this right
+ *  after setting the size, so a failure is caught while the user is still
+ *  looking at the sheet.
+ *
+ *  Throws on a failed load, and leaves the slot EMPTY in that case (ensure()
+ *  drops it before loading), which is why the caller re-initialises. */
+export async function reloadLocalEngine(): Promise<void> {
+  const source = await defaultEngineSource();
+  // No source means no model is selected — nothing to reload, and the
+  // caller's try/catch must not fire over a state it cannot fix.
+  if (!source) return;
+  await getManager().ensure(
+    source,
+    source.kind === "local"
+      ? await projectorPathForFileName(source.fileName)
+      : undefined,
+  );
 }
 
 /** One process-wide engine slot (local context cached by file). */
@@ -361,7 +385,7 @@ async function defaultAddGenerationPrompt(): Promise<boolean | undefined> {
 
 /** Default on-device turn: engine slot + agent loop + persisted turns. */
 function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner {
-  return (text, paths, onToken) => {
+  return (text, paths, onToken, onReasoning, onToolStart, onToolDelta) => {
     const runTurn = createTurnRunner({
       ensureEngine: async (source: EngineSource) =>
         // The projector rides the same resolution the image gate uses
@@ -388,7 +412,7 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
     getSampler: (sid) => defaultSampler(sid),
       saveImage: (uri: string) => defaultSaveImage(uri),
     });
-    return runTurn(text, paths, onToken);
+    return runTurn(text, paths, onToken, onReasoning, onToolStart, onToolDelta);
   };
 }
 
@@ -414,6 +438,8 @@ releaseEngine: () => {
       }),
     active: { handle: null },
     streamGen: 0,
+    stoppingGen: null,
+    toolTokens: createToolTokenCounter(),
   };
   return create<ChatState>()((set, get) => ({
     messages: [],

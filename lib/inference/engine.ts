@@ -77,6 +77,13 @@ export interface ToolDefinition {
     name: string;
     description: string;
     parameters: Record<string, unknown>;
+    /** This talent's RECOMMENDED context cost, in tokens. OPTIONAL and
+     *  absent by default: a definition that does not declare one is not
+     *  heavy, so no existing tool changes behaviour. When present it is
+     *  what lets the context-full banner name the tool that needs the
+     *  most room. Not sent on the wire — the shape above is what the
+     *  provider sees. */
+    recommendedContextTokens?: number;
   };
 }
 

@@ -27,8 +27,11 @@ export interface MessageRow {
   showAvatar: boolean;
   /** Newest turn while tokens arrive: the pending row's anchor. */
   isActiveRun: boolean;
-  /** User-turn delivery state; the error card owns error turns instead. */
-  status: "sending" | "sent";
+  /** User-turn delivery state. `failed` when the turn's own reply carries
+   * an error: the store records a failed send on the assistant stub, and
+   * retry() clears it before rerunning. The assistant-side tap-to-retry
+   * error card is unaffected — the row only reports the delivery. */
+  status: "sending" | "sent" | "failed";
 }
 
 /** Active-run indicator (PocketPal PendingIndicator): the visual bottom of
@@ -62,13 +65,29 @@ function dayLabel(at: number, now: number): string {
   });
 }
 
+/** One delivery state per user row, in the order it can apply.
+ *
+ * `next` is the turn's own reply: a send that failed left its error there,
+ * so the question never landed. Only the message IMMEDIATELY after counts —
+ * otherwise one failure would smear across every later question. */
+function deliveryStatus(
+  message: ChatMessage,
+  next: ChatMessage | undefined,
+  sendingNow: boolean,
+): MessageRow["status"] {
+  if (message.role !== "user") return "sent";
+  if (sendingNow) return "sending";
+  return next?.error !== undefined ? "failed" : "sent";
+}
+
 /** Rows for the list: a date header opening each day, then its turns. */
 export function buildRows(
   messages: ChatMessage[],
-  opts?: { now?: number; sending?: boolean },
+  opts?: { now?: number; sending?: boolean; stopping?: boolean },
 ): ChatRow[] {
   const now = opts?.now ?? Date.now();
   const sending = opts?.sending ?? false;
+  const stopping = opts?.stopping ?? false;
   const rows: ChatRow[] = [];
   let lastDay = "";
   messages.forEach((message, index) => {
@@ -89,13 +108,16 @@ export function buildRows(
       grouped,
       showAvatar: message.role === "assistant" && !grouped,
       isActiveRun: isLast && message.streaming === true,
-      status: sending && isLast && message.role === "user" ? "sending" : "sent",
+      status: deliveryStatus(message, next, sending && isLast),
     });
   });
   // The pending row anchors on the active run, not on a second read of
   // the messages: one predicate, or the two disagree about what streams.
+  // While a stopped turn unwinds nothing is streaming, but the row must
+  // still show — the stopping flag keeps it mounted (ticket 03).
   const tail = rows[rows.length - 1];
-  if (tail !== undefined && tail.kind === "message" && tail.isActiveRun) {
+  const activeRun = tail !== undefined && tail.kind === "message" && tail.isActiveRun;
+  if (activeRun || stopping) {
     rows.push({ kind: "pending", id: "pending" });
   }
   return rows;

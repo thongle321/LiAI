@@ -12,11 +12,19 @@ import {
   makeDirectoryAsync,
   deleteAsync,
   getInfoAsync,
+  getFreeDiskStorageAsync,
   documentDirectory,
+  FileSystemSessionType,
   type DownloadResumable,
   type DownloadProgressData,
 } from "expo-file-system/legacy";
 import type { DownloadJob } from "../types/models.ts";
+import {
+  describeHttpFailure,
+  isRetryableStatus,
+  MAX_ATTEMPTS,
+  retryAfterMs,
+} from "./models/http-retry.ts";
 
 export interface DownloadProgressCallback {
   (job: DownloadJob): void;
@@ -31,6 +39,17 @@ function getModelsDirectoryPath(): string {
   return `${documentDirectory ?? ""}models/`;
 }
 
+/** How often the free-space poll runs during a live transfer. Slow on
+ *  purpose (PocketPal's useStorageCheck.ts:20-24): this is a backstop, not a
+ *  progress signal, and a disk stat costs nothing to do rarely. */
+const SPACE_CHECK_MS = 10_000;
+
+/** Backoff between retry attempts. Unref'd so a pending wait can never hold
+ *  the process open past the transfer it belongs to. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 class ResumableDownloadService {
   private activeDownloads: Map<string, {
     job: DownloadJob;
@@ -41,6 +60,16 @@ class ResumableDownloadService {
 
   /** Last progress mark per job: speed is bytes/dt, refreshed ≥500ms apart. */
   private speedMarks = new Map<string, { at: number; bytes: number; speed: number }>();
+
+  /** Last emit per job, ms. PocketPal parity (DownloadWorker.kt:230-240,
+   *  iOS `progressInterval: 800` at DownloadManager.ts:337): the byte loop,
+   *  not the socket, decides progress frequency. expo throttles its Android
+   *  emitter to 100ms but its iOS one not at all
+   *  (FileSystemLegacyModule.swift:265 fires sendEvent per didWriteData), so
+   *  the flood lands in JS unthrottled — thousands of object spreads a
+   *  second, which saturates the JS thread and lags every screen. Gating
+   *  here is the one place every tick passes through. */
+  private lastEmit = new Map<string, number>();
 
   /** Jobs the user is actively cancelling. expo's cancelAsync() pauses the
    * in-flight task, so its downloadAsync() resolves null and would report
@@ -60,6 +89,95 @@ class ResumableDownloadService {
     }
     if (!prev) this.speedMarks.set(jobId, { at: now, bytes: totalBytes, speed: 0 });
     return prev?.speed ?? 0;
+  }
+
+  /** PocketParity: nothing downstream can ask for progress faster than this,
+   *  so subscribers stay cheap enough to sit on top of the whole store. */
+  private static readonly EMIT_MS = 800;
+
+  /** Drop the per-download bookkeeping a terminal job no longer needs. */
+  private forget(jobId: string): void {
+    this.speedMarks.delete(jobId);
+    this.lastEmit.delete(jobId);
+  }
+
+  /** Live free-space poll while bytes are moving. PocketPal parity:
+   *  useStorageCheck.ts:20-24, :88-92 — a slow timer of its own, never a
+   *  per-tick disk read. The pre-flight check in startSpecDownload answers
+   *  "can this fit at all"; this answers "is it still fitting", which is a
+   *  different question when a 4 GB pull meets a 4.1 GB phone. */
+  private spaceWatch: ReturnType<typeof setInterval> | null = null;
+
+  private startSpaceWatch(): void {
+    if (this.spaceWatch) return;
+    this.spaceWatch = setInterval(() => {
+      void this.checkFreeSpace();
+    }, SPACE_CHECK_MS);
+  }
+
+  private stopSpaceWatchIfIdle(): void {
+    if (!this.spaceWatch) return;
+    if (this.getAllJobs().some((j) => j.status === "downloading")) return;
+    clearInterval(this.spaceWatch);
+    this.spaceWatch = null;
+  }
+
+  private async checkFreeSpace(): Promise<void> {
+    const live = this.getAllJobs().filter((j) => j.status === "downloading");
+    if (live.length === 0) {
+      this.stopSpaceWatchIfIdle();
+      return;
+    }
+    let free: number;
+    try {
+      free = await getFreeDiskStorageAsync();
+    } catch {
+      // Unknown free space: the transfer reports the truth, as pre-flight does.
+      return;
+    }
+    if (!Number.isFinite(free)) return;
+    for (const job of live) {
+      const remaining = job.totalBytes - job.downloadedBytes;
+      // The partial is kept, so freeing space and tapping Resume continues
+      // from here rather than starting the gigabytes again.
+      if (remaining > 0 && free < remaining) {
+        await this.failJob(
+          job.id,
+          "Not enough storage space to finish this download — free some up, then Resume",
+        );
+      }
+    }
+  }
+
+  /** Terminal failure that keeps the partial on disk, for the cases where
+   *  resuming is still the right story (unlike cancel, which abandons). */
+  private async failJob(jobId: string, message: string): Promise<void> {
+    const entry = this.activeDownloads.get(jobId);
+    if (!entry) return;
+    this.forget(jobId);
+    if (entry.task) {
+      // pauseAsync() resolves the in-flight downloadAsync() to null, which
+      // lands in reportPaused() and would flip the row from "failed" straight
+      // back to "paused". The cancelling flag is the existing guard for that
+      // (see cancelDownload), so this borrows it rather than adding a second
+      // mechanism.
+      this.cancelling.add(jobId);
+      // Stop the bytes first: a job marked failed while the socket is live
+      // keeps writing into a file the row no longer claims to be tracking.
+      await entry.task.pauseAsync().catch(() => {});
+    }
+    const failedJob: DownloadJob = { ...entry.job, status: "failed", error: message };
+    this.activeDownloads.set(jobId, { ...entry, job: failedJob, task: null });
+    entry.progressCallback(failedJob);
+    entry.completeCallback(failedJob, false);
+    this.callbacks.onProgress?.(failedJob);
+    this.callbacks.onComplete?.(failedJob, false);
+    this.stopSpaceWatchIfIdle();
+    // Cleared only AFTER the terminal event is published: whichever order the
+    // native side resolves the paused downloadAsync() in, reportPaused now
+    // either ran before this block (and "failed" overwrote it) or runs after
+    // (and the flag swallows it). Clearing earlier loses that second case.
+    this.cancelling.delete(jobId);
   }
 
   private callbacks: {
@@ -99,7 +217,7 @@ class ResumableDownloadService {
         status: "failed",
         error: message,
       };
-      this.speedMarks.delete(job.id);
+      this.forget(job.id);
       this.activeDownloads.set(job.id, {
         job: failedJob,
         task: this.activeDownloads.get(job.id)?.task ?? null,
@@ -110,6 +228,7 @@ class ResumableDownloadService {
       onComplete(failedJob, false);
       this.callbacks.onProgress?.(failedJob);
       this.callbacks.onComplete?.(failedJob, false);
+      this.stopSpaceWatchIfIdle();
       throw new Error(message);
     };
 
@@ -120,11 +239,21 @@ class ResumableDownloadService {
 
       // Ensure directory exists (legacy API expects string)
       await makeDirectoryAsync(getModelsDirectoryPath(), { intermediates: true });
+      this.startSpaceWatch();
 
       const handleProgress = (progress: DownloadProgressData) => {
         if (this.cancelling.has(job.id)) return;
         const totalBytes = progress.totalBytesWritten;
         const expected = progress.totalBytesExpectedToWrite;
+        // The throttle, before any allocation. A completed transfer always
+        // gets its last tick through, same guard as the Android emitter's
+        // `|| totalBytesWritten == totalBytesExpectedToWrite`.
+        const now = Date.now();
+        const last = this.lastEmit.get(job.id) ?? 0;
+        if (now - last < ResumableDownloadService.EMIT_MS && totalBytes !== expected) {
+          return;
+        }
+        this.lastEmit.set(job.id, now);
         const progressPercent =
           job.totalBytes > 0 ? Math.round((totalBytes / job.totalBytes) * 100) : 0;
         const updatedJob: DownloadJob = {
@@ -149,7 +278,27 @@ class ResumableDownloadService {
         const next = createDownloadResumable(
           job.downloadUrl,
           destPath,
-          { headers: job.headers },
+          // A 4 GB pull outlives a foreground app. BACKGROUND hands the
+          // transfer to a native session that keeps going when the app is
+          // backgrounded, which is the difference between a download that
+          // finishes and one that dies the moment the user switches apps
+          // (PocketPal's DownloadWorker.kt:33 runs the same idea in a
+          // WorkManager worker).
+          //
+          // Two consequences, both accepted:
+          //  - Progress callbacks STOP while backgrounded and resume on
+          //    foreground (FileSystem.d.ts:161-163). The bar freezes and
+          //    catches up; nothing is lost, and reconcileInterrupted
+          //    re-stats the file if the app was killed outright.
+          //  - The native session retries a dead connection itself rather
+          //    than failing, so the JS retry loop below is the backstop for
+          //    the foreground case, not the primary recovery.
+          //
+          // Android currently ignores sessionType (no handling in
+          // FileSystemLegacyModule.kt), so this buys iOS only today. Passing
+          // it unconditionally costs nothing and picks up Android support
+          // for free if expo adds it.
+          { headers: job.headers, sessionType: FileSystemSessionType.BACKGROUND },
           handleProgress,
           resume,
         );
@@ -178,30 +327,60 @@ class ResumableDownloadService {
         });
         onProgress(pausedJob);
         this.callbacks.onProgress?.(pausedJob);
+        this.stopSpaceWatchIfIdle();
       };
 
-      let result = await startTask(resumeData).downloadAsync();
+      // Retry loop (PocketPal parity: DownloadWorker.kt:285 retries 5xx with
+      // exponential backoff; :145 fails 4xx outright).
+      //
+      // The invariant every branch below defends: after the native writer has
+      // run, the bytes on disk are whatever the server sent — appended onto
+      // the partial when a resume token was used (FileOutputStream(file,
+      // isResume), FileSystemLegacyModule.kt:926-927), and the writer never
+      // checks the status. So a non-2xx body or an ignored Range both leave a
+      // corrupt file, and the only safe move is to delete and re-request.
+      let result: Awaited<ReturnType<DownloadResumable["downloadAsync"]>>;
+      let complete = false;
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        // Only the first attempt may resume. A retry starts clean precisely
+        // because the failed body is already in the file.
+        const usedResume = attempt === 0 && resumeData != null;
+        result = await startTask(usedResume ? (resumeData ?? undefined) : undefined).downloadAsync();
 
-      if (!result) {
-        reportPaused();
-        return;
-      }
-
-      if (resumeData && result.status === 200) {
-        try {
-          await deleteAsync(destPath, { idempotent: true });
-        } catch {
-          // The fresh fetch below reports the truth.
-        }
-        result = await startTask().downloadAsync();
         if (!result) {
           reportPaused();
           return;
         }
+
+        if (usedResume && result.status === 200) {
+          // The server ignored our Range and sent the whole file, which the
+          // writer just APPENDED to the partial. That file is corrupt, so it
+          // goes; the next attempt is fresh (usedResume is false by then) and
+          // costs one attempt, which is honest — it is a second request.
+          await deleteAsync(destPath, { idempotent: true }).catch(() => {});
+          continue;
+        }
+
+        if (result.status === 200 || result.status === 206) {
+          complete = true;
+          break;
+        }
+
+        await deleteAsync(destPath, { idempotent: true }).catch(() => {});
+        if (!isRetryableStatus(result.status) || attempt === MAX_ATTEMPTS - 1) {
+          fail(describeHttpFailure(result.status));
+        }
+        // Throttle or blip: wait as long as the server asked, else our curve.
+        await sleep(retryAfterMs(result.headers, attempt));
+        if (this.cancelling.has(job.id)) return;
       }
 
-      if (result.status !== 200 && result.status !== 206) {
-        fail(`HTTP ${result.status}`);
+      if (!complete || !result) {
+        // Attempts ran out on the ignored-Range refetch. The partial is
+        // already deleted above, so there is nothing to resume and nothing
+        // corrupt left behind.
+        await deleteAsync(destPath, { idempotent: true }).catch(() => {});
+        fail("Download did not complete — tap Retry");
       }
 
       // Trust-but-verify: a short/overlong file must never read completed.
@@ -229,7 +408,7 @@ class ResumableDownloadService {
         downloadedBytes: job.totalBytes,
         resumable: true,
       };
-      this.speedMarks.delete(job.id);
+      this.forget(job.id);
       this.activeDownloads.set(job.id, {
         job: completedJob,
         task,
@@ -240,6 +419,7 @@ class ResumableDownloadService {
       onComplete(completedJob, true);
       this.callbacks.onProgress?.(completedJob);
       this.callbacks.onComplete?.(completedJob, true);
+      this.stopSpaceWatchIfIdle();
     } catch (error) {
       fail(error instanceof Error ? error.message : "Download failed");
     }
@@ -307,6 +487,7 @@ class ResumableDownloadService {
     });
 
     this.callbacks.onProgress?.(resumedJob);
+    this.startSpaceWatch();
 
     try {
       const result = await entry.task.resumeAsync();
@@ -392,8 +573,9 @@ class ResumableDownloadService {
       status: "cancelled",
     };
 
-    this.speedMarks.delete(jobId);
+    this.forget(jobId);
     this.activeDownloads.delete(jobId);
+    this.stopSpaceWatchIfIdle();
     this.callbacks.onProgress?.(cancelledJob);
     this.callbacks.onComplete?.(cancelledJob, false);
   }
@@ -416,8 +598,9 @@ class ResumableDownloadService {
 
   /** Delete a completed/failed/cancelled download from tracking */
   removeJob(jobId: string): void {
-    this.speedMarks.delete(jobId);
+    this.forget(jobId);
     this.activeDownloads.delete(jobId);
+    this.stopSpaceWatchIfIdle();
   }
 }
 

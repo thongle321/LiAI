@@ -39,11 +39,10 @@ function presetFor(modelId: string, presets: PresetModel[]): PresetModel {
   return preset;
 }
 
-/** Min gap between transient progress pushes to the store (~4 fps). The bar
- *  animates smoothly at this rate; the native tick can fire far faster. */
-const PROGRESS_PUSH_MS = 250;
-/** Last push time per model id, so throttle is per-download not global. */
-const progressPushedAt = new Map<string, number>();
+/** Min gap between transient progress pushes to the store. Progress is
+ *  already gated once, at the emitter, in download-service.ts (PocketPal's
+ *  per-byte-loop throttle) — a second gate here was only ever a second
+ *  place to forget one. Progress ticks ride that single gate now. */
 
 export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSlice> = (
   set,
@@ -177,6 +176,9 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
         ? Math.round((partialBytes / activeFile.size) * 100)
         : 0;
     const auth = get().activeHfToken(token) ?? undefined;
+// HF's LFS content id, when we have one: the resume validator below.
+// PresetModelFile has no oid (only HFModelFile does), hence the `in` check.
+const oid: string | undefined = "oid" in file ? file.oid : undefined;
 
     const job: DownloadJob = {
       id: `download-${generateId()}`,
@@ -190,6 +192,13 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
         ...(auth && isHuggingFaceUrl(activeFile.downloadUrl)
           ? { Authorization: `Bearer ${auth}` }
           : {}),
+        // If-Range closes the splice hole: a resume (Range: bytes=N-) against
+        // a repo whose file changed would otherwise append the NEW bytes to
+        // the OLD partial and land on exactly the right length with a wrong
+        // middle. HF answers 200 instead of 206 when the validator fails,
+        // and the service already restarts cleanly on that. Ignored by
+        // servers when no Range is sent, so a fresh download is unaffected.
+        ...(oid ? { "If-Range": oid } : {}),
       },
       destinationPath: `${LegacyFileSystem.documentDirectory}models/${activeFile.name}`,
       status: "downloading",
@@ -236,24 +245,17 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
           error: downloadJob.error,
         });
       }
-      // Throttle the transient push so the bar animates smoothly (~4 fps)
-      // instead of re-rendering every preset card on every native tick.
-      // pocketpal ships the unthrottled version; that is the hotspot.
-      const now = Date.now();
-      const last = progressPushedAt.get(downloadJob.modelId) ?? 0;
-      if (now - last >= PROGRESS_PUSH_MS) {
-        progressPushedAt.set(downloadJob.modelId, now);
-        get().setModelProgress(downloadJob.modelId, {
-          downloadProgress: downloadJob.progress,
-          downloadedBytes: downloadJob.downloadedBytes,
-          totalBytes: downloadJob.totalBytes,
-          speedBytesPerSec: downloadJob.speedBytesPerSec,
-        });
-        // syncDownloadStatus builds a fresh Map and notifies subscribers, so
-        // it rides the same throttle — running it every tick was the last
-        // per-tick store notification.
-        get().syncDownloadStatus();
-      }
+      // One transient push per emitted tick (throttled at the source).
+      get().setModelProgress(downloadJob.modelId, {
+        downloadProgress: downloadJob.progress,
+        downloadedBytes: downloadJob.downloadedBytes,
+        totalBytes: downloadJob.totalBytes,
+        speedBytesPerSec: downloadJob.speedBytesPerSec,
+      });
+      // syncDownloadStatus builds a fresh Map and notifies subscribers, so
+      // it rides the same gate — running it every tick was the last per-tick
+      // store notification.
+      get().syncDownloadStatus();
     });
 
     downloadService.setCompleteCallback((downloadJob, success) => {
@@ -426,7 +428,10 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       try {
         const info = await LegacyFileSystem.getInfoAsync(dir + file.name);
         if (!info.exists || !("size" in info) || typeof info.size !== "number") continue;
-        if (info.size >= file.size) {
+        // `===`, not `>=`: an oversized file is the fingerprint of an error
+      // body appended onto a partial by the native writer, and calling that
+      // "completed" hands the user a corrupt model that loads and misbehaves.
+      if (info.size === file.size) {
           // Whole file on disk but never marked: killed at the finish line.
           get().updateModel(spec.id, {
             downloadStatus: "completed",

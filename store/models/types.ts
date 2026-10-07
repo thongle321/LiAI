@@ -111,7 +111,10 @@ export interface DownloadsSlice {
   /** Start from an already-built spec (interrupted-resume re-entry). */
   startSpecDownload: (
     spec: ModelSpec,
-    file: { name: string; size: number; downloadUrl: string },
+    // `oid` is HF's LFS content id: HFModelFile carries it, PresetModelFile
+    // doesn't. It rides out as If-Range so a resume can never splice two
+    // versions of the same path together.
+    file: { name: string; size: number; downloadUrl: string; oid?: string },
     token?: string,
   ) => Promise<void>;
   /** Resume a killed download from its partial file (manual Resume). */

@@ -51,7 +51,7 @@ function toJobStatus(state: NativeDownload["state"]): DownloadJob["status"] {
  *  model card a live one would. */
 function toJob(record: NativeDownload): DownloadJob {
   return {
-    id: `native-${record.id}`,
+    id: record.id,
     modelId: record.modelId,
     fileName: record.fileName,
     downloadUrl: "",
@@ -129,7 +129,7 @@ export class AndroidDownloadService {
     for (const record of records) {
       // Adopt the native row under the modelId the caller sent, so it joins
       // to the same model card the JS store already holds.
-      this.mirror.set(record.modelId, {
+      this.mirror.set(record.id, {
         ...toJob(record),
       });
       this.seenTerminal.delete(record.id);
@@ -185,7 +185,7 @@ export class AndroidDownloadService {
       headers: job.headers,
     });
 
-    this.mirror.set(job.modelId, job);
+    this.mirror.set(job.id, job);
     this.ensureSubscribed();
     this.beginPolling();
     onProgress({ ...job, status: "downloading" });
@@ -296,8 +296,7 @@ private apply(
     // Terminal is not forgotten. Without this the Room row survives the job,
     // the table grows one entry per download forever, and every cold start
     // re-reads all of it. Fire-and-forget: the mirror is already correct.
-    const nativeId = job?.id.startsWith("native-") ? job.id.slice(7) : undefined;
-    if (nativeId) void this.native?.forgetDownload(nativeId).catch(() => {});
+    if (job) void this.native?.forgetDownload(job.id).catch(() => {});
     if (this.mirror.size === 0) this.stopPolling();
   }
 }

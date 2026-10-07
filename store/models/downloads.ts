@@ -19,7 +19,7 @@ import {
   hfRefFromSearch,
   isHuggingFaceUrl,
 } from "../../lib/models/huggingface";
-import { downloadService, failureCode } from "../../lib/download-service";
+import { platformDownloadService, failureCode } from "../../lib/download-service";
 import { latestJobForModel } from "../../lib/models/download-jobs.ts";
 import { resumeDataForPartial, classifyFileOnDisk } from "../../lib/models/resume-state.ts";
 import { findProjectorFile, pairDownloadStep } from "../../lib/models/vision-pairing.ts";
@@ -101,12 +101,12 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
 
     // One live job per model: double-taps and retries must not stack tasks
     // on the same file (stale entries made resume grab dead jobs and throw).
-    const live = latestJobForModel(downloadService.getAllJobs(), specId);
+    const live = latestJobForModel(platformDownloadService.getAllJobs(), specId);
     if (live && (live.status === "downloading" || live.status === "paused")) return;
-    for (const stale of downloadService
+    for (const stale of platformDownloadService
       .getAllJobs()
       .filter((j) => j.modelId === specId)) {
-      downloadService.removeJob(stale.id);
+      platformDownloadService.removeJob(stale.id);
     }
 
     // Create the spec once; a re-download keeps its existing row.
@@ -233,7 +233,7 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
 
     // The service's callbacks are global (last registered wins); keying each
     // update off the job's own modelId makes re-registration harmless.
-    downloadService.setProgressCallback((downloadJob) => {
+    platformDownloadService.setProgressCallback((downloadJob) => {
       // Persist only on a real status transition (idle->downloading,
       // ->paused, ->failed). Progress bytes go through the transient path so
       // a many-per-second tick never hits AsyncStorage (the models screen
@@ -262,7 +262,7 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
       get().syncDownloadStatus();
     });
 
-    downloadService.setCompleteCallback((downloadJob, success) => {
+    platformDownloadService.setCompleteCallback((downloadJob, success) => {
       const specNow = get().getModel(downloadJob.modelId);
       // Pair handoff (vision-series 01): the MAIN leg finishing while a
       // projector is still missing does NOT complete the model — the
@@ -331,7 +331,7 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
     });
 
     try {
-      await downloadService.startDownload(job, undefined, undefined, resume ?? undefined);
+      await platformDownloadService.startDownload(job, undefined, undefined, resume ?? undefined);
     } catch (error) {
       get().updateModel(specId, {
         downloadStatus: "failed",
@@ -360,18 +360,18 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
   },
 
   pauseDownload: async (jobId) => {
-    await downloadService.pauseDownload(jobId);
+    await platformDownloadService.pauseDownload(jobId);
     get().syncDownloadStatus();
   },
 
   resumeDownload: async (jobId) => {
-    await downloadService.resumeDownload(jobId);
+    await platformDownloadService.resumeDownload(jobId);
     get().syncDownloadStatus();
   },
 
   pauseModelDownload: async (specId) => {
     try {
-      const job = latestJobForModel(downloadService.getAllJobs(), specId);
+      const job = latestJobForModel(platformDownloadService.getAllJobs(), specId);
       if (!job) return;
       await get().pauseDownload(job.id);
     } catch {
@@ -381,7 +381,7 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
 
   resumeModelDownload: async (specId) => {
     try {
-      const job = latestJobForModel(downloadService.getAllJobs(), specId);
+      const job = latestJobForModel(platformDownloadService.getAllJobs(), specId);
       if (job) {
         await get().resumeDownload(job.id);
         return;
@@ -396,7 +396,7 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
     // Cancel, not pause: the service deletes the partial file, so this
     // abandons the download rather than parking it. No fallback resume
     // path exists on purpose — there is nothing left on disk to resume.
-    const job = latestJobForModel(downloadService.getAllJobs(), specId);
+    const job = latestJobForModel(platformDownloadService.getAllJobs(), specId);
     if (!job) return;
     await get().cancelDownload(job.id);
   },
@@ -518,13 +518,13 @@ if (!info.exists || !("size" in info) || typeof info.size !== "number") continue
   },
 
   cancelDownload: async (jobId) => {
-    const job = downloadService.getJob(jobId);
+    const job = platformDownloadService.getJob(jobId);
     // Reset AFTER the service resolves, not before: the service's terminal
     // "cancelled" event carries the last known byte count, so an early reset
     // was immediately overwritten and left a stale 40% on the row. Awaiting
     // first also keeps the card on its real state while the abort is in
     // flight, then it snaps straight to Download.
-    await downloadService.cancelDownload(jobId);
+    await platformDownloadService.cancelDownload(jobId);
     if (job) {
       get().updateModel(job.modelId, {
         downloadStatus: "idle",
@@ -537,7 +537,7 @@ if (!info.exists || !("size" in info) || typeof info.size !== "number") continue
 
   syncDownloadStatus: () => {
     const activeDownloads = new Map(
-      downloadService.getAllJobs().map((job) => [job.id, job.status]),
+      platformDownloadService.getAllJobs().map((job) => [job.id, job.status]),
     );
     set({ activeDownloads });
   },

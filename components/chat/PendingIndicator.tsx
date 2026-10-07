@@ -109,6 +109,7 @@ export function PendingIndicator({ startedAt }: { startedAt: number | null }) {
       exiting={fadeExiting(duration)}
       className="my-1 max-w-[75%] flex-row self-start"
       accessibilityRole="progressbar"
+      accessibilityLiveRegion="polite"
       // Seconds are spoken, not just drawn: a screen-reader user gets the
       // same "is it stuck?" signal a sighted one does. The phase joins
       // the speech while a tool runs; the elapsed count never leaves.

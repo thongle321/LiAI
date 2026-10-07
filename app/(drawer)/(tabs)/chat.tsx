@@ -281,15 +281,20 @@ export default function ChatRoute() {
   // nothing else.
   const heavyToolName = useMemo(() => {
     const steps = newestAssistant?.steps ?? [];
-    for (let i = steps.length - 1; i >= 0; i -= 1) {
+    let maxTokens = -1;
+    let maxTool: string | undefined;
+    for (const step of steps) {
       const def = talentDefinitions().find(
-        (t) => t.function.name === steps[i].tool,
+        (t) => t.function.name === step.tool,
       );
-      if (def?.function.recommendedContextTokens !== undefined) {
-        return def.function.name;
+      if (!def) continue;
+      const tokens = def.function.recommendedContextTokens;
+      if (tokens !== undefined && tokens > maxTokens) {
+        maxTokens = tokens;
+        maxTool = def.function.name;
       }
     }
-    return undefined;
+    return maxTool;
   }, [newestAssistant]);
   const fullFailures = useMemo(
     () =>
@@ -411,6 +416,15 @@ export default function ChatRoute() {
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
 
+  // SafeAreaView comes from react-native-safe-area-context, which Uniwind
+  // does NOT patch: its className prop is ignored outright (Uniwind's own
+  // SafeAreaView wraps React Native's, reachable only via uniwind/components).
+  // So this box is styled with `style`, per the Style Exception List, and
+  // `flex: 1` is load-bearing rather than decoration: without it the box
+  // shrink-wraps its content and every `absolute bottom-0` inside it (the
+  // composer, the overlay group) resolves against a box that no longer
+  // reaches the bottom of the screen -- which put the composer at the top of
+  // the screen, on top of the header.
   return (
     <SafeAreaView
       edges={["top", "left", "right"]}

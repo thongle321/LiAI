@@ -26,6 +26,11 @@ import {
   MAX_ATTEMPTS,
   retryAfterMs,
 } from "./models/http-retry.ts";
+import {
+  androidDriverAvailable,
+  AndroidDownloadService,
+} from "./android-download-service.ts";
+import { Platform } from "react-native";
 
 /** A failure that carries a machine-readable kind, so the UI can offer the
  *  right recovery instead of pattern-matching an English sentence. An
@@ -664,3 +669,41 @@ class ResumableDownloadService {
 // Singleton instance
 export const downloadService = new ResumableDownloadService();
 export { ResumableDownloadService };
+
+/**
+ * Platform pick.
+ *
+ * Android runs the WorkManager driver when the native module is present,
+ * because expo-file-system's downloader there runs inside the app process and
+ * dies with it — see lib/android-download-service.ts. iOS and anything without
+ * the native side keep the legacy path, which already survives backgrounding
+ * via `sessionType: BACKGROUND`.
+ *
+ * Exported as one object with one shape so store/models/downloads.ts never has
+ * to know which driver it is talking to.
+ */
+type DownloadDriver = {
+  setProgressCallback(callback: DownloadProgressCallback): void;
+  setCompleteCallback(callback: DownloadCompleteCallback): void;
+  startDownload(
+    job: DownloadJob,
+    progressCallback?: DownloadProgressCallback,
+    completeCallback?: DownloadCompleteCallback,
+    resumeData?: string,
+  ): Promise<void>;
+  pauseDownload(jobId: string): Promise<DownloadJob | null>;
+  resumeDownload(jobId: string): Promise<void>;
+  cancelDownload(jobId: string): Promise<void>;
+  getJob(jobId: string): DownloadJob | null;
+  getAllJobs(): DownloadJob[];
+  removeJob(jobId: string): void;
+};
+
+function createDriver(): DownloadDriver {
+  if (Platform.OS === "android" && androidDriverAvailable()) {
+    return new AndroidDownloadService();
+  }
+  return new ResumableDownloadService();
+}
+
+export const platformDownloadService: DownloadDriver = createDriver();

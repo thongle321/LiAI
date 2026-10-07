@@ -188,7 +188,13 @@ private apply(
     // Clearing the guard is what lets the completion fire again after a
     // resume that goes on to finish.
     this.seenTerminal.delete(jobId);
-    await this.native?.resumeDownload(jobId);
+    // Native resume refuses anything that is not PAUSED, so a FAILED card's
+    // Retry has to take the retry verb. Falling back here keeps
+    // store/models/downloads.ts unchanged and stops it throwing into a
+    // swallowed catch, which left the failed record orphaned on disk.
+    await this.native
+      ?.resumeDownload(jobId)
+      .catch(() => this.native?.retryDownload(jobId));
     this.beginPolling();
   }
 

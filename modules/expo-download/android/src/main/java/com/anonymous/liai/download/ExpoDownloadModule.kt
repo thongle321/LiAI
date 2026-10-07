@@ -105,26 +105,33 @@ class ExpoDownloadModule : Module() {
 
             AsyncFunction("resumeDownload") { downloadId: String ->
                 val record = store.get(downloadId) ?: throw CodedException("no such download")
+                // Resume means "continue what I paused" — nothing else. A
+                // FAILED record is terminal and is not resumable; that is
+                // retryDownload's job, and conflating them left Retry on a
+                // failed card throwing into a swallowed catch.
                 if (record.isTerminal() && record.state != DownloadState.PAUSED) {
                     throw CodedException("download is not resumable")
                 }
                 store.mutate(downloadId) { it.copy(state = DownloadState.QUEUED, error = null) }
-                workManager.enqueueUniqueWork(
-                    workName(downloadId),
-                    ExistingWorkPolicy.REPLACE,
-                    OneTimeWorkRequestBuilder<DownloadWorker>()
-                        .setInputData(workDataOf(DownloadWorker.KEY_ID to downloadId))
-                        .setConstraints(
-                            Constraints
-                                .Builder()
-                                .setRequiredNetworkType(NetworkType.CONNECTED)
-                                .build(),
-                        ).setBackoffCriteria(
-                            BackoffPolicy.EXPONENTIAL,
-                            WorkRequest_MIN_BACKOFF_MILLIS,
-                            TimeUnit.MILLISECONDS,
-                        ).build(),
-                )
+                enqueue(downloadId)
+            }
+
+            /** Retry after a FAILURE, with no terminal-state guard. PocketPal
+             *  parity: DownloadModule.kt:262-284 sets QUEUED and enqueues
+             *  regardless of how the last attempt ended. Distinct from
+             *  resume because the user-facing verbs are: Resume continues a
+             *  paused transfer, Retry restarts one that died. The partial on
+             *  disk is untouched either way, so a retry resumes from it. */
+            AsyncFunction("retryDownload") { downloadId: String ->
+                if (store.get(downloadId) == null) throw CodedException("no such download")
+                store.mutate(downloadId) {
+                    it.copy(
+                        state = DownloadState.QUEUED,
+                        error = null,
+                        errorCode = null,
+                    )
+                }
+                enqueue(downloadId)
             }
 
             AsyncFunction("cancelDownload") { downloadId: String ->
@@ -176,6 +183,27 @@ class ExpoDownloadModule : Module() {
             "error" to error,
             "errorCode" to errorCode,
         )
+
+    /** The one place a transfer is handed to WorkManager, so start,
+     *  resume, and retry cannot drift apart. */
+    private fun enqueue(downloadId: String) {
+        workManager.enqueueUniqueWork(
+            workName(downloadId),
+            ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<DownloadWorker>()
+                .setInputData(workDataOf(DownloadWorker.KEY_ID to downloadId))
+                .setConstraints(
+                    Constraints
+                        .Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build(),
+                ).setBackoffCriteria(
+                    BackoffPolicy.EXPONENTIAL,
+                    WorkRequest_MIN_BACKOFF_MILLIS,
+                    TimeUnit.MILLISECONDS,
+                ).build(),
+        )
+    }
 
     private fun workName(downloadId: String) = "expo-download-$downloadId"
 

@@ -87,11 +87,3 @@ function failureReason(status: number): string {
   }
   return "Download failed";
 }
-
-/** True when the failure is the account's problem, not the file's — the
- *  case where "Disable token and retry" is a real offer. 403 is excluded:
- *  dropping the token cannot grant repo access, so offering it would be
- *  a dead end. */
-export function isAuthFailure(status: number): boolean {
-  return status === 401;
-}

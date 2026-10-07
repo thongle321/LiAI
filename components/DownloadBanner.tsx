@@ -36,7 +36,7 @@ export function DownloadBanner() {
 
   return (
     <Pressable
-      onPress={() => router.push("/models")}
+      onPress={() => router.navigate("/models")}
       accessibilityRole="button"
       accessibilityLabel={`Downloading ${lead.name}, ${Math.round(pct)} percent. Open models.`}
       className="absolute left-0 right-0 top-0 border-b border-border bg-surface-1 px-4 pb-2 pt-2"

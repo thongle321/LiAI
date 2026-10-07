@@ -5,7 +5,6 @@ import assert from "node:assert/strict";
 
 import {
   describeHttpFailure,
-  isAuthFailure,
   isRetryableStatus,
   MAX_ATTEMPTS,
   retryAfterMs,
@@ -85,16 +84,6 @@ describe("describeHttpFailure", () => {
 
   it("still names the status when it has nothing specific to say", () => {
     assert.match(describeHttpFailure(418), /418/);
-  });
-});
-
-describe("isAuthFailure", () => {
-  it("offers token recovery only where dropping the token could help", () => {
-    assert.equal(isAuthFailure(401), true);
-    // 403 is access, not authentication: retrying anonymously cannot grant
-    // it, so "disable token and retry" would be a dead end.
-    assert.equal(isAuthFailure(403), false);
-    assert.equal(isAuthFailure(429), false);
   });
 });
 

@@ -44,8 +44,7 @@ function getModelsDirectoryPath(): string {
  *  progress signal, and a disk stat costs nothing to do rarely. */
 const SPACE_CHECK_MS = 10_000;
 
-/** Backoff between retry attempts. Unref'd so a pending wait can never hold
- *  the process open past the transfer it belongs to. */
+/** Backoff between retry attempts. */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -372,7 +371,11 @@ class ResumableDownloadService {
         }
         // Throttle or blip: wait as long as the server asked, else our curve.
         await sleep(retryAfterMs(result.headers, attempt));
-        if (this.cancelling.has(job.id)) return;
+        // The tracked row is the authority on whether this transfer should
+        // still be running. A cancel, a disk-full failJob, or a pause all move
+        // it off "downloading", and the loop must not fire a fresh request
+        // for a job the row has already settled.
+        if (this.activeDownloads.get(job.id)?.job.status !== "downloading") return;
       }
 
       if (!complete || !result) {
@@ -499,26 +502,58 @@ class ResumableDownloadService {
         return;
       }
 
-      if (result.status !== 200 && result.status !== 206) {
-        throw new Error(`HTTP ${result.status}`);
+      // A resume that comes back 200 did NOT honour our Range: the server sent
+      // the whole file and the native writer APPENDED it to the partial
+      // (FileSystemLegacyModule.kt:926-927). That file is corrupt and the old
+      // code read it as a success. There is no clean way to salvage an append
+      // whose seam we cannot see, so it goes; Retry restarts from scratch.
+      const ignoredRange = result.status === 200;
+      // Anything other than 206 here is either that case or an error, and in
+      // both the body the server just sent is already sitting in the file.
+      if (ignoredRange || result.status !== 206) {
+        await deleteAsync(getModelsDirectoryPath() + entry.job.fileName, {
+          idempotent: true,
+        }).catch(() => {});
+        throw new Error(
+          ignoredRange
+            ? "The server restarted this file instead of resuming — tap Retry to start it again"
+            : describeHttpFailure(result.status),
+        );
       }
 
-      {
-        const completedJob: DownloadJob = {
-          ...entry.job,
-          status: "completed",
-          progress: 100,
-          downloadedBytes: entry.job.totalBytes,
-        };
-
-        this.activeDownloads.set(jobId, {
-          ...entry,
-          job: completedJob,
-        });
-
-        this.callbacks.onProgress?.(completedJob);
-        this.callbacks.onComplete?.(completedJob, true);
+      // Trust-but-verify, matching the fresh path: a resume that produced the
+      // wrong length is corrupt, however cleanly it reported.
+      if (entry.job.totalBytes > 0) {
+        const info = await getInfoAsync(
+          getModelsDirectoryPath() + entry.job.fileName,
+        ).catch(() => null);
+        const actual =
+          info?.exists && "size" in info && typeof info.size === "number" ? info.size : -1;
+        if (actual !== -1 && actual !== entry.job.totalBytes) {
+          await deleteAsync(getModelsDirectoryPath() + entry.job.fileName, {
+            idempotent: true,
+          }).catch(() => {});
+          throw new Error(
+            `Size mismatch (${actual} of ${entry.job.totalBytes} bytes) — tap Retry to continue`,
+          );
+        }
       }
+
+      const completedJob: DownloadJob = {
+        ...entry.job,
+        status: "completed",
+        progress: 100,
+        downloadedBytes: entry.job.totalBytes,
+      };
+
+      this.activeDownloads.set(jobId, {
+        ...entry,
+        job: completedJob,
+      });
+
+      this.callbacks.onProgress?.(completedJob);
+      this.callbacks.onComplete?.(completedJob, true);
+      this.stopSpaceWatchIfIdle();
     } catch (error) {
       const failedJob: DownloadJob = {
         ...entry.job,

@@ -39,11 +39,6 @@ function presetFor(modelId: string, presets: PresetModel[]): PresetModel {
   return preset;
 }
 
-/** Min gap between transient progress pushes to the store. Progress is
- *  already gated once, at the emitter, in download-service.ts (PocketPal's
- *  per-byte-loop throttle) — a second gate here was only ever a second
- *  place to forget one. Progress ticks ride that single gate now. */
-
 export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSlice> = (
   set,
   get,
@@ -198,7 +193,13 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
         // middle. HF answers 200 instead of 206 when the validator fails,
         // and the service already restarts cleanly on that. Ignored by
         // servers when no Range is sent, so a fresh download is unaffected.
-        ...(oid ? { "If-Range": oid } : {}),
+        //
+        // The value MUST be a quoted entity-tag (RFC 7232 s3.2): HF serves
+        // LFS files with ETag: "<lfs-sha256>", which is the oid. A bare hex
+        // string is a malformed tag, so the server cannot match it and is
+        // entitled to ignore the whole header — which would leave the
+        // splice exactly as unprotected as sending nothing at all.
+        ...(oid ? { "If-Range": `"${oid}"` } : {}),
       },
       destinationPath: `${LegacyFileSystem.documentDirectory}models/${activeFile.name}`,
       status: "downloading",
@@ -245,7 +246,10 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
           error: downloadJob.error,
         });
       }
-      // One transient push per emitted tick (throttled at the source).
+      // One transient push per emitted tick. There is deliberately no gate here:
+//      // progress is already throttled once, at the emitter, in
+      // download-service.ts (PocketPal's per-byte-loop throttle). A second
+      // gate in the store was only ever a second place to forget one.
       get().setModelProgress(downloadJob.modelId, {
         downloadProgress: downloadJob.progress,
         downloadedBytes: downloadJob.downloadedBytes,

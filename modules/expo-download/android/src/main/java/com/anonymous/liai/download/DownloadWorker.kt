@@ -9,6 +9,7 @@ import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
@@ -75,8 +76,16 @@ class DownloadWorker(
         } catch (io: IOException) {
             // Network died mid-transfer. WorkManager owns the backoff, so a
             // retry here is the OS-level exponential curve, not our own.
-            store.mutate(id) { it.copy(status = DownloadState.FAILED, error = io.message) }
+            requeue(id, io.message)
             Result.retry()
+        } catch (ce: CancellationException) {
+            // A pause or cancel from JS stops us by cancelling this
+            // coroutine, which surfaces here as CancellationException — not
+            // an IOException. Writing a status here would race the PAUSED /
+            // CANCELLED row that the caller already wrote, and whichever lost
+            // would decide what the user sees: a paused download reported as
+            // failed. The caller owns this state; say nothing.
+            throw ce
         } catch (t: Throwable) {
             store.mutate(id) {
                 it.copy(
@@ -85,6 +94,20 @@ class DownloadWorker(
                 )
             }
             Result.failure()
+        }
+    }
+
+    /**
+     * Park a row as QUEUED ahead of a WorkManager retry.
+     *
+     * FAILED here would be a lie: we are returning Result.retry(), so we WILL
+     * be re-run. The row said "failed" while WorkManager quietly retried it,
+     * and the user was shown an error for a transfer that was still going.
+     * QUEUED is also what the UI already renders as "downloading".
+     */
+    private suspend fun requeue(id: String, reason: String?) {
+        store.mutate(id) {
+            it.copy(status = DownloadState.QUEUED, error = reason)
         }
     }
 
@@ -154,12 +177,9 @@ class DownloadWorker(
                     }
 
                     res.code == 429 || res.code in 500..599 -> {
-                        store.mutate(record.id) {
-                            it.copy(
-                                status = DownloadState.FAILED,
-                                error = "HTTP ${res.code}",
-                            )
-                        }
+                        // Rate limited or the server is unwell. Retry, so the
+                        // row must read QUEUED — see requeue().
+                        requeue(record.id, "HTTP ${res.code}")
                         return@withContext Result.retry()
                     }
 

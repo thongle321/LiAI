@@ -697,6 +697,10 @@ type DownloadDriver = {
   getJob(jobId: string): DownloadJob | null;
   getAllJobs(): DownloadJob[];
   removeJob(jobId: string): void;
+  /** Adopt whatever the native side is still running. Android-only: iOS has
+   *  no such notion, because a background NSURLSession there resolves its
+   *  own promise when JS returns. */
+  reconcileWithNative?(): Promise<string[]>;
 };
 
 function createDriver(): DownloadDriver {

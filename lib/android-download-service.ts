@@ -46,6 +46,29 @@ function toJobStatus(state: NativeDownload["state"]): DownloadJob["status"] {
   }
 }
 
+/** A native record shaped as a DownloadJob. Keyed by modelId, which the
+ *  caller sends on every request, so a cold-started record joins to the same
+ *  model card a live one would. */
+function toJob(record: NativeDownload): DownloadJob {
+  return {
+    id: `native-${record.id}`,
+    modelId: record.modelId,
+    fileName: record.fileName,
+    downloadUrl: "",
+    destinationPath: record.destinationPath,
+    status: toJobStatus(record.state),
+    progress:
+      record.expectedTotal > 0
+        ? Math.round((record.downloadedBytes / record.expectedTotal) * 100)
+        : 0,
+    downloadedBytes: record.downloadedBytes,
+    totalBytes: record.expectedTotal,
+    error: record.error,
+    errorCode: record.errorCode,
+    resumable: true,
+  };
+}
+
 /** True when this platform has a native module to talk to. */
 export function androidDriverAvailable(): boolean {
   return androidDownload() !== null;
@@ -65,6 +88,55 @@ export class AndroidDownloadService {
   } = {};
   private poller: ReturnType<typeof setInterval> | null = null;
   private seenTerminal = new Set<string>();
+  /** ONE module-level subscription, not one per startDownload. A listener
+   *  added per start is never removed, so every retry stacked another. */
+  private unsubscribe: (() => void) | null = null;
+
+  private ensureSubscribed(): void {
+    if (this.unsubscribe) return;
+    this.unsubscribe = addDownloadListener((event) => {
+      this.apply(event, undefined, undefined);
+    });
+  }
+
+  /**
+   * Adopt whatever the native side still has running.
+   *
+   * THIS IS THE COLD-START PATH, and it was missing. Without it a download
+   * that survived a force-stop kept transferring under WorkManager while the
+   * app had no mirror entry, no poller, and no listener — the row showed
+   * "paused" and nothing ever took control of it again. The transfer
+   * outliving JS is the whole point of the module, so JS has to come back and
+   * ask.
+   *
+   * PocketPal parity: initializeStore -> syncWithActiveDownloads
+   * (ModelStore.ts:763) -> getActiveDownloads() -> reattach observer.
+   *
+   * Returns the ids it adopted so callers can refresh just those rows.
+   */
+  async reconcileWithNative(): Promise<string[]> {
+    const native = this.native;
+    if (!native) return [];
+    this.ensureSubscribed();
+    let records: NativeDownload[];
+    try {
+      records = await native.getActiveDownloads();
+    } catch {
+      // Native unavailable (prebuild predates the module): the caller falls
+      // back to the legacy driver. Not a failed reconciliation.
+      return [];
+    }
+    for (const record of records) {
+      // Adopt the native row under the modelId the caller sent, so it joins
+      // to the same model card the JS store already holds.
+      this.mirror.set(record.modelId, {
+        ...toJob(record),
+      });
+      this.seenTerminal.delete(record.id);
+    }
+    if (records.length > 0) this.beginPolling();
+    return records.map((r) => r.modelId);
+  }
 
   setProgressCallback(callback: ProgressCallback): void {
     this.callbacks.onProgress = callback;
@@ -91,6 +163,11 @@ export class AndroidDownloadService {
     if (!native) throw new Error("expo-download native module unavailable");
     const onProgress = progressCallback ?? (() => {});
     const complete = onComplete ?? (() => {});
+    // The subscription is now module-level, so a per-call completion handler
+    // has to reach the shared callbacks to be invoked at all. The store sets
+    // these itself; this only fills them when a caller passes one.
+    if (progressCallback) this.callbacks.onProgress = onProgress;
+    if (onComplete) this.callbacks.onComplete = complete;
 
     // The store keys on the download id, so a retry re-enqueues the SAME
     // record and WorkManager REPLACE keeps one worker per file.
@@ -108,10 +185,9 @@ export class AndroidDownloadService {
       headers: job.headers,
     });
 
-    this.mirror.set(job.id, job);
+    this.mirror.set(job.modelId, job);
+    this.ensureSubscribed();
     this.beginPolling();
-    // Events are the fast path; polling is what makes it correct.
-    addDownloadListener((event) => this.apply(event, onProgress, complete));
     onProgress({ ...job, status: "downloading" });
   }
 
@@ -215,7 +291,13 @@ private apply(
 
   removeJob(jobId: string): void {
     this.seenTerminal.delete(jobId);
+    const job = this.mirror.get(jobId);
     this.mirror.delete(jobId);
+    // Terminal is not forgotten. Without this the Room row survives the job,
+    // the table grows one entry per download forever, and every cold start
+    // re-reads all of it. Fire-and-forget: the mirror is already correct.
+    const nativeId = job?.id.startsWith("native-") ? job.id.slice(7) : undefined;
+    if (nativeId) void this.native?.forgetDownload(nativeId).catch(() => {});
     if (this.mirror.size === 0) this.stopPolling();
   }
 }

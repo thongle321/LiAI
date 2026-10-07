@@ -64,6 +64,8 @@ declare class ExpoDownloadModule extends NativeModule<ExpoDownloadEvents> {
   /** Retry a FAILED download. Distinct from resume, which refuses anything
    *  that is not PAUSED — mirroring pocketpal-ai's separate retry verb. */
   retryDownload(id: string): Promise<void>;
+  /** Delete the record entirely. Terminal is not forgotten. */
+  forgetDownload(id: string): Promise<void>;
   cancelDownload(id: string): Promise<void>;
   /** Every record the worker has, read from the same durable store it writes.
    *  This is what a cold-started app calls to find downloads it never saw. */

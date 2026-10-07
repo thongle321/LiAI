@@ -166,6 +166,15 @@ class ExpoDownloadModule : Module() {
                 store.mutate(downloadId) { it.copy(status = DownloadState.CANCELLED) }
             }
 
+            /** Drop a record entirely. Cancel and completion mark a row
+             *  terminal, but terminal is not the same as forgotten: without
+             *  this the table grows one row per download forever, and every
+             *  cold start re-reads all of it. */
+            val forgetBlock: suspend (String) -> Unit = { downloadId ->
+                store.delete(downloadId)
+            }
+            AsyncFunction("forgetDownload") Coroutine forgetBlock
+
             /** The contract, not the optimisation: every non-terminal record,
              *  read from the same store the worker writes. This is what JS
              *  calls after a cold start to find work it never saw. */

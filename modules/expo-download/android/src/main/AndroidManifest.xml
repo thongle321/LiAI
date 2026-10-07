@@ -1,2 +1,12 @@
-<manifest>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!--
+    The download runs as a foreground service, and on API 33+ starting one
+    without this throws. PocketPal needs no equivalent: it has no foreground
+    service at all, which is why its transfers are bounded by WorkManager's
+    ten-minute cap — a limit every multi-GB model crosses.
+
+    Declared here rather than in a config plugin so prebuild carries it
+    through the module manifest merge with no extra wiring.
+  -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

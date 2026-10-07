@@ -1,5 +1,6 @@
 package com.anonymous.liai.download
 
+import android.content.Context
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
@@ -9,7 +10,6 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.await
 import androidx.work.workDataOf
-import android.content.Context
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
@@ -160,10 +160,6 @@ class ExpoDownloadModule : Module() {
                 // at all and the UI silently disagrees with the disk.
                 store.all().filterNot { it.isTerminal() }.forEach { sendEvent(EVENT, it.toWritableMap()) }
             }
-
-            OnStopObserving {
-                workManager.cancelAllWorkByTag(TAG)
-            }
         }
 
     private fun DownloadRecord.toWritableMap(): Map<String, Any?> =
@@ -183,7 +179,6 @@ class ExpoDownloadModule : Module() {
 
     private companion object {
         const val EVENT = "onDownloadEvent"
-        const val TAG = "expo-download"
 
         /** WorkManager's own floor for exponential backoff. */
         const val WorkRequest_MIN_BACKOFF_MILLIS = 10_000L

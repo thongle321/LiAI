@@ -10,6 +10,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -45,6 +47,18 @@ class DownloadWorker(
 ) : CoroutineWorker(context, params) {
     private val store = DownloadStore(File(context.filesDir, STORE_NAME))
     private val client = OkHttpClient()
+
+    /** The in-flight call, so a stop can break a blocked read.
+     *
+     *  `isStopped` is only checked BETWEEN reads, and a blocking
+     *  `byteStream.read()` ignores coroutine cancellation, so without this a
+     *  stalled connection makes Pause do nothing until the next byte arrives —
+     *  arbitrarily long. PocketPal solves the same problem with a
+     *  `handleStopped()` -> `currentCall?.cancel()` hook (DownloadWorker.kt:33),
+     *  which it can afford because it uses `ListenableWorker`; `CoroutineWorker`
+     *  marks `onStopped` final, so the hook lives on the coroutine instead. */
+    @Volatile
+    private var currentCall: okhttp3.Call? = null
 
     override suspend fun doWork(): Result {
         val id = inputData.getString(KEY_ID) ?: return Result.failure()
@@ -106,8 +120,33 @@ class DownloadWorker(
                         }
                     }.build()
 
-            val response = client.newCall(request).await()
+            // WorkManager cancels this coroutine when the worker is stopped (it cancels
+            // the work continuation in its own onStopped). Hooking THAT is what
+            // breaks a blocked read, because cancelling the call is the only
+            // thing a blocking socket read actually reacts to.
+            currentCoroutineContext().job.invokeOnCompletion { currentCall?.cancel() }
+
+            val call = client.newCall(request)
+            currentCall = call
+            val response =
+                try {
+                    call.await()
+                } finally {
+                    currentCall = null
+                }
             response.use { res ->
+                // A 200 on a resume means the server ignored our Range and is
+                // sending the WHOLE file. Appending it to the partial is how a
+                // right-length, wrong-contents GGUF happens, so the partial is
+                // dropped and this response is written from zero. No retry:
+                // the body already in hand IS the file, so re-requesting it
+                // would cost a full WorkManager backoff cycle for nothing.
+                if (res.code == 200 && existing > 0) {
+                    dest.delete()
+                    existing = 0
+                    store.mutate(record.id) { it.copy(downloadedBytes = 0L) }
+                }
+
                 when {
                     res.code == 401 || res.code == 403 -> {
                         fail(record, authMessage(res.code), if (res.code == 401) "authentication" else null)
@@ -126,7 +165,9 @@ class DownloadWorker(
 
                     res.code == 416 -> {
                         // Our copy is longer than the server's: the file
-                        // changed upstream. Start clean.
+                        // changed upstream. Delete it and fail for real —
+                        // returning retry() here would leave the row saying
+                        // "failed" while WorkManager quietly re-runs us.
                         dest.delete()
                         store.mutate(record.id) {
                             it.copy(
@@ -134,16 +175,7 @@ class DownloadWorker(
                                 error = "The file changed on the server — tap Retry",
                             )
                         }
-                        return@withContext Result.retry()
-                    }
-
-                    res.code == 200 && existing > 0 -> {
-                        // Server ignored Range and is sending the whole file.
-                        // The JS path appended this to the partial and called
-                        // it success. Delete and let the next attempt be clean.
-                        dest.delete()
-                        store.mutate(record.id) { it.copy(downloadedBytes = 0L) }
-                        return@withContext Result.retry()
+                        return@withContext Result.failure()
                     }
 
                     res.code != 200 && res.code != 206 -> {

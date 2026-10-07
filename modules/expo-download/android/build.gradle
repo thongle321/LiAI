@@ -1,12 +1,25 @@
 plugins {
   id 'com.android.library'
   id 'expo-module-gradle-plugin'
+  // Room generates its DAO/Database implementations at compile time, which
+  // needs an annotation processor. kapt rather than KSP because it needs no
+  // extra plugin version alignment with the Kotlin the Expo plugin applies.
+  id 'kotlin-kapt'
 }
 
 group = 'com.anonymous.liai.download'
 version = '0.1.0'
 
 dependencies {
+  // Room, matching pocketpal-ai's download store. suspend + Flow rather than
+  // a JSON file, so two workers writing at once cannot corrupt the state.
+  // Room 2.7.x, not 2.6.x: the 2.6 compiler bundles kotlinx-metadata that
+  // cannot read Kotlin 2.1 metadata ("Provided Metadata instance has version
+  // 2.1.0, while maximum supported version is 2.0.0"). Downgrading Kotlin is
+  // not an option — expo-module-gradle-plugin owns it.
+  implementation "androidx.room:room-runtime:2.7.1"
+  implementation "androidx.room:room-ktx:2.7.1"
+  kapt "androidx.room:room-compiler:2.7.1"
   // The transfer runs in a WorkManager CoroutineWorker so it survives the
   // app process being killed, which a JS-driven download cannot.
   implementation "androidx.work:work-runtime-ktx:2.9.1"

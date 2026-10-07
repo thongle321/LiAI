@@ -38,14 +38,14 @@ import kotlin.coroutines.suspendCoroutine
  *  - A 200 on a resume means the server ignored our Range and sent the whole
  *    file. Appending that to a partial yields a file of the right length and
  *    the wrong contents, so the partial is dropped and the fetch restarts.
- *  - [DownloadRecord.expectedTotal] comes from the Hub, never from
+ *  - [DownloadEntity.expectedTotal] comes from the Hub, never from
  *    Content-Length, which on a 206 is the size of the remainder.
  */
 class DownloadWorker(
     context: Context,
     params: WorkerParameters,
 ) : CoroutineWorker(context, params) {
-    private val store = DownloadStore(File(context.filesDir, STORE_NAME))
+    private val store = DownloadStore(DownloadDatabase.get(applicationContext))
     private val client = OkHttpClient()
 
     /** The in-flight call, so a stop can break a blocked read.
@@ -65,7 +65,7 @@ class DownloadWorker(
         val record = store.get(id) ?: return Result.failure()
 
         // Somebody already settled this one while we were queued.
-        if (record.state == DownloadState.CANCELLED || record.state == DownloadState.PAUSED) {
+        if (record.status == DownloadState.CANCELLED || record.status == DownloadState.PAUSED) {
             return Result.success()
         }
 
@@ -75,12 +75,12 @@ class DownloadWorker(
         } catch (io: IOException) {
             // Network died mid-transfer. WorkManager owns the backoff, so a
             // retry here is the OS-level exponential curve, not our own.
-            store.mutate(id) { it.copy(state = DownloadState.FAILED, error = io.message) }
+            store.mutate(id) { it.copy(status = DownloadState.FAILED, error = io.message) }
             Result.retry()
         } catch (t: Throwable) {
             store.mutate(id) {
                 it.copy(
-                    state = DownloadState.FAILED,
+                    status = DownloadState.FAILED,
                     error = t.message ?: t::class.java.simpleName,
                 )
             }
@@ -88,9 +88,9 @@ class DownloadWorker(
         }
     }
 
-    private suspend fun transfer(record: DownloadRecord): Result =
+    private suspend fun transfer(record: DownloadEntity): Result =
         withContext(Dispatchers.IO) {
-            val dest = File(record.destinationPath)
+            val dest = File(record.destination)
             dest.parentFile?.mkdirs()
 
             // Resume truth lives on disk, not in memory: this is exactly what
@@ -156,7 +156,7 @@ class DownloadWorker(
                     res.code == 429 || res.code in 500..599 -> {
                         store.mutate(record.id) {
                             it.copy(
-                                state = DownloadState.FAILED,
+                                status = DownloadState.FAILED,
                                 error = "HTTP ${res.code}",
                             )
                         }
@@ -171,7 +171,7 @@ class DownloadWorker(
                         dest.delete()
                         store.mutate(record.id) {
                             it.copy(
-                                state = DownloadState.FAILED,
+                                status = DownloadState.FAILED,
                                 error = "The file changed on the server — tap Retry",
                             )
                         }
@@ -214,7 +214,7 @@ class DownloadWorker(
                             lastPublish = now
                             store.mutate(record.id) {
                                 it.copy(
-                                    state = DownloadState.RUNNING,
+                                    status = DownloadState.RUNNING,
                                     downloadedBytes = written,
                                 )
                             }
@@ -228,7 +228,7 @@ class DownloadWorker(
                 if (record.expectedTotal > 0 && actual != record.expectedTotal) {
                     store.mutate(record.id) {
                         it.copy(
-                            state = DownloadState.FAILED,
+                            status = DownloadState.FAILED,
                             downloadedBytes = actual,
                             error = "Size mismatch ($actual of ${record.expectedTotal} bytes)",
                         )
@@ -238,7 +238,7 @@ class DownloadWorker(
 
                 store.mutate(record.id) {
                     it.copy(
-                        state = DownloadState.COMPLETED,
+                        status = DownloadState.COMPLETED,
                         downloadedBytes = record.expectedTotal,
                         error = null,
                         errorCode = null,
@@ -248,14 +248,14 @@ class DownloadWorker(
             }
         }
 
-    private fun fail(
-        record: DownloadRecord,
+    private suspend fun fail(
+        record: DownloadEntity,
         message: String,
         code: String?,
     ) {
         store.mutate(record.id) {
             it.copy(
-                state = DownloadState.FAILED,
+                status = DownloadState.FAILED,
                 error = message,
                 errorCode = code,
             )
@@ -275,7 +275,7 @@ class DownloadWorker(
      * what lifts that cap; without it this module would be pointless for the
      * downloads it exists to support.
      */
-    private fun createForegroundInfo(record: DownloadRecord): ForegroundInfo {
+    private fun createForegroundInfo(record: DownloadEntity): ForegroundInfo {
         val notificationManager =
             applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -306,7 +306,7 @@ class DownloadWorker(
         }
     }
 
-    private fun percent(record: DownloadRecord): Int {
+    private fun percent(record: DownloadEntity): Int {
         if (record.expectedTotal <= 0) return 0
         return ((record.downloadedBytes * 100) / record.expectedTotal).toInt().coerceIn(0, 100)
     }

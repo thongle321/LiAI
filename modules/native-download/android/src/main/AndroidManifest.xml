@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
   <!--
     The download runs as a foreground service, and on API 33+ starting one
     without this throws. PocketPal needs no equivalent: it has no foreground
@@ -9,4 +10,24 @@
     through the module manifest merge with no extra wiring.
   -->
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+  <!--
+    Android 14+ (API 34) requires the foreground service type to be declared
+    in the manifest. WorkManager declares SystemForegroundService in its own
+    manifest WITHOUT a type, so the merge yields 0x00000000 and setForeground()
+    throws:
+      foregroundServiceType 0x00000001 is not a subset of
+      foregroundServiceType attribute 0x00000000 in service element
+    tools:replace overrides WorkManager's attribute with the type the worker
+    actually uses (FOREGROUND_SERVICE_TYPE_DATA_SYNC = dataSync).
+
+    The <application> wrapper is required: a <service> directly under <manifest>
+    is rejected by AAPT with "unexpected element <service> found in <manifest>".
+  -->
+  <application>
+    <service
+        android:name="androidx.work.impl.foreground.SystemForegroundService"
+        android:foregroundServiceType="dataSync"
+        tools:replace="android:foregroundServiceType" />
+  </application>
 </manifest>

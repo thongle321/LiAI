@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 
 import {
   describeHttpFailure,
+  errorCodeForStatus,
   isRetryableStatus,
   MAX_ATTEMPTS,
   retryAfterMs,
@@ -84,6 +85,24 @@ describe("describeHttpFailure", () => {
 
   it("still names the status when it has nothing specific to say", () => {
     assert.match(describeHttpFailure(418), /418/);
+  });
+});
+
+describe("errorCodeForStatus", () => {
+  it("offers token recovery only for a rejected token", () => {
+    assert.equal(errorCodeForStatus(401), "authentication");
+  });
+
+  it("offers nothing for a repo the account cannot read", () => {
+    // Retrying anonymously cannot grant repo access, so a recovery button
+    // here is a dead end that looks like help.
+    assert.equal(errorCodeForStatus(403), undefined);
+  });
+
+  it("offers nothing for failures the user must fix outside the app", () => {
+    for (const s of [404, 416, 429, 500, 503]) {
+      assert.equal(errorCodeForStatus(s), undefined, `${s}`);
+    }
   });
 });
 

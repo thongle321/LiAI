@@ -27,6 +27,7 @@ export default function ModelsRoute() {
   const loadPersisted = useModelStore((s) => s.loadPersisted);
   const startDownload = useModelStore((s) => s.startDownload);
   const clearDownloadError = useModelStore((s) => s.clearDownloadError);
+  const retryWithoutToken = useModelStore((s) => s.retryWithoutToken);
   const resumeInterruptedDownload = useModelStore((s) => s.resumeInterruptedDownload);
   // Pull-to-refresh (PocketPal parity): re-stat the disk so rows that
   // finished off-screen snap to their real state, and re-fetch presets.
@@ -43,7 +44,7 @@ export default function ModelsRoute() {
         (m) => m.downloadStatus === "failed" && m.error,
       );
       return failed && failed.error
-        ? { id: failed.id, error: failed.error }
+        ? { id: failed.id, error: failed.error, errorCode: failed.errorCode }
         : null;
     }),
   );
@@ -186,9 +187,18 @@ export default function ModelsRoute() {
 
       <DownloadErrorDialog
         error={failedDownload?.error ?? null}
+        errorCode={failedDownload?.errorCode}
         onDismiss={() => {
           if (failedDownload !== null) clearDownloadError(failedDownload.id);
         }}
+        onRetryWithoutToken={
+          failedDownload === null
+            ? undefined
+            : () => {
+                clearDownloadError(failedDownload.id);
+                void retryWithoutToken(failedDownload.id);
+              }
+        }
         onRetry={() => {
           if (failedDownload === null) return;
           // Clear first so the dialog closes even when the retry path

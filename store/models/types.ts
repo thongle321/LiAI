@@ -139,6 +139,10 @@ export interface DownloadsSlice {
   /** Abandon by stored spec id: cancels the job and deletes the partial
    * file, so the row returns to a plain Download (no resume). */
   cancelModelDownload: (specId: string) => Promise<void>;
+  /** 401 recovery: drop the HF token and re-run the download. Only offered
+   *  when the failure carries the "authentication" code — a 403 means the
+   *  account cannot read the repo, which no token state changes. */
+  retryWithoutToken: (specId: string) => Promise<void>;
   syncDownloadStatus: () => void;
 }
 

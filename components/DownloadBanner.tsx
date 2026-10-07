@@ -17,8 +17,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
 import { useModelStore } from "../store/modelStore";
-import { formatBytes } from "./models/ModelBits";
+import { ProgressTrack, progressLabel } from "./models/ModelBits";
 
+/** Stacked in normal flow above the navigator, NOT absolutely positioned.
+ *
+ * The review caught this as an overlay that covers each screen's header for
+ * the whole transfer. Trading one layout shift when a download starts (and
+ * one when it ends) for never hiding a header is the right way round: a
+ * download runs for minutes, and a screen you cannot read is worse than a
+ * screen that moved once. */
 export function DownloadBanner() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -39,7 +46,7 @@ export function DownloadBanner() {
       onPress={() => router.navigate("/models")}
       accessibilityRole="button"
       accessibilityLabel={`Downloading ${lead.name}, ${Math.round(pct)} percent. Open models.`}
-      className="absolute left-0 right-0 top-0 border-b border-border bg-surface-1 px-4 pb-2 pt-2"
+      className="border-b border-border bg-surface-1 px-4 pb-2 pt-2"
       style={{ paddingTop: insets.top + 8 }}
     >
       <View className="flex-row items-center justify-between">
@@ -47,14 +54,12 @@ export function DownloadBanner() {
           {lead.name}
         </Text>
         <Text className="font-sans text-caption text-secondary-text">
-          {speed !== undefined && speed > 0
-            ? `${Math.round(pct)}% · ${formatBytes(speed)}/s`
-            : `${Math.round(pct)}%`}
+          {progressLabel(pct, speed)}
           {extra > 0 ? `  ·  +${extra} more` : ""}
         </Text>
       </View>
-      <View className="mt-2 h-1 overflow-hidden rounded-full bg-surface-2">
-        <View className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+      <View className="mt-2">
+        <ProgressTrack progress={pct} />
       </View>
     </Pressable>
   );

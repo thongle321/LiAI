@@ -81,6 +81,24 @@ export function StatusBadge({ status }: { status: ModelDownloadStatus }) {
   );
 }
 
+/** The bar itself: track plus fill. Shared so a second surface showing a
+ *  transfer (the global banner) cannot drift from the card's — same clamp,
+ *  same colours, same rounded ends. */
+export function ProgressTrack({ progress }: { progress: number }) {
+  const clamped = Math.min(100, Math.max(0, progress));
+  return (
+    <View className="h-1 overflow-hidden rounded-full bg-surface-2">
+      <View className="h-full rounded-full bg-primary" style={{ width: `${clamped}%` }} />
+    </View>
+  );
+}
+
+/** The status line: a percentage, and a speed when we know one. */
+export function progressLabel(progress: number, speed?: number): string {
+  const pct = `${Math.round(progress)}%`;
+  return speed !== undefined && speed > 0 ? `${pct} · ${formatBytes(speed)}/s` : pct;
+}
+
 export function DownloadProgressBar({
   progress,
   speed,
@@ -93,16 +111,9 @@ export function DownloadProgressBar({
   // Caption Slate, right-aligned: it counts bytes, so it is metadata.
   return (
     <View className="mx-0.5 mb-3 mt-1">
-      <View className="h-1 overflow-hidden rounded-full bg-surface-2">
-        <View
-          className="h-full rounded-full bg-primary"
-          style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-        />
-      </View>
+      <ProgressTrack progress={progress} />
       <Text className="mt-1 text-right font-sans text-caption text-secondary-text">
-        {speed !== undefined && speed > 0
-          ? `${Math.round(progress)}% · ${formatBytes(speed)}/s`
-          : `${Math.round(progress)}%`}
+        {progressLabel(progress, speed)}
       </Text>
     </View>
   );

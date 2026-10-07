@@ -19,9 +19,9 @@ import {
   hfRefFromSearch,
   isHuggingFaceUrl,
 } from "../../lib/models/huggingface";
-import { downloadService } from "../../lib/download-service";
+import { downloadService, failureCode } from "../../lib/download-service";
 import { latestJobForModel } from "../../lib/models/download-jobs.ts";
-import { resumeDataForPartial } from "../../lib/models/resume-state.ts";
+import { resumeDataForPartial, classifyFileOnDisk } from "../../lib/models/resume-state.ts";
 import { findProjectorFile, pairDownloadStep } from "../../lib/models/vision-pairing.ts";
 import { readGgufMetadata } from "../../lib/models/gguf-header.ts";
 import { asyncStorage, MEMORY_GUARD_KEY, generateId } from "./storage";
@@ -324,6 +324,7 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
         get().updateModel(downloadJob.modelId, {
           downloadStatus: "failed",
           error: message,
+          errorCode: downloadJob.errorCode,
         });
       }
       get().syncDownloadStatus();
@@ -335,8 +336,27 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
       get().updateModel(specId, {
         downloadStatus: "failed",
         error: error instanceof Error ? error.message : "Download failed",
+        errorCode: failureCode(error),
       });
     }
+  },
+
+  /** Recovery for a 401: drop the token and try the download again.
+   *
+   * Distinct from disableHfTokenAndRetry, which re-runs a search. This
+   * re-runs the download, because the thing that failed was a transfer and
+   * the user is looking at a model card, not a search box. Only 401 gets
+   * here — 403 means the account cannot read the repo, and no token state
+   * we can reach from this screen changes that. */
+  retryWithoutToken: async (specId) => {
+    get().setUseHfToken(false);
+    const spec = get().getModel(specId);
+    const file = spec?.files[0];
+    if (!spec || !file) return;
+    // Clearing the code first: the card would otherwise keep offering a
+    // button for a failure this action is about to supersede.
+    get().updateModel(specId, { error: undefined, errorCode: undefined });
+    await get().startSpecDownload(spec, file, undefined);
   },
 
   pauseDownload: async (jobId) => {
@@ -431,11 +451,12 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
       if (!file || !(file.size > 0)) continue;
       try {
         const info = await LegacyFileSystem.getInfoAsync(dir + file.name);
-        if (!info.exists || !("size" in info) || typeof info.size !== "number") continue;
-        // `===`, not `>=`: an oversized file is the fingerprint of an error
+if (!info.exists || !("size" in info) || typeof info.size !== "number") continue;
+      // `===`, not `>=`: an oversized file is the fingerprint of an error
       // body appended onto a partial by the native writer, and calling that
       // "completed" hands the user a corrupt model that loads and misbehaves.
-      if (info.size === file.size) {
+      const state = classifyFileOnDisk(info.size, file.size);
+      if (state === "complete") {
           // Whole file on disk but never marked: killed at the finish line.
           get().updateModel(spec.id, {
             downloadStatus: "completed",
@@ -445,7 +466,24 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
             localPath: dir + file.name,
             error: undefined,
           });
-        } else if (resumeDataForPartial(info.size, file.size) !== null) {
+        } else if (state === "corrupt") {
+          // Overshoot: nothing here is resumable and nothing is whole. It
+          // used to match neither branch and simply sit on disk forever,
+          // holding gigabytes the user cannot reclaim from the UI. Delete it
+          // and hand the row back so Download works again.
+          await LegacyFileSystem.deleteAsync(dir + file.name, { idempotent: true }).catch(
+            () => {
+              // Unremovable: leave the row honest about why it cannot load.
+            },
+          );
+          get().updateModel(spec.id, {
+            downloadStatus: "idle",
+            downloadProgress: 0,
+            downloadedBytes: 0,
+            totalBytes: file.size,
+            error: "A partial download was left corrupt on disk — tap Download to start again",
+          });
+        } else if (state === "partial") {
           // Partial file: manual Resume continues it, nothing auto-starts.
           get().updateModel(spec.id, {
             downloadStatus: "paused",

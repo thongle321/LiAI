@@ -18,13 +18,32 @@ import {
   type DownloadResumable,
   type DownloadProgressData,
 } from "expo-file-system/legacy";
-import type { DownloadJob } from "../types/models.ts";
+import type { DownloadErrorCode, DownloadJob } from "../types/models.ts";
 import {
   describeHttpFailure,
+  errorCodeForStatus,
   isRetryableStatus,
   MAX_ATTEMPTS,
   retryAfterMs,
 } from "./models/http-retry.ts";
+
+/** A failure that carries a machine-readable kind, so the UI can offer the
+ *  right recovery instead of pattern-matching an English sentence. An
+ *  explicit field, NOT a constructor parameter property: node's
+ *  strip-only type stripping (node --test) rejects parameter properties. */
+class DownloadFailure extends Error {
+  readonly code?: DownloadErrorCode;
+  constructor(message: string, code?: DownloadErrorCode) {
+    super(message);
+    this.name = "DownloadFailure";
+    this.code = code;
+  }
+}
+
+/** Read the kind off whatever the service threw, if it carried one. */
+export function failureCode(error: unknown): DownloadErrorCode | undefined {
+  return error instanceof DownloadFailure ? error.code : undefined;
+}
 
 export interface DownloadProgressCallback {
   (job: DownloadJob): void;
@@ -210,11 +229,12 @@ class ResumableDownloadService {
   ): Promise<void> {
     const onProgress = progressCallback || (() => {});
     const onComplete = completeCallback || (() => {});
-    const fail = (message: string): never => {
+    const fail = (message: string, code?: DownloadErrorCode): never => {
       const failedJob: DownloadJob = {
         ...job,
         status: "failed",
         error: message,
+        errorCode: code,
       };
       this.forget(job.id);
       this.activeDownloads.set(job.id, {
@@ -367,7 +387,7 @@ class ResumableDownloadService {
 
         await deleteAsync(destPath, { idempotent: true }).catch(() => {});
         if (!isRetryableStatus(result.status) || attempt === MAX_ATTEMPTS - 1) {
-          fail(describeHttpFailure(result.status));
+          fail(describeHttpFailure(result.status), errorCodeForStatus(result.status));
         }
         // Throttle or blip: wait as long as the server asked, else our curve.
         await sleep(retryAfterMs(result.headers, attempt));
@@ -514,10 +534,11 @@ class ResumableDownloadService {
         await deleteAsync(getModelsDirectoryPath() + entry.job.fileName, {
           idempotent: true,
         }).catch(() => {});
-        throw new Error(
+        throw new DownloadFailure(
           ignoredRange
             ? "The server restarted this file instead of resuming — tap Retry to start it again"
             : describeHttpFailure(result.status),
+          errorCodeForStatus(result.status),
         );
       }
 
@@ -559,6 +580,7 @@ class ResumableDownloadService {
         ...entry.job,
         status: "failed",
         error: error instanceof Error ? error.message : "Download failed",
+        errorCode: failureCode(error),
       };
 
       this.activeDownloads.set(jobId, {

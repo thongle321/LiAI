@@ -17,19 +17,30 @@ import { Modal, Pressable, Text, View } from "react-native";
 
 import { scrim } from "../../themes/tokens.ts";
 import { downloadErrorCopy } from "../../lib/models/download-error.ts";
+import type { DownloadErrorCode } from "../../types/models.ts";
 
 export function DownloadErrorDialog({
   error,
+  errorCode,
   onDismiss,
   onRetry,
+  onRetryWithoutToken,
 }: {
   /** The stored failure reason, or null to stay hidden. */
   error: string | null;
+  /** Machine-readable failure kind, when the UI can offer a real fix. */
+  errorCode?: DownloadErrorCode;
   onDismiss: () => void;
   onRetry: () => void;
+  /** Offered only for "authentication": drop the token and try again. */
+  onRetryWithoutToken?: () => void;
 }) {
   if (error === null) return null;
   const { title, body } = downloadErrorCopy(error);
+  // Only 401 carries this. A 403 means the account cannot read the repo, and
+  // retrying without a token cannot grant that — offering the button there
+  // would be a dead end dressed up as help.
+  const showTokenRecovery = errorCode === "authentication" && onRetryWithoutToken !== undefined;
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
       <View
@@ -46,6 +57,18 @@ export function DownloadErrorDialog({
           <Text className="mb-4 font-sans text-body-md text-secondary-text">
             {body}
           </Text>
+          {showTokenRecovery && (
+            <Pressable
+              onPress={onRetryWithoutToken}
+              className="btn btn--secondary mb-2 w-full"
+              accessibilityRole="button"
+              accessibilityLabel="Download again without your Hugging Face token"
+            >
+              <Text className="font-sans text-body-md text-primary">
+                Retry without token
+              </Text>
+            </Pressable>
+          )}
           <View className="flex-row gap-2">
             <Pressable
               onPress={onDismiss}

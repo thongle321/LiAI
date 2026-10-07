@@ -30,27 +30,29 @@ export { DrawerErrorBoundary as ErrorBoundary } from "../../components/RouteErro
 export default function DrawerLayout() {
   return (
     <View className="flex-1">
-      <Drawer
-        screenOptions={{
-          headerShown: false,
-          drawerStyle: { width: 280, backgroundColor: colors.surface1 },
-          overlayColor: scrim,
-        }}
-        drawerContent={(props) => (
-          <AppDrawerContent onClose={() => props.navigation.closeDrawer()} />
-        )}
-      >
-        <Drawer.Screen name="(tabs)" />
-        <Drawer.Screen name="models" />
-        <Drawer.Screen name="settings" />
-        <Drawer.Screen name="voice-settings" />
-        <Drawer.Screen name="about" />
-      </Drawer>
       {/* Above the navigator, not inside it: a download outlives any one
-          screen, so its progress has to be readable from all of them.
-          Absolutely positioned so the navigator never reflows when a
-          download starts or finishes. */}
+          screen, so its progress has to be readable from all of them. */}
       <DownloadBanner />
+      {/* flex-1 wrapper: the banner is a sibling in this column, and the
+          navigator sizes to its own content without it. */}
+      <View className="flex-1">
+        <Drawer
+          screenOptions={{
+            headerShown: false,
+            drawerStyle: { width: 280, backgroundColor: colors.surface1 },
+            overlayColor: scrim,
+          }}
+          drawerContent={(props) => (
+            <AppDrawerContent onClose={() => props.navigation.closeDrawer()} />
+          )}
+        >
+          <Drawer.Screen name="(tabs)" />
+          <Drawer.Screen name="models" />
+          <Drawer.Screen name="settings" />
+          <Drawer.Screen name="voice-settings" />
+          <Drawer.Screen name="about" />
+        </Drawer>
+      </View>
     </View>
   );
 }

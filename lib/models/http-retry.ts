@@ -12,6 +12,19 @@
  * this account cannot read, and they need different words.
  */
 
+import type { DownloadErrorCode } from "../../types/models.ts";
+
+/** Which failures the UI can offer a real fix for.
+ *
+ * Only 401 qualifies. 403 deliberately does not: it means the account
+ * cannot read the repo, and retrying without the token cannot grant that,
+ * so a "disable token and retry" button would be a dead end dressed up as
+ * help. Everything else needs the user to do something outside the app
+ * (accept a licence, free disk, wait out a throttle). */
+export function errorCodeForStatus(status: number): DownloadErrorCode | undefined {
+  return status === 401 ? "authentication" : undefined;
+}
+
 /** Total attempts, including the first. Three is enough to ride out a CDN
  *  blip without turning a dead link into a two-minute spinner. */
 export const MAX_ATTEMPTS = 3;

@@ -1,4 +1,4 @@
-/** Android download driver: WorkManager via the local `expo-download` module.
+/** Android download driver: WorkManager via the local `native-download` module.
  *
  * WHY A SEPARATE DRIVER: `download-service.ts` is built around
  * expo-file-system's `createDownloadResumable`, which on Android runs on a
@@ -18,7 +18,7 @@
  * Falls back to null (and therefore to the legacy driver) whenever the native
  * side is absent: a clone that has not run `expo prebuild` yet still works.
  */
-import { androidDownload, addDownloadListener, type NativeDownload } from "../modules/expo-download/src/ExpoDownloadModule";
+import { androidDownload, addDownloadListener, type NativeDownload } from "../modules/native-download/src/NativeDownloadModule";
 import type { DownloadJob } from "../types/models.ts";
 
 export type ProgressCallback = (job: DownloadJob) => void;
@@ -160,7 +160,7 @@ export class AndroidDownloadService {
     _resumeData?: string,
   ): Promise<void> {
     const native = this.native;
-    if (!native) throw new Error("expo-download native module unavailable");
+    if (!native) throw new Error("native-download native module unavailable");
     const onProgress = progressCallback ?? (() => {});
     const complete = onComplete ?? (() => {});
     // The subscription is now module-level, so a per-call completion handler

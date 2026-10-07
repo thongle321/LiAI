@@ -56,7 +56,7 @@ export interface NativeDownloadRequest {
   headers?: Record<string, string>;
 }
 
-declare class ExpoDownloadModule extends NativeModule<ExpoDownloadEvents> {
+declare class NativeDownloadModule extends NativeModule<NativeDownloadEvents> {
   startDownload(request: NativeDownloadRequest): Promise<void>;
   pauseDownload(id: string): Promise<void>;
   resumeDownload(id: string): Promise<void>;
@@ -72,19 +72,19 @@ declare class ExpoDownloadModule extends NativeModule<ExpoDownloadEvents> {
   /** Resolves when the download is no longer live, or null if it still is. */
 }
 
-type ExpoDownloadEvents = {
+type NativeDownloadEvents = {
   onDownloadEvent: (event: NativeDownload) => void;
 };
 
-let cached: ExpoDownloadModule | null | undefined;
+let cached: NativeDownloadModule | null | undefined;
 
 /** The native module on Android, or null anywhere else. Never throws: the
  *  whole point is that the iOS path keeps working without it. */
-export function androidDownload(): ExpoDownloadModule | null {
+export function androidDownload(): NativeDownloadModule | null {
   if (Platform.OS !== "android") return null;
   if (cached === undefined) {
     try {
-      cached = requireNativeModule<ExpoDownloadModule>("ExpoDownload");
+      cached = requireNativeModule<NativeDownloadModule>("NativeDownload");
     } catch {
       // Native side not built yet (fresh clone, or a prebuild that predates
       // this module). Callers fall back to the legacy downloader.

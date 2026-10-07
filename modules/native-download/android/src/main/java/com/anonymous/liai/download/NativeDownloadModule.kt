@@ -42,7 +42,7 @@ import java.util.concurrent.TimeUnit
  * so [getActiveDownloads] reads the same durable store the worker writes and
  * is the source of truth. Events are an optimisation; polling is the contract.
  */
-class ExpoDownloadModule : Module() {
+class NativeDownloadModule : Module() {
     /** reactContext is nullable in the API surface; every function here needs a
      *  real Context to reach WorkManager and the files dir, so failing loudly
      *  at the boundary is better than a silent no-op later. */
@@ -67,7 +67,7 @@ class ExpoDownloadModule : Module() {
 
     override fun definition() =
         ModuleDefinition {
-            Name("ExpoDownload")
+            Name("NativeDownload")
 
             OnCreate {
                 scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

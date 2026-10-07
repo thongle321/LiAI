@@ -14,6 +14,8 @@ import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import expo.modules.kotlin.records.Field
+import expo.modules.kotlin.records.Record
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -185,16 +187,42 @@ class ExpoDownloadModule : Module() {
     }
 }
 
-/** The shape JS hands over to start a download. A plain class with
- *  constructor parameters, which is how the Expo Modules API converts a JS
- *  object into a Kotlin record. */
-class DownloadRequest(
-    val id: String,
-    val modelId: String,
-    val url: String,
-    val fileName: String,
-    val destinationPath: String,
-    val expectedTotal: Double,
-    val ifRange: String?,
-    val headers: Map<String, String>,
-)
+/** The shape JS hands over to start a download.
+ *
+ *  MUST implement `Record` with `@Field` vars — a plain Kotlin class with
+ *  constructor parameters compiles fine and then throws at runtime.
+ *  `TypeConverterProvider.obtainNonNullableTypeConverter` walks primitives,
+ *  collections, enums, `Record`, `View`, `SharedRef`, `SharedObject`,
+ *  `JavaScriptFunction`, `ValueOrUndefined`, `Either`, and finally
+ *  `throw MissingTypeConverter` (TypeConverterProvider.kt:104-172). A class
+ *  that implements none of those lands on the throw.
+ *
+ *  Every field needs a default so `ObjectConstructorFactory` can find a
+ *  constructor whose parameters are ALL optional
+ *  (allocators/ObjectConstructorFactory.kt:31). */
+class DownloadRequest : Record {
+    @Field
+    var id: String = ""
+
+    @Field
+    var modelId: String = ""
+
+    @Field
+    var url: String = ""
+
+    @Field
+    var fileName: String = ""
+
+    @Field
+    var destinationPath: String = ""
+
+    @Field
+    var expectedTotal: Double = 0.0
+
+    /** HF LFS content id, sent as a quoted If-Range entity-tag. */
+    @Field
+    var ifRange: String? = null
+
+    @Field
+    var headers: Map<String, String> = emptyMap()
+}

@@ -59,6 +59,9 @@ class ExpoDownloadModule : Module() {
      *  leave a coroutine behind. */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /** The Room Flow collector, cancelled on the LAST listener leaving. */
+    private var observeJob: kotlinx.coroutines.Job? = null
+
     override fun definition() =
         ModuleDefinition {
             Name("ExpoDownload")
@@ -181,6 +184,29 @@ class ExpoDownloadModule : Module() {
                     store.all().filterNot { isTerminal(it) }
                         .forEach { sendEvent(EVENT, it.toWritableMap()) }
                 }
+                // Then keep pushing: the worker writes progress to the same
+                // table once a second, so this Flow is the transfer's own
+                // heartbeat. Polling from JS stays the CONTRACT (emitNative
+                // returns early when the JS object is gone, which is exactly
+                // the case a background download exists for) — these events
+                // are the fast path on top of it, never the only path.
+                observeJob?.cancel()
+                observeJob = scope.launch {
+                    store.observeAll().collect { records ->
+                        records.filterNot { isTerminal(it) }.forEach {
+                            sendEvent(EVENT, it.toWritableMap())
+                        }
+                    }
+                }
+            }
+
+            // Cancels the COLLECTOR ONLY. An earlier version of this module
+            // called cancelAllWorkByTag here, which read like cleanup but
+            // would have killed live downloads whenever JS tore down — the
+            // exact opposite of what this module is for.
+            OnStopObserving {
+                observeJob?.cancel()
+                observeJob = null
             }
         }
 

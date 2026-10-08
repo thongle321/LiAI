@@ -71,6 +71,20 @@ The mobile application is responsible for:
 
 - expo-linking + expo-constants
 - react-native-gesture-handler
+- react-native-keyboard-controller
+- react-native-safe-area-context
+- react-native-screens
+- react-native-webview
+- @lodev09/react-native-true-sheet
+- expo-haptics
+- expo-keep-awake
+- expo-sharing
+- expo-splash-screen
+- expo-status-bar
+- expo-system-ui
+- expo-build-properties
+- expo-dev-client
+- tailwindcss
 
 ### Dependency Policy
 
@@ -134,6 +148,12 @@ models/
 
 tests/
 
+modules/
+
+docs/
+
+pocketpal-ai/
+
 ```
 
 **app/** is for routes and screens only. Screens compose components and
@@ -145,6 +165,15 @@ components too early.
 **store/** holds Zustand stores.
 **lib/** holds external service helpers.
 Never expose secret keys here.
+**modules/** holds local Expo native modules (e.g. `native-download`, Kotlin
++ TypeScript). Their Kotlin is unreachable from `npm test` — device checks
+carry them.
+**docs/** holds research, specs and agent docs (see Agent skills below).
+**pocketpal-ai/** is the vendored reference app — read it, never edit it.
+**android/** is committed (PocketPal's way; `expo prebuild --clean` discards
+tracked native edits — restore them from git). Its manifest carries the two
+`uses-feature` camera lines that keep camera-less devices installable; build
+output is excluded by `android/.gitignore`.
 ---
 
 ## UI Rules
@@ -319,6 +348,15 @@ Before every feature:
 
 - Replicate UI exactly when designs are provided.
 
+
+## PocketPal parity
+
+`pocketpal-ai/` is the vendored PocketPal AI reference app, and feature
+parity work is measured against it. Read its source for the reference
+behavior, record verdicts and findings in `docs/research/`, and check
+`docs/specs/` before starting parity work.
+
+---
 
 ## Agent skills
 

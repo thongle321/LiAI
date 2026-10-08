@@ -365,6 +365,32 @@ export default function ChatRoute() {
   // identical in both states. The screen-anchored ones need nothing.
   const keyboardVisible = useKeyboardState((s) => s.isVisible);
   const tabBarCompensation = keyboardVisible ? keyboardOffset : 0;
+  // TEMPORARY __DEV__ PROBE — the empty card was reported moving on a
+  // 2026-10-07 Android build (post-fix, see docs/research/2026-10-08-
+  // pocketpal-chat-empty-view-keyboard.md) while every static input says
+  // its box is invariant. Printing both boxes on each keyboard toggle turns
+  // "I don't know if the whole screen moves" into numbers. Strip with its
+  // two onLayout hooks before committing any fix.
+  const probeColumn = useRef(0);
+  const probeOverlay = useRef(0);
+  useEffect(() => {
+    if (!__DEV__) return;
+    console.log(
+      "[empty-view probe]",
+      JSON.stringify({
+        keyboard: keyboardVisible,
+        column: probeColumn.current,
+        overlay: probeOverlay.current,
+        list: listHeight,
+        composer: composerHeight,
+        compensation: tabBarCompensation,
+        offset: keyboardOffset,
+      }),
+    );
+    // Probe deliberately keyed on the toggle alone: the numbers are only
+    // interesting at the two keyboard states, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyboardVisible]);
   // Height of the field, which IS the composer. NOT a delta from a baseline,
   // unlike the library's example: the field is out of flow, so nothing else
   // accounts for it and the newest message would sit behind it. The banners
@@ -556,7 +582,12 @@ export default function ChatRoute() {
           keyboard opens. The library's guide is also explicit that
           KeyboardAvoidingView is the wrong tool for chat, so there is no KAV
           on this screen. */}
-      <View className="flex-1">
+      <View
+        className="flex-1"
+        onLayout={(e) => {
+          probeColumn.current = e.nativeEvent.layout.height;
+        }}
+      >
         <View
           className="flex-1"
           onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
@@ -609,6 +640,9 @@ export default function ChatRoute() {
           <View
             className="absolute inset-x-0 top-0"
             style={{ bottom: composerHeight + tabBarCompensation }}
+            onLayout={(e) => {
+              probeOverlay.current = e.nativeEvent.layout.height;
+            }}
             pointerEvents="box-none"
           >
             <ChatEmptyPlaceholder />

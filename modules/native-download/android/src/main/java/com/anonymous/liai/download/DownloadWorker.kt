@@ -221,11 +221,16 @@ class DownloadWorker(
                 // report Size mismatch forever and could never finish. The
                 // end-of-transfer check below compares against THIS value.
                 val contentLength = body.contentLength()
-                val serverTotal = when {
-                    contentLength <= 0 -> record.expectedTotal // chunked/Xet: keep catalog
-                    append -> existing + contentLength // 206: remainder + bytes on disk
-                    else -> contentLength
-                }
+                val serverTotal =
+                    when {
+                        // chunked/Xet: keep the catalog's size
+                        contentLength <= 0 -> record.expectedTotal
+
+                        // 206: the response is only the remainder
+                        append -> existing + contentLength
+
+                        else -> contentLength
+                    }
                 if (serverTotal > 0 && serverTotal != record.expectedTotal) {
                     store.mutate(record.id) { it.copy(expectedTotal = serverTotal) }
                 }

@@ -250,11 +250,22 @@ export function createSendSlice(
     } catch (err) {
       if (gen !== ctx.streamGen) return;
       const message = err instanceof Error ? err.message : "Local run failed";
+      const error = llmError(message);
       updateBubble(opts.assistantId, {
         streaming: false,
-        error: llmError(message),
+        error,
       });
-      set({ sending: false, turnStartedAt: null, pendingToolName: null });
+      // The reason and the retry affordance, now that a failed turn has no
+      // card of its own in the list: PocketPal surfaces failures in the
+      // snackbar (uiStore.setChatWarning -> ErrorSnackbar). `recoverable`
+      // because `retry` can re-run exactly this turn — the bubble still
+      // carries its error, which is what retry() looks for.
+      set({
+        sending: false,
+        turnStartedAt: null,
+        pendingToolName: null,
+        chatWarning: { message: error.message, severity: "error", recoverable: true },
+      });
       ctx.keepAwake(false);
     } finally {
       // Success, failure or supersede: idle must hold no timer.

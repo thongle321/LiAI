@@ -21,16 +21,15 @@ export interface DateHeaderRow {
 export interface MessageRow {
   kind: "message";
   message: ChatMessage;
-  /** Next turn continues the group: hide this row's avatar, tighten corners. */
+  /** Next turn continues the group: tighter vertical rhythm. */
   grouped: boolean;
-  /** Assistant row closing its group: the one avatar for the group. */
-  showAvatar: boolean;
   /** Newest turn while tokens arrive: the pending row's anchor. */
   isActiveRun: boolean;
   /** User-turn delivery state. `failed` when the turn's own reply carries
    * an error: the store records a failed send on the assistant stub, and
-   * retry() clears it before rerunning. The assistant-side tap-to-retry
-   * error card is unaffected — the row only reports the delivery. */
+   * retry() clears it before rerunning. The row only reports delivery —
+   * a failed turn's reason and its retry live in the snackbar
+   * (PocketParity: PocketPal has no error bubble in the list at all). */
   status: "sending" | "sent" | "failed";
 }
 
@@ -106,7 +105,6 @@ export function buildRows(
       kind: "message",
       message,
       grouped,
-      showAvatar: message.role === "assistant" && !grouped,
       isActiveRun: isLast && message.streaming === true,
       status: deliveryStatus(message, next, sending && isLast),
     });

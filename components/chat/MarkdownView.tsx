@@ -202,10 +202,21 @@ const headingText = {
 export function MarkdownView({
   text,
   dense = false,
+  maxWidth,
 }: {
   text: string;
   /** Reasoning block: renders at pocketpal's 14/20 thinking rung. */
   dense?: boolean;
+  /** Definite measure width for the parsed body.
+   *
+   *  The parsed elements used to be returned as a bare fragment, so
+   *  nothing constrained them: a native <Text> reports its full unwrapped
+   *  width as intrinsic, the row shrink-wrapped to that, and the list
+   *  clipped the overflow instead of wrapping it. react-native-marked
+   *  exposes no width option of its own — its README's hook example gets
+   *  one from the surrounding <ScrollView> — so the caller owns this
+   *  wrapper. See lib/chat/message-width.ts. */
+  maxWidth?: number;
 }) {
   const body = dense ? denseText : baseText;
   const elements = useMarkdown(text === "" ? " " : text, {
@@ -244,10 +255,10 @@ export function MarkdownView({
     },
   });
   return (
-    <>
+    <View style={maxWidth === undefined ? undefined : { maxWidth }}>
       {elements.map((element, index) => (
         <Fragment key={index}>{element}</Fragment>
       ))}
-    </>
+    </View>
   );
 }

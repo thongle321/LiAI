@@ -1,9 +1,16 @@
-/** Message list item: user card, assistant card (markdown + tool chips +
- * actions), and the tap-to-retry error card — one row, either role.
+/** Message list item: user card and assistant turn (markdown + tool chips
+ * + footer) — one row, either role.
  *
  * Renamed from Bubble.tsx (message-view refactor): same behavior, new
  * name. Assistant text renders through MarkdownView; streaming replies
  * re-parse per token chunk.
+ *
+ * Row shape is PocketPal's (Message.tsx, Bubble.tsx, styles.ts): a width
+ * measured once by the list and threaded down, an assistant turn with no
+ * furniture at all — no avatar, no name, no fill — and a footer carrying
+ * only speak, copy and timings. Their Avatar returns null for assistant
+ * rows and their sender name is off by default, so their assistant row is
+ * bare text on the page; ours now is too.
  */
 
 import { ActivityIndicator, Image as RNImage, Pressable, Text, View } from "react-native";
@@ -12,24 +19,16 @@ import { useState } from "react";
 import Animated from "react-native-reanimated";
 import { CheckCheck, CircleAlert, Wrench } from "lucide-react-native";
 
-import { APP_NAME } from "../../constants/app.ts";
-
-// Reanimated v4 ships View/Text/Image/ScrollView only — Pressable
-// goes through the builtin factory instead of a hand-rolled wrapper.
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
 import { colors } from "../../themes/tokens.ts";
 import { formatTime, formatToolMetrics } from "../../lib/format.ts";
 import {
   MOTION_DURATION_MS,
   bubbleEntering,
   fadeExiting,
-  usePressFeedback,
 } from "../../lib/motion.ts";
 import type { MessageRow } from "../../lib/chat/rows.ts";
 import { blocksOf, turnText } from "../../lib/chat/blocks.ts";
 import type { AgentStep } from "../../types/chat.ts";
-import { AssistantAvatar } from "./AssistantAvatar.tsx";
 import { MarkdownView } from "./MarkdownView.tsx";
 import { MessageActions } from "./MessageActions.tsx";
 import { LinkPreviewCard } from "./LinkPreview.tsx";
@@ -39,6 +38,7 @@ import { ToolErrorBlock } from "./ToolErrorBlock.tsx";
 import { ToolMetricsLine, toolSurfaceFor } from "./toolSurfaces.tsx";
 import { ImageViewer } from "./ImageViewer.tsx";
 import type { PickableModel } from "../../lib/chat/models.ts";
+import type { MessageWidths } from "../../lib/chat/message-width.ts";
 
 /** One tool block, as a SIBLING of the text bubbles — never nested in
  * one. THREE-WAY DISPATCH, in this order (G5):
@@ -78,9 +78,11 @@ function ToolBlock({ step }: { step: AgentStep }) {
     <View className="flex-row items-center gap-1 self-start rounded-full border border-border bg-surface-2 px-2 py-0.5">
       <Wrench size={11} color={colors.secondaryText} />
       <Text className="font-sans text-caption text-secondary-text">
-        {step.tool}
-        {/* PocketPal's chip suffix: same formatter, so the chip and the
-            footer can never disagree. */}
+        {/* PocketPal's chip reads "Used {{name}}" (ToolUsedChip.tsx:53-66),
+            so the reader can tell a tool ran from a label that just names
+            one. Their metrics suffix is the same " · 1,500 tokens · 35s"
+            our formatToolMetrics already produces. */}
+        Used {step.tool}
         {metricsText === null ? "" : ` · ${metricsText}`}
       </Text>
     </View>
@@ -89,17 +91,16 @@ function ToolBlock({ step }: { step: AgentStep }) {
 
 export function MessageListItem({
   row,
-  onRetry,
   onRegenerate,
   onEdit,
   onRegenerateWith,
   canRun,
   models,
+  widths,
   contextBannerVisible,
 }: {
-  /** One adapter row: message plus its group/avatar/status flags. */
+  /** One adapter row: message plus its group/status flags. */
   row: MessageRow;
-  onRetry: () => void;
   /** Null for user bubbles (nothing to regenerate). */
   onRegenerate: (() => void) | null;
   /** Enter edit mode on this turn. Only reachable from a user bubble. */
@@ -110,15 +111,17 @@ export function MessageListItem({
   canRun: boolean;
   /** Models offered by "Regenerate with…". */
   models: PickableModel[];
+  /** The list's one width measurement, threaded down (PocketParity).
+   *  A percentage cannot work here — see lib/chat/message-width.ts. */
+  widths: MessageWidths;
   /** A context-full banner is on screen for this conversation, so the
    *  turn footer must not repeat what it already says. */
   contextBannerVisible?: boolean;
 }) {
-  const { message, grouped, showAvatar, status } = row;
+  const { message, grouped, status } = row;
   const duration = MOTION_DURATION_MS;
   const entering = bubbleEntering(duration);
   const exiting = fadeExiting(duration);
-  const press = usePressFeedback();
   // Previews and actions target settled turns: a half-streamed URL would
   // trigger a garbage preview fetch, and actions need final text.
   const settled = message.streaming !== true;
@@ -156,30 +159,15 @@ export function MessageListItem({
       {bubble}
     </MessageMenu>
   );
-  if (message.error) {
-    return (
-      <AnimatedPressable
-        entering={entering}
-        exiting={exiting}
-        onPressIn={press.onPressIn}
-        onPressOut={press.onPressOut}
-        onPress={onRetry}
-        style={press.animatedStyle}
-        className="card card--error self-start max-w-[80%] my-1"
-      >
-        <Text className="font-sans text-body-lg text-primary-text">
-          {message.text}
-        </Text>
-        <Text className="mt-1 font-sans text-body-sm text-error">
-          {message.error.message} — tap to retry
-        </Text>
-      </AnimatedPressable>
-    );
-  }
   if (message.role === "user") {
     return (
       <>
-        <Animated.View entering={entering} exiting={exiting} className="my-1 max-w-[80%] self-end items-end">
+        <Animated.View
+          entering={entering}
+          exiting={exiting}
+          className={grouped ? "mb-1 self-end items-end" : "mb-4 self-end items-end"}
+          style={{ maxWidth: widths.user }}
+        >
             {message.images !== undefined && message.images.length > 0 && (
             // G8: one row of up to five, each independently tappable. Keyed
             // by position plus length: the list only ever shrinks, so a
@@ -198,10 +186,11 @@ export function MessageListItem({
               ))}
             </View>
           )}
+          {/* No tail: PocketPal passes roundBorder hard-coded true, so its
+              bubbles have all four corners rounded and the tail its styles
+              describe never actually renders. */}
           {withMenu(
-            <View
-              className={`px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-br-sm"} bg-surface-3`}
-            >
+            <View className="rounded-xl bg-surface-3 px-5 py-3">
               <Text className="font-sans text-body-lg text-primary-text">
                 {message.text}
               </Text>
@@ -210,16 +199,16 @@ export function MessageListItem({
           <View className="w-full">
             <LinkPreviewCard text={message.text} />
           </View>
-          {/* Time + status once per group, like the assistant name row:
-              repeating them on every grouped turn is visual noise. */}
+          {/* Time + status once per group: repeating them on every
+              grouped turn is visual noise. */}
           {!grouped && (
             <View className="mt-1 flex-row items-center">
               <Text className="font-sans text-caption text-secondary-text">
                 {formatTime(message.at)}
               </Text>
               {/* Three states, one row. The error icon is the row's own
-                  record that this question never landed -- the assistant
-                  turn below still owns the tap-to-retry card. */}
+                  record that this question never landed; the reason and
+                  its retry live in the snackbar, not on the row. */}
               {status === "sending" ? (
                 <ActivityIndicator size="small" color={colors.secondaryText} />
               ) : status === "failed" ? (
@@ -239,59 +228,60 @@ export function MessageListItem({
     );
   }
   return (
-    <Animated.View entering={entering} exiting={exiting} className="my-1 max-w-[75%] flex-row self-start">
-      <AssistantAvatar shown={showAvatar} />
-      <View className="flex-1">
-        {!grouped && (
-          <View className="mb-1 flex-row items-center gap-2">
-            <Text className="font-sans text-caption text-secondary-text">{APP_NAME}</Text>
-            <Text className="font-sans text-caption text-secondary-text">
-              {formatTime(message.at)}
-            </Text>
-          </View>
-        )}
-        {withMenu(
-          <View className="gap-2">
-            {blocks.map((block, index) => {
-              if (block.kind === "reasoning") {
-                return (
-                  <ReasoningBlock
-                    key={`reasoning-${index}`}
-                    text={block.text}
-                    autoCollapse={settled || wholeText.trim() !== ""}
-                  />
-                );
-              }
-              if (block.kind === "text") {
-                return (
-                  <View
-                    key={`text-${index}`}
-                    className={`border border-border bg-surface-1 px-5 py-3 ${grouped ? "rounded-xl" : "rounded-xl rounded-tl-sm"}`}
-                  >
-                    <MarkdownView text={block.text} />
-                    {settled && <LinkPreviewCard text={block.text} />}
-                  </View>
-                );
-              }
-              // A tool block resolves to its step by id; a dangling
-              // reference (a step the store skipped) renders nothing
-              // rather than guessing a surface.
-              const step = stepById.get(block.stepId);
-              if (step === undefined) return null;
-              return <ToolBlock key={step.id} step={step} />;
-            })}
-          </View>,
-        )}
-        {onRegenerate !== null && settled && (
-          <MessageActions
-            text={wholeText}
-            usage={message.usage}
-            outcome={message.outcome}
-            contextBannerVisible={contextBannerVisible}
-            onRegenerate={onRegenerate}
-          />
-        )}
-      </View>
+    // The list's ONE measured width, threaded down — not a percentage.
+    // `self-start` + `max-w-[75%]` shrink-wrapped this row to the content's
+    // intrinsic width and the viewport clipped it instead of wrapping;
+    // see lib/chat/message-width.ts. Vertical rhythm is PocketPal's
+    // (styles.ts:24-32): 4px within a group, 16px between groups.
+    <Animated.View
+      entering={entering}
+      exiting={exiting}
+      className={grouped ? "mb-1" : "mb-4"}
+      style={{ maxWidth: widths.assistant }}
+    >
+      {withMenu(
+        <View className="gap-2">
+          {blocks.map((block, index) => {
+            if (block.kind === "reasoning") {
+              return (
+                <ReasoningBlock
+                  key={`reasoning-${index}`}
+                  text={block.text}
+                  maxWidth={widths.assistant}
+                  autoCollapse={settled || wholeText.trim() !== ""}
+                />
+              );
+            }
+            if (block.kind === "text") {
+              // No fill, no border, no radius: PocketPal's assistant
+              // bubble is `backgroundColor: 'transparent'` with a radius
+              // that only exists to clip the tool surfaces inside it. The
+              // vertical inset is theirs (insets.messageInsetsVertical:
+              // 10); the horizontal one is 0, because the list's own p-5
+              // already sets the text's left edge.
+              return (
+                <View key={`text-${index}`} className="py-2.5">
+                  <MarkdownView text={block.text} maxWidth={widths.assistant} />
+                  {settled && <LinkPreviewCard text={block.text} />}
+                </View>
+              );
+            }
+            // A tool block resolves to its step by id; a dangling
+            // reference (a step the store skipped) renders nothing
+            // rather than guessing a surface.
+            const step = stepById.get(block.stepId);
+            if (step === undefined) return null;
+            return <ToolBlock key={step.id} step={step} />;
+          })}
+        </View>,
+      )}
+      {settled && (
+        <MessageActions
+          text={wholeText}
+          outcome={message.outcome}
+          contextBannerVisible={contextBannerVisible}
+        />
+      )}
     </Animated.View>
   );
 }

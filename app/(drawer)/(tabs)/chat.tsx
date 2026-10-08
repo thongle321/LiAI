@@ -114,6 +114,19 @@ export default function ChatRoute() {
   const checkHealth = useChatStore((s) => s.checkHealth);
   const send = useChatStore((s) => s.send);
   const retry = useChatStore((s) => s.retry);
+  // The failed turn's own retry, which used to live on the card this screen
+  // no longer renders. The snackbar carries no message id, so the newest
+  // message still carrying an error is the turn it stands for — the same
+  // turn the deleted card sat on.
+  const retryFailedTurn = () => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.error !== undefined) {
+        void retry(m.id);
+        return;
+      }
+    }
+  };
   const regenerate = useChatStore((s) => s.regenerate);
   const newConversation = useChatStore((s) => s.newConversation);
   const startEdit = useChatStore((s) => s.startEdit);
@@ -600,15 +613,15 @@ export default function ChatRoute() {
             blankSpace={blankSpace}
             onEndVisibleChange={setAtEnd}
             streaming={streaming}
-            renderRow={(row) =>
+            renderRow={(row, widths) =>
               row.kind === "date" ? (
                 <DateHeader label={row.label} />
               ) : row.kind === "pending" ? (
-                <PendingIndicator startedAt={turnStartedAt} />
+                <PendingIndicator startedAt={turnStartedAt} widths={widths} />
               ) : (
                 <MessageListItem
                   row={row}
-                  onRetry={() => void retry(row.message.id)}
+                  widths={widths}
                   contextBannerVisible={contextFullShowing}
                   canRun={canRun}
                   models={menuModels}
@@ -712,6 +725,7 @@ export default function ChatRoute() {
           <ChatWarningSnackbar
             warning={chatWarning}
             onDismiss={dismissWarning}
+            onRetry={retryFailedTurn}
           />
   {/* `?? 0` is dead-in-practice: a FULL banner implies the local engine
       (remote hardcodes contextFull: false) so windowSize is nCtx there,

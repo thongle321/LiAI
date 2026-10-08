@@ -34,7 +34,6 @@ describe("buildRows", () => {
         kind: "message",
         message,
         grouped: false,
-        showAvatar: false,
         isActiveRun: false,
         status: "sent",
       },
@@ -52,7 +51,6 @@ describe("buildRows", () => {
       kind: "message",
       message: q,
       grouped: false,
-      showAvatar: false,
       isActiveRun: false,
       status: "sent",
     });
@@ -60,7 +58,6 @@ describe("buildRows", () => {
       kind: "message",
       message: first,
       grouped: true,
-      showAvatar: false,
       isActiveRun: false,
       status: "sent",
     });
@@ -68,7 +65,6 @@ describe("buildRows", () => {
       kind: "message",
       message: second,
       grouped: false,
-      showAvatar: true,
       isActiveRun: false,
       status: "sent",
     });

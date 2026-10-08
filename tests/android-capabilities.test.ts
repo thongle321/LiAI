@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import path from "node:path";
 
@@ -70,6 +70,33 @@ describe("android hardware capabilities", () => {
       read("android/app/src/main/AndroidManifest.xml"),
       /<uses-permission android:name="android\.permission\.CAMERA"\s*\/>/,
       "the CAMERA permission must stay declared",
+    );
+  });
+});
+
+describe("llama.rn native artifacts", () => {
+  it("has the prebuilt libs its CMake needs to build the JNI wrappers", () => {
+    // REGRESSION, and the nastiest silent failure in the project: llama.rn
+    // ships NO binaries in its npm tarball. Its postinstall
+    // (install/download-native-artifacts.js) fetches them into
+    // android/src/main/jniLibs, and CMake SKIPS every `rnllama_jni_*` target
+    // when that directory is empty ("no prebuilt for <abi>"). The build then
+    // SUCCEEDS, the app installs and runs, and the only symptom is every
+    // chat reply reading "JSI bindings not installed" — a swallowed
+    // UnsatisfiedLinkError from RNLlama.loadNative.
+    //
+    // Fix: npm rebuild llama.rn, then rebuild the app (a Metro reload cannot
+    // help; the libraries are native).
+    assert.ok(
+      existsSync(
+        path.join(
+          ROOT,
+          "node_modules/llama.rn/android/src/main/jniLibs/arm64-v8a/librnllama.so",
+        ),
+      ),
+      "llama.rn native artifacts are missing — run `npm rebuild llama.rn` " +
+        "(or node node_modules/llama.rn/install/download-native-artifacts.js), " +
+        "clear node_modules/llama.rn/android/.cxx, then rebuild the app",
     );
   });
 });

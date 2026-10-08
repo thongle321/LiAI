@@ -44,7 +44,12 @@ export default function ModelsRoute() {
         (m) => m.downloadStatus === "failed" && m.error,
       );
       return failed && failed.error
-        ? { id: failed.id, error: failed.error, errorCode: failed.errorCode }
+        ? {
+            id: failed.id,
+            error: failed.error,
+            errorCode: failed.errorCode,
+            modelUrl: failed.hfUrl,
+          }
         : null;
     }),
   );
@@ -188,6 +193,7 @@ export default function ModelsRoute() {
       <DownloadErrorDialog
         error={failedDownload?.error ?? null}
         errorCode={failedDownload?.errorCode}
+        modelUrl={failedDownload?.modelUrl}
         onDismiss={() => {
           if (failedDownload !== null) clearDownloadError(failedDownload.id);
         }}

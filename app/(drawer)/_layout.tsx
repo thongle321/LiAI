@@ -22,7 +22,6 @@ import { Drawer } from "expo-router/drawer";
 
 import { colors, scrim } from "../../themes/tokens.ts";
 import { AppDrawerContent } from "../../components/AppDrawer.tsx";
-import { DownloadBanner } from "../../components/DownloadBanner.tsx";
 
 // Same story as the root boundary: this was `app/(drawer)/+error.tsx`.
 export { DrawerErrorBoundary as ErrorBoundary } from "../../components/RouteErrorBoundaries.tsx";
@@ -30,11 +29,6 @@ export { DrawerErrorBoundary as ErrorBoundary } from "../../components/RouteErro
 export default function DrawerLayout() {
   return (
     <View className="flex-1">
-      {/* Above the navigator, not inside it: a download outlives any one
-          screen, so its progress has to be readable from all of them. */}
-      <DownloadBanner />
-      {/* flex-1 wrapper: the banner is a sibling in this column, and the
-          navigator sizes to its own content without it. */}
       <View className="flex-1">
         <Drawer
           screenOptions={{

@@ -532,7 +532,12 @@ export function HFModelSearch({
           </View>
         ) : null}
         {isProgressVisible(status) ? (
-          <DownloadProgressBar progress={progress} speed={spec?.speedBytesPerSec} />
+          <DownloadProgressBar
+            progress={progress}
+            downloaded={spec?.downloadedBytes ?? 0}
+            total={spec?.totalBytes ?? 0}
+            speed={spec?.speedBytesPerSec}
+          />
         ) : null}
       </View>
     );

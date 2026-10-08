@@ -69,7 +69,6 @@ declare class NativeDownloadModule extends NativeModule<NativeDownloadEvents> {
   /** Every record the worker has, read from the same durable store it writes.
    *  This is what a cold-started app calls to find downloads it never saw. */
   getActiveDownloads(): Promise<NativeDownload[]>;
-  /** Resolves when the download is no longer live, or null if it still is. */
 }
 
 type NativeDownloadEvents = {

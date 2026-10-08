@@ -4,15 +4,13 @@ import { Pressable, Text, View } from "react-native";
 import { CheckCircle2, Download, Eye, MessageSquare, Pause, Play, X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
+import { clampPercent, formatBytes, progressCaption } from "../../lib/models/progress.ts";
 import type { ModelDownloadStatus, ModelType } from "../../types/models";
 
-export function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-}
+// Re-exported so the six existing importers keep one import path. The
+// implementation lives in lib/ now, where it is testable by `node --test`
+// and where the PocketParity port is documented.
+export { formatBytes, progressCaption };
 
 /** Compact stat for HF rows (e.g. 12.4k downloads). */
 export function formatCompact(n: number): string {
@@ -81,11 +79,10 @@ export function StatusBadge({ status }: { status: ModelDownloadStatus }) {
   );
 }
 
-/** The bar itself: track plus fill. Shared so a second surface showing a
- *  transfer (the global banner) cannot drift from the card's — same clamp,
- *  same colours, same rounded ends. */
+/** The bar itself: track plus fill. The clamp is shared so every surface
+ *  showing a transfer cannot drift from the others. */
 export function ProgressTrack({ progress }: { progress: number }) {
-  const clamped = Math.min(100, Math.max(0, progress));
+  const clamped = clampPercent(progress);
   return (
     <View className="h-1 overflow-hidden rounded-full bg-surface-2">
       <View className="h-full rounded-full bg-primary" style={{ width: `${clamped}%` }} />
@@ -93,27 +90,26 @@ export function ProgressTrack({ progress }: { progress: number }) {
   );
 }
 
-/** The status line: a percentage, and a speed when we know one. */
-export function progressLabel(progress: number, speed?: number): string {
-  const pct = `${Math.round(progress)}%`;
-  return speed !== undefined && speed > 0 ? `${pct} · ${formatBytes(speed)}/s` : pct;
-}
-
 export function DownloadProgressBar({
   progress,
+  downloaded,
+  total,
   speed,
 }: {
   progress: number;
-  /** Live bytes/sec; shown PocketPal-style when known. */
+  /** Bytes on disk right now, and the transfer's full size. */
+  downloaded: number;
+  total: number;
+  /** Live bytes/sec. */
   speed?: number;
 }) {
-  // Mist track, Signal Blue fill, Micro radius on both. The status line is
+  // Mist track, Signal Blue fill, Micro radius on both. The caption is
   // Caption Slate, right-aligned: it counts bytes, so it is metadata.
   return (
     <View className="mx-0.5 mb-3 mt-1">
       <ProgressTrack progress={progress} />
       <Text className="mt-1 text-right font-sans text-caption text-secondary-text">
-        {progressLabel(progress, speed)}
+        {progressCaption(downloaded, total, speed ?? 0)}
       </Text>
     </View>
   );

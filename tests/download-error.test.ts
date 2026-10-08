@@ -62,6 +62,26 @@ describe("download error taxonomy (C1)", () => {
     assert.match(downloadErrorCopy("boom").body, /boom/);
     assert.equal(downloadErrorCopy("boom").title, "Download failed");
   });
+
+  it("gives only the branches with a real user action numbered steps", () => {
+    // PocketParity: DownloadErrorDialog.tsx:207-224 (forbiddenSteps,
+    // getTokenSteps). A 403 asks for a licence accepted over on Hugging
+    // Face; a 401 asks for a token fixed in Settings. Both are walks, so
+    // both are numbered.
+    for (const message of ["Not enough storage space", "HTTP 401", "HTTP 403"]) {
+      const { steps } = downloadErrorCopy(message);
+      assert.ok(steps.length >= 2, `steps for: ${message}`);
+      for (const step of steps) assert.ok(step.trim().length > 0);
+    }
+    // Nothing to walk through: a server blip is "try again in a moment",
+    // and an unknown failure keeps its raw message instead.
+    assert.deepEqual(downloadErrorCopy("HTTP 500").steps, []);
+    assert.deepEqual(downloadErrorCopy("boom").steps, []);
+    assert.deepEqual(
+      downloadErrorCopy("Size mismatch (1 of 2 bytes)").steps,
+      [],
+    );
+  });
 });
 
 describe("dialog wiring (C1)", () => {
@@ -83,6 +103,18 @@ describe("dialog wiring (C1)", () => {
     assert.match(src, /downloadErrorCopy\(/, "one taxonomy, never re-derived");
     assert.match(src, /Try Again/, "retry in the dialog");
     assert.match(src, /Dismiss/);
+  });
+
+  it("offers the Hugging Face page and the numbered steps", () => {
+    const src = read("components/models/DownloadErrorDialog.tsx");
+    assert.match(src, /steps\.map\(/, "the fix-it steps are numbered");
+    assert.match(src, /View on Hugging Face/, "licences are accepted over there");
+    assert.match(src, /Linking\.openURL\(modelUrl\)/);
+    // Fed by the failed spec's own repo page, so a preset with no Hub entry
+    // simply renders no link rather than a dead one.
+    const screen = read("app/(drawer)/models.tsx");
+    assert.match(screen, /modelUrl=\{failedDownload\?\.modelUrl\}/);
+    assert.match(screen, /hfUrl/);
   });
 
   it("the store can clear a dismissed error", () => {

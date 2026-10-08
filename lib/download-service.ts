@@ -342,7 +342,14 @@ class ResumableDownloadService {
         if (this.cancelling.has(job.id)) return;
         // Paused before completion: keep the task so resume works, and
         // report paused instead of sticking at downloading forever.
-        const pausedJob: DownloadJob = { ...job, status: "paused" };
+        // The mirror is the authority on progress, not the `job` param: a
+        // native-initiated pause (background session giving up, user
+        // interrupting) resolves this path with no JS tick since start, so
+        // spreading `job` reported 0% over a file already at 60%.
+        const pausedJob: DownloadJob = {
+          ...(this.activeDownloads.get(job.id)?.job ?? job),
+          status: "paused",
+        };
         this.activeDownloads.set(job.id, {
           job: pausedJob,
           task: this.activeDownloads.get(job.id)?.task ?? null,

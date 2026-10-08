@@ -7,7 +7,6 @@
 import type {
   HFModelFile,
   HFModelSearchResult,
-  ModelDownloadStatus,
   ModelFile,
   ModelSettings,
   ModelSpec,
@@ -90,8 +89,6 @@ export interface CatalogSlice {
 }
 
 export interface DownloadsSlice {
-  /** Mirrored from downloadService */
-  activeDownloads: Map<string, ModelDownloadStatus>;
   /** Load-guard learned ceiling (PocketPal largestSuccessfulLoad parity) */
   largestSuccessfulBytes: number;
 
@@ -143,7 +140,6 @@ export interface DownloadsSlice {
    *  when the failure carries the "authentication" code — a 403 means the
    *  account cannot read the repo, which no token state changes. */
   retryWithoutToken: (specId: string) => Promise<void>;
-  syncDownloadStatus: () => void;
 }
 
 export interface RemoteSlice {

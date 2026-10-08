@@ -100,7 +100,12 @@ export function PresetModelCard({
         </View>
 
         {showCardProgress && (
-          <DownloadProgressBar progress={card.progress} speed={card.speed} />
+          <DownloadProgressBar
+            progress={card.progress}
+            downloaded={card.downloaded}
+            total={card.total}
+            speed={card.speed}
+          />
         )}
       </Pressable>
 
@@ -143,7 +148,12 @@ export function PresetModelCard({
                   </View>
                 </View>
                 {isProgressVisible(st.status) && (
-                  <DownloadProgressBar progress={st.progress} speed={st.speed} />
+                  <DownloadProgressBar
+              progress={st.progress}
+              downloaded={st.downloaded}
+              total={st.total}
+              speed={st.speed}
+            />
                 )}
               </View>
             );

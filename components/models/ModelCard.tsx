@@ -14,7 +14,7 @@ import {
   fadeExiting,
 } from "../../lib/motion.ts";
 import type { ModelSpec, RemoteApiProvider } from "../../types/models";
-import { Chip, CancelDownloadButton, DownloadButton, ModelTypeIcon, StatusDot, formatBytes, isProgressVisible } from "./ModelBits.tsx";
+import { Chip, CancelDownloadButton, DownloadButton, DownloadProgressBar, ModelTypeIcon, StatusDot, formatBytes, isProgressVisible } from "./ModelBits.tsx";
 import { ModelCardDetails } from "./ModelCardDetails.tsx";
 
 function typeLabel(type: ModelSpec["type"]): string {
@@ -131,9 +131,20 @@ export function ModelCard({
             /* A bookmark IS its spec, so the spec id is the card's own id
                and the download controls need no prop plumbing. */
             isProgressVisible(item.downloadStatus) ? (
-              <CancelDownloadButton
-                onPress={() => void cancelModelDownload(item.id)}
-              />
+              <>
+                <CancelDownloadButton
+                  onPress={() => void cancelModelDownload(item.id)}
+                />
+                {/* The card used to inherit its only progress readout from the
+                    global banner. That banner is gone, so a bookmarked model
+                    downloading here would show nothing at all. */}
+                <DownloadProgressBar
+                  progress={item.downloadProgress}
+                  downloaded={item.downloadedBytes}
+                  total={item.totalBytes}
+                  speed={item.speedBytesPerSec}
+                />
+              </>
             ) : (
               <DownloadButton
                 status={item.downloadStatus}

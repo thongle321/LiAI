@@ -43,7 +43,6 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
   set,
   get,
 ) => ({
-  activeDownloads: new Map(),
   largestSuccessfulBytes: 0,
 
   saveMemoryGuard: async () => {
@@ -256,10 +255,6 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
         totalBytes: downloadJob.totalBytes,
         speedBytesPerSec: downloadJob.speedBytesPerSec,
       });
-      // syncDownloadStatus builds a fresh Map and notifies subscribers, so
-      // it rides the same gate — running it every tick was the last per-tick
-      // store notification.
-      get().syncDownloadStatus();
     });
 
     platformDownloadService.setCompleteCallback((downloadJob, success) => {
@@ -327,7 +322,6 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
           errorCode: downloadJob.errorCode,
         });
       }
-      get().syncDownloadStatus();
     });
 
     try {
@@ -361,12 +355,10 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
 
   pauseDownload: async (jobId) => {
     await platformDownloadService.pauseDownload(jobId);
-    get().syncDownloadStatus();
   },
 
   resumeDownload: async (jobId) => {
     await platformDownloadService.resumeDownload(jobId);
-    get().syncDownloadStatus();
   },
 
   pauseModelDownload: async (specId) => {
@@ -497,7 +489,6 @@ if (!info.exists || !("size" in info) || typeof info.size !== "number") continue
         // Unreadable file: leave the row as loaded.
       }
     }
-    get().syncDownloadStatus();
   },
 
   refreshGgufMetadata: async (specId) => {
@@ -532,13 +523,5 @@ if (!info.exists || !("size" in info) || typeof info.size !== "number") continue
         downloadedBytes: 0,
       });
     }
-    get().syncDownloadStatus();
-  },
-
-  syncDownloadStatus: () => {
-    const activeDownloads = new Map(
-      platformDownloadService.getAllJobs().map((job) => [job.id, job.status]),
-    );
-    set({ activeDownloads });
   },
 });

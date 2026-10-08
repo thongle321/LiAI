@@ -19,7 +19,7 @@ import { useModelStore } from "../../store/modelStore";
 import { useChatStore } from "../../store/chat";
 import { Sheet } from "../Sheet.tsx";
 import { colors } from "../../themes/tokens.ts";
-import { formatBytes } from "./ModelBits.tsx";
+import { formatBytes, progressCaption } from "./ModelBits.tsx";
 import type { ModelFile, ModelSpec } from "../../types/models";
 
 export function ProjectorSelectorSheet({
@@ -124,7 +124,11 @@ export function ProjectorSelectorSheet({
                   </Text>
                   <Text className="font-sans text-body-sm text-secondary-text">
                     {inFlight
-                      ? `${model.downloadProgress}%`
+                      ? progressCaption(
+                          model.downloadedBytes,
+                          model.totalBytes,
+                          model.speedBytesPerSec ?? 0,
+                        )
                       : downloaded
                         ? "Downloaded"
                         : formatBytes(file.size)}

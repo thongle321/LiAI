@@ -278,14 +278,24 @@ class ResumableDownloadService {
           return;
         }
         this.lastEmit.set(job.id, now);
+        // PocketPal's rule (iOS takes `bytesTotal = res.contentLength`,
+        // DownloadManager.ts:391): the response's total beats the catalog's,
+        // so a file re-quantized upstream still finishes instead of failing
+        // Size mismatch forever. Guarded for expo: FileSystemLegacyModule.kt
+        // :629-636 adds the resume offset to `expected`, and a chunked/Xet
+        // response reports -1 + N, which lands a byte BELOW what has already
+        // been written — rejected by this comparison. Once adopted, a later
+        // nonsense tick keeps the previously adopted value, not the catalog's.
+        const adopted = this.activeDownloads.get(job.id)?.job.totalBytes || job.totalBytes;
+        const serverTotal = expected > 0 && expected >= totalBytes ? expected : adopted;
         const progressPercent =
-          job.totalBytes > 0 ? Math.round((totalBytes / job.totalBytes) * 100) : 0;
+          serverTotal > 0 ? Math.round((totalBytes / serverTotal) * 100) : 0;
         const updatedJob: DownloadJob = {
           ...job,
           status: "downloading",
           progress: progressPercent,
           downloadedBytes: totalBytes,
-          totalBytes: job.totalBytes || expected,
+          totalBytes: serverTotal,
           speedBytesPerSec: this.trackSpeed(job.id, totalBytes),
         };
         this.activeDownloads.set(job.id, {
@@ -420,14 +430,17 @@ class ResumableDownloadService {
 
       // Trust-but-verify: a short/overlong file must never read completed.
       // Retry re-stats the partial and resumes (or restarts when useless).
-      if (job.totalBytes > 0) {
+      // Compared against the SERVER's total, which handleProgress adopted;
+      // the catalog value is only what's left when the server reported none.
+      const finalTotal = this.activeDownloads.get(job.id)?.job.totalBytes || job.totalBytes;
+      if (finalTotal > 0) {
         try {
           const info = await getInfoAsync(destPath);
           const actual =
             info.exists && "size" in info && typeof info.size === "number" ? info.size : -1;
-          if (actual !== job.totalBytes) {
+          if (actual !== finalTotal) {
             fail(
-              `Size mismatch (${actual} of ${job.totalBytes} bytes) — tap Retry to continue`,
+              `Size mismatch (${actual} of ${finalTotal} bytes) — tap Retry to continue`,
             );
           }
         } catch (error) {
@@ -440,7 +453,8 @@ class ResumableDownloadService {
         ...job,
         status: "completed",
         progress: 100,
-        downloadedBytes: job.totalBytes,
+        downloadedBytes: finalTotal,
+        totalBytes: finalTotal,
         resumable: true,
       };
       this.forget(job.id);
@@ -708,6 +722,11 @@ type DownloadDriver = {
    *  no such notion, because a background NSURLSession there resolves its
    *  own promise when JS returns. */
   reconcileWithNative?(): Promise<string[]>;
+  /** Read-only: which models the native store still holds records for. No
+   *  mirror writes, no adoption — this is the skip-set
+   *  `reconcileInterrupted` needs BEFORE the disk pass classifies anything.
+   *  Android-only, like reconcileWithNative. */
+  knownModelIds?(): Promise<string[]>;
 };
 
 function createDriver(): DownloadDriver {

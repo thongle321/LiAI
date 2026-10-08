@@ -202,11 +202,20 @@ class NativeDownloadModule : Module() {
                 // returns early when the JS object is gone, which is exactly
                 // the case a background download exists for) — these events
                 // are the fast path on top of it, never the only path.
+                //
+                // Terminal states are pushed too (parity with PocketPal's
+                // onDownloadComplete/onDownloadFailed): without them the card
+                // sits for up to a second after the worker finishes. The
+                // replay above stays filtered on purpose — re-announcing rows
+                // from a previous session would re-run the store's completion
+                // block for downloads that finished long ago. JS dedupes the
+                // event/poll double-delivery (claimTerminal in
+                // lib/models/download-jobs.ts).
                 observeJob?.cancel()
                 observeJob =
                     scope?.launch {
                         store.observeAll().collect { records ->
-                            records.filterNot { isTerminal(it) }.forEach {
+                            records.forEach {
                                 sendEvent(EVENT, it.toWritableMap())
                             }
                         }

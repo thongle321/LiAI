@@ -427,7 +427,20 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
 
   reconcileInterrupted: async () => {
     const dir = `${LegacyFileSystem.documentDirectory}models/`;
+    // Native wins, and this runs BEFORE reconcileWithNative adopts anything
+    // (persistence.ts keeps the disk pass first, deliberately). The worker
+    // reconciles disk-vs-DB itself against the SERVER's adopted total (the
+    // serverTotal block and the end-of-transfer size check in
+    // DownloadWorker.kt), while this pass classifies by the CATALOG's size —
+    // so on a file whose real size no longer matches the catalog
+    // (re-quantized upstream), this pass would mark a completed download
+    // "paused" or DELETE it as corrupt before adoption could correct it.
+    // Read-only peek; the mirror stays untouched.
+    const nativeKnown = new Set(
+      (await platformDownloadService.knownModelIds?.()) ?? [],
+    );
     for (const spec of get().models) {
+      if (nativeKnown.has(spec.id)) continue;
       // Already whole: nothing to reconcile, but it may predate the GGUF
       // metadata read — backfill it here, once, from the file at rest.
       // That is the whole point of the second hook: a model downloaded

@@ -41,23 +41,38 @@ The manual JS implementation it displaces is visible in PocketPal's own iOS
 path (`DownloadManager.ts:325-341`): `RNFS.downloadFile` with a
 `progressInterval`, which is what the module exists to make unnecessary.
 
-## Verdict: LiAI is a behavioural superset
+## Verdict: row-by-row parity
 
-Same architecture, same primitives, more of it wired up and more of it correct.
+`same` = behaves as the reference. `better` = diverges in LiAI's favour
+(kept deliberately). `documented` = contract/architecture difference with no
+behavioral consequence, kept on purpose.
 
-| Capability | PocketPal | LiAI |
-|---|---|---|
-| Survives process death | WorkManager + Room | WorkManager + Room (`DownloadStore`) |
-| Cold-start re-adopt | `getActiveDownloads` + `reattachDownloadObserver` | `reconcileWithNative` (`android-download-service.ts:117`) |
-| Resume | `Range` from file length | `Range` + **`If-Range` validator** (`DownloadWorker.kt:196`) |
-| Ignored-Range recovery | delete + restart | delete + restart (`download-service.ts:379`) |
-| Progress that survives JS death | Room, 1 Hz | Room 1 Hz + JS 1 Hz poll, because events die with the runtime |
-| Android 10-minute cap | (WorkManager cap) | foreground service + notification, `FOREGROUND_SERVICE_TYPE_DATA_SYNC` |
-| pause / resume / retry from JS | **not reachable** | all three wired (`android-download-service.ts`) |
-| Free space | JS pre-flight (`src/utils/index.ts:338`) | JS pre-flight (`downloads.ts:220`) **+ 10 s live poll** on the legacy path |
-| Foreground re-sync on resume | none — zero `AppState` usage | `reconcileWithNative` after `reconcileInterrupted` |
-| iOS transfer | `RNFS.downloadFile` from JS | `expo-file-system` `BACKGROUND` session |
-| Orphaned Room rows | grows forever | `forgetDownload` on `removeJob` |
+| Row | PocketPal | LiAI | Verdict |
+|---|---|---|---|
+| Framework | TurboModule + codegen, `getEnforcing` | Expo Modules API, `requireNativeModule` | documented |
+| Registered name | `DownloadModule` | `NativeDownload` | documented |
+| Missing native side | `getEnforcing` throws | caught → `null` → legacy driver fallback | better |
+| `startDownload` shape | `(url, config)`, native generates the id | `(request)` with caller `id` + `modelId` | better — joins to model cards exactly, where PocketPal matches `download.url === m.downloadUrl` and breaks on redirect |
+| Return types | `Promise<boolean>` (return = did it work) | `Promise<void>`, the Room store is the authority | documented |
+| Events | 4 named events; `onDownloadCancelled` emitted, never handled | 1 `onDownloadEvent` carrying the whole record; **terminal states emitted from the live loop**, re-attach replay stays filtered (`NativeDownloadModule.kt:206`) | same behavior, documented shape |
+| Record fields | `{url, destination, progress, status}` | `{modelId, fileName, expectedTotal, downloadedBytes, errorCode, …}` | better |
+| Transfer / durability | WorkManager + Room | WorkManager + Room | same |
+| Resume safety | `Range` from file length, no validator | `Range` + `If-Range` + oversize-partial guard | better |
+| HTTP status handling | 401/403/429 → generic 4xx terminal failure; FAILED while WorkManager still retries 5xx | auth-specific copy for 401/403; 429 + 5xx retry with row = QUEUED | better |
+| Total size source | response `Content-Length` (`PW:176-194`); iOS takes raw `contentLength` with no 206 correction | response total, `206 → existing + contentLength`, chunked `-1` falls back to catalog (`DownloadWorker.kt` transfer); legacy driver guards expo's `-1 + N` (`download-service.ts` handleProgress) | same on Android, better on iOS |
+| Size-mismatch check | none visible — total just follows the response | compares disk against the adopted server total, catalog when the server reported none | same, plus a check |
+| Progress cadence | Room write at 1 Hz + LiveData events | Room write at 1 Hz + events + 1 s JS poll | same cadence |
+| Terminal delivery | immediate events | immediate events + poll, deduped by `claimTerminal` (`lib/models/download-jobs.ts`) | same |
+| 10-minute cap | WorkManager's cap applies (no foreground service) | foreground service + notification, `FOREGROUND_SERVICE_TYPE_DATA_SYNC` | better (missing in PocketPal) |
+| Notification progress | none at all | determinate bar re-emitted on every 1 Hz write; spinner only when total unknown | better |
+| Paused row at worker entry | `Result.retry()` — burns backoff cycles | `Result.success()`, bytes kept | better |
+| pause / resume / retry from JS | 4 of 9 verbs dead from JS | all 7 verbs called | better |
+| Room row lifecycle | rows grow forever | `forgetDownload` on `removeJob` | better |
+| Re-adopt after JS death | `reattachDownloadObserver` re-attaches LiveData | `reconcileWithNative` polls `getActiveDownloads` + `claimTerminal` | same behavior, different mechanism |
+| Disk classification on cold start | JS-less; worker reconciles file vs DB | worker reconciles, and `reconcileInterrupted` **skips** specs the native store knows (`knownModelIds`) | same, ordering documented |
+| Auth token at rest | plaintext `authToken` Room column (v1→v2 migration) | plaintext `headers` JSON in Room; source is SecureStore | same exposure |
+| Free space | JS pre-flight only | JS pre-flight + 10 s live poll on the legacy path | better |
+| `progressInterval` / `networkType` / `priority` config | present in spec; `networkType`/`priority` never read by its own worker | hardcoded equivalent values | documented — same observable behavior |
 
 ## Deliberate non-divergences
 
@@ -113,13 +128,11 @@ Ported to match the reference exactly; these are the places it does not.
 
 ## Known gaps, accepted for now
 
-- **ENOSPC loops.** `DownloadWorker.kt:76-81` catches `IOException` →
+- **ENOSPC loops.** `DownloadWorker.kt` catches `IOException` →
   `Result.retry()`, so a genuinely full disk retries on exponential backoff
   indefinitely and the card reads "downloading" forever. PocketPal has the
   identical shape. Fix would be a `StatFs` pre-flight plus a specific ENOSPC
   branch, ~40 lines of Kotlin that `node --test` cannot reach.
-- **The OS notification's progress bar is frozen.** `createForegroundInfo` is
-  built once at `DownloadWorker.kt:74` and never refreshed.
 - **Nothing enumerates the models directory.** A `.gguf` on disk with no
   matching spec row is never listed, never reclaimed. True of both apps.
 - **No sha256** — see non-divergence 2.
@@ -145,7 +158,8 @@ Ported to match the reference exactly; these are the places it does not.
 
 ## Not checked
 
-- Whether PocketPal's worker refreshes its foreground notification.
+- ~~Whether PocketPal's worker refreshes its foreground notification.~~
+  Answered: PocketPal ships **no** foreground notification at all.
 - `DownloadEntity.kt`'s 1→2 migration body, and PocketPal's
   `DownloadManager.test.ts` mock contract.
 - `modules/native-download/ios/` — there is no parallel worker to compare.

@@ -39,8 +39,12 @@ import kotlin.coroutines.suspendCoroutine
  *  - A 200 on a resume means the server ignored our Range and sent the whole
  *    file. Appending that to a partial yields a file of the right length and
  *    the wrong contents, so the partial is dropped and the fetch restarts.
- *  - [DownloadEntity.expectedTotal] comes from the Hub, never from
- *    Content-Length, which on a 206 is the size of the remainder.
+ *  - [DownloadEntity.expectedTotal] starts as the catalog's size, then
+ *    adopts the RESPONSE's total the way PocketPal does
+ *    (pocketpal-ai DownloadWorker.kt:176-194): fresh 200 -> Content-Length,
+ *    206 -> existing + Content-Length. Content-Length on a 206 is the
+ *    remainder, so it is never trusted bare. A chunked/Xet response reports
+ *    -1 and keeps the catalog value.
  */
 class DownloadWorker(
     context: Context,
@@ -211,6 +215,20 @@ class DownloadWorker(
                 // known good and there is nothing left to splice.
                 val append = res.code == 206 && existing > 0
                 val body = res.body ?: return@withContext Result.failure()
+
+                // The server's total, not the catalog's: a file re-quantized
+                // upstream (or an LFS object that changed) would otherwise
+                // report Size mismatch forever and could never finish. The
+                // end-of-transfer check below compares against THIS value.
+                val contentLength = body.contentLength()
+                val serverTotal = when {
+                    contentLength <= 0 -> record.expectedTotal // chunked/Xet: keep catalog
+                    append -> existing + contentLength // 206: remainder + bytes on disk
+                    else -> contentLength
+                }
+                if (serverTotal > 0 && serverTotal != record.expectedTotal) {
+                    store.mutate(record.id) { it.copy(expectedTotal = serverTotal) }
+                }
                 val bodyStream = body.byteStream()
                 RandomAccessFile(dest, "rw").use { raf ->
                     if (append) raf.seek(existing)
@@ -241,19 +259,36 @@ class DownloadWorker(
                                     downloadedBytes = written,
                                 )
                             }
+                            // Refresh the OS notification on the same 1 Hz
+                            // cadence. It was built once before transfer(),
+                            // and setProgress(indeterminate = true) ignores
+                            // its percent argument — so the bar sat at 0%
+                            // for a 4 GB pull while the card showed 90%.
+                            setForeground(
+                                createForegroundInfo(
+                                    record.copy(
+                                        status = DownloadState.RUNNING,
+                                        downloadedBytes = written,
+                                        expectedTotal = serverTotal,
+                                    ),
+                                ),
+                            )
                         }
                     }
                 }
 
                 // Trust-but-verify. A short file that reads as complete hands
-                // the user a model that loads and misbehaves.
+                // the user a model that loads and misbehaves. Compared against
+                // the SERVER's total (catalog when the server reported none):
+                // a truncated fixed-length body raises an IOException from
+                // OkHttp before it reaches here.
                 val actual = if (dest.exists()) dest.length() else 0L
-                if (record.expectedTotal > 0 && actual != record.expectedTotal) {
+                if (serverTotal > 0 && actual != serverTotal) {
                     store.mutate(record.id) {
                         it.copy(
                             status = DownloadState.FAILED,
                             downloadedBytes = actual,
-                            error = "Size mismatch ($actual of ${record.expectedTotal} bytes)",
+                            error = "Size mismatch ($actual of $serverTotal bytes)",
                         )
                     }
                     return@withContext Result.failure()
@@ -262,7 +297,8 @@ class DownloadWorker(
                 store.mutate(record.id) {
                     it.copy(
                         status = DownloadState.COMPLETED,
-                        downloadedBytes = record.expectedTotal,
+                        downloadedBytes = actual,
+                        expectedTotal = serverTotal,
                         error = null,
                         errorCode = null,
                     )
@@ -316,7 +352,12 @@ class DownloadWorker(
                 .setContentTitle("Downloading ${record.fileName}")
                 .setSmallIcon(android.R.drawable.stat_sys_download)
                 .setOngoing(true)
-                .setProgress(100, percent(record), true)
+                // Determinate when a total is known: `indeterminate = true`
+                // makes Android ignore the percent entirely, which is why the
+                // bar used to sit still. Unknown total (chunked response with
+                // no catalog size) falls back to the spinner, where a number
+                // would be a lie.
+                .setProgress(100, percent(record), record.expectedTotal <= 0)
                 .build()
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ForegroundInfo(

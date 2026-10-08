@@ -19,6 +19,7 @@
  * side is absent: a clone that has not run `expo prebuild` yet still works.
  */
 import { androidDownload, addDownloadListener, type NativeDownload } from "../modules/native-download/src/NativeDownloadModule";
+import { claimTerminal, isTerminalState } from "./models/download-jobs.ts";
 import type { DownloadJob } from "../types/models.ts";
 
 export type ProgressCallback = (job: DownloadJob) => void;
@@ -132,10 +133,27 @@ export class AndroidDownloadService {
       this.mirror.set(record.id, {
         ...toJob(record),
       });
-      this.seenTerminal.delete(record.id);
+      // Re-arm the completion claim ONLY for live records. Clearing it for a
+      // terminal row would let the next poll re-fire onComplete for a
+      // download that finished last session — the same re-announcement the
+      // replay filter in NativeDownloadModule.kt deliberately suppresses.
+      // The store syncs those rows through persistence' setModelProgress
+      // loop, which does not need the completion callback.
+      if (!isTerminalState(record.state)) this.seenTerminal.delete(record.id);
     }
     if (records.length > 0) this.beginPolling();
     return records.map((r) => r.modelId);
+  }
+
+  /** Read-only peek, used by reconcileInterrupted before the disk pass —
+   *  see knownModelIds on the DownloadDriver interface. */
+  async knownModelIds(): Promise<string[]> {
+    if (!this.native) return [];
+    try {
+      return (await this.native.getActiveDownloads()).map((r) => r.modelId);
+    } catch {
+      return [];
+    }
   }
 
   setProgressCallback(callback: ProgressCallback): void {
@@ -221,6 +239,10 @@ private apply(
       ...previous,
       status: toJobStatus(record.state),
       downloadedBytes: record.downloadedBytes,
+      // The worker adopts the server's total (PocketPal parity), so the
+      // record — not the catalog value baked in at startDownload — is the
+      // authority once it arrives.
+      totalBytes: record.expectedTotal > 0 ? record.expectedTotal : previous.totalBytes,
       progress:
         record.expectedTotal > 0
           ? Math.round((record.downloadedBytes / record.expectedTotal) * 100)
@@ -233,9 +255,9 @@ private apply(
     onProgress?.(next);
     this.callbacks.onProgress?.(next);
 
-    const terminal = record.state === "completed" || record.state === "failed" || record.state === "cancelled";
-    if (terminal && !this.seenTerminal.has(record.id)) {
-      this.seenTerminal.add(record.id);
+    // The event and the 1 s poll both deliver the same terminal record;
+    // claimTerminal keeps onComplete single-fire.
+    if (claimTerminal(this.seenTerminal, record.id, record.state)) {
       const success = record.state === "completed";
       onComplete?.(next, success);
       this.callbacks.onComplete?.(next, success);

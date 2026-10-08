@@ -110,6 +110,92 @@ describe("background release", () => {
   });
 });
 
+/** Coming back should not make the next message pay for the load.
+ *
+ * PocketParity: they reload on foreground rather than on next use
+ * (pocketpal-ai ModelStore.ts:1163 checkAndReloadAutoReleasedModel). We
+ * released the model to survive the background, so restoring it there is
+ * the same trade — the load happens while the user is reading, not while
+ * they are waiting on a reply.
+ */
+describe("foreground restore", () => {
+  function watched(enabled = true) {
+    const app = fakeAppState();
+    let released = 0;
+    let restored = 0;
+    watchBackgroundRelease(app.source, {
+      isEnabled: () => enabled,
+      release: () => {
+        released += 1;
+      },
+      restore: () => {
+        restored += 1;
+      },
+    });
+    return { app, releases: () => released, restores: () => restored };
+  }
+
+  it("reloads on the way back in, having released on the way out", () => {
+    const { app, releases, restores } = watched();
+    app.fire("background");
+    app.fire("active");
+    assert.equal(releases(), 1);
+    assert.equal(restores(), 1);
+  });
+
+  it("does not reload a model it never released", () => {
+    // The user deactivated by hand, or the engine was already empty.
+    // Reloading here would resurrect a model they deliberately unloaded.
+    const { app, restores } = watched();
+    app.fire("active");
+    assert.equal(restores(), 0);
+  });
+
+  it("does not reload when offloading is turned off", () => {
+    // Nothing was released on the way out, so there is nothing to restore.
+    const { app, restores } = watched(false);
+    app.fire("background");
+    app.fire("active");
+    assert.equal(restores(), 0);
+  });
+
+  it("does not reload after a picker held the model", () => {
+    // The camera or gallery backgrounded the app and we kept the model;
+    // reloading on return would load a context that is already loaded.
+    const { app, restores } = watched();
+    const resume = suspendBackgroundRelease();
+    app.fire("background");
+    resume();
+    app.fire("active");
+    assert.equal(restores(), 0);
+  });
+
+  it("restores once per release, not on every active event", () => {
+    // iOS emits `active` more than once for a single return (a notification
+    // shade pull, a permission prompt). Each extra load would be a full
+    // multi-GB read the user did not ask for.
+    const { app, restores } = watched();
+    app.fire("background");
+    app.fire("active");
+    app.fire("active");
+    assert.equal(restores(), 1);
+  });
+
+  it("is optional, so a caller that only releases still works", () => {
+    const app = fakeAppState();
+    let released = 0;
+    watchBackgroundRelease(app.source, {
+      isEnabled: () => true,
+      release: () => {
+        released += 1;
+      },
+    });
+    app.fire("background");
+    app.fire("active");
+    assert.equal(released, 1);
+  });
+});
+
 describe("picker suspension (G14)", () => {
   // Opening the OS picker or the camera backgrounds the app. A background
   // release there frees the model mid-pick, so the send that follows turns

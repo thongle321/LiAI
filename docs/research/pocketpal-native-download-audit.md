@@ -61,14 +61,14 @@ behavioral consequence, kept on purpose.
 | HTTP status handling | 401/403/429 → generic 4xx terminal failure; FAILED while WorkManager still retries 5xx | auth-specific copy for 401/403; 429 + 5xx retry with row = QUEUED | better |
 | Total size source | response `Content-Length` (`PW:176-194`); iOS takes raw `contentLength` with no 206 correction | response total, `206 → existing + contentLength`, chunked `-1` falls back to catalog (`DownloadWorker.kt` transfer); legacy driver guards expo's `-1 + N` (`download-service.ts` handleProgress) | same on Android, better on iOS |
 | Size-mismatch check | none visible — total just follows the response | compares disk against the adopted server total, catalog when the server reported none | same, plus a check |
-| Progress cadence | Room write at 1 Hz + LiveData events | Room write at 1 Hz + events + 1 s JS poll | same cadence |
-| Terminal delivery | immediate events | immediate events + poll, deduped by `claimTerminal` (`lib/models/download-jobs.ts`) | same |
+| Progress cadence | Room write at 1 Hz + LiveData events | Room write at 1 Hz + events, single writer | same |
+| Terminal delivery | immediate events | immediate events, deduped by `claimTerminal` (`lib/models/download-jobs.ts`) | same |
 | 10-minute cap | WorkManager's cap applies (no foreground service) | foreground service + notification, `FOREGROUND_SERVICE_TYPE_DATA_SYNC` | better (missing in PocketPal) |
 | Notification progress | none at all | determinate bar re-emitted on every 1 Hz write; spinner only when total unknown | better |
 | Paused row at worker entry | `Result.retry()` — burns backoff cycles | `Result.success()`, bytes kept | better |
 | pause / resume / retry from JS | 4 of 9 verbs dead from JS | all 7 verbs called | better |
 | Room row lifecycle | rows grow forever | `forgetDownload` on `removeJob` | better |
-| Re-adopt after JS death | `reattachDownloadObserver` re-attaches LiveData | `reconcileWithNative` polls `getActiveDownloads` + `claimTerminal` | same behavior, different mechanism |
+| Re-adopt after JS death | `reattachDownloadObserver` re-attaches LiveData; `syncWithActiveDownloads` (`ModelStore.ts:763`) adopts at boot | `reconcileWithNative` reads `getActiveDownloads` once at boot + `claimTerminal` | same behavior, different mechanism |
 | Disk classification on cold start | JS-less; worker reconciles file vs DB | worker reconciles, and `reconcileInterrupted` **skips** specs the native store knows (`knownModelIds`) | same, ordering documented |
 | Auth token at rest | plaintext `authToken` Room column (v1→v2 migration) | plaintext `headers` JSON in Room; source is SecureStore | same exposure |
 | Free space | JS pre-flight only | JS pre-flight + 10 s live poll on the legacy path | better |
@@ -111,9 +111,15 @@ Ported to match the reference exactly; these are the places it does not.
    ready"` — both at parity, and now the only cross-screen signal.
    Side effect: the banner consumed `insets.top` while every drawer screen
    padded it again, so deleting it removed an app-wide double inset.
-2. **ETA is fed by our smoothed `speedBytesPerSec`**, not the reference's
-   raw per-tick delta (`DownloadManager.ts:88-120`). Same string, steadier
-   number: theirs renders `ETA: 0 sec` on any stalled tick.
+2. **The rate is sampled through one window**, `nextSpeedSample`
+   (`lib/models/download-jobs.ts`); the formula is the reference's exactly
+   (delta bytes over delta seconds, remaining over speed,
+   `DownloadManager.ts:88-120`). The window exists because the Room Flow
+   re-emits on *any* row write, so a status transition delivers a record
+   whose byte count has not moved — raw per-tick math reads that as a hard
+   `0 MB/s`, which is the `0 -> value -> 0` flicker. Duplicates keep the
+   window open instead; the reference has no such case because its own
+   LiveData observer feeds it the same way.
 3. **`formatBytes` is decimal base 1000 with `kB`**, ported verbatim from
    `utils/formatters.ts:16-41`. It replaced a binary `KB` implementation, so
    every byte string in the app shifted.

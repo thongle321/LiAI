@@ -8,44 +8,29 @@
  * getJob/getAllJobs and the onProgress/onComplete callbacks) and
  * `download-service.ts` picks one at construction.
  *
- * PROGRESS IS POLLED, deliberately. The native module emits an event per
- * transition, but a download that outlives the JS runtime is precisely the
- * case where events are dropped. `getActiveDownloads()` reads the same
- * durable store the worker writes, so polling at the same ~1 Hz the emitter
- * already uses costs nothing extra and is the thing that actually
- * reconstructs state after a cold start.
+ * PROGRESS IS PUSHED, PocketPal's shape: the native module emits a record on
+ * every Room write (the worker writes progress at ~1 Hz), and that event is
+ * the ONLY live feed here. `getActiveDownloads()` is the one-shot recovery at
+ * boot — reconcileWithNative adopts whatever the worker kept running while JS
+ * was dead (pocketpal: syncWithActiveDownloads, ModelStore.ts:763). An
+ * earlier version ALSO polled at 1 Hz; two writers delivering the same second
+ * twice is exactly what made the rate flicker 0 -> spike -> 0.
  *
  * Falls back to null (and therefore to the legacy driver) whenever the native
  * side is absent: a clone that has not run `expo prebuild` yet still works.
  */
 import { androidDownload, addDownloadListener, type NativeDownload } from "../modules/native-download/src/NativeDownloadModule";
-import { claimTerminal, isTerminalState } from "./models/download-jobs.ts";
+import {
+  claimTerminal,
+  isTerminalState,
+  nativeDestinationPath,
+  nativeStateToJobStatus,
+  nextSpeedSample,
+} from "./models/download-jobs.ts";
 import type { DownloadJob } from "../types/models.ts";
 
 export type ProgressCallback = (job: DownloadJob) => void;
 export type CompleteCallback = (job: DownloadJob, success: boolean) => void;
-
-/** Same cadence the emitter uses, so polling adds nothing the bar would miss. */
-const POLL_MS = 1000;
-
-/** Native state -> the JS vocabulary `DownloadJob.status` uses. `queued` has
- *  no JS equivalent: WorkManager has accepted the job but not started it,
- *  which reads to the user as still downloading. */
-function toJobStatus(state: NativeDownload["state"]): DownloadJob["status"] {
-  switch (state) {
-    case "running":
-    case "queued":
-      return "downloading";
-    case "paused":
-      return "paused";
-    case "completed":
-      return "completed";
-    case "cancelled":
-      return "cancelled";
-    case "failed":
-      return "failed";
-  }
-}
 
 /** A native record shaped as a DownloadJob. Keyed by modelId, which the
  *  caller sends on every request, so a cold-started record joins to the same
@@ -57,7 +42,7 @@ function toJob(record: NativeDownload): DownloadJob {
     fileName: record.fileName,
     downloadUrl: "",
     destinationPath: record.destinationPath,
-    status: toJobStatus(record.state),
+    status: nativeStateToJobStatus(record.state, record.error),
     progress:
       record.expectedTotal > 0
         ? Math.round((record.downloadedBytes / record.expectedTotal) * 100)
@@ -87,8 +72,11 @@ export class AndroidDownloadService {
     onProgress?: ProgressCallback;
     onComplete?: CompleteCallback;
   } = {};
-  private poller: ReturnType<typeof setInterval> | null = null;
   private seenTerminal = new Set<string>();
+  /** Previous sample per id, for the speed the native record does not carry
+   *  (PocketPal computes it natively; ours ships raw bytes only — without
+   *  this the caption read "0.00 MB/s" on every WorkManager download). */
+  private ticks = new Map<string, { bytes: number; at: number }>();
   /** ONE module-level subscription, not one per startDownload. A listener
    *  added per start is never removed, so every retry stacked another. */
   private unsubscribe: (() => void) | null = null;
@@ -105,10 +93,9 @@ export class AndroidDownloadService {
    *
    * THIS IS THE COLD-START PATH, and it was missing. Without it a download
    * that survived a force-stop kept transferring under WorkManager while the
-   * app had no mirror entry, no poller, and no listener — the row showed
-   * "paused" and nothing ever took control of it again. The transfer
-   * outliving JS is the whole point of the module, so JS has to come back and
-   * ask.
+   * app had no mirror entry and no listener — the row showed "paused" and
+   * nothing ever took control of it again. The transfer outliving JS is the
+   * whole point of the module, so JS has to come back and ask.
    *
    * PocketPal parity: initializeStore -> syncWithActiveDownloads
    * (ModelStore.ts:763) -> getActiveDownloads() -> reattach observer.
@@ -134,14 +121,13 @@ export class AndroidDownloadService {
         ...toJob(record),
       });
       // Re-arm the completion claim ONLY for live records. Clearing it for a
-      // terminal row would let the next poll re-fire onComplete for a
+      // terminal row would let the next event re-fire onComplete for a
       // download that finished last session — the same re-announcement the
       // replay filter in NativeDownloadModule.kt deliberately suppresses.
       // The store syncs those rows through persistence' setModelProgress
       // loop, which does not need the completion callback.
       if (!isTerminalState(record.state)) this.seenTerminal.delete(record.id);
     }
-    if (records.length > 0) this.beginPolling();
     return records.map((r) => r.modelId);
   }
 
@@ -194,7 +180,11 @@ export class AndroidDownloadService {
       modelId: job.modelId,
       url: job.downloadUrl,
       fileName: job.fileName,
-      destinationPath: job.destinationPath,
+      // Plain path, NOT expo's `file://` URI: the worker does
+      // `new File(record.destination)` and mkdirs on it. A URI is read as a
+      // relative `file:` directory, which fails with ENOENT on every
+      // download. PocketPal's RNFS path never carried a scheme.
+      destinationPath: nativeDestinationPath(job.destinationPath),
       expectedTotal: job.totalBytes,
       // Same quoted-entity-tag requirement as the JS path: a bare hex oid is
       // a malformed If-Range and the server may ignore the header entirely,
@@ -205,25 +195,7 @@ export class AndroidDownloadService {
 
     this.mirror.set(job.id, job);
     this.ensureSubscribed();
-    this.beginPolling();
     onProgress({ ...job, status: "downloading" });
-  }
-
-  private beginPolling(): void {
-    if (this.poller) return;
-    this.poller = setInterval(() => {
-      void this.native?.getActiveDownloads().then(
-        (records) => {
-          for (const record of records) {
-            this.apply(record, undefined, undefined);
-          }
-        },
-        () => {
-          // A failed poll is not a failed download. The next tick retries,
-          // and the terminal event still arrives.
-        },
-      );
-    }, POLL_MS);
   }
 
   /** Fan a native record out to both the per-job and global callbacks, and
@@ -235,42 +207,51 @@ private apply(
   ): void {
     const previous = this.mirror.get(record.id);
     if (!previous) return;
+    // One total for BOTH the stored value and the percentage — the previous
+    // version fell back to the mirror for totalBytes but not for progress,
+    // so a record with expectedTotal 0 pinned the bar at 0% while the
+    // caption counted real bytes.
+    const total = record.expectedTotal > 0 ? record.expectedTotal : previous.totalBytes;
+    // ONE window over the single event stream. The Room Flow re-emits on
+    // ANY row write, so a status transition delivers a record whose byte
+    // count has not moved; sampling on every delivery read that as a hard
+    // 0 (and a burst arriving microseconds after the real sample read as a
+    // ~32 MB/s spike), which is why the rate flickered 0 -> spike -> 0. The
+    // window survives those repeats and reports only on a real advance —
+    // `speed === undefined` means "keep the last shown", so the caption
+    // holds steady and the ETA counts down instead of resetting.
+    const [baseline, speed] = nextSpeedSample(
+      this.ticks.get(record.id),
+      record.downloadedBytes,
+      Date.now(),
+    );
+    this.ticks.set(record.id, baseline);
     const next: DownloadJob = {
       ...previous,
-      status: toJobStatus(record.state),
+      status: nativeStateToJobStatus(record.state, record.error),
       downloadedBytes: record.downloadedBytes,
       // The worker adopts the server's total (PocketPal parity), so the
       // record — not the catalog value baked in at startDownload — is the
       // authority once it arrives.
-      totalBytes: record.expectedTotal > 0 ? record.expectedTotal : previous.totalBytes,
+      totalBytes: total,
       progress:
-        record.expectedTotal > 0
-          ? Math.round((record.downloadedBytes / record.expectedTotal) * 100)
-          : 0,
+        total > 0 ? Math.round((record.downloadedBytes / total) * 100) : 0,
       error: record.error,
       errorCode: record.errorCode,
+      ...(speed !== undefined ? { speedBytesPerSec: speed } : {}),
     };
     this.mirror.set(record.id, next);
 
     onProgress?.(next);
     this.callbacks.onProgress?.(next);
 
-    // The event and the 1 s poll both deliver the same terminal record;
+    // The event stream may deliver the same terminal record more than once;
     // claimTerminal keeps onComplete single-fire.
     if (claimTerminal(this.seenTerminal, record.id, record.state)) {
       const success = record.state === "completed";
       onComplete?.(next, success);
       this.callbacks.onComplete?.(next, success);
-      if ([...this.mirror.values()].every((j) => j.status !== "downloading")) {
-        this.stopPolling();
-      }
     }
-  }
-
-  private stopPolling(): void {
-    if (!this.poller) return;
-    clearInterval(this.poller);
-    this.poller = null;
   }
 
   async pauseDownload(jobId: string): Promise<DownloadJob | null> {
@@ -293,14 +274,13 @@ private apply(
     await this.native
       ?.resumeDownload(jobId)
       .catch(() => this.native?.retryDownload(jobId));
-    this.beginPolling();
   }
 
   async cancelDownload(jobId: string): Promise<void> {
     await this.native?.cancelDownload(jobId);
     this.seenTerminal.add(jobId);
+    this.ticks.delete(jobId);
     this.mirror.delete(jobId);
-    if (this.mirror.size === 0) this.stopPolling();
   }
 
   getJob(jobId: string): DownloadJob | null {
@@ -313,12 +293,12 @@ private apply(
 
   removeJob(jobId: string): void {
     this.seenTerminal.delete(jobId);
+    this.ticks.delete(jobId);
     const job = this.mirror.get(jobId);
     this.mirror.delete(jobId);
     // Terminal is not forgotten. Without this the Room row survives the job,
     // the table grows one entry per download forever, and every cold start
     // re-reads all of it. Fire-and-forget: the mirror is already correct.
     if (job) void this.native?.forgetDownload(job.id).catch(() => {});
-    if (this.mirror.size === 0) this.stopPolling();
   }
 }

@@ -14,11 +14,11 @@ people download from, get no disclosure at all.
 
 **Status:** ready-for-agent
 
-- [ ] Storage is re-read on an interval while a download card is mounted, rather than read once
-- [ ] When the model will not fit, the Download button is disabled and the card states the model's size and the free space inline
-- [ ] Once space is freed, the button re-enables without remounting or restarting the app
-- [ ] The check covers preset cards, Hugging Face bookmark cards, Hugging Face search file rows, and the onboarding picker
-- [ ] Surfaces with no Download button — the ready-models list, the projector picker, the failure dialog — are untouched
-- [ ] A failed storage read leaves the user with an explanation rather than a silently disabled button and no reason
-- [ ] The inline wording follows the reference app's form
-- [ ] The check consumes the storage-fit decision rather than re-deriving the rule
+- [x] Storage is re-read on an interval while a download card is mounted, rather than read once
+- [x] When the model will not fit, the Download button is disabled and the card states the model's size and the free space inline
+- [x] Once space is freed, the button re-enables without remounting or restarting the app
+- [x] The check covers preset cards, Hugging Face bookmark cards, Hugging Face search file rows, and the onboarding picker
+- [x] Surfaces with no Download button — the ready-models list, the projector picker, the failure dialog — are untouched
+- [x] A failed storage read leaves the user with an explanation rather than a silently disabled button and no reason
+- [x] The inline wording follows the reference app's form
+- [x] The check consumes the storage-fit decision rather than re-deriving the rule

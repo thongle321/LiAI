@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight, Power, Settings, Trash2, X } from "lucide-re
 
 import { colors } from "../../themes/tokens.ts";
 import { useModelStore } from "../../store/modelStore";
+import { useStorageDisclosure } from "../../hooks/useStorageDisclosure.ts";
 import { parseModelSettings } from "../../lib/model-settings.ts";
 import {
   MOTION_DURATION_MS,
@@ -30,7 +31,6 @@ export function ModelCard({
   onDeactivate,
   onSettings,
   onDownload,
-  outOfSpace = false,
 }: {
   item: ModelSpec;
   isActive: boolean;
@@ -43,9 +43,6 @@ export function ModelCard({
    *  Download instead of Load/Unload. PocketParity with PocketPal's
    *  not-downloaded ModelCard branch. */
   onDownload?: () => void;
-  /** The file does not fit on disk: disable the download rather than
-   *  letting it fail halfway. */
-  outOfSpace?: boolean;
 }) {
   // Stable selectors: actions never change identity, so each subscribes
   // alone and no card re-renders on unrelated store writes.
@@ -63,6 +60,10 @@ export function ModelCard({
   // Only the file size, never the parameter count next to it: "0.6B" beside
   // "751 MB" reads as two competing sizes for one model.
   const fileBytes = item.files.reduce((sum, f) => sum + f.size, 0);
+  // A ready model has no Download button, so it has nothing to check: null
+  // stops the poll. A bookmark polls while it is on screen, which is what
+  // lets the button come back on its own once space is freed.
+  const fit = useStorageDisclosure(onDownload ? fileBytes : null);
   // Detail expand: chevron state only — the region itself mounts with
   // the shared fade preset.
   const [expanded, setExpanded] = useState(false);
@@ -152,7 +153,7 @@ export function ModelCard({
                 onPress={onDownload}
                 onPause={() => void pauseModelDownload(item.id)}
                 onResume={() => void resumeModelDownload(item.id)}
-                disabled={outOfSpace || item.downloadStatus === "completed"}
+                disabled={!fit.fits || item.downloadStatus === "completed"}
               />
             )
           ) : (
@@ -203,6 +204,13 @@ export function ModelCard({
             </View>
           </Pressable>
         </View>
+        {/* The shortfall, on the card: a disabled button with no reason is
+            the failure this line exists to prevent. */}
+        {onDownload && item.downloadStatus !== "completed" && fit.message ? (
+          <Text className="mt-2 font-sans text-caption text-warning">
+            {fit.message}
+          </Text>
+        ) : null}
       </View>
       {expanded ? (
         <Animated.View

@@ -28,6 +28,7 @@ import {
 } from "../../components/InferenceSettings.tsx";
 import { SearchSettings } from "../../components/SearchSettings.tsx";
 import { HfTokenSettings } from "../../components/HfTokenSettings.tsx";
+import { StorageSettings } from "../../components/StorageSettings.tsx";
 
 export default function SettingsScreen() {
   return (
@@ -40,6 +41,7 @@ export default function SettingsScreen() {
           <ModelLoadingSettings />
           <SearchSettings />
           <HfTokenSettings />
+          <StorageSettings />
         </ContentColumn>
       </ScrollView>
     </SafeAreaView>

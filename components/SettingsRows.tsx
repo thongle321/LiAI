@@ -59,7 +59,7 @@ export function RowSizeProvider({
 }
 
 /** Label + optional description, the left half of every row. */
-function RowLabel({ label, description }: { label: string; description?: string }) {
+export function RowLabel({ label, description }: { label: string; description?: string }) {
   const size = useContext(RowSize);
   return (
     <View className="flex-1 pr-4">

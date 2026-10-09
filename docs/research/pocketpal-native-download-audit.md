@@ -65,6 +65,7 @@ behavioral consequence, kept on purpose.
 | Terminal delivery | immediate events | immediate events, deduped by `claimTerminal` (`lib/models/download-jobs.ts`) | same |
 | 10-minute cap | WorkManager's cap applies (no foreground service) | foreground service + notification, `FOREGROUND_SERVICE_TYPE_DATA_SYNC` | better (missing in PocketPal) |
 | Notification progress | none at all | determinate bar re-emitted on every 1 Hz write; spinner only when total unknown | better |
+| `POST_NOTIFICATIONS` request | before every download, per the reference app (`pocketpal-ai/` is not vendored in this worktree, so this rests on the spec, not on a re-read) | before every transfer, in the start path (`lib/models/notification-permission.ts`), never at launch | same, and deliberately so: a user who declined is asked again. Not a gate — the answer is never read, so the download runs either way |
 | Paused row at worker entry | `Result.retry()` — burns backoff cycles | `Result.success()`, bytes kept | better |
 | pause / resume / retry from JS | 4 of 9 verbs dead from JS | all 7 verbs called | better |
 | Room row lifecycle | rows grow forever | `forgetDownload` on `removeJob` | better |

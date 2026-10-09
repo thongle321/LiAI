@@ -195,9 +195,15 @@ type, the card anatomy, and the reset-dialog copy were already at parity.
   hardcoded non-token colour. That is not adopted: a single bar everywhere
   reads as consistency rather than as a bug.
 
-- **`getAllJobs` is deleted**, along with its interface declaration. It has a
-  working implementation and no caller, and with no banner there is no new
-  cross-screen surface that would want it.
+- **The job-listing accessor is kept.** An earlier draft of this spec proposed
+  deleting it as dead code, on the grounds that no user interface renders it.
+  That was wrong, and the correction is recorded here rather than quietly
+  dropped. The accessor has eight live call sites: it backs pause, resume and
+  cancel, the free-space watcher, and — most importantly — cold-start adoption
+  of transfers that outlived the JS runtime. Deleting it would cost the app the
+  ability to resume a download after a process death. Its only true defect is
+  that no user interface consumes it, which is not the same as nothing calling
+  it.
 
 - **No global download overlay, banner, or badge.** Downloads are visible on
   the models screen only. This was decided twice previously and stands.
@@ -293,6 +299,14 @@ in this repo, not a compromise adopted for this feature.
 - **No component test harness exists**, so every claim in this spec about how
   something looks is a claim about pixels. Verification is typecheck, the full
   suite, and a documented manual pass over the affected surfaces.
+
+- **One spec claim was wrong, and is corrected in the decisions above.** The
+  claim was that a driver accessor had no callers. The truth was that no user
+  interface renders it — a weaker and completely different statement. Eight
+  call sites existed, including the one that recovers downloads after the
+  process is killed. Worth remembering whenever a report describes a symbol as
+  unrendered: unrendered is not uncalled, and the difference is the whole
+  review.
 
 - **The parity audit document is the reference for what is already at parity**
   and must be updated in the same change, so the divergences recorded here do

@@ -23,7 +23,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { getFreeDiskStorageAsync } from "expo-file-system/legacy";
 import {
   ArrowLeft,
   Bookmark,
@@ -39,6 +38,7 @@ import {
 
 import { Sheet } from "../Sheet.tsx";
 import { useSnackbar } from "../Snackbar.tsx";
+import { useFreeSpacePoll } from "../../hooks/useStorageDisclosure.ts";
 import { colors } from "../../themes/tokens.ts";
 import { useShallow } from "zustand/shallow";
 import { useModelStore } from "../../store/modelStore";
@@ -51,6 +51,7 @@ import {
   visionSizeBreakdown,
 } from "../../lib/models/hf-format.ts";
 import { hfFileWarnings } from "../../lib/models/hf-warnings.ts";
+import { storageDisclosure } from "../../lib/models/storage-disclosure.ts";
 import type { HFWarningCode } from "../../lib/models/hf-warnings.ts";
 import type { HFModelFile, HFModelSearchResult, ModelDownloadStatus } from "../../types/models";
 import {
@@ -306,7 +307,9 @@ export function HFModelSearch({
   const [visionSheetFile, setVisionSheetFile] = useState<HFModelFile | null>(
     null,
   );
-  const [freeBytes, setFreeBytes] = useState<number | null>(null);
+  // Polled while the details sheet is open, not read once when it opened:
+  // the user may free space while looking at the file list.
+  const { freeBytes, checked } = useFreeSpacePoll(selected !== null);
   // Bumped by the filter sheets so the debounce effect re-runs: the store
   // holds the filters, and its identity never changes.
   const [filtersVersion, setFiltersVersion] = useState(0);
@@ -342,16 +345,9 @@ export function HFModelSearch({
     setSelected(result);
     setFiles([]);
     setFilesLoading(true);
-    setFreeBytes(null);
     try {
-      const [loaded, free] = await Promise.all([
-        getModelFiles(result.modelId),
-        // Free disk is best-effort: a null means "unknown", which must
-        // never disable the download button.
-        getFreeDiskStorageAsync().catch(() => null),
-      ]);
+      const loaded = await getModelFiles(result.modelId);
       setFiles(loaded);
-      setFreeBytes(free);
     } catch (error) {
       console.error("Failed to load model files:", error);
     } finally {
@@ -452,7 +448,12 @@ export function HFModelSearch({
       freeBytes,
       learnedCeilingBytes: largestSuccessfulBytes,
     });
-    const outOfSpace = freeBytes !== null && breakdown.total > freeBytes;
+    const fit = storageDisclosure({
+      modelBytes: breakdown.llmSize,
+      projectorBytes: breakdown.mmprojSize ?? 0,
+      freeBytes,
+      checked,
+    });
 
     return (
       <View className="py-3 border-b border-border">
@@ -483,9 +484,9 @@ export function HFModelSearch({
                   ? `${formatBytes(breakdown.llmSize)} + ${formatBytes(breakdown.mmprojSize)} projector`
                   : formatBytes(file.size)}
               </Text>
-              {outOfSpace ? (
-                <Text className="font-sans text-caption text-error">
-                  {`Only ${formatBytes(freeBytes ?? 0)} free`}
+              {fit.message ? (
+                <Text className="font-sans text-caption text-warning">
+                  {fit.message}
                 </Text>
               ) : null}
             </View>
@@ -516,7 +517,7 @@ export function HFModelSearch({
               <DownloadButton
                 status={status}
                 progress={progress}
-                disabled={outOfSpace || status === "completed"}
+                disabled={!fit.fits || status === "completed"}
                 onPress={() => onDownload(result, file)}
                 onPause={() => void pauseModelDownload(specId)}
                 onResume={() => void resumeModelDownload(specId)}

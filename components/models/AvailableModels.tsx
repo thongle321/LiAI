@@ -1,8 +1,7 @@
 /** "Available to download" group: preset cards with their quantization files. */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { getFreeDiskStorageAsync } from "expo-file-system/legacy";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
@@ -12,8 +11,10 @@ import tiersJson from "../../assets/device-tiers.json";
 // Parsed once (see onboarding/model.tsx): static bundle data.
 const TIERS = parseTiers(tiersJson);
 import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
+import { useFreeSpacePoll } from "../../hooks/useStorageDisclosure.ts";
 import { useModelStore } from "../../store/modelStore";
 import { presetSpecId } from "../../lib/models/huggingface.ts";
+import { storageDisclosure } from "../../lib/models/storage-disclosure.ts";
 import { isPresetDownloaded, presetCardState, presetFileState } from "../../lib/models/file-state.ts";
 import type { PresetModel, PresetModelFile } from "../../types/models";
 import { ModelAccordion } from "./ModelAccordion.tsx";
@@ -51,6 +52,10 @@ export function PresetModelCard({
   // Hoisted so the closure keeps the narrowing (and needs no cast): cancel
   // takes the downloading file's spec id, not the preset id.
   const downloadingSpecId = showCardProgress ? card.specId : undefined;
+  // One poll for the card, shared by its quantization rows: a card with
+  // five files must not ask the filesystem the same question five times.
+  // Only while it is expanded — a collapsed card shows no rows to inform.
+  const { freeBytes, checked } = useFreeSpacePoll(expanded);
 
   return (
     <View className="mb-4 bg-surface-1 border border-border rounded-lg overflow-hidden">
@@ -117,6 +122,11 @@ export function PresetModelCard({
           </View>
           {preset.files.map((item) => {
             const st = fileState(item);
+            const fit = storageDisclosure({
+              modelBytes: item.size,
+              freeBytes,
+              checked,
+            });
             return (
               <View key={item.name} className="py-3 border-b border-border">
                 <View className="flex-row items-center justify-between">
@@ -143,10 +153,17 @@ export function PresetModelCard({
                       onPress={() => onDownload(preset.id, item)}
                       onPause={() => void pauseModelDownload(presetSpecId(preset.id, item.name))}
                       onResume={() => void resumeModelDownload(presetSpecId(preset.id, item.name))}
-                      disabled={st.status === "completed"}
+                      disabled={!fit.fits || st.status === "completed"}
                     />
                   </View>
                 </View>
+                {/* The shortfall is stated here, on the card, rather than
+                    left for the user to discover from a disabled button. */}
+                {st.status !== "completed" && fit.message ? (
+                  <Text className="mt-2 font-sans text-caption text-warning">
+                    {fit.message}
+                  </Text>
+                ) : null}
                 {isProgressVisible(st.status) && (
                   <DownloadProgressBar
               progress={st.progress}
@@ -192,24 +209,6 @@ export function AvailableModels({
   );
   const guard = useLoadGuard();
   const tiers = TIERS;
-  const [freeBytes, setFreeBytes] = useState<number | null>(null);
-
-  // Read once for the whole section, not per card: a dozen cards asking
-  // the filesystem the same question is a dozen round trips.
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    void getFreeDiskStorageAsync()
-      .then((free) => {
-        if (!cancelled) setFreeBytes(free);
-      })
-      .catch(() => {
-        // Unknown free space must never disable a download button.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
 
   function onGuardedDownload(modelId: string, file: PresetModelFile): void {
     guard(file.size, () => onDownload(modelId, file));
@@ -244,10 +243,6 @@ export function AvailableModels({
                   void startSpecDownload(bookmark, file, activeHfToken() ?? undefined),
                 );
               }}
-              outOfSpace={
-                freeBytes !== null &&
-                bookmark.files.reduce((sum, f) => sum + f.size, 0) > freeBytes
-              }
               /* The pending branch renders Download instead of Load/Unload,
                  so neither callback is reachable from a bookmark. */
               onActivate={() => {}}

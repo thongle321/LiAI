@@ -6,9 +6,8 @@
  * living only in the long-press menu. Ours had copy + regenerate + speak
  * plus a per-turn token count; regenerate moved to the menu (MessageMenu
  * already carries onRegenerate, so nothing new was needed) and the counts
- * moved out, because the UsageStats chip above the composer already
- * aggregates the session and the footer was printing a second, per-turn
- * version of the same numbers.
+ * moved out entirely — the session chip above the composer is gone too, so
+ * the chat shows no token counts at all.
  *
  * Timing strings are PocketPal's (AssistantTurnFooter.tsx:57-113, en.json
  * 567-576), comma-joined, with TTFT last: `40ms/token, 24.60 tokens/sec,

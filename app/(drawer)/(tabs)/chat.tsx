@@ -47,7 +47,6 @@ import { ChatEmptyPlaceholder } from "../../../components/chat/ChatEmptyPlacehol
 import { DateHeader } from "../../../components/chat/DateHeader.tsx";
 import { PendingIndicator } from "../../../components/chat/PendingIndicator.tsx";
 import { MessageInput } from "../../../components/chat/MessageInput.tsx";
-import { UsageStats } from "../../../components/chat/UsageStats.tsx";
 import { SuggestedPrompts } from "../../../components/chat/SuggestedPrompts.tsx";
 import { MessageList } from "../../../components/chat/MessageList.tsx";
 import {
@@ -752,7 +751,6 @@ export default function ChatRoute() {
         {ready && emptyState && (
           <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
         )}
-        <UsageStats messages={messages} />
       </Animated.View>
       {/* The ladder lives OUTSIDE the overlay row: it is a modal sheet
           with its own scrim, so it must not inherit the composer's lift

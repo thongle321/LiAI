@@ -402,14 +402,11 @@ describe("keyboard avoidance", () => {
     // field's 16px content, and that misalignment is visible on every screen.
     // DESIGN.md: "gutters are owned by one layer".
     const offenders: string[] = [];
-    // Only the ROOT of each overlay is checked. A chip or a pill padding
-    // ITSELF (px-3 on the usage pill, px-4 on a prompt chip) is internal
-    // padding and perfectly legal; what must not come back is a container
-    // adding a screen inset on top of the group's.
-    for (const file of [
-      "components/chat/SuggestedPrompts.tsx",
-      "components/chat/UsageStats.tsx",
-    ]) {
+    // Only the ROOT of each overlay is checked. A chip padding ITSELF
+    // (px-4 on a prompt chip) is internal padding and perfectly legal; what
+    // must not come back is a container adding a screen inset on top of the
+    // group's.
+    for (const file of ["components/chat/SuggestedPrompts.tsx"]) {
       const root = read(file).match(/className="[^"]*"/)?.[0] ?? "";
       if (/\bpx-[45]\b/.test(root)) {
         offenders.push(`${file}: its root carries a screen inset: ${root}`);
@@ -493,7 +490,7 @@ describe("keyboard avoidance", () => {
     // The issue lines live here too, for the same reason.
     assert.match(field, /px-4 pb-1 font-sans text-xs text-secondary-text/);
     // ...and the banners must NOT, or they are overlays again.
-    assert.doesNotMatch(field, /SuggestedPrompts|UsageStats/, "the banners are overlays");
+    assert.doesNotMatch(field, /SuggestedPrompts/, "the banners are overlays");
   });
 
   it("the docked field keeps the tokens the amended design system requires", () => {

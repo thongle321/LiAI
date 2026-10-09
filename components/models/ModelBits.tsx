@@ -80,12 +80,13 @@ export function StatusBadge({ status }: { status: ModelDownloadStatus }) {
 }
 
 /** The bar itself: track plus fill. The clamp is shared so every surface
- *  showing a transfer cannot drift from the others. */
+ *  showing a transfer cannot drift from the others. 8px tall with a 5px
+ *  radius, the reference app's proportions. */
 export function ProgressTrack({ progress }: { progress: number }) {
   const clamped = clampPercent(progress);
   return (
-    <View className="h-1 overflow-hidden rounded-full bg-surface-2">
-      <View className="h-full rounded-full bg-primary" style={{ width: `${clamped}%` }} />
+    <View className="h-2 overflow-hidden rounded-[5px] bg-surface-2">
+      <View className="h-full rounded-[5px] bg-primary" style={{ width: `${clamped}%` }} />
     </View>
   );
 }
@@ -103,7 +104,7 @@ export function DownloadProgressBar({
   /** Live bytes/sec. */
   speed?: number;
 }) {
-  // Mist track, Signal Blue fill, Micro radius on both. The caption is
+  // Mist track, Signal Blue fill, 5px radius on both. The caption is
   // Caption Slate, right-aligned: it counts bytes, so it is metadata.
   return (
     <View className="mx-0.5 mb-3 mt-1">

@@ -9,9 +9,9 @@
  * `KB` — that changed every byte string in the app when it was ported, and
  * these cases pin the port so it cannot drift back.
  *
- * Two deliberate carries from the reference: the speed label divides by
- * 1024 while the byte string divides by 1000, and there is no hours branch,
- * so a slow large transfer renders `1000 min`.
+ * One carry from the reference remains: there is no hours branch, so a slow
+ * large transfer renders `1000 min`. Byte and speed figures both use base
+ * 1000 — the reference's 1024 speed divisor is gone.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -88,13 +88,20 @@ describe("progressCaption", () => {
   it("renders bytes, speed and ETA in one line with no percentage", () => {
     assert.equal(
       progressCaption(1_048_576, 4_200_000_000, 5_682_000),
-      "1.05 MB (5.42 MB/s) ETA: 13 min",
+      "1.05 MB (5.68 MB/s) ETA: 13 min",
     );
   });
 
-  it("divides the speed by 1024 while the byte string uses 1000", () => {
-    // 1024 B/s -> 1024/1024/1024 = 0.00 MB/s to two decimals. Inherited
-    // from the reference; pinned so it cannot be "fixed" by accident.
-    assert.equal(progressCaption(1_000, 2_000, 1024), "1 kB (0.00 MB/s) ETA: 1 sec");
+  it("formats the byte figure and the speed figure against the same unit base", () => {
+    // The regression: the byte string divides by 1000 while the speed label
+    // divided by 1024, so one line read `1.05 MB (5.42 MB/s)` — two numbers
+    // about five percent apart. 5,682,000 B/s is 5.68 MB/s at base 1000.
+    const caption = progressCaption(1_048_576, 4_200_000_000, 5_682_000);
+    assert.match(caption, /^1\.05 MB \(5\.68 MB\/s\)/);
+
+    // Worked example, independent of the implementation: 5000 kB/s read at
+    // base 1000 is 5 MB/s. A 1024 divisor prints 4.77 and contradicts the
+    // byte figure beside it.
+    assert.match(progressCaption(2_000_000, 4_000_000, 5_000_000), /^2 MB \(5\.00 MB\/s\)/);
   });
 });

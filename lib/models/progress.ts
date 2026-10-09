@@ -4,9 +4,8 @@
  * the two apps read identically to a user: `src/utils/formatters.ts:16-41`
  * and the live listener at `services/downloads/DownloadManager.ts:88-120`.
  *
- * The speed label divides by 1024 while the byte string divides by 1000, and
- * there is no hours branch. Both are inherited from the reference, kept
- * deliberately — see the note on `progressCaption`.
+ * There is no hours branch, so a slow transfer renders a large number of
+ * minutes. Both kept deliberately — see the note on `progressCaption`.
  */
 const BINARY_UNITS = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
 const DECIMAL_UNITS = ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
@@ -65,10 +64,13 @@ export function formatEta(remainingBytes: number, speedBytesPerSec: number): str
  *  store/ModelStore.ts:300). No percentage: the reference shows none, and the
  *  byte count plus the bar already carry it.
  *
- *  The mixed unit bases are the reference's, not an oversight here: it
- *  divides the speed by 1024 and formats the bytes by 1000, so the two
- *  numbers on the line disagree by ~5%. Mirrored on purpose so the strings
- *  match; pinned by tests/progress.test.ts.
+ *  One unit base for both figures: the byte string and the speed label both
+ *  divide by 1000. The reference mixed bases (speed by 1024, bytes by 1000),
+ *  so one line read `1.05 MB (5.42 MB/s)` — numbers ~5% apart on the same
+ *  line. Byte formatting itself stays decimal.
+ *
+ *  The hours branch stays absent: the reference has none, and matching its
+ *  output verbatim is the goal.
  *
  *  The one place this is NOT verbatim: remaining bytes are clamped at zero.
  *  The reference would render `ETA: -3 sec` when a re-stat reports more bytes
@@ -79,7 +81,7 @@ export function progressCaption(
   totalBytes: number,
   speedBytesPerSec: number,
 ): string {
-  const speedMBps = (speedBytesPerSec / 1024 / 1024).toFixed(2);
+  const speedMBps = (speedBytesPerSec / 1000 / 1000).toFixed(2);
   return `${formatBytes(downloadedBytes)} (${speedMBps} MB/s) ETA: ${formatEta(
     Math.max(0, totalBytes - downloadedBytes),
     speedBytesPerSec,

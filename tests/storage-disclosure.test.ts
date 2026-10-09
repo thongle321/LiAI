@@ -134,7 +134,6 @@ describe("every download surface is covered", () => {
 
   it("surfaces with no Download button are untouched", () => {
     for (const surface of [
-      "components/models/ReadyModels.tsx",
       "components/models/ProjectorSelectorSheet.tsx",
       "components/models/DownloadErrorDialog.tsx",
     ]) {

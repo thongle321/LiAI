@@ -1,25 +1,24 @@
-/** "Available to download" group: preset cards with their quantization files. */
+/** Catalog preset card: the preset plus its quantization files.
+ *
+ * PocketParity: the group this card used to live in ("Available to
+ * download") is now computed by lib/models/model-groups.ts and rendered by
+ * the screen, so this file is the card alone. The device-tier grouping it
+ * once carried is gone with it — PocketPal groups by model type
+ * (ModelsScreen.tsx:319-333), which the same module now does.
+ */
 
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
-import { parseTiers } from "../../lib/models/device-tiers.ts";
-import tiersJson from "../../assets/device-tiers.json";
-
-// Parsed once (see onboarding/model.tsx): static bundle data.
-const TIERS = parseTiers(tiersJson);
-import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
 import { useFreeSpacePoll } from "../../hooks/useStorageDisclosure.ts";
 import { useModelStore } from "../../store/modelStore";
 import { presetSpecId } from "../../lib/models/huggingface.ts";
 import { storageDisclosure } from "../../lib/models/storage-disclosure.ts";
-import { isPresetDownloaded, presetCardState, presetFileState } from "../../lib/models/file-state.ts";
+import { presetCardState, presetFileState } from "../../lib/models/file-state.ts";
 import { findProjectorFile } from "../../lib/models/vision-pairing.ts";
 import type { PresetModel, PresetModelFile } from "../../types/models";
-import { ModelAccordion } from "./ModelAccordion.tsx";
-import { ModelCard } from "./ModelCard.tsx";
 import {
   CancelDownloadButton,
   DownloadButton,
@@ -96,22 +95,30 @@ export function PresetModelCard({
               </Text>
             </View>
           </View>
-          {/* Collapsed cards carry no action row, so a download started here
-              had no way out. */}
-          {downloadingSpecId && (
-            <CancelDownloadButton
-              onPress={() => void cancelModelDownload(downloadingSpecId)}
-            />
-          )}
+          {/* No action row: a collapsed card's only affordance is expanding
+              to reach the per-quantization Download buttons, and a download
+              started there gets its progress and Cancel below. */}
         </View>
 
-        {showCardProgress && (
-          <DownloadProgressBar
-            progress={card.progress}
-            downloaded={card.downloaded}
-            total={card.total}
-            speed={card.speed}
-          />
+        {/* Outside the header Pressable on purpose: the Cancel button is
+            full-width now, and nested inside it a tap would also toggle the
+            card — cancelling a download and expanding it at once. */}
+        {(showCardProgress || downloadingSpecId) && (
+          <View className="px-5 pb-4">
+            {showCardProgress ? (
+              <DownloadProgressBar
+                progress={card.progress}
+                downloaded={card.downloaded}
+                total={card.total}
+                speed={card.speed}
+              />
+            ) : null}
+            {downloadingSpecId ? (
+              <CancelDownloadButton
+                onPress={() => void cancelModelDownload(downloadingSpecId)}
+              />
+            ) : null}
+          </View>
         )}
       </Pressable>
 
@@ -145,13 +152,6 @@ export function PresetModelCard({
                     </View>
                   </View>
                   <View className="flex-row items-center gap-2">
-                    {isProgressVisible(st.status) && (
-                      <CancelDownloadButton
-                        onPress={() =>
-                          void cancelModelDownload(presetSpecId(preset.id, item.name))
-                        }
-                      />
-                    )}
                     <DownloadButton
                       status={st.status}
                       progress={st.progress}
@@ -170,12 +170,19 @@ export function PresetModelCard({
                   </Text>
                 ) : null}
                 {isProgressVisible(st.status) && (
-                  <DownloadProgressBar
-              progress={st.progress}
-              downloaded={st.downloaded}
-              total={st.total}
-              speed={st.speed}
-            />
+                  <>
+                    <DownloadProgressBar
+                      progress={st.progress}
+                      downloaded={st.downloaded}
+                      total={st.total}
+                      speed={st.speed}
+                    />
+                    <CancelDownloadButton
+                      onPress={() =>
+                        void cancelModelDownload(presetSpecId(preset.id, item.name))
+                      }
+                    />
+                  </>
                 )}
               </View>
             );
@@ -183,100 +190,5 @@ export function PresetModelCard({
         </View>
       )}
     </View>
-  );
-}
-
-export function AvailableModels({
-  open,
-  onToggle,
-  onDownload,
-  onOpenSettings,
-  grouped = true,
-}: {
-  open: boolean;
-  /** Receives the Collapsible's next state, not a bare toggle. */
-  onToggle: (next: boolean) => void;
-  onDownload: (modelId: string, file: PresetModelFile) => void;
-  onOpenSettings: (modelId: string) => void;
-  /** PocketPal `grouped` filter: tier headers on, or one flat preset list. */
-  grouped?: boolean;
-}) {
-  const presets = useModelStore((s) => s.presets);
-  const models = useModelStore((s) => s.models);
-  const startSpecDownload = useModelStore((s) => s.startSpecDownload);
-  const activeHfToken = useModelStore((s) => s.activeHfToken);
-  // Finished presets live in Ready: hide them here (PocketPal parity).
-  const visible = presets.filter((p) => !isPresetDownloaded(models, p));
-  // PocketPal splits its groups on isDownloaded alone, so an HF bookmark
-  // sits in this section beside the presets, not in Ready.
-  const bookmarks = models.filter(
-    (m) => m.origin === "huggingface" && m.downloadStatus !== "completed",
-  );
-  const guard = useLoadGuard();
-  const tiers = TIERS;
-
-  function onGuardedDownload(modelId: string, file: PresetModelFile): void {
-    guard(file.size, () => onDownload(modelId, file));
-  }
-
-  const cards = (items: PresetModel[]) =>
-    items.map((item) => (
-      <PresetModelCard key={item.id} preset={item} onDownload={onGuardedDownload} />
-    ));
-
-  return (
-    <ModelAccordion
-      title="Available to download"
-      count={visible.length + bookmarks.length}
-      open={open}
-      onToggle={onToggle}
-    >
-      {bookmarks.length > 0 ? (
-        <View className="mb-4">
-          {bookmarks.map((bookmark) => (
-            <ModelCard
-              key={bookmark.id}
-              item={bookmark}
-              isActive={false}
-              onDownload={() => {
-                const file = bookmark.files[0];
-                if (!file) return;
-                guard(file.size, () =>
-                  // A gated repo's file needs the token attached, exactly
-                  // as the search sheet does it; without it the download
-                  // 401s halfway.
-                  void startSpecDownload(bookmark, file, activeHfToken() ?? undefined),
-                );
-              }}
-              /* The pending branch renders Download instead of Load/Unload,
-                 so neither callback is reachable from a bookmark. */
-              onActivate={() => {}}
-              onDeactivate={() => {}}
-              onSettings={() => onOpenSettings(bookmark.id)}
-            />
-          ))}
-        </View>
-      ) : null}
-      {grouped ? (
-        // Only tier-listed presets render here — the coverage invariant is
-        // a test-time decision (C9, option c): a catalog preset missing
-        // from every tier fails tests/preset-catalog.test.ts rather than
-        // silently vanishing at runtime.
-        tiers.map((tier) => {
-          const tierPresets = visible.filter((p) => tier.presetIds.includes(p.id));
-          if (tierPresets.length === 0) return null;
-          return (
-            <View key={tier.id}>
-              <Text className="mb-1 mt-3 font-sans-semibold text-body-sm text-secondary-text">
-                {tier.label} — {tier.blurb}
-              </Text>
-              {cards(tierPresets)}
-            </View>
-          );
-        })
-      ) : (
-        <View className="mt-3">{cards(visible)}</View>
-      )}
-    </ModelAccordion>
   );
 }

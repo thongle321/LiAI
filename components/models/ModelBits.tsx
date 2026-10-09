@@ -116,20 +116,22 @@ export function DownloadProgressBar({
   );
 }
 
-/** Abandon a download. Sits beside DownloadButton and matches its shape
- * (48dp, 8px radius, 1px Hairline) so the pair reads as one control
- * cluster. Labelled rather than an icon alone: it deletes the partial
- * file, and a bare X does not say that. */
+/** Abandon a download. PocketPal's shape (ModelCard.tsx:435-449): an
+ * outlined, full-width destructive button sitting UNDER the progress bar,
+ * error-tinted ground, error label, close icon. Ours carries the same
+ * geometry in LiAI's own tokens — Error border and label, Clean White
+ * ground, 48dp tall, 8px radius. Labelled rather than an icon alone: it
+ * deletes the partial file, and a bare X does not say that. */
 export function CancelDownloadButton({ onPress }: { onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
-      className="min-h-12 flex-row items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
+      className="mt-1 min-h-12 w-full flex-row items-center justify-center rounded-lg border border-error bg-surface-1 px-3 py-2"
       accessibilityRole="button"
       accessibilityLabel="Cancel download and delete downloaded data"
     >
       <X size={16} color={colors.error} />
-      <Text className="ml-2 font-sans text-body-sm text-primary-text">Cancel</Text>
+      <Text className="ml-2 font-sans text-body-sm text-error">Cancel</Text>
     </Pressable>
   );
 }
@@ -154,8 +156,11 @@ export function DownloadButton({
   const isPaused = status === "paused";
   const isCompleted = status === "completed";
   const isFailed = status === "failed";
+  // The button names the ACTION; the number belongs to the progress bar
+  // already sitting next to it (DownloadProgressBar), and "42%" on a
+  // pause button read as a value, not something to tap.
   const label = isDownloading
-    ? `${Math.round(progress)}%`
+    ? "Pause"
     : isPaused
     ? "Paused"
     : isFailed

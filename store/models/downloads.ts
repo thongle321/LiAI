@@ -7,7 +7,6 @@
 
 import type { StateCreator } from "zustand";
 import * as LegacyFileSystem from "expo-file-system/legacy";
-import { PermissionsAndroid, Platform } from "react-native";
 
 import type { DownloadsSlice, ModelStore } from "./types";
 import type { DownloadJob, PresetModel } from "../../types/models";
@@ -26,7 +25,6 @@ import { resumeDataForPartial, classifyFileOnDisk } from "../../lib/models/resum
 import { findProjectorFile, pairDownloadStep } from "../../lib/models/vision-pairing.ts";
 import { readGgufMetadata } from "../../lib/models/gguf-header.ts";
 import { modelFitsOnDevice } from "../../lib/storage-fit.ts";
-import { requestDownloadNotificationPermission } from "../../lib/models/notification-permission.ts";
 import { asyncStorage, MEMORY_GUARD_KEY, generateId } from "./storage";
 
 function hfRefFor(modelId: string, results: HFModelSearchResult[]) {
@@ -98,7 +96,7 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
     await get().startSpecDownload(spec, file, token);
   },
 
-  startSpecDownload: async (spec, file, token, options) => {
+  startSpecDownload: async (spec, file, token) => {
     const specId = spec.id;
 
     // One live job per model: double-taps and retries must not stack tasks
@@ -246,25 +244,11 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
       return;
     }
 
-    // The foreground notification the worker posts is the only download
-    // progress visible outside the app, and on Android 13+ it is suppressed
-    // unless POST_NOTIFICATIONS is granted. Asked in the start path, never at
-    // launch, so the prompt arrives while the feature that needs it is in
-    // use, and on EVERY download, mirroring the reference app (a user who
-    // declines is asked again; accepted trade-off). It sits AFTER the
-    // storage pre-flight so a download that will be refused never prompts.
-    // NOT A GATE: the outcome is never read, so declining, a missing
-    // permission API, or a throw all leave the download running exactly as
-    // before. `promptForNotifications` is false only for the projector
-    // handoff, a continuation the user did not start.
-    if (options?.promptForNotifications !== false) {
-      await requestDownloadNotificationPermission({
-        os: Platform.OS,
-        permission: PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS ?? null,
-        request: (permission) => PermissionsAndroid.request(permission),
-      });
-    }
-
+    // No notification permission is requested (removed): the Android
+    // worker's foreground-service notification is what lifts WorkManager's
+    // ten-minute cap on a multi-GB transfer, and it is posted whether or not
+    // the user has answered any prompt — on Android 13+ it stays suppressed
+    // until the permission is granted from system settings.
     get().updateModel(specId, {
       downloadStatus: "downloading",
       downloadProgress: resumeProgress,
@@ -315,7 +299,6 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
           specNow,
           specNow.files[0],
           get().activeHfToken() ?? undefined,
-          { promptForNotifications: false },
         );
         return;
       }

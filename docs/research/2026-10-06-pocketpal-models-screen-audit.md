@@ -21,7 +21,7 @@ Scope: everything on the Models screen except the remote-model management featur
 - Header-right filter/menu: `D:\aivision\pocketpal-ai\src\components\ModelsHeaderRight\ModelsHeaderRight.tsx`
 - Cross-screen sheets (from `D:\aivision\pocketpal-ai\src\components\`): `ModelSettingsSheet`, `DownloadErrorDialog`, `ErrorSnackbar`, `ModelErrorReportSheet`, `ModelsResetDialog`.
 
-User app equivalent: route `D:\aivision\app\(drawer)\models.tsx` (+ `app\(drawer)\_layout.tsx`), header `D:\aivision\components\ScreenHeader.tsx`, models UI kit under `D:\aivision\components\models\` (`ModelCard.tsx`, `ModelCardDetails.tsx`, `ModelBits.tsx`, `ReadyModels.tsx`, `AvailableModels.tsx`, `ModelAccordion.tsx`, `ModelsHeaderRight.tsx`, `FABGroup.tsx`, `HFModelSearch.tsx`, `ModelSettingsSheet.tsx`, `DownloadErrorDialog.tsx`, `RemoteModelSheet.tsx`). State: `D:\aivision\store\modelStore.ts` → `D:\aivision\store\models\` (`catalog.ts`, `downloads.ts`, `active.ts`, `persistence.ts`, `settings.ts`, `storage.ts`, `remote.ts`, `types.ts`), UI prefs in `D:\aivision\store\modelsUi.ts`.
+User app equivalent: route `D:\aivision\app\(drawer)\models.tsx` (+ `app\(drawer)\_layout.tsx`), header `D:\aivision\components\ScreenHeader.tsx`, models UI kit under `D:\aivision\components\models\` (`ModelCard.tsx`, `ModelCardDetails.tsx`, `ModelBits.tsx`, `AvailableModels.tsx` (preset card), `model-groups.ts`, `ModelAccordion.tsx`, `ModelsHeaderRight.tsx`, `FABGroup.tsx`, `HFModelSearch.tsx`, `ModelSettingsSheet.tsx`, `DownloadErrorDialog.tsx`, `RemoteModelSheet.tsx`). State: `D:\aivision\store\modelStore.ts` → `D:\aivision\store\models\` (`catalog.ts`, `downloads.ts`, `active.ts`, `persistence.ts`, `settings.ts`, `storage.ts`, `remote.ts`, `types.ts`), UI prefs in `D:\aivision\store\modelsUi.ts`.
 
 ---
 
@@ -108,7 +108,7 @@ Legend: **ported** = landed in this session · **present** = already there befor
 | PocketPal element (§2) | Status | Where (user app) |
 |---|---|---|
 | Drawer entry to Models | present | `app\(drawer)\_layout.tsx`, `app\(drawer)\models.tsx` |
-| Ready to use / Available to download groups | present | `components\models\ReadyModels.tsx`, `AvailableModels.tsx`, `ModelAccordion.tsx` |
+| Ready to use / Available to download groups | present | `lib\models\model-groups.ts` + `app\(drawer)\models.tsx`, `ModelAccordion.tsx` |
 | Accordion expand/collapse + persisted open state | present | `store\modelsUi.ts`, `models.tsx` |
 | Header filter menu (downloaded / hf / grouped / expand-all) | present | `components\models\ModelsHeaderRight.tsx` |
 | Reset models action + confirm dialog | **ported** | `store\models\settings.ts` `resetModelSettings`, `ModelsHeaderRight.tsx` "Reset models" row, `Alert` confirm in `models.tsx` |
@@ -149,3 +149,72 @@ Legend: **ported** = landed in this session · **present** = already there befor
 3. **A projector is not a model row.** pocketpal makes projectors first-class `Model` entries (`modelType: PROJECTION`) referenced by id; LiAI keeps `spec.projector` inline and downloads it as a second leg of the same job. One downloader, one progress bar, one integrity story.
 4. **Chat-template registry intentionally absent.** The editor is a raw textarea; a picker would be a list of templates nothing validates.
 5. **Projector candidates are frozen at build time.** A repo that adds an mmproj later will not offer it until the model is re-bookmarked from search; `supportsVision` for pre-existing rows is inferred from a recorded projector or the filename-derived type.
+
+---
+
+## 6. 2026-10-09 — "copy it 100%, in our style and stack" — slice 1: the group list
+
+Decision: rebuild the screen skeleton to the reference's structure and copy
+its strings verbatim, keeping LiAI's tokens, type scale and Uniwind classes.
+
+Applied:
+
+- `lib/models/model-groups.ts` (new) — the grouping itself, pure and tested
+  (`tests/model-groups.test.ts`): two fixed buckets when `grouped` is off,
+  one group per model type when it is on, "Local" for a local model,
+  "Unknown" when there is no type, empty groups dropped.
+- `store/modelsUi.ts` — expansion is now `expandedGroups: Record<groupKey,
+  boolean>` (PocketPal `UIStore.ts:28-30`), persisted, default
+  `{ready_to_use: true}`. `setOpen`/`setAllOpen` are gone with the two fixed
+  sections they named; old payloads fall back to the default expansion.
+- `app/(drawer)/models.tsx` — a FlatList whose items are groups, each an
+  accordion over its models (PocketParity `ModelsScreen.tsx:397-412`,
+  `:346-377`). The screen now resolves each group item to its card.
+- `components/models/ModelAccordion.tsx` — title + optional description, no
+  count chip (the reference has no count).
+- `components/models/ModelsHeaderRight.tsx` — verbatim menu copy
+  ("Hugging Face Models", "Downloaded Models", "Group by Model Type",
+  "Reset Models List").
+- Deleted `components/models/ReadyModels.tsx`; `AvailableModels.tsx` is now
+  the preset card alone.
+
+Deliberate divergences:
+
+1. **Device-tier grouping is gone.** It was ours, not the reference's; the
+   `grouped` filter now means what it means there.
+2. **No expand/collapse-all menu rows.** The reference's menu has none
+   (`ModelsHeaderRight.tsx:73-115`).
+3. **The downloaded-first sort is not implemented.** The reference applies it
+   when `grouped` is off (`:280-289`); our two buckets already split on
+   downloaded/available, so it would be a no-op.
+4. **The `downloaded` filter hides remote providers too.** They are never
+   `isDownloaded` there, so the reference hides them as well.
+
+
+Slice 2 — the compact card:
+
+- `lib/models/card-actions.ts` (new, tested) decides the action row; the card
+  draws it. A transfer in flight reduces the row to Cancel (ModelCard.tsx
+  :426-453); a bookmark gets Download · Settings · Remove · expand
+  (:455-527); a downloaded model gets Load/Offload · Settings · Delete ·
+  expand (:530-586).
+- `components/models/ModelCard.tsx`: 24px radius card, compact header (type
+  icon + middle-elided name + size + status dot), the author line and the
+  type/size/file-count chips removed, the chevron moved out of the header
+  into the action row, Load/Offload at 40px with a 16px radius and 40px
+  icon buttons, and the destructive action now confirms first with the
+  reference's own wording.
+- The status dot now appears whenever a file is on disk — green loaded,
+  grey merely downloaded (:314-327), where before it showed only when
+  loaded.
+
+Divergences:
+
+1. **Pause/Resume stays.** The reference has no paused state at all; ours
+   keeps it, by request.
+2. **"Offload" for the loaded model's button** (en.json
+   `modelCard.buttons.offload`), matching the reference's vocabulary. The
+   engine-level operation is still named Unload elsewhere.
+3. **The progress bar stays on the card**, and the whole group column is
+   one list rather than the reference's nested FlatList per group. The
+   latter is a deliberate shortcut, noted in `models.tsx`.

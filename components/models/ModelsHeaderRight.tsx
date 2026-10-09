@@ -11,8 +11,6 @@ import { Dimensions, Modal, Pressable, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import {
   Check,
-  ChevronsDownUp,
-  ChevronsUpDown,
   Cloud,
   Download,
   Layers,
@@ -86,16 +84,12 @@ export function ModelsHeaderRight({
   hfOnly,
   grouped,
   onToggleFilter,
-  onExpandAll,
-  onCollapseAll,
   onResetModels,
 }: {
   downloadedOnly: boolean;
   hfOnly: boolean;
   grouped: boolean;
   onToggleFilter: (filter: ModelsUiFilter) => void;
-  onExpandAll: () => void;
-  onCollapseAll: () => void;
   onResetModels?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -195,20 +189,20 @@ export function ModelsHeaderRight({
             >
             <GroupLabel label="Filters" />
             <ToggleRow
-              label="Downloaded only"
-              icon={<Download size={16} color={colors.secondaryText} />}
-              on={downloadedOnly}
-              onPress={() => run(() => onToggleFilter("downloadedOnly"))}
-            />
-            <ToggleRow
-              label="Hugging Face only"
+              label="Hugging Face Models"
               icon={<Cloud size={16} color={colors.secondaryText} />}
               on={hfOnly}
               onPress={() => run(() => onToggleFilter("hfOnly"))}
             />
+            <ToggleRow
+              label="Downloaded Models"
+              icon={<Download size={16} color={colors.secondaryText} />}
+              on={downloadedOnly}
+              onPress={() => run(() => onToggleFilter("downloadedOnly"))}
+            />
             <GroupLabel label="View" />
             <ToggleRow
-              label="Group by device tier"
+              label="Group by Model Type"
               icon={<Layers size={16} color={colors.secondaryText} />}
               on={grouped}
               onPress={() => run(() => onToggleFilter("grouped"))}
@@ -219,7 +213,7 @@ export function ModelsHeaderRight({
                 onPress={() => run(onResetModels)}
                 className="menu-row"
                 accessibilityRole="button"
-                accessibilityLabel="Reset models"
+                accessibilityLabel="Reset Models List"
               >
                 <View className="mr-3 w-7 items-center justify-center">
                   <RotateCcw size={16} color={colors.secondaryText} />
@@ -228,42 +222,10 @@ export function ModelsHeaderRight({
                   numberOfLines={1}
                   className="mr-2 flex-1 font-sans text-body-md text-primary-text"
                 >
-                  Reset models
+                  Reset Models List
                 </Text>
               </Pressable>
             ) : null}
-            <Pressable
-              onPress={() => run(onExpandAll)}
-              className="menu-row"
-              accessibilityRole="button"
-              accessibilityLabel="Expand all sections"
-            >
-              <Text
-                numberOfLines={1}
-                className="flex-1 font-sans text-body-md text-primary-text mr-2"
-              >
-                Expand all
-              </Text>
-              <View className="w-7 items-center">
-                <ChevronsUpDown size={16} color={colors.secondaryText} />
-              </View>
-            </Pressable>
-            <Pressable
-              onPress={() => run(onCollapseAll)}
-              className="menu-row"
-              accessibilityRole="button"
-              accessibilityLabel="Collapse all sections"
-            >
-              <Text
-                numberOfLines={1}
-                className="flex-1 font-sans text-body-md text-primary-text mr-2"
-              >
-                Collapse all
-              </Text>
-              <View className="w-7 items-center">
-                <ChevronsDownUp size={16} color={colors.secondaryText} />
-              </View>
-            </Pressable>
             </Animated.View>
           </Animated.View>
           )}

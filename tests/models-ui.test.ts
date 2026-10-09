@@ -4,6 +4,7 @@ import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
 import { createModelsUiStore, UI_STATE_KEY } from "../store/modelsUi.ts";
+import { READY_TO_USE, AVAILABLE_TO_DOWNLOAD } from "../lib/models/model-groups.ts";
 import type { KeyValueStorage } from "../lib/storage.ts";
 
 function memoryStorage(seed: Record<string, string> = {}): KeyValueStorage & {
@@ -29,51 +30,47 @@ describe("models ui store", () => {
     storage = memoryStorage();
   });
 
-  it("starts with both sections open", async () => {
+  it("starts with only the Ready group open", async () => {
     const useStore = createModelsUiStore(storage);
     await useStore.getState().load();
     const s = useStore.getState();
-    assert.equal(s.readyOpen, true);
-    assert.equal(s.availableOpen, true);
+    // PocketPal's default expansion (UIStore.ts:28-30): ready_to_use open.
+    assert.equal(s.expandedGroups[READY_TO_USE], true);
+    assert.equal(s.expandedGroups["available_to_download"], undefined);
     assert.equal(s.loaded, true);
   });
 
-  it("persists expansion and restores it on load", async () => {
+  it("persists a group's expansion and restores it on load", async () => {
     const useStore = createModelsUiStore(storage);
     await useStore.getState().load();
-    useStore.getState().setOpen("ready", false);
-    useStore.getState().setOpen("available", false);
+    useStore.getState().toggleGroup(READY_TO_USE, false);
+    useStore.getState().toggleGroup("llm", true);
     // persist() is async; wait a tick.
     await new Promise((r) => setTimeout(r, 0));
 
     const saved = JSON.parse(storage.data[UI_STATE_KEY]);
-    assert.equal(saved.readyOpen, false);
-    assert.equal(saved.availableOpen, false);
-    // No section-visibility state survives: both sections always render.
-    assert.equal("readyVisible" in saved, false);
-    assert.equal("availableVisible" in saved, false);
+    assert.equal(saved.expandedGroups[READY_TO_USE], false);
+    assert.equal(saved.expandedGroups.llm, true);
 
     const useStore2 = createModelsUiStore(storage);
     await useStore2.getState().load();
-    assert.equal(useStore2.getState().readyOpen, false);
-    assert.equal(useStore2.getState().availableOpen, false);
+    assert.equal(useStore2.getState().expandedGroups[READY_TO_USE], false);
+    assert.equal(useStore2.getState().expandedGroups.llm, true);
   });
 
   it("falls back to defaults on corrupt payload", async () => {
     const bad = createModelsUiStore(memoryStorage({ [UI_STATE_KEY]: "not json" }));
     await bad.getState().load();
-    assert.equal(bad.getState().readyOpen, true);
+    assert.equal(bad.getState().expandedGroups[READY_TO_USE], true);
     assert.equal(bad.getState().loaded, true);
   });
 
-  it("setAllOpen toggles both groups and persists", async () => {
+  it("keys expansion by group type, so grouped mode gets its own state", async () => {
     const useStore = createModelsUiStore(storage);
     await useStore.getState().load();
-    useStore.getState().setAllOpen(false);
-    await new Promise((r) => setTimeout(r, 0));
-    assert.equal(useStore.getState().readyOpen, false);
-    assert.equal(useStore.getState().availableOpen, false);
-    assert.equal(JSON.parse(storage.data[UI_STATE_KEY]).readyOpen, false);
+    useStore.getState().toggleGroup("vision", true);
+    assert.equal(useStore.getState().expandedGroups.vision, true);
+    assert.equal(useStore.getState().expandedGroups[READY_TO_USE], true);
   });
 
   it("starts with PocketPal-mapped filters at defaults", async () => {
@@ -82,7 +79,8 @@ describe("models ui store", () => {
     const s = useStore.getState();
     assert.equal(s.downloadedOnly, false);
     assert.equal(s.hfOnly, false);
-    assert.equal(s.grouped, true);
+    // PocketPal ships `filters: []`, so `grouped` starts off.
+    assert.equal(s.grouped, false);
   });
 
   it("persists filters and restores them on load", async () => {
@@ -118,12 +116,13 @@ describe("models ui store", () => {
     const useStore = createModelsUiStore(legacy);
     await useStore.getState().load();
     const s = useStore.getState();
-    // Obsolete visibility keys in a stored payload are ignored, and neither
-    // section is suppressed because of them.
-    assert.equal(s.readyOpen, true);
-    assert.equal(s.availableOpen, false);
+    // The two legacy section keys map onto the group keys, so a user's
+    // collapse survives the migration.
+    assert.equal(s.expandedGroups[READY_TO_USE], true);
+    assert.equal(s.expandedGroups[AVAILABLE_TO_DOWNLOAD], false);
+    assert.equal("readyOpen" in s, false);
     assert.equal(s.downloadedOnly, false);
     assert.equal(s.hfOnly, false);
-    assert.equal(s.grouped, true);
+    assert.equal(s.grouped, false);
   });
 });

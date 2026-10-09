@@ -8,7 +8,7 @@
 
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, usePathname } from "expo-router";
 import Constants from "expo-constants";
 import {
   CircleHelp,
@@ -40,6 +40,11 @@ export function AppDrawerContent() {
   const deleteSessions = useChatStore((s) => s.deleteSessions);
   const renameSession = useChatStore((s) => s.renameSession);
   const setPinned = useChatStore((s) => s.setPinned);
+  // The highlight is a screen fact, not a store fact: the store keeps the
+  // last session loaded while you are on another screen, and drawing it
+  // there claims you are reading it. Tapping a row still opens it from
+  // anywhere — this only affects the drawn state.
+  const onChat = usePathname() === "/chat";
 
   /** Export exactly these sessions, one JSON per conversation through the
    *  SAME serializer and read path as ChatMenu's single-session export
@@ -110,7 +115,7 @@ export function AppDrawerContent() {
         <View className="flex-1">
           <SessionList
             sessions={sessions}
-            sessionId={sessionId}
+            sessionId={onChat ? sessionId : null}
             onOpen={(id) => openSession(id)}
             onDelete={(id) => void deleteSession(id)}
             onRename={(id, title) => renameSession(id, title)}

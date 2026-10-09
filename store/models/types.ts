@@ -113,11 +113,6 @@ export interface DownloadsSlice {
     // versions of the same path together.
     file: { name: string; size: number; downloadUrl: string; oid?: string },
     token?: string,
-    options?: {
-      /** False for the projector handoff: a continuation the user did not
-       *  start, so it must not raise the notification prompt again. */
-      promptForNotifications?: boolean;
-    },
   ) => Promise<void>;
   /** Resume a killed download from its partial file (manual Resume). */
   resumeInterruptedDownload: (specId: string) => Promise<void>;

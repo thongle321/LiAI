@@ -509,11 +509,7 @@ export function HFModelSearch({
                 fill={bookmarked ? colors.primary : "none"}
               />
             </Pressable>
-            {isProgressVisible(status) ? (
-              <CancelDownloadButton
-                onPress={() => void cancelModelDownload(specId)}
-              />
-            ) : (
+            {isProgressVisible(status) ? null : (
               <DownloadButton
                 status={status}
                 progress={progress}
@@ -533,12 +529,15 @@ export function HFModelSearch({
           </View>
         ) : null}
         {isProgressVisible(status) ? (
-          <DownloadProgressBar
-            progress={progress}
-            downloaded={spec?.downloadedBytes ?? 0}
-            total={spec?.totalBytes ?? 0}
-            speed={spec?.speedBytesPerSec}
-          />
+          <>
+            <DownloadProgressBar
+              progress={progress}
+              downloaded={spec?.downloadedBytes ?? 0}
+              total={spec?.totalBytes ?? 0}
+              speed={spec?.speedBytesPerSec}
+            />
+            <CancelDownloadButton onPress={() => void cancelModelDownload(specId)} />
+          </>
         ) : null}
       </View>
     );

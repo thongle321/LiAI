@@ -1,7 +1,19 @@
-/** Ready-model rows: a downloaded local/HF/preset card and a remote-provider row. */
+/** Ready-model rows: a downloaded local/HF/preset card and a remote-provider
+ * row.
+ *
+ * PocketParity: pocketpal-ai/src/screens/ModelsScreen/ModelCard/ModelCard.tsx
+ * (:688-818 and styles.ts). Compact header — type icon, middle-elided name,
+ * then size and a status dot on the right — followed by the warnings, the
+ * progress bar and ONE action row. The header's author line and the
+ * type/size/file-count chips are gone: the reference carries none of them,
+ * and the author is in the expanded grid instead (:962-971).
+ *
+ * The row itself is decided by lib/models/card-actions.ts (one pure
+ * function, tested); this file draws what it returns.
+ */
 
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { ChevronDown, ChevronRight, Power, Settings, Trash2, X } from "lucide-react-native";
 
@@ -9,20 +21,33 @@ import { colors } from "../../themes/tokens.ts";
 import { useModelStore } from "../../store/modelStore";
 import { useStorageDisclosure } from "../../hooks/useStorageDisclosure.ts";
 import { parseModelSettings } from "../../lib/model-settings.ts";
+import { cardActions, statusDotState } from "../../lib/models/card-actions.ts";
 import {
   MOTION_DURATION_MS,
   fadeEntering,
   fadeExiting,
 } from "../../lib/motion.ts";
 import type { ModelSpec, RemoteApiProvider } from "../../types/models";
-import { Chip, CancelDownloadButton, DownloadButton, DownloadProgressBar, ModelTypeIcon, StatusDot, formatBytes, isProgressVisible } from "./ModelBits.tsx";
+import {
+  Chip,
+  CancelDownloadButton,
+  DownloadButton,
+  DownloadProgressBar,
+  ModelTypeIcon,
+  StatusDot,
+  formatBytes,
+} from "./ModelBits.tsx";
 import { ModelCardDetails } from "./ModelCardDetails.tsx";
 
-function typeLabel(type: ModelSpec["type"]): string {
-  if (type === "llm") return "LLM";
-  if (type === "vision") return "Vision";
-  return "Projection";
-}
+/** PocketPal's card geometry: 24px radius, 1px outline, no elevation
+ *  (styles.ts:7-14). Ours drops the `margin: 6` — the group column already
+ *  spaces the cards. */
+const CARD =
+  "mb-3 overflow-hidden rounded-[24px] border border-border bg-surface-1";
+/** PocketPal's icon button: 40px square, 16px radius (styles.ts:178-186).
+ *  Ours keeps a 48px pressable around it so the tap target is legal. */
+const ICON_BUTTON = "h-12 w-12 items-center justify-center";
+const ICON_SURFACE = "h-10 w-10 items-center justify-center rounded-2xl";
 
 export function ModelCard({
   item,
@@ -75,45 +100,196 @@ export function ModelCard({
   const [expanded, setExpanded] = useState(false);
   const duration = MOTION_DURATION_MS;
 
+  const actions = cardActions({
+    status: item.downloadStatus,
+    isActive,
+    downloadable: onDownload !== undefined,
+  });
+  const dot = statusDotState({ status: item.downloadStatus, isActive });
+
+  /** Both destructive actions confirm first (PocketParity: ModelCard.tsx
+   *  :220-232 for delete, :247-257 for remove). The two wordings are the
+   *  reference's, because the difference between them is the whole point:
+   *  one deletes a file, the other only drops a list entry. */
+  function confirmDestructive(): void {
+    // Read the same thing the glyph and the a11y label read, so the three
+    // cannot disagree about what the button does.
+    const removing = actions.includes("remove");
+    Alert.alert(
+      removing ? "Remove Model" : "Delete Model",
+      removing
+        ? "Are you sure you want to remove this model from the list?"
+        : "Are you sure you want to delete this downloaded model?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: removing ? "Remove" : "Delete",
+          style: "destructive",
+          onPress: () => {
+            if (removing) {
+              if (removeBookmark(item.id) === false) {
+                Alert.alert("Error", "Failed to remove the model.");
+              }
+            } else {
+              // removeModel is async and answers nothing, so there is no
+              // result to report — only the delete can fail silently.
+              void removeModel(item.id);
+            }
+          },
+        },
+      ],
+    );
+  }
+
   return (
-    <View className="mb-3 overflow-hidden rounded-lg border border-border bg-surface-1">
-      <View className="p-5">
-        <View className="flex-row items-center gap-2">
-          <ModelTypeIcon type={item.type} />
-          {/* flex-1/shrink so a long name truncates instead of pushing the
-              green dot past the card edge. middle-ellipsis keeps the
-              informative end of an "org/model" repo name (pocketpal's
-              ModelCard uses flex:1/minWidth:0 + numberOfLines +
-              ellipsizeMode="middle"). */}
-          <Text
-            numberOfLines={1}
-            ellipsizeMode="middle"
-            className="shrink font-sans-semibold text-body-md text-primary-text"
-          >
-            {title}
+    <View className={CARD}>
+      {/* PocketPal's compact header (styles.ts:53-95): icon + name on the
+          left, size then status dot on the right. The dot reads "loaded"
+          when green and "downloaded" when grey — never a word. */}
+      <View className="flex-row items-center gap-2 px-4 pt-4">
+        <ModelTypeIcon type={item.type} />
+        {/* flex-1/shrink so a long name truncates instead of pushing the
+            dot past the card edge. middle-ellipsis keeps the informative
+            end of an "org/model" repo name (pocketparity:
+            ellipsizeMode="middle"). */}
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="middle"
+          className="min-w-0 flex-1 font-sans-semibold text-body-md text-primary-text"
+        >
+          {title}
+        </Text>
+        {fileBytes > 0 ? (
+          <Text className="font-sans text-caption text-secondary-text">
+            {formatBytes(fileBytes)}
           </Text>
-          {/* Loaded reads as a green dot alone — no "Active" word, no tint
-              chip. The paired "Unload" button below is the word that keeps
-              this from being a colour-only signal; the label keeps it
-              reachable to a screen reader. */}
-          {isActive && (
-            <View
-              accessibilityRole="text"
-              accessibilityLabel="Loaded"
+        ) : null}
+        {dot !== null ? (
+          <View
+            accessibilityRole="text"
+            accessibilityLabel={dot === "active" ? "Loaded" : "Downloaded"}
+          >
+            <StatusDot
+              color={dot === "active" ? colors.success : colors.secondaryText}
+            />
+          </View>
+        ) : null}
+      </View>
+
+      {/* While a transfer is in flight the row IS the cancel (PocketParity:
+          the downloading branch returns one wide Cancel, :426-453), with
+          the progress bar above it — the global banner is gone, so this is
+          the only progress readout a bookmark has. */}
+      {actions[0] === "cancel" ? (
+        <View className="mt-2 px-4">
+          <DownloadProgressBar
+            progress={item.downloadProgress}
+            downloaded={item.downloadedBytes}
+            total={item.totalBytes}
+            speed={item.speedBytesPerSec}
+          />
+          <CancelDownloadButton
+            onPress={() => void cancelModelDownload(item.id)}
+          />
+        </View>
+      ) : null}
+
+      {/* The shortfall, on the card: a disabled button with no reason is
+          the failure this line exists to prevent. */}
+      {onDownload && item.downloadStatus !== "completed" && fit.message ? (
+        <Text className="storage-warning mt-2 px-4">{fit.message}</Text>
+      ) : null}
+
+      {/* One row (PocketParity: styles.ts:156-172 — gap 8, the primary
+          action flex:1 at 40px tall with a 16px radius, the rest 40px
+          icon buttons). Wraps so a long name plus four actions reflow
+          instead of clipping at 320pt. Nothing renders while a transfer is
+          in flight: that row is the Cancel above, and an empty view here
+          would only add phantom padding under it. */}
+      {actions.length > 1 ? (
+      <View className="mt-3 flex-row flex-wrap items-center gap-2 px-4 pb-4">
+        {actions.includes("download") && onDownload ? (
+          <DownloadButton
+            status={item.downloadStatus}
+            progress={item.downloadProgress}
+            onPress={onDownload}
+            onPause={() => void pauseModelDownload(item.id)}
+            onResume={() => void resumeModelDownload(item.id)}
+            disabled={!fit.fits || item.downloadStatus === "completed"}
+          />
+        ) : null}
+
+        {actions.includes("load") || actions.includes("offload") ? (
+          <Pressable
+            onPress={isActive ? onDeactivate : onActivate}
+            className={`btn min-h-10 flex-1 rounded-2xl px-5 ${
+              isActive ? "btn--secondary" : "btn--primary"
+            }`}
+            accessibilityRole="button"
+            accessibilityLabel={isActive ? `Offload ${title}` : `Load ${title}`}
+          >
+            <Power
+              size={16}
+              color={isActive ? colors.primary : colors.onPrimary}
+            />
+            <Text
+              className={`ml-2 font-sans text-body-sm ${
+                isActive ? "text-primary" : "text-on-primary"
+              }`}
             >
-              <StatusDot color={colors.success} />
+              {/* PocketParity: the loaded model's button says "Offload"
+                    (en.json models.modelCard.buttons.offload), and the icon is
+                    an eject rather than a power glyph. */}
+              {isActive ? "Offload" : "Load"}
+            </Text>
+          </Pressable>
+        ) : null}
+
+        {actions.includes("settings") ? (
+          <Pressable
+            onPress={onSettings}
+            className={ICON_BUTTON}
+            accessibilityRole="button"
+            accessibilityLabel={`Settings for ${title}`}
+          >
+            <View className={`${ICON_SURFACE} border border-border bg-surface-1`}>
+              <Settings size={16} color={colors.secondaryText} />
             </View>
-          )}
-          {/* Glyph swap, not a transform: a style-rotated lucide icon
-              rendered invisible on this phone before (SettingsRows
-              AdvancedGroup). Right when closed, down when open. */}
+          </Pressable>
+        ) : null}
+
+        {/* A bookmark is removed with X, a downloaded file with trash:
+            the glyph says whether anything on disk goes away. */}
+        {actions.includes("remove") || actions.includes("delete") ? (
+          <Pressable
+            onPress={confirmDestructive}
+            className={ICON_BUTTON}
+            accessibilityRole="button"
+            accessibilityLabel={
+              actions.includes("remove") ? `Remove ${title}` : `Delete ${title}`
+            }
+          >
+            <View className={`${ICON_SURFACE} bg-error/10`}>
+              {actions.includes("remove") ? (
+                <X size={16} color={colors.error} />
+              ) : (
+                <Trash2 size={16} color={colors.error} />
+              )}
+            </View>
+          </Pressable>
+        ) : null}
+
+        {/* Glyph swap, not a transform: a style-rotated lucide icon
+            rendered invisible on this phone before (SettingsRows
+            AdvancedGroup). Right when closed, down when open. */}
+        {actions.includes("expand") ? (
           <Pressable
             onPress={() => setExpanded((v) => !v)}
-            className="h-12 w-12 items-center justify-center"
+            className={ICON_BUTTON}
             accessibilityRole="button"
             accessibilityState={{ expanded }}
             accessibilityLabel={
-              expanded ? `Collapse details for ${title}` : `Expand details for ${title}`
+              expanded ? "Collapse details" : "Expand details"
             }
           >
             {expanded ? (
@@ -122,107 +298,15 @@ export function ModelCard({
               <ChevronRight size={20} color={colors.secondaryText} />
             )}
           </Pressable>
-        </View>
-        <Text className="mt-1 font-sans text-body-sm text-secondary-text/70">
-          by {item.author}
-        </Text>
-        <View className="mt-2 flex-row flex-wrap items-center gap-2">
-          <Chip label={typeLabel(item.type)} />
-          {fileBytes > 0 && <Chip label={formatBytes(fileBytes)} />}
-          {item.files.length > 1 && <Chip label={`${item.files.length} files`} />}
-        </View>
-        {/* Wraps so a long model name + three actions reflow instead of
-            clipping at 320pt. */}
-        <View className="mt-3 flex-row flex-wrap items-center gap-2">
-          {onDownload ? (
-            /* A bookmark IS its spec, so the spec id is the card's own id
-               and the download controls need no prop plumbing. */
-            isProgressVisible(item.downloadStatus) ? (
-              <>
-                <CancelDownloadButton
-                  onPress={() => void cancelModelDownload(item.id)}
-                />
-                {/* The card used to inherit its only progress readout from the
-                    global banner. That banner is gone, so a bookmarked model
-                    downloading here would show nothing at all. */}
-                <DownloadProgressBar
-                  progress={item.downloadProgress}
-                  downloaded={item.downloadedBytes}
-                  total={item.totalBytes}
-                  speed={item.speedBytesPerSec}
-                />
-              </>
-            ) : (
-              <DownloadButton
-                status={item.downloadStatus}
-                progress={item.downloadProgress}
-                onPress={onDownload}
-                onPause={() => void pauseModelDownload(item.id)}
-                onResume={() => void resumeModelDownload(item.id)}
-                disabled={!fit.fits || item.downloadStatus === "completed"}
-              />
-            )
-          ) : (
-            <Pressable
-              onPress={isActive ? onDeactivate : onActivate}
-              className={`btn min-h-12 px-5 py-2 ${isActive ? "btn--secondary" : "btn--primary"}`}
-              accessibilityRole="button"
-              accessibilityLabel={
-                isActive ? `Unload ${title}` : `Load ${title}`
-              }
-            >
-              <Power size={16} color={isActive ? colors.primary : colors.onPrimary} />
-              <Text
-                className={`ml-2 font-sans text-body-sm ${
-                  isActive ? "text-primary" : "text-on-primary"
-                }`}
-              >
-                {isActive ? "Unload" : "Load"}
-              </Text>
-            </Pressable>
-          )}
-          <Pressable
-            onPress={onSettings}
-            className="h-12 w-12 items-center justify-center rounded-full"
-            accessibilityRole="button"
-            accessibilityLabel={`Settings for ${title}`}
-          >
-            <View className="h-10 w-10 items-center justify-center rounded-full border border-border bg-surface-1">
-              <Settings size={16} color={colors.secondaryText} />
-            </View>
-          </Pressable>
-          {/* A bookmark is removed with X, a downloaded file with trash:
-              the glyph says whether anything on disk goes away. */}
-          <Pressable
-            onPress={() =>
-              onDownload ? removeBookmark(item.id) : void removeModel(item.id)
-            }
-            className="h-12 w-12 items-center justify-center rounded-full"
-            accessibilityRole="button"
-            accessibilityLabel={onDownload ? `Remove ${title}` : `Delete ${title}`}
-          >
-            <View className="h-10 w-10 items-center justify-center rounded-full bg-error/10">
-              {onDownload ? (
-                <X size={16} color={colors.error} />
-              ) : (
-                <Trash2 size={16} color={colors.error} />
-              )}
-            </View>
-          </Pressable>
-        </View>
-        {/* The shortfall, on the card: a disabled button with no reason is
-            the failure this line exists to prevent. */}
-        {onDownload && item.downloadStatus !== "completed" && fit.message ? (
-          <Text className="storage-warning mt-2">
-            {fit.message}
-          </Text>
         ) : null}
       </View>
+      ) : null}
+
       {expanded ? (
         <Animated.View
           entering={fadeEntering(duration)}
           exiting={fadeExiting(duration)}
-          className="border-t border-border px-5 pb-5"
+          className="border-t border-border px-4 pb-4"
         >
           <ModelCardDetails item={item} fileBytes={fileBytes} />
         </Animated.View>
@@ -245,18 +329,26 @@ export function RemoteProviderCard({
   onRemove: () => void;
 }) {
   return (
-    <View className="mb-3 bg-surface-1 border border-border rounded-lg overflow-hidden">
-    <View className="p-5 flex-row items-center justify-between">
+    <View className="mb-3 bg-surface-1 border border-border rounded-[24px] overflow-hidden">
+      <View className="p-5 flex-row items-center justify-between">
         <View className="flex-1">
           <View className="flex-row items-center gap-2">
-            <StatusDot color={isActive ? colors.success : colors.secondaryText} />
-            <Text className="font-sans-semibold text-body-md text-primary-text">{item.name}</Text>
+            <StatusDot
+              color={isActive ? colors.success : colors.secondaryText}
+            />
+            <Text className="font-sans-semibold text-body-md text-primary-text">
+              {item.name}
+            </Text>
           </View>
           <Text className="font-sans text-body-sm text-secondary-text/70 mt-0.5">
             {item.baseUrl} • {item.modelName}
           </Text>
           <View className="flex-row items-center gap-2 mt-2">
-            <Chip label={item.providerType === "openrouter" ? "OpenRouter" : "Remote API"} />
+            <Chip
+              label={
+                item.providerType === "openrouter" ? "OpenRouter" : "Remote API"
+              }
+            />
             {!isActive && reachable === false && <Chip label="Unreachable" />}
           </View>
         </View>
@@ -267,16 +359,18 @@ export function RemoteProviderCard({
             accessibilityRole="button"
             accessibilityLabel={`Activate ${item.name}`}
           >
-            <Text className="font-sans text-body-sm text-on-primary">Activate</Text>
+            <Text className="font-sans text-body-sm text-on-primary">
+              Activate
+            </Text>
           </Pressable>
         )}
         <Pressable
           onPress={onRemove}
-          className="h-12 w-12 items-center justify-center rounded-full"
+          className="h-12 w-12 items-center justify-center"
           accessibilityRole="button"
           accessibilityLabel={`Remove ${item.name}`}
         >
-          <View className="h-10 w-10 items-center justify-center rounded-full bg-error/10">
+          <View className="h-10 w-10 items-center justify-center rounded-2xl bg-error/10">
             <Trash2 size={16} color={colors.error} />
           </View>
         </Pressable>

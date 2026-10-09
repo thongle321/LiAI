@@ -1,7 +1,16 @@
-/** Models screen: Ready to use + Available to download, header filters, add FAB. */
+/** Models screen: PocketPal's group list — Ready to Use / Available to
+ * Download, or one group per model type when `grouped` is on — plus the
+ * header filter menu and the add FAB.
+ *
+ * PocketParity: ModelsScreen.tsx:386-478. A FlatList whose items are
+ * GROUPS, each an accordion wrapping its models (`:397-412`, `:346-377`).
+ * The grouping itself is lib/models/model-groups.ts; the expansion state
+ * is keyed by group key, exactly as the reference keys it
+ * (UIStore.ts:28-30). Empty groups are never rendered (`:378-384`).
+ */
 
-import { useEffect, useState } from "react";
-import { Alert, RefreshControl, ScrollView, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Alert, FlatList, RefreshControl, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
@@ -9,17 +18,26 @@ import { colors } from "../../themes/tokens.ts";
 import { ScreenHeader } from "../../components/ScreenHeader.tsx";
 import { ContentColumn } from "../../components/ContentColumn.tsx";
 import { useLocalModelImport } from "../../hooks/useLocalModelImport.ts";
+import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
 import { useShallow } from "zustand/shallow";
 import { useModelStore } from "../../store/modelStore.ts";
+import { useChatStore } from "../../store/chat.ts";
 import { useModelsUi } from "../../store/modelsUi.ts";
+import { isProviderActive } from "../../lib/model-providers.ts";
+import {
+  buildModelGroups,
+  type ModelGroup,
+} from "../../lib/models/model-groups.ts";
 import { DownloadErrorDialog } from "../../components/models/DownloadErrorDialog.tsx";
 import { ModelsHeaderRight } from "../../components/models/ModelsHeaderRight.tsx";
 import { FABGroup, FAB_STACK_HEIGHT } from "../../components/models/FABGroup.tsx";
-import { ReadyModels } from "../../components/models/ReadyModels.tsx";
-import { AvailableModels } from "../../components/models/AvailableModels.tsx";
+import { ModelAccordion } from "../../components/models/ModelAccordion.tsx";
+import { PresetModelCard } from "../../components/models/AvailableModels.tsx";
+import { ModelCard, RemoteProviderCard } from "../../components/models/ModelCard.tsx";
 import { HFModelSearch } from "../../components/models/HFModelSearch.tsx";
 import { RemoteModelSheet } from "../../components/models/RemoteModelSheet.tsx";
 import { ModelSettingsSheet } from "../../components/models/ModelSettingsSheet.tsx";
+import type { PresetModelFile } from "../../types/models";
 
 export default function ModelsRoute() {
   // Stable selectors: actions never change identity, so each subscribes
@@ -34,6 +52,14 @@ export default function ModelsRoute() {
   const reconcileInterrupted = useModelStore((s) => s.reconcileInterrupted);
   const loadPresets = useModelStore((s) => s.loadPresets);
   const resetModelSettings = useModelStore((s) => s.resetModelSettings);
+  const setActiveModel = useModelStore((s) => s.setActiveModel);
+  const setActiveRemoteApi = useModelStore((s) => s.setActiveRemoteApi);
+  const removeRemoteApi = useModelStore((s) => s.removeRemoteApi);
+  const startSpecDownload = useModelStore((s) => s.startSpecDownload);
+  const activeHfToken = useModelStore((s) => s.activeHfToken);
+  // Unload must free memory, not just detach: point the model store at
+  // nothing AND drop the engine's cached context so the next Load reloads.
+  const releaseEngine = useChatStore((s) => s.releaseEngine);
   // C1: ONE failure slot for the whole screen — the dialog auto-opens
   // from failed store state (PocketPal's dialog reaction), covering
   // every card type that can fail. Narrow stable read: progress ticks
@@ -55,23 +81,31 @@ export default function ModelsRoute() {
   );
   const router = useRouter();
   const importLocalModel = useLocalModelImport();
+  const guard = useLoadGuard();
   // Stable selectors plus one useShallow read set: actions subscribe
-  // alone, the accordion/filter flags move as one shallow unit.
+  // alone, the expansion/filter flags move as one shallow unit.
   const loadUi = useModelsUi((s) => s.load);
-  const setOpen = useModelsUi((s) => s.setOpen);
-  const setAllOpen = useModelsUi((s) => s.setAllOpen);
+  const toggleGroup = useModelsUi((s) => s.toggleGroup);
   const setFilter = useModelsUi((s) => s.setFilter);
-  const { readyOpen, availableOpen, downloadedOnly, hfOnly, grouped, autoNavigateToChat } =
+  const { expandedGroups, downloadedOnly, hfOnly, grouped, autoNavigateToChat } =
     useModelsUi(
       useShallow((s) => ({
-        readyOpen: s.readyOpen,
-        availableOpen: s.availableOpen,
+        expandedGroups: s.expandedGroups,
         downloadedOnly: s.downloadedOnly,
         hfOnly: s.hfOnly,
         grouped: s.grouped,
         autoNavigateToChat: s.autoNavigateToChat,
       })),
     );
+  const { models, presets, remoteApis, remoteCaps, activeModelId } = useModelStore(
+    useShallow((s) => ({
+      models: s.models,
+      presets: s.presets,
+      remoteApis: s.remoteApis,
+      remoteCaps: s.remoteCaps,
+      activeModelId: s.activeModelId,
+    })),
+  );
 
   useEffect(() => {
     loadPersisted();
@@ -84,8 +118,6 @@ export default function ModelsRoute() {
   const [refreshing, setRefreshing] = useState(false);
   // Both groups self-hide when empty: pocketpal drops filter-empty groups,
   // so a fresh install would show a blank list. This is the empty state.
-  // A number selector: re-renders only when the count changes, not on
-  // every download-progress tick.
   const catalogCount = useModelStore((s) => s.models.length + s.remoteApis.length);
 
   async function handleRefresh(): Promise<void> {
@@ -96,6 +128,103 @@ export default function ModelsRoute() {
       setRefreshing(false);
     }
   }
+
+  const groups = useMemo(
+    () =>
+      buildModelGroups({
+        specs: models,
+        remotes: remoteApis,
+        presets,
+        filters: { downloadedOnly, hfOnly, grouped },
+      }),
+    [models, remoteApis, presets, downloadedOnly, hfOnly, grouped],
+  );
+
+  const specById = useMemo(() => new Map(models.map((m) => [m.id, m])), [models]);
+  const presetById = useMemo(() => new Map(presets.map((p) => [p.id, p])), [presets]);
+  const remoteById = useMemo(() => new Map(remoteApis.map((r) => [r.id, r])), [remoteApis]);
+
+  function guardedDownload(modelId: string, file: PresetModelFile): void {
+    guard(file.size, () => startDownload(modelId, file));
+  }
+
+  function renderItem(item: ModelGroup["items"][number], presetDownload: typeof guardedDownload) {
+    if (item.kind === "preset") {
+      const preset = presetById.get(item.id);
+      return preset ? (
+        <PresetModelCard
+          key={item.id}
+          preset={preset}
+          onDownload={presetDownload}
+        />
+      ) : null;
+    }
+    if (item.kind === "remote") {
+      const provider = remoteById.get(item.id);
+      return provider ? (
+        <RemoteProviderCard
+          key={item.id}
+          item={provider}
+          isActive={isProviderActive(activeModelId, item.id)}
+          reachable={remoteCaps[item.id]?.reachable}
+          onActivate={() => setActiveRemoteApi(item.id)}
+          onRemove={() => removeRemoteApi(item.id)}
+        />
+      ) : null;
+    }
+    const spec = specById.get(item.id);
+    if (spec === undefined) return null;
+    if (spec.downloadStatus === "completed") {
+      return (
+        <ModelCard
+          key={spec.id}
+          item={spec}
+          isActive={activeModelId === spec.id}
+          onActivate={() => {
+            setActiveModel(spec.id, "local");
+            if (autoNavigateToChat) router.push("/chat");
+          }}
+          onDeactivate={() => {
+            setActiveModel(null);
+            releaseEngine();
+          }}
+          onSettings={() => setSettingsModelId(spec.id)}
+        />
+      );
+    }
+    // A pending spec is an HF bookmark: its card offers Download, and the
+    // token rides along or a gated repo 401s halfway through.
+    return (
+      <ModelCard
+        key={spec.id}
+        item={spec}
+        isActive={false}
+        onDownload={() => {
+          const file = spec.files[0];
+          if (!file) return;
+          guard(file.size, () =>
+            void startSpecDownload(spec, file, activeHfToken() ?? undefined),
+          );
+        }}
+        /* The pending branch renders Download instead of Load/Unload, so
+           neither callback is reachable from a bookmark. */
+        onActivate={() => {}}
+        onDeactivate={() => {}}
+        onSettings={() => setSettingsModelId(spec.id)}
+      />
+    );
+  }
+
+  const renderGroup = ({ item: group }: { item: ModelGroup }) => (
+    <ModelAccordion
+      title={group.label}
+      {...(group.description !== undefined ? { description: group.description } : {})}
+      open={expandedGroups[group.key] ?? false}
+      onToggle={(next) => toggleGroup(group.key, next)}
+    >
+      {group.items.map((item) => renderItem(item, guardedDownload))}
+    </ModelAccordion>
+  );
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
@@ -110,8 +239,6 @@ export default function ModelsRoute() {
               const current = { downloadedOnly, hfOnly, grouped };
               setFilter(filter, !current[filter]);
             }}
-            onExpandAll={() => setAllOpen(true)}
-            onCollapseAll={() => setAllOpen(false)}
             onResetModels={() =>
               Alert.alert(
                 "Reset models",
@@ -130,52 +257,39 @@ export default function ModelsRoute() {
         }
       />
       <View className="flex-1">
-        <ScrollView
-          className="flex-1"
-          contentContainerClassName="w-full"
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => void handleRefresh()}
-              tintColor={colors.primary}
-            />
-          }
-        >
-          {/* paddingBottom is an inline style, not a class: it is derived from
-              FAB_STACK_HEIGHT, and a dynamically-composed Uniwind class has
-              failed to resolve on device before (see ModelsHeaderRight). */}
-          <ContentColumn className="p-5" style={{ paddingBottom: FAB_STACK_HEIGHT }}>
-            <ReadyModels
-              open={readyOpen}
-              onToggle={(next) => setOpen("ready", next)}
-              onOpenSettings={setSettingsModelId}
-              // "Auto-Navigate to Chat": activating a model should land
-              // you somewhere you can type, not back on a list you now
-              // have to leave again.
-              onNavigateToChat={
-                autoNavigateToChat ? () => router.push("/chat") : undefined
-              }
-              hfOnly={hfOnly}
-            />
-            {/* downloadedOnly (PocketPal `downloaded`): only Ready renders. */}
-            {!downloadedOnly && (
-              <AvailableModels
-                open={availableOpen}
-                onToggle={(next) => setOpen("available", next)}
-                onDownload={(modelId, file) => startDownload(modelId, file)}
-                onOpenSettings={(modelId) => setSettingsModelId(modelId)}
-                grouped={grouped}
+        {/* PocketParity: the list's own items are GROUPS, each rendering its
+            models — ModelsScreen.tsx:397-412, :362-376. shortcut: no nested
+            FlatList per group (the reference has one), so a group's items are
+            all mounted; windowing is the outer list's only lever. Nest one when
+            the catalog outgrows a screen's worth of cards. One ContentColumn
+            wraps the whole list so group headers line up with the cards on a
+            wide screen; `paddingBottom` is an inline style, not a class: it
+            is derived from FAB_STACK_HEIGHT, and a dynamically-composed
+            Uniwind class has failed to resolve on device before. */}
+        <ContentColumn className="w-full flex-1">
+          <FlatList
+            data={groups}
+            keyExtractor={(group) => group.key}
+            renderItem={renderGroup}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => void handleRefresh()}
+                tintColor={colors.primary}
               />
-            )}
-            {catalogCount === 0 ? (
-              <View className="items-center py-10">
-                <Text className="font-sans text-body-md text-secondary-text text-center">
-                  No models yet. Add one from the + button or search Hugging Face.
-                </Text>
-              </View>
-            ) : null}
-          </ContentColumn>
-        </ScrollView>
+            }
+            contentContainerStyle={{ paddingBottom: FAB_STACK_HEIGHT }}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          />
+        </ContentColumn>
+        {catalogCount === 0 && presets.length === 0 ? (
+          <View className="pointer-events-none absolute inset-0 items-center justify-center px-8">
+            <Text className="text-center font-sans text-body-md text-secondary-text">
+              No models yet. Add one from the + button or search Hugging Face.
+            </Text>
+          </View>
+        ) : null}
 
         <FABGroup
           onAddHFModel={() => setHfOpen(true)}

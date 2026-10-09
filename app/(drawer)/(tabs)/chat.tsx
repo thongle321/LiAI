@@ -176,14 +176,10 @@ export default function ChatRoute() {
   // per-row arrow is a fresh prop identity on every screen render, which
   // defeats memo(MessageListItem) and re-renders every visible row on each
   // keyboard toggle — the jank half of the reported flash with a model
-  // loaded. Stable handlers + a memoized row (buildRows is already
-  // memoized above) let a keyboard toggle skip the rows entirely.
-  const handleEdit = useCallback(
-    (messageId: string) => {
-      startEdit(messageId);
-    },
-    [startEdit],
-  );
+  // loaded. Rows are memoized, so stable handlers let a keyboard toggle
+  // skip the rows entirely. startEdit already has this exact signature and
+  // identity, so it passes through unwrapped; the other two bind the id
+  // onto a store action that takes only part of it.
   const handleRegenerate = useCallback(
     (messageId: string) => {
       void regenerate(messageId);
@@ -674,7 +670,7 @@ export default function ChatRoute() {
                   contextBannerVisible={contextFullShowing}
                   canRun={canRun}
                   models={menuModels}
-                  onEdit={handleEdit}
+                  onEdit={startEdit}
                   onRegenerateWith={handleRegenerateWith}
                   onRegenerate={
                     row.message.role === "assistant" ? handleRegenerate : null
@@ -729,6 +725,31 @@ export default function ChatRoute() {
           </Animated.View>
         )}
       </View>
+
+      {/* Keyboard strip. While the keyboard animates in, the frames between
+          the tab bar unmounting and the keyboard covering its slot would
+          show this screen's base colour where the bar's Clean White used to
+          be — a colour flash on every open and close (most exposed with a
+          model loaded, because then the strip is visible rather than covered
+          by the placeholder card). This is the bar's own colour and height,
+          flipped by the SAME store in the SAME commit as the bar's unmount,
+          so no frame mixes the two. Behind the fully open keyboard it is
+          invisible; it exists only for the transition.
+
+          Paint order is load-bearing: it sits BEFORE the composer and the
+          overlay group precisely so they paint OVER it. Those are lifted by
+          the keyboard, so for the transition frames their lower edges cross
+          this band — and the composer's control row carries coloured
+          buttons (the send fill). A strip above them would hide the send
+          button for the length of the keyboard animation. pointerEvents is
+          none, so the only thing this box can do is paint. */}
+      {keyboardVisible && (
+        <View
+          className="absolute inset-x-0 bottom-0 bg-surface-1"
+          style={{ height: keyboardOffset }}
+          pointerEvents="none"
+        />
+      )}
 
       {/* The composer. It IS the floating box: absolutely positioned, out of
           the column's flow, lifting itself, and reporting its own height.
@@ -829,24 +850,6 @@ export default function ChatRoute() {
         visible={pickerOpen}
         onClose={() => setPickerOpen(false)}
       />
-      {/* Keyboard strip. While the keyboard animates in, the frames between
-          the tab bar unmounting and the keyboard covering its slot would
-          show this screen's base colour where the bar's Clean White used to
-          be — a colour flash on every open and close (worse with a model
-          loaded, because then the strip is visible, not covered by the
-          placeholder card). This is the bar's own colour and height,
-          flipped by the SAME store in the SAME commit as the bar's unmount,
-          so no frame mixes the two. Behind the fully open keyboard it is
-          invisible; it exists only for the transition. It paints over the
-          composer's bottom edge for those frames — same colour, so it
-          cannot be seen — and carries no pointer events. */}
-      {keyboardVisible && (
-        <View
-          className="absolute inset-x-0 bottom-0 bg-surface-1"
-          style={{ height: keyboardOffset }}
-          pointerEvents="none"
-        />
-      )}
     </SafeAreaView>
   );
 }

@@ -573,6 +573,96 @@ describe("keyboard avoidance", () => {
     assert.doesNotMatch(input, /mb-3 flex-row items-end/, "flush with the bottom edge");
   });
 
+  it("sending dismisses the keyboard, via this version's dismiss API", () => {
+    // PocketPal's send path calls Keyboard.dismiss() (ChatView.tsx:447): the
+    // message is committed, so the keyboard's job is done and leaving it up
+    // strands the composer over the streaming reply. This app pins
+    // react-native-keyboard-controller 1.21.9, which exports no `Keyboard`
+    // class — the API here is KeyboardControllerNative.dismiss(keepFocus,
+    // animated). The second assertion doubles as a guard against the newer
+    // spelling being pasted in: it does not compile here.
+    const input = read("components/chat/MessageInput.tsx");
+    assert.match(
+      input,
+      /KeyboardControllerNative\.dismiss\(false, true\)/,
+      "sending must dismiss the keyboard (keepFocus=false, animated)",
+    );
+    assert.doesNotMatch(
+      input,
+      /\bKeyboard\.dismiss\(/,
+      "`Keyboard` is not exported by 1.21.9 — that spelling does not compile",
+    );
+  });
+
+  it("the empty thread's CTA opens the in-chat picker, not only a route", () => {
+    // PocketPal parity: the no-model card's action opens their
+    // ChatPalModelPickerSheet, so activating a model no longer means
+    // leaving the conversation. The Download branch (nothing pickable at
+    // all) still routes to /models.
+    const chat = read("app/(drawer)/(tabs)/chat.tsx");
+    const placeholder = read("components/chat/ChatEmptyPlaceholder.tsx");
+    assert.match(
+      chat,
+      /<ChatEmptyPlaceholder\s+onSelectModel=\{\(\) => setPickerOpen\(true\)\}\s*\/>/,
+      "the screen wires the card's CTA to the picker",
+    );
+    assert.match(
+      chat,
+      /<ModelPickerSheet\s+visible=\{pickerOpen\}/,
+      "the picker sheet renders from the chat screen",
+    );
+    assert.doesNotMatch(
+      placeholder,
+      /buttonText === "Download Model"/,
+      "the CTA dispatches on a field, not on display copy: a rewording must not re-route the button",
+    );
+    assert.match(
+      placeholder,
+      /cta === "download" \|\| onSelectModel === undefined/,
+      "download — or no picker offered — routes to /models",
+    );
+    assert.match(
+      placeholder,
+      /onSelectModel\(\)/,
+      "an offered picker opens in place",
+    );
+    // The picker dismisses the keyboard on open (it is opened from the
+    // composer end of the screen) and selects through the SAME
+    // local/remote discriminator as the header menu.
+    const picker = read("components/chat/ModelPickerSheet.tsx");
+    assert.match(picker, /KeyboardControllerNative\.dismiss\(false, true\)/);
+    assert.match(
+      picker,
+      /if \(host === undefined\) setActiveModel\(id, "local"\)/,
+      "a local entry has no host — the same discriminator as the menus",
+    );
+    assert.match(picker, /pickableModels\(/);
+  });
+
+  it("the keyboard strip paints under the composer and the overlays", () => {
+    // The strip exists only for the frames while the keyboard animates in,
+    // and the composer and the overlay group are lifted by the keyboard, so
+    // their lower edges cross the strip's band for exactly those frames.
+    // Painted after them, the strip would hide the composer's control row —
+    // the send button is a filled circle sitting in that band — for the
+    // length of the keyboard animation. Earlier in the tree paints first;
+    // pointerEvents="none" keeps the strip out of touch entirely.
+    const chat = read("app/(drawer)/(tabs)/chat.tsx");
+    const strip = chat.indexOf("absolute inset-x-0 bottom-0 bg-surface-1");
+    const composer = chat.indexOf("<MessageInput");
+    const overlays = chat.indexOf('className="absolute inset-x-0 px-4"');
+    assert.notEqual(strip, -1, "the strip exists");
+    assert.notEqual(composer, -1, "the composer exists");
+    assert.notEqual(overlays, -1, "the overlay group exists");
+    assert.ok(strip < composer, "the strip must paint under the composer");
+    assert.ok(strip < overlays, "the strip must paint under the overlay group");
+    assert.match(
+      chat.slice(strip, composer),
+      /pointerEvents="none"/,
+      "the strip never takes touches",
+    );
+  });
+
   it("the shared helper is callable from the UI runtime", () => {
     // keyboardOcclusion is called INSIDE useDerivedValue, which runs on the
     // UI runtime. A plain JS function there throws at runtime:

@@ -76,8 +76,8 @@ export const TAB_BAR_HEIGHT_SEED = 67;
  * copies of the constant (60 in code, 64 in prose, 75 real). An onLayout
  * can legitimately report 0 before first paint, so "reject, keep the
  * seeded value" is the only safe reading of a bad number. Pure so the
- * store's guard stays testable here (store/keyboard.ts imports
- * TAB_BAR_HEIGHT from components/BottomNav.tsx, which node cannot load). */
+ * store's guard stays testable here — node can load this module, and it
+ * cannot load a React Native component. */
 export function resolveTabBarHeight(current: number, measured: number): number {
   if (!Number.isFinite(measured) || measured <= 0) return current;
   return measured;

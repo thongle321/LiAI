@@ -12,9 +12,9 @@ permanently disabled button does not.
 
 **Status:** ready-for-agent
 
-- [ ] Starting a download consults the storage-fit decision before any transfer begins
-- [ ] Free space that cannot be read refuses the download rather than attempting it
-- [ ] A refusal records the model's failure with a message the failure dialog already classifies as a storage problem, so its existing title, body and numbered fix-it steps are what the user sees
-- [ ] No bytes are written and no partial file is created when a download is refused
-- [ ] The wiring is guarded by a source assertion, since the models store imports the filesystem and the native download module and cannot be imported under the test runner
-- [ ] The blast radius of failing closed is recorded in the spec's risk notes: a device whose free-space read always throws can never start a download
+- [x] Starting a download consults the storage-fit decision before any transfer begins
+- [x] Free space that cannot be read refuses the download rather than attempting it
+- [x] A refusal records the model's failure with a message the failure dialog already classifies as a storage problem, so its existing title, body and numbered fix-it steps are what the user sees
+- [x] No bytes are written and no partial file is created when a download is refused
+- [x] The wiring is guarded by a source assertion, since the models store imports the filesystem and the native download module and cannot be imported under the test runner
+- [x] The blast radius of failing closed is recorded in the spec's risk notes: a device whose free-space read always throws can never start a download (spec.md "Further Notes"; also in-code at the pre-flight)

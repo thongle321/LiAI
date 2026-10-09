@@ -218,3 +218,27 @@ Divergences:
 3. **The progress bar stays on the card**, and the whole group column is
    one list rather than the reference's nested FlatList per group. The
    latter is a deliberate shortcut, noted in `models.tsx`.
+
+Slice 3 — HF search + details (mostly already there):
+
+Checked against the reference rather than rebuilt. Already in place before
+this pass: two stacked sheets (search under, details over —
+`HFModelSearch.tsx` testIDs `hf-search-sheet` / `hf-details-sheet`), the
+author filter and sort sheets, infinite scroll from the Hub's Link header,
+per-result and per-detail stats (updated / downloads / likes / trending),
+the "Requires Token" chip on a gated RESULT, the auth-failure hint with
+"Disable Token & Retry", the warning chip and its numbered snackbar, the
+vision chip opening VisionDownloadSheet, per-file bookmarks, and cancel
+while a file transfers.
+
+Two gaps closed:
+
+1. **The details sheet's section heading** said "Files"; it now says
+   "Available GGUF Files" (en.json `models.details.title`), which is what
+   names the file kind.
+2. **A gated FILE carries no chip**, only the result row did
+   (PocketParity ModelFileCard.tsx:323-338). Without it the download 401s
+   halfway with nothing on screen to explain why.
+
+Locked by `tests/hf-details-sheet.test.ts` (source assertions — the sheet
+mounts native components, so the runner cannot render it).

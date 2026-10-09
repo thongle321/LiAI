@@ -462,6 +462,17 @@ export function HFModelSearch({
             <Text className="font-sans text-body-md text-primary-text">{file.name}</Text>
             <View className="flex-row flex-wrap items-center gap-2 mt-2">
               <Chip label="GGUF" />
+              {/* A gated repo's file needs the HF token; without the chip a
+                  download 401s halfway (PocketParity: ModelFileCard.tsx
+                  :323-338). */}
+              {result.gated ? (
+                <View className="flex-row items-center gap-1 rounded bg-surface-2 px-2 py-0.5">
+                  <Lock size={10} color={colors.secondaryText} />
+                  <Text className="font-sans text-caption text-secondary-text">
+                    Requires Token
+                  </Text>
+                </View>
+              ) : null}
               {/* Vision is a DECISION, not a label: it opens the sheet that
                   downloads the pair (or deliberately skips it). The plain
                   Download button beside it still takes the default. */}
@@ -758,7 +769,10 @@ export function HFModelSearch({
                 ) : null}
               </View>
               <Text className="font-sans-semibold text-body-md text-primary-text mt-3 mb-1">
-                Files
+                {/* en.json `models.details.title`, verbatim — it names the
+                    file KIND, which is the whole difference between this
+                    list and a folder of repository files. */}
+                Available GGUF Files
               </Text>
             </View>
             {filesLoading ? (

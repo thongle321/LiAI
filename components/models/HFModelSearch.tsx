@@ -485,7 +485,7 @@ export function HFModelSearch({
                   : formatBytes(file.size)}
               </Text>
               {fit.message ? (
-                <Text className="font-sans text-caption text-warning">
+                <Text className="storage-warning">
                   {fit.message}
                 </Text>
               ) : null}

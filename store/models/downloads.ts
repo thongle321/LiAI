@@ -7,6 +7,7 @@
 
 import type { StateCreator } from "zustand";
 import * as LegacyFileSystem from "expo-file-system/legacy";
+import { PermissionsAndroid, Platform } from "react-native";
 
 import type { DownloadsSlice, ModelStore } from "./types";
 import type { DownloadJob, PresetModel } from "../../types/models";
@@ -26,7 +27,6 @@ import { findProjectorFile, pairDownloadStep } from "../../lib/models/vision-pai
 import { readGgufMetadata } from "../../lib/models/gguf-header.ts";
 import { modelFitsOnDevice } from "../../lib/storage-fit.ts";
 import { requestDownloadNotificationPermission } from "../../lib/models/notification-permission.ts";
-import { PermissionsAndroid, Platform } from "react-native";
 import { asyncStorage, MEMORY_GUARD_KEY, generateId } from "./storage";
 
 function hfRefFor(modelId: string, results: HFModelSearchResult[]) {

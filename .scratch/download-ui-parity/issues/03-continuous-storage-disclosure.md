@@ -12,8 +12,7 @@ people download from, get no disclosure at all.
 
 **Blocked by:** 01 — Storage-fit decision module
 
-**Status:** ready-for-agent
-
+**Status:** done
 - [x] Storage is re-read on an interval while a download card is mounted, rather than read once
 - [x] When the model will not fit, the Download button is disabled and the card states the model's size and the free space inline
 - [x] Once space is freed, the button re-enables without remounting or restarting the app

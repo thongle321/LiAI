@@ -155,4 +155,28 @@ describe("every download surface is covered", () => {
       "the read moved into the hook, which polls it",
     );
   });
+
+  // A vision model's real footprint is the LLM PLUS its projector. The
+  // store's pre-flight sums the pair, so a card quoting only the model
+  // promises more space than the download actually needs. Two surfaces got
+  // this wrong independently: the HF search row priced its paired mmproj,
+  // the preset and bookmark cards did not.
+  it("prices a vision model's projector into every card's own check", () => {
+    // The size may arrive via the paired spec field (bookmark cards) or via
+    // the shared pairing helper (preset cards, which have no projector on the
+    // preset itself). Either counts — what must not happen is pricing the
+    // model alone while the pre-flight prices the pair.
+    const priced = /(?:findProjectorFile\([^)]*\)|projector)\??\.size/;
+    for (const surface of [
+      "components/models/AvailableModels.tsx",
+      "components/models/ModelCard.tsx",
+    ]) {
+      assert.match(
+        strip(surface),
+        priced,
+        `${surface} must price a projector into the requirement, the way the ` +
+          `store's pre-flight does — otherwise a vision model looks like it fits`,
+      );
+    }
+  });
 });

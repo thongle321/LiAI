@@ -63,7 +63,13 @@ export function ModelCard({
   // A ready model has no Download button, so it has nothing to check: null
   // stops the poll. A bookmark polls while it is on screen, which is what
   // lets the button come back on its own once space is freed.
-  const fit = useStorageDisclosure(onDownload ? fileBytes : null);
+  const fit = useStorageDisclosure(
+    onDownload ? fileBytes : null,
+    // The projector leg runs after this one, so a vision model's requirement
+    // is the pair — matching the store's pre-flight. Without this a vision
+    // bookmark looks like it fits when it does not.
+    item.projector?.size,
+  );
   // Detail expand: chevron state only — the region itself mounts with
   // the shared fade preset.
   const [expanded, setExpanded] = useState(false);
@@ -207,7 +213,7 @@ export function ModelCard({
         {/* The shortfall, on the card: a disabled button with no reason is
             the failure this line exists to prevent. */}
         {onDownload && item.downloadStatus !== "completed" && fit.message ? (
-          <Text className="mt-2 font-sans text-caption text-warning">
+          <Text className="storage-warning mt-2">
             {fit.message}
           </Text>
         ) : null}

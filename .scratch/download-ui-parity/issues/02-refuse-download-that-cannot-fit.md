@@ -10,8 +10,7 @@ permanently disabled button does not.
 
 **Blocked by:** 01 — Storage-fit decision module
 
-**Status:** ready-for-agent
-
+**Status:** done
 - [x] Starting a download consults the storage-fit decision before any transfer begins
 - [x] Free space that cannot be read refuses the download rather than attempting it
 - [x] A refusal records the model's failure with a message the failure dialog already classifies as a storage problem, so its existing title, body and numbered fix-it steps are what the user sees

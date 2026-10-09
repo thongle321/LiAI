@@ -7,11 +7,10 @@ leads nowhere.
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
-
-- [ ] Settings displays the device's free space
-- [ ] The figure is formatted with the existing byte formatter rather than an ad-hoc one
-- [ ] The reading is taken when the screen is shown, and the user can refresh it
-- [ ] The reading can fail without breaking the screen
-- [ ] The failure dialog's existing advice text is unchanged and now points at something real
-- [ ] This is a single storage row, not a usage breakdown, a model browser, or a cleanup action
+**Status:** done
+- [x] Settings displays the device's free space
+- [x] The figure is formatted with the existing byte formatter rather than an ad-hoc one
+- [x] The reading is taken when the screen is shown, and the user can refresh it
+- [x] The reading can fail without breaking the screen
+- [x] The failure dialog's existing advice text is unchanged and now points at something real
+- [x] This is a single storage row, not a usage breakdown, a model browser, or a cleanup action

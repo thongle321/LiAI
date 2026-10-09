@@ -16,6 +16,7 @@ import { useModelStore } from "../../store/modelStore";
 import { presetSpecId } from "../../lib/models/huggingface.ts";
 import { storageDisclosure } from "../../lib/models/storage-disclosure.ts";
 import { isPresetDownloaded, presetCardState, presetFileState } from "../../lib/models/file-state.ts";
+import { findProjectorFile } from "../../lib/models/vision-pairing.ts";
 import type { PresetModel, PresetModelFile } from "../../types/models";
 import { ModelAccordion } from "./ModelAccordion.tsx";
 import { ModelCard } from "./ModelCard.tsx";
@@ -124,6 +125,10 @@ export function PresetModelCard({
             const st = fileState(item);
             const fit = storageDisclosure({
               modelBytes: item.size,
+              // The projector leg runs after this one, so a vision preset's
+              // requirement is the pair. Same helper the downloader uses, so
+              // the promise on this card and the fetch can never drift.
+              projectorBytes: findProjectorFile(item, preset.files)?.size,
               freeBytes,
               checked,
             });
@@ -160,7 +165,7 @@ export function PresetModelCard({
                 {/* The shortfall is stated here, on the card, rather than
                     left for the user to discover from a disabled button. */}
                 {st.status !== "completed" && fit.message ? (
-                  <Text className="mt-2 font-sans text-caption text-warning">
+                  <Text className="storage-warning mt-2">
                     {fit.message}
                   </Text>
                 ) : null}

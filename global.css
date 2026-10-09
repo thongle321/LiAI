@@ -189,6 +189,16 @@
   padding: 20px;
 }
 
+/* The inline line under a Download button that cannot fit. Three surfaces
+   state the same thing about the same shortfall, so it is one class rather
+   than three copies of a utility string. */
+.storage-warning {
+  font-family: var(--font-sans);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  color: var(--color-warning);
+}
+
 /* Grouped rows: .rows is a row card (0 internal padding so the dividers run
    edge to edge); .row is one row inside it. */
 .rows {

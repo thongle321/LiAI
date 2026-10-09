@@ -24,6 +24,7 @@ import { latestJobForModel } from "../../lib/models/download-jobs.ts";
 import { resumeDataForPartial, classifyFileOnDisk } from "../../lib/models/resume-state.ts";
 import { findProjectorFile, pairDownloadStep } from "../../lib/models/vision-pairing.ts";
 import { readGgufMetadata } from "../../lib/models/gguf-header.ts";
+import { modelFitsOnDevice } from "../../lib/storage-fit.ts";
 import { asyncStorage, MEMORY_GUARD_KEY, generateId } from "./storage";
 
 function hfRefFor(modelId: string, results: HFModelSearchResult[]) {
@@ -208,6 +209,41 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
       resumable: true,
     };
 
+    // PocketPal parity: refuse before bytes move when the disk can't fit it.
+    // FAILS CLOSED — a free-space read that throws leaves `free` null, which
+    // the pure decision blocks on. This reverses our old fail-open policy: a
+    // transfer that runs out reports its own failure honestly, a refused one
+    // explains itself here. Blast radius: a device whose read ALWAYS throws
+    // can never start a download. Reverting is one line (treat null as fit).
+    let free: number | null = null;
+    try {
+      const reading = await LegacyFileSystem.getFreeDiskStorageAsync();
+      free = Number.isFinite(reading) ? reading : null;
+    } catch {
+      // Unreadable free space is not permission to fill the disk.
+    }
+    if (
+      !modelFitsOnDevice({
+        modelBytes: activeFile.size,
+        // The projector leg runs AFTER this one, so the main leg's
+        // requirement is the pair — a vision model that only half fits
+        // does not fit.
+        ...(step === "main" && spec.projector
+          ? { projectorBytes: spec.projector.size }
+          : {}),
+        freeBytes: free,
+      })
+    ) {
+      get().updateModel(specId, {
+        downloadStatus: "failed",
+        error:
+          free === null
+            ? "Not enough storage space to download: free space on this device could not be determined"
+            : "Not enough storage space to download the model",
+      });
+      return;
+    }
+
     get().updateModel(specId, {
       downloadStatus: "downloading",
       downloadProgress: resumeProgress,
@@ -215,20 +251,6 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
       downloadedBytes: partialBytes,
       error: undefined,
     });
-
-    // PocketPal parity: refuse before bytes move when the disk can't fit it.
-    try {
-      const free = await LegacyFileSystem.getFreeDiskStorageAsync();
-      if (Number.isFinite(free) && free < activeFile.size) {
-        get().updateModel(specId, {
-          downloadStatus: "failed",
-          error: "Not enough storage space to download the model",
-        });
-        return;
-      }
-    } catch {
-      // Unknown free space: attempt anyway, the transfer reports the truth.
-    }
 
     // The service's callbacks are global (last registered wins); keying each
     // update off the job's own modelId makes re-registration harmless.

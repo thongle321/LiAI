@@ -76,9 +76,13 @@ export function ProjectorSelectorSheet({
       onClose();
       if (isActive) void releaseEngine();
       if (dependents.length > 0) {
+        // PocketParity: the dependent list gets its own labelled line
+        // (en.json models.multimodal.dependentModels). Ours DETACHES the
+        // projector rather than deleting it — a projector is not a row of
+        // its own here — so the title stays ours; only the list is copied.
         Alert.alert(
           "Vision disabled",
-          `This projector was shared. Vision is now off for: ${dependents.join(", ")}.`,
+          `This projector was shared, so vision is now off for its other models.\n\nDependent models: ${dependents.join(", ")}`,
         );
       }
     })();

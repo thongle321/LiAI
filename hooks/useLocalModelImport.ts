@@ -31,16 +31,26 @@ export function useLocalModelImport(): () => Promise<void> {
       (await LegacyFileSystem.getInfoAsync(`${base}models/local/${n}`)).exists;
 
     if (await exists(fileName)) {
+      // PocketParity: en.json models.fileManagement.* — the message ASKS
+      // the question rather than restating the filename, and the buttons
+      // carry their own capitalisation.
       const choice = await new Promise<"replace" | "keep" | "cancel">((resolve) =>
-        Alert.alert("File already exists", fileName, [
-          { text: "Cancel", style: "cancel", onPress: () => resolve("cancel") },
-          { text: "Keep both", onPress: () => resolve("keep") },
-          { text: "Replace", onPress: () => resolve("replace") },
-        ]),
+        Alert.alert(
+          "File already exists",
+          "A file with this name already exists. What would you like to do?",
+          [
+            // The reference's order (ModelsScreen.tsx:213-228): Replace,
+            // Keep Both, Cancel — iOS renders the array left to right.
+            { text: "Replace", onPress: () => resolve("replace") },
+            { text: "Keep Both", onPress: () => resolve("keep") },
+            { text: "Cancel", style: "cancel", onPress: () => resolve("cancel") },
+          ],
+        ),
       );
       if (choice === "cancel") return;
       if (choice === "keep") {
-        let n = 2;
+        // Count from 1, as the reference does (ModelsScreen.tsx:231-244).
+        let n = 1;
         while (await exists(numberedFileName(fileName, n))) n++;
         fileName = numberedFileName(fileName, n);
       }
@@ -57,11 +67,16 @@ export function useLocalModelImport(): () => Promise<void> {
     if (!confirmed) return;
 
     try {
-      showSnackbar("Copying model…", { type: "info", duration: 60000 });
+      // The reference's copy notice is a STICKY snackbar for the whole copy
+      // (`duration={86400000}`, ModelsScreen.tsx:438-444): a multi-GB file
+      // takes minutes, and a toast that expires first would leave a long
+      // silence that reads as a hang. 60s carries the same intent without
+      // being effectively permanent.
+      showSnackbar("Copying model file...", { type: "info", duration: 60000 });
       await addLocalModel(asset.uri, fileName, size);
       showSnackbar("Model added.", { type: "success" });
     } catch {
-      showSnackbar("Could not copy the file into models.", { type: "error" });
+      showSnackbar("Failed to copy model file", { type: "error" });
     }
   };
 }

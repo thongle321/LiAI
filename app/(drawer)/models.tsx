@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Alert, FlatList, RefreshControl, Text, View } from "react-native";
+import { FlatList, RefreshControl, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
@@ -37,6 +37,7 @@ import { ModelCard, RemoteProviderCard } from "../../components/models/ModelCard
 import { HFModelSearch } from "../../components/models/HFModelSearch.tsx";
 import { RemoteModelSheet } from "../../components/models/RemoteModelSheet.tsx";
 import { ModelSettingsSheet } from "../../components/models/ModelSettingsSheet.tsx";
+import { ModelsResetDialog } from "../../components/models/ModelsResetDialog.tsx";
 import type { PresetModelFile } from "../../types/models";
 
 export default function ModelsRoute() {
@@ -115,6 +116,9 @@ export default function ModelsRoute() {
   const [hfOpen, setHfOpen] = useState(false);
   const [remoteModalOpen, setRemoteModalOpen] = useState(false);
   const [settingsModelId, setSettingsModelId] = useState<string | null>(null);
+  // PocketParity: the reset lives in its own dialog (ModelsResetDialog), not
+  // an inline Alert — its copy is three paragraphs with one bolded word.
+  const [resetOpen, setResetOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   // Both groups self-hide when empty: pocketpal drops filter-empty groups,
   // so a fresh install would show a blank list. This is the empty state.
@@ -239,20 +243,7 @@ export default function ModelsRoute() {
               const current = { downloadedOnly, hfOnly, grouped };
               setFilter(filter, !current[filter]);
             }}
-            onResetModels={() =>
-              Alert.alert(
-                "Reset models",
-                "Restore every model's name, system prompt, and stop words to defaults? Downloaded files are kept.",
-                [
-                  { text: "Cancel", style: "cancel" },
-                  {
-                    text: "Reset",
-                    style: "destructive",
-                    onPress: () => void resetModelSettings(),
-                  },
-                ],
-              )
-            }
+            onResetModels={() => setResetOpen(true)}
           />
         }
       />
@@ -303,6 +294,15 @@ export default function ModelsRoute() {
       <RemoteModelSheet visible={remoteModalOpen} onClose={() => setRemoteModalOpen(false)} />
 
       <ModelSettingsSheet modelId={settingsModelId} onClose={() => setSettingsModelId(null)} />
+
+      <ModelsResetDialog
+        visible={resetOpen}
+        onCancel={() => setResetOpen(false)}
+        onConfirm={() => {
+          setResetOpen(false);
+          void resetModelSettings();
+        }}
+      />
 
       <DownloadErrorDialog
         error={failedDownload?.error ?? null}

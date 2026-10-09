@@ -242,3 +242,27 @@ Two gaps closed:
 
 Locked by `tests/hf-details-sheet.test.ts` (source assertions — the sheet
 mounts native components, so the runner cannot render it).
+
+Slice 4 — dialogs, import flow, strings:
+
+- `components/models/ModelsResetDialog.tsx` (new): the reference's Confirm
+  Reset copy in a Modal card, mounted by `app/(drawer)/models.tsx` in place
+  of an inline `Alert.alert`. A Paper Dialog there; ours is a Modal because
+  the app has no dialog primitive and the body is three paragraphs with one
+  bolded word, which `Alert.alert` cannot carry. The reference's fourth
+  ("irreversible") paragraph is commented out in its own source (:42-45) and
+  is absent here too.
+- `hooks/useLocalModelImport.ts`: the collision prompt now ASKS the
+  question ("A file with this name already exists. What would you like to
+  do?") instead of restating the filename, the buttons are Replace / Keep
+  Both / Cancel in the reference's order, and the copy notice is
+  "Copying model file..." / "Failed to copy model file".
+- `lib/local-model.ts`: keep-both writes `name_1.gguf`, counting from one
+  (ModelsScreen.tsx:231-244), not `name (2).gguf` from two. Test updated.
+- `ProjectorSelectorSheet`: the dependent list gets the reference's
+  "Dependent models:" line. The title stays ours — ours DETACHES a
+  projector, it does not delete one, because a projector is not a row of its
+  own here.
+
+Locked by `tests/models-dialog-copy.test.ts` (source assertions; Alert and
+Modal cannot run under the test runner).

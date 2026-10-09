@@ -36,9 +36,7 @@ export default function DrawerLayout() {
             drawerStyle: { width: 280, backgroundColor: colors.surface1 },
             overlayColor: scrim,
           }}
-          drawerContent={(props) => (
-            <AppDrawerContent onClose={() => props.navigation.closeDrawer()} />
-          )}
+          drawerContent={() => <AppDrawerContent />}
         >
           <Drawer.Screen name="(tabs)" />
           <Drawer.Screen name="models" />

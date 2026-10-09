@@ -159,8 +159,11 @@ export function SessionList({
   }
 
   async function openSession(s: ChatSession): Promise<void> {
-    // Tapping the already-open conversation does nothing further.
-    if (s.id === sessionId) return;
+// No early return for the already-open conversation: the caller
+    // navigates to the chat screen, and the drawer only closes once it
+    // has somewhere to be. Bailing out here used to make the tap look
+    // dead from any screen other than chat, where the panel happened to
+    // be covering the screen the user wanted anyway.
     setNotice(null);
     const ok = await onOpen(s.id);
     if (!ok) setNotice("Couldn't load that conversation.");

@@ -3,7 +3,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { keyboardOcclusion } from "../lib/keyboard.ts";
+import { keyboardOcclusion, resolveTabBarHeight } from "../lib/keyboard.ts";
 
 describe("keyboardOcclusion", () => {
   it("is zero while the keyboard is closed", () => {
@@ -46,5 +46,21 @@ describe("keyboardOcclusion", () => {
     // must not push content downwards.
     assert.equal(keyboardOcclusion(20, 48), 0);
     assert.equal(keyboardOcclusion(-20, 48), 0);
+  });
+});
+
+describe("resolveTabBarHeight", () => {
+  it("takes the measured height over the seeded constant", () => {
+    assert.equal(resolveTabBarHeight(67, 71.5), 71.5);
+  });
+
+  it("keeps the seed on a nonsense measurement", () => {
+    // An onLayout can report 0 before first paint. Feeding that into the
+    // compensation under-lifts the column-anchored overlays by the whole
+    // bar height, and a centred child absorbs half of it as drift.
+    assert.equal(resolveTabBarHeight(67, 0), 67);
+    assert.equal(resolveTabBarHeight(67, -12), 67);
+    assert.equal(resolveTabBarHeight(67, Number.NaN), 67);
+    assert.equal(resolveTabBarHeight(67, Number.POSITIVE_INFINITY), 67);
   });
 });

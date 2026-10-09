@@ -164,6 +164,47 @@ describe("keyboard avoidance", () => {
     );
   });
 
+  it("keyboard visibility has exactly one writer, read by the bar and the screen", () => {
+    // The race this store removes (store/keyboard.ts). The tab bar and the
+    // chat screen BOTH react to the keyboard — the bar unmounts, the screen
+    // compensates the column the bar vacates — and each used to subscribe
+    // to useKeyboardState itself, in its own subtree. The two updates are
+    // not guaranteed to land in the same React commit, so for a frame the
+    // column had grown while the compensation had not, and the centred
+    // empty card shifted by half the bar slot on a build whose static
+    // geometry was already exact. One writer at the root: one
+    // notification, one batched commit, both consumers move together.
+    const chat = read("app/(drawer)/(tabs)/chat.tsx");
+    const tabs = read("app/(drawer)/(tabs)/_layout.tsx");
+    const layout = read("app/_layout.tsx");
+
+    assert.doesNotMatch(
+      chat,
+      /useKeyboardState/,
+      "the screen reads the store, not the events",
+    );
+    assert.doesNotMatch(
+      tabs,
+      /useKeyboardState/,
+      "the bar reads the store, not the events",
+    );
+    assert.match(
+      layout,
+      /useKeyboardState/,
+      "the root layout is the one place that subscribes",
+    );
+    assert.match(chat, /useKeyboardStore/, "the screen reads the shared store");
+    assert.match(tabs, /useKeyboardStore/, "the bar reads the shared store");
+
+    // Exactly one call site writes the flag. (The store's OWN definition
+    // is `setVisible: (visible) =>` — a colon, not a call — and store/ is
+    // not scanned, so this counts writers, not declarations.)
+    const writers = allSources()
+      .filter(({ source }) => /setVisible\(/.test(stripComments(source)))
+      .map(({ file }) => file);
+    assert.deepEqual(writers, ["app/_layout.tsx"]);
+  });
+
   it("the tab bar height has one definition, imported by its consumers", () => {
     // Root cause of the no-model card drifting ~7.5px when the keyboard
     // opened: three numbers for one bar (constant 60, prose 64, real 75).
@@ -180,11 +221,27 @@ describe("keyboard avoidance", () => {
       defs.map(({ file }) => file),
       ["components/BottomNav.tsx"],
     );
+    // The screen no longer imports the constant: it reads the bar's
+    // measured height from store/keyboard.ts (the bar measures itself on
+    // layout — see the single-writer test below). The ONE re-declaration
+    // is lib/keyboard.ts's seed, because a store importing BottomNav
+    // drags the React Native type graph into the ambient program and
+    // breaks the Uniwind augmentation loading. The seed must equal the
+    // bar's height, or the compensation is wrong until the first layout.
     const chat = read("app/(drawer)/(tabs)/chat.tsx");
     assert.match(
       chat,
-      /import \{ TAB_BAR_HEIGHT \} from "\.\.\/\.\.\/\.\.\/components\/BottomNav\.tsx"/,
-      "the chat route must import the height, not invent its own number",
+      /const tabBarHeight = useKeyboardStore\(\(s\) => s\.tabBarHeight\)/,
+      "the screen takes the measured height from the store, not a literal",
+    );
+    const barHeight = read("components/BottomNav.tsx").match(
+      /const TAB_BAR_HEIGHT = (\d+)/,
+    );
+    const seed = read("lib/keyboard.ts").match(/TAB_BAR_HEIGHT_SEED = (\d+)/);
+    assert.equal(
+      seed?.[1],
+      barHeight?.[1],
+      "the seed duplicates the bar's height: change both together",
     );
     assert.doesNotMatch(
       chat,

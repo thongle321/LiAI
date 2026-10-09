@@ -36,12 +36,11 @@ import {
   usePressFeedback,
 } from "../../../lib/motion.ts";
 import { APP_NAME } from "../../../constants/app.ts";
-import { TAB_BAR_HEIGHT } from "../../../components/BottomNav.tsx";
 import { useChatStore } from "../../../store/chat.ts";
+import { useKeyboardStore } from "../../../store/keyboard.ts";
 import { useModelStore } from "../../../store/modelStore";
 import { useInference } from "../../../store/inference.ts";
 import { useKeyboardLift } from "../../../hooks/useKeyboardLift.ts";
-import { useKeyboardState } from "react-native-keyboard-controller";
 import { MessageListItem } from "../../../components/chat/MessageListItem.tsx";
 import { ChatEmptyPlaceholder } from "../../../components/chat/ChatEmptyPlaceholder.tsx";
 import { DateHeader } from "../../../components/chat/DateHeader.tsx";
@@ -68,6 +67,7 @@ import { useModelReady } from "../../../hooks/useModelReady.ts";
 import { GenerationSettingsSheet } from "../../../components/chat/GenerationSettingsSheet.tsx";
 import { ChatWarningSnackbar } from "../../../components/chat/ChatWarningSnackbar.tsx";
 import { ChatMenu } from "../../../components/chat/ChatMenu.tsx";
+import { ModelPickerSheet } from "../../../components/chat/ModelPickerSheet.tsx";
 
 export default function ChatRoute() {
   const messages = useChatStore((s) => s.messages);
@@ -172,6 +172,33 @@ export default function ChatRoute() {
     },
     [menuModels, setActiveModel, setActiveRemoteApi],
   );
+  // Row actions carry the message id instead of closing over the row: a
+  // per-row arrow is a fresh prop identity on every screen render, which
+  // defeats memo(MessageListItem) and re-renders every visible row on each
+  // keyboard toggle — the jank half of the reported flash with a model
+  // loaded. Stable handlers + a memoized row (buildRows is already
+  // memoized above) let a keyboard toggle skip the rows entirely.
+  const handleEdit = useCallback(
+    (messageId: string) => {
+      startEdit(messageId);
+    },
+    [startEdit],
+  );
+  const handleRegenerate = useCallback(
+    (messageId: string) => {
+      void regenerate(messageId);
+    },
+    [regenerate],
+  );
+  const handleRegenerateWith = useCallback(
+    (messageId: string, modelId: string) => {
+      // Switch first, then re-answer: EngineManager swaps the slot on the
+      // next ensure(), so the rerun lands on the model the user picked.
+      switchToModel(modelId);
+      void regenerate(messageId);
+    },
+    [switchToModel, regenerate],
+  );
   const activeModelLabel = useMemo(() => {
     const m = menuModels.find((x) => x.active);
     if (m === undefined) return null;
@@ -232,7 +259,13 @@ export default function ChatRoute() {
   // only with no model and no conversation; the empty thread with a model is
   // SuggestedPrompts' job.
   const emptyState = messages.length === 0 && query.trim() === "";
-  const showPlaceholder = !ready && emptyState;
+  // PocketPal's single-source gate: the placeholder asks whether a MODEL is
+  // active, not whether the transport is healthy. Gating it on `connection`
+  // made it a health flap — connection is resolved only at mount and on
+  // model change, so it goes stale in both directions, and the card could
+  // vanish while a model sat loaded. `ready` keeps its real consumers:
+  // send-enable and the prompt chips.
+  const showPlaceholder = activeModelId === null && emptyState;
 
   const motionDuration = MOTION_DURATION_MS;
 
@@ -367,7 +400,11 @@ export default function ChatRoute() {
   const [atEnd, setAtEnd] = useState(true);
   const [listHeight, setListHeight] = useState(0);
   // What the list must clear: the tab bar and the safe-area inset below it.
-  const keyboardOffset = insets.bottom + TAB_BAR_HEIGHT;
+  // The bar's own height is seeded from its class-sum constant and
+  // replaced by its measured height (store/keyboard.ts), so a class change
+  // cannot silently drift the compensation again.
+  const tabBarHeight = useKeyboardStore((s) => s.tabBarHeight);
+  const keyboardOffset = insets.bottom + tabBarHeight;
   // The tab bar renders null while the keyboard is up ((tabs)/_layout.tsx:42),
   // so the screen — and this column with it — GROWS by exactly that much. A
   // vertically centred child would then slide down by half of it, which is
@@ -375,7 +412,14 @@ export default function ChatRoute() {
   // keyboard opened. The keyboard height is not the cause; this is. Give the
   // two column-anchored overlays the same bottom back so their centring box is
   // identical in both states. The screen-anchored ones need nothing.
-  const keyboardVisible = useKeyboardState((s) => s.isVisible);
+  //
+  // BOTH this flag and the bar's unmount come from one store
+  // (store/keyboard.ts), written in one place (KeyboardVisibilitySync in
+  // app/_layout.tsx), so they commit together — two independent
+  // useKeyboardState subscribers could land a frame apart, shifting the
+  // column-anchored overlays for a frame even though the static geometry
+  // is exact.
+  const keyboardVisible = useKeyboardStore((s) => s.isVisible);
   const tabBarCompensation = keyboardVisible ? keyboardOffset : 0;
   // TEMPORARY __DEV__ PROBE — the empty card was reported moving on a
   // 2026-10-07 Android build (post-fix, see docs/research/2026-10-08-
@@ -451,6 +495,12 @@ export default function ChatRoute() {
   const menuPress = usePressFeedback();
   const penPress = usePressFeedback();
   const [generationOpen, setGenerationOpen] = useState(false);
+  // PocketPal's in-chat model picker: opened from the empty thread's CTA so
+  // activating a model no longer means leaving the conversation. There is
+  // deliberately no composer chevron (that decision predates this: the
+  // header title routes to /models, and each message offers "Regenerate
+  // with…"); the picker is the no-model path only.
+  const [pickerOpen, setPickerOpen] = useState(false);
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
 
@@ -624,18 +674,10 @@ export default function ChatRoute() {
                   contextBannerVisible={contextFullShowing}
                   canRun={canRun}
                   models={menuModels}
-                  onEdit={() => startEdit(row.message.id)}
-                  onRegenerateWith={(modelId: string) => {
-                    // Switch first, then re-answer: EngineManager swaps
-                    // the slot on the next ensure(), so the rerun lands on
-                    // the model the user picked.
-                    switchToModel(modelId);
-                    void regenerate(row.message.id);
-                  }}
+                  onEdit={handleEdit}
+                  onRegenerateWith={handleRegenerateWith}
                   onRegenerate={
-                    row.message.role === "assistant"
-                      ? () => void regenerate(row.message.id)
-                      : null
+                    row.message.role === "assistant" ? handleRegenerate : null
                   }
                 />
               )
@@ -657,7 +699,9 @@ export default function ChatRoute() {
             }}
             pointerEvents="box-none"
           >
-            <ChatEmptyPlaceholder />
+            <ChatEmptyPlaceholder
+              onSelectModel={() => setPickerOpen(true)}
+            />
           </View>
         )}
         {/* Jump to latest: an overlay pinned to the content column's
@@ -781,6 +825,28 @@ export default function ChatRoute() {
         visible={generationOpen}
         onClose={() => setGenerationOpen(false)}
       />
+      <ModelPickerSheet
+        visible={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+      />
+      {/* Keyboard strip. While the keyboard animates in, the frames between
+          the tab bar unmounting and the keyboard covering its slot would
+          show this screen's base colour where the bar's Clean White used to
+          be — a colour flash on every open and close (worse with a model
+          loaded, because then the strip is visible, not covered by the
+          placeholder card). This is the bar's own colour and height,
+          flipped by the SAME store in the SAME commit as the bar's unmount,
+          so no frame mixes the two. Behind the fully open keyboard it is
+          invisible; it exists only for the transition. It paints over the
+          composer's bottom edge for those frames — same colour, so it
+          cannot be seen — and carries no pointer events. */}
+      {keyboardVisible && (
+        <View
+          className="absolute inset-x-0 bottom-0 bg-surface-1"
+          style={{ height: keyboardOffset }}
+          pointerEvents="none"
+        />
+      )}
     </SafeAreaView>
   );
 }

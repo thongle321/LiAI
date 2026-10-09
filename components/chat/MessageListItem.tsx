@@ -15,7 +15,7 @@
 
 import { ActivityIndicator, Image as RNImage, Pressable, Text, View } from "react-native";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import Animated from "react-native-reanimated";
 import { CheckCheck, CircleAlert, Wrench } from "lucide-react-native";
 
@@ -89,7 +89,7 @@ function ToolBlock({ step }: { step: AgentStep }) {
   );
 }
 
-export function MessageListItem({
+export const MessageListItem = memo(function MessageListItem({
   row,
   onRegenerate,
   onEdit,
@@ -101,12 +101,17 @@ export function MessageListItem({
 }: {
   /** One adapter row: message plus its group/status flags. */
   row: MessageRow;
-  /** Null for user bubbles (nothing to regenerate). */
-  onRegenerate: (() => void) | null;
+  /** Null for user bubbles (nothing to regenerate). Take the message id
+   *  rather than closing over it: the screen's handlers are stable
+   *  (useCallback), so a keyboard toggle — which re-renders the screen —
+   *  re-creates no prop identity here and this row can bail out. A
+   *  per-row arrow would re-render every visible row instead, which is
+   *  the jank half of the keyboard flash. */
+  onRegenerate: ((messageId: string) => void) | null;
   /** Enter edit mode on this turn. Only reachable from a user bubble. */
-  onEdit: () => void;
+  onEdit: (messageId: string) => void;
   /** Re-answer this turn with a different model. */
-  onRegenerateWith: (modelId: string) => void;
+  onRegenerateWith: (messageId: string, modelId: string) => void;
   /** A model is loaded: regenerate and edit both start a turn. */
   canRun: boolean;
   /** Models offered by "Regenerate with…". */
@@ -145,6 +150,9 @@ export function MessageListItem({
   const [enlarged, setEnlarged] = useState<string | null>(null);
   // Both bubbles wrap in the same menu and only the bubble inside differs.
   // One definition, so the two call sites cannot drift apart.
+  // The menu's API stays no-arg/model-id-only: binding the row's id to
+  // the screen's stable handlers happens here, so the arrows are recreated
+  // only when THIS row re-renders (row change), not on every screen render.
   const withMenu = (bubble: ReactNode) => (
     <MessageMenu
       text={wholeText}
@@ -152,9 +160,11 @@ export function MessageListItem({
       role={message.role}
       canRun={canRun}
       models={models}
-      onRegenerate={onRegenerate ?? undefined}
-      onEdit={onEdit}
-      onRegenerateWith={onRegenerateWith}
+      onRegenerate={
+        onRegenerate === null ? undefined : () => onRegenerate(message.id)
+      }
+      onEdit={() => onEdit(message.id)}
+      onRegenerateWith={(modelId) => onRegenerateWith(message.id, modelId)}
     >
       {bubble}
     </MessageMenu>
@@ -284,4 +294,4 @@ export function MessageListItem({
       )}
     </Animated.View>
   );
-}
+});

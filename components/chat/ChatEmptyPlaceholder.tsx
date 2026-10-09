@@ -36,7 +36,9 @@ export function ChatEmptyPlaceholder() {
     buttonText = "Download Model";
   } else {
     title = "Activate Model To Get Started";
-    description = "Pick a model and it activates the moment it finishes downloading.";
+    // No auto-activation since download completion stopped selecting a model
+    // (PocketPal parity), so the copy must not promise it.
+    description = "Pick a downloaded model and tap Load to start chatting.";
     buttonText = "Select Model";
   }
 

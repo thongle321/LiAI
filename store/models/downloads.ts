@@ -313,11 +313,9 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
             ? `${LegacyFileSystem.documentDirectory}models/${mainFile.name}`
             : downloadJob.destinationPath,
         });
-        // First download activates itself: no manual step, and a working
-        // chat is never yanked away (only-when-none scope).
-        if (!get().activeModelId) {
-          get().setActiveModel(downloadJob.modelId, "local");
-        }
+        // Nothing selects the model here: activation is an explicit Load
+        // (PocketPal parity), so the row flipping to Downloaded is the whole
+        // of what a finished download does.
         // The file is whole: read what it says about itself while it is
         // still known-fresh. Fire-and-forget — metadata is a bonus, and
         // the row is already correct without it.

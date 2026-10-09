@@ -205,7 +205,7 @@ describe("keyboard avoidance", () => {
     assert.deepEqual(writers, ["app/_layout.tsx"]);
   });
 
-  it("the tab bar height has one definition, imported by its consumers", () => {
+  it("the tab bar height has one definition, seeded into the store and measured live", () => {
     // Root cause of the no-model card drifting ~7.5px when the keyboard
     // opened: three numbers for one bar (constant 60, prose 64, real 75).
     // The compensation subtracted 60+inset while the column grew by

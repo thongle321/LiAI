@@ -1,9 +1,11 @@
 /** Every model the user could switch to, in ONE place.
  *
- * Two surfaces offer this list: the header menu's "Model" submenu
- * (components/chat/ChatMenu.tsx) and each message's "Regenerate with…"
- * submenu. They must never disagree about which models exist or which is
- * active, so neither builds the list itself.
+ * THREE surfaces offer this list: the header menu's "Model" submenu
+ * (components/chat/ChatMenu.tsx), each message's "Regenerate with…"
+ * submenu, and the chat thread's model picker sheet
+ * (components/chat/ModelPickerSheet.tsx). They must never disagree about
+ * which models exist or which is active, so no surface builds the list
+ * itself.
  *
  * Local readiness is NOT decided here: `isLocalModelReady` is the engine's
  * predicate, shared so this list and the composer cannot classify the same

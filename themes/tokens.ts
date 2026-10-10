@@ -95,3 +95,15 @@ export const spacing = {
   lg: 24,
   xl: 32,
 } as const;
+
+/** Type sizes on THIRD-PARTY surfaces that have no Uniwind rung of their
+ * own: the markdown renderer's bubble scale (the parts `typeScale` cannot
+ * express) and inline/block code. Pinned by tests/font-scale.test.ts —
+ * one home so the chat scale cannot drift into two copies (Part 2 audit,
+ * P3). */
+export const embeddedText = {
+  /** Markdown h3 — the bubble scale's one size between title 20 and body 16. */
+  markdownH3: 18,
+  /** Inline (codespan) and block code. */
+  code: 13,
+} as const;

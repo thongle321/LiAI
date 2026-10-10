@@ -62,9 +62,12 @@ export function keyboardOcclusion(height: number, insetsBottom = 0): number {
  * BottomNav.tsx imports React Native and Uniwind: a store importing it for
  * one number drags the native type graph into the ambient program and
  * breaks the augmentation loading. One re-declaration, here, in the module
- * the geometry already lives in — the value is device-verified (it is the
- * sum of BottomNav's classes, listed there), not test-verified. */
-export const TAB_BAR_HEIGHT_SEED = 67;
+ * the geometry already lives in. The value is the bar's class sum at
+ * DEFAULT font scale (listed on TAB_BAR_HEIGHT in BottomNav.tsx) — an
+ * ESTIMATE the bar's own onLayout replaces, because the label scales with
+ * the OS font setting up to 1.5x and a grown bar measures taller than any
+ * fixed sum. */
+export const TAB_BAR_HEIGHT_SEED = 69;
 
 /** The tab bar's measured height wins over the seeded class-sum constant —
  * but a nonsense measurement must never poison it.

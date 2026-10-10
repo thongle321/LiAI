@@ -59,7 +59,13 @@ export function PresetModelCard({
 
   return (
     <View className="mb-4 bg-surface-1 border border-border rounded-lg overflow-hidden">
-      <Pressable onPress={() => setExpanded(!expanded)} className="p-5">
+      <Pressable
+        onPress={() => setExpanded(!expanded)}
+        className="p-5"
+        accessibilityRole="button"
+        accessibilityLabel={preset.name}
+        accessibilityState={{ expanded }}
+      >
         <View className="flex-row items-center justify-between">
           <View className="flex-1">
             <View className="flex-row items-center gap-2 mb-1">

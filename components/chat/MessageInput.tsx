@@ -638,7 +638,12 @@ function PlusItem({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} className="flex-row items-center gap-3 px-5 py-2">
+    <Pressable
+      onPress={onPress}
+      className="flex-row items-center gap-3 px-5 py-2"
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
       <Icon size={18} color={colors.primary} />
       <Text className="font-sans text-body-sm text-primary-text">{label}</Text>
     </Pressable>

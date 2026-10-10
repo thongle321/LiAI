@@ -27,9 +27,8 @@ import { openSettings } from "expo-linking";
 import { useCameraDevice, useCameraPermission } from "react-native-vision-camera";
 import type { Camera as VisionCameraView } from "react-native-vision-camera";
 
-import { useKeyboardState } from "react-native-keyboard-controller";
 import { colors } from "../../../themes/tokens.ts";
-import { TAB_BAR_HEIGHT } from "../../../components/BottomNav.tsx";
+import { useKeyboardStore } from "../../../store/keyboard.ts";
 import { VOICE_STATUS_LABEL } from "../../../lib/voiceStatus.ts";
 import { useVisionTurn } from "../../../hooks/useVisionTurn.ts";
 import { useWatchMode } from "../../../hooks/useWatchMode.ts";
@@ -91,9 +90,14 @@ export default function VisionScreen() {
   // the keyboard is up, or the panel visibly jumps as the bar disappears.
   // The value doubles as the panel's lift anchor, so the draft input still
   // lands exactly on the keyboard top (see VisionBottomPanel).
-  const keyboardVisible = useKeyboardState((s) => s.isVisible);
+  // Same store as the chat screen (store/keyboard.ts): the bar's MEASURED
+  // height, not the seed constant — the label scales with the OS font
+  // setting, so the real bar can be taller than the class sum, and the
+  // anchor must track it or the panel drifts when large text is on.
+  const keyboardVisible = useKeyboardStore((s) => s.isVisible);
+  const tabBarHeight = useKeyboardStore((s) => s.tabBarHeight);
   const panelBottom =
-    12 + (keyboardVisible ? TAB_BAR_HEIGHT + insets.bottom : 0);
+    12 + (keyboardVisible ? tabBarHeight + insets.bottom : 0);
   // Two dead ends land on the same system screen: a denied camera and a
   // blocked mic. One handler for both.
   const goToSettings = () => void openSettings();

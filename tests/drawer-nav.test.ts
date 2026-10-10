@@ -35,6 +35,24 @@ describe("drawer has no new-conversation row", () => {
   });
 });
 
+describe("session rows are memoized (Part 2 audit, P3)", () => {
+  it("SessionList extracts the row into a memo() component", () => {
+    // The drawer re-renders for menu anchors, notices and rename state —
+    // none of which any row depends on. With an inline renderItem closure
+    // every one of those re-renders re-created every row in the list.
+    const source = read(SESSION_LIST);
+    assert.match(
+      source,
+      /memo\(/,
+      "the row must be a memoized component, not an inline renderItem closure",
+    );
+    assert.match(source, /<SessionRow\b/, "renderItem renders the memoized row");
+    // The checkbox depends on selecting mode, so the list needs it in
+    // extraData or memo would happily keep stale checkboxes mounted.
+    assert.match(source, /extraData=\{\[sessionId, selected, selecting\]\}/);
+  });
+});
+
 describe("drawer owns a Chat tab like pocketpal", () => {
   it("leads the footer nav, navigates to chat, and starts fresh (Q1=A)", () => {
     const source = read(DRAWER);

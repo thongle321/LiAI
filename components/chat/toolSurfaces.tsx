@@ -157,6 +157,7 @@ function Sheet({
           className="max-h-[70%] rounded-t-2xl bg-surface-1 px-4 pb-6 pt-3"
           onPress={() => {}}
           accessibilityLabel="Results"
+          accessibilityRole="button"
         >
           <ScrollView>{children}</ScrollView>
         </Pressable>

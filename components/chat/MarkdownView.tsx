@@ -26,7 +26,7 @@ import {
 
 import { isOpenableUrl } from "../../lib/chat/links.ts";
 import { useChatStore } from "../../store/chat";
-import { colors, font } from "../../themes/tokens.ts";
+import { colors, embeddedText, font, typeScale } from "../../themes/tokens.ts";
 import { CodeBlock } from "./CodeBlock.tsx";
 
 /** One guarded open shared by both link overrides: Linking, then the
@@ -183,13 +183,18 @@ const renderer = new ChatRenderer({ selectable: true });
 
 const baseText = {
   fontFamily: font.sans,
-  // Pocketpal's bubble body (MarkdownView/styles.ts:15).
-  fontSize: 16,
+  // Pocketpal's bubble body (MarkdownView/styles.ts:15) — the bodyLg rung.
+  fontSize: typeScale.bodyLg.size,
   color: colors.primaryText,
 };
 
-// The reasoning block's own rung: their ReasoningBlock pins body 14/20.
-const denseText = { ...baseText, fontSize: 14, lineHeight: 20 };
+// The reasoning block's own rung: their ReasoningBlock pins body 14/20 —
+// exactly the bodyMd rung, so it comes from the shared scale.
+const denseText = {
+  ...baseText,
+  fontSize: typeScale.bodyMd.size,
+  lineHeight: typeScale.bodyMd.lineHeight,
+};
 
 // Every text-bearing key gets the family: the library's internals set
 // sizes and weights but no fontFamily, so any key missed here falls
@@ -232,23 +237,26 @@ export function MarkdownView({
       strikethrough: { ...body },
       link: { ...body, color: colors.primary },
       // Marked's defaults (32/28/24/22) are the biggest type in a chat
-      // bubble; pinned to the bubble scale (grilling Q4).
-      h1: { ...headingText, fontSize: 24 },
-      h2: { ...headingText, fontSize: 20 },
-      h3: { ...headingText, fontSize: 18 },
-      h4: { ...headingText, fontSize: 16 },
-      h5: { ...headingText, fontSize: 16 },
-      h6: { ...headingText, fontSize: 16 },
+      // bubble; pinned to the bubble scale (grilling Q4). Sizes come from
+      // the shared type scale — h1 rides h2's 24 rung, h2 rides h3's 20,
+      // h4-h6 sit at body size; markdownH3 (18) is the one bubble size
+      // with no rung, so it lives in embeddedText.
+      h1: { ...headingText, fontSize: typeScale.h2.size },
+      h2: { ...headingText, fontSize: typeScale.h3.size },
+      h3: { ...headingText, fontSize: embeddedText.markdownH3 },
+      h4: { ...headingText, fontSize: typeScale.bodyLg.size },
+      h5: { ...headingText, fontSize: typeScale.bodyLg.size },
+      h6: { ...headingText, fontSize: typeScale.bodyLg.size },
       li: { ...body },
       codespan: {
         fontFamily: font.sans,
-        fontSize: 13,
+        fontSize: embeddedText.code,
         color: colors.primaryText,
         backgroundColor: colors.surface2,
       },
       codeText: {
         fontFamily: font.sans,
-        fontSize: 13,
+        fontSize: embeddedText.code,
         color: colors.primaryText,
       },
       list: { marginBottom: 8 },

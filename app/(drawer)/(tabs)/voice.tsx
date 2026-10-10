@@ -158,7 +158,11 @@ export default function VoiceScreen() {
         {issue !== null && (
           <View className="mt-4 items-center">
             {needsSettings ? (
-              <Pressable onPress={() => void openSettings()}>
+              <Pressable
+                onPress={() => void openSettings()}
+                accessibilityRole="button"
+                accessibilityLabel={issue}
+              >
                 <Text className="text-center font-sans text-body-sm text-primary">
                   {issue}
                 </Text>

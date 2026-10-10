@@ -34,7 +34,9 @@ export interface MessageRow {
 }
 
 /** Active-run indicator (PocketPal PendingIndicator): the visual bottom of
- * the list while tokens arrive. Appended by the adapter — never stored. */
+ * the list while tokens arrive. Appended by the adapter — never stored.
+ * Not exported: nothing outside this module names it — the exported
+ * ChatRow union carries it (knip:export). */
 export interface PendingRow {
   kind: "pending";
   id: "pending";

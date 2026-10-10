@@ -121,6 +121,65 @@ describe("EngineManager", () => {
     assert.deepEqual(seen, ["mm/a.gguf", undefined]);
   });
 
+  it("keys the slot on EVERY init field the loader reads", async () => {
+    let loads = 0;
+    const manager = new EngineManager(
+      {
+        loadLocal: async () => {
+          loads += 1;
+          return { engine: fakeEngine(), release: async () => {} };
+        },
+        createRemote: () => fakeEngine(),
+      },
+      async () => null,
+    );
+    const source = { kind: "local", fileName: "a.gguf" } as const;
+    const base = {
+      n_ctx: 4096,
+      n_gpu_layers: 99,
+      use_mlock: false,
+      use_mmap: true,
+      n_batch: 512,
+      n_ubatch: 512,
+      n_threads: 4,
+      flash_attn_type: "auto" as const,
+      cache_type_k: "q8_0" as const,
+      cache_type_v: "q8_0" as const,
+      speculative: false,
+      spec_draft_n_gpu_layers: 99,
+      spec_draft_cache_type_k: "q8_0" as const,
+      spec_draft_cache_type_v: "q8_0" as const,
+      no_extra_bufts: true,
+    };
+    await manager.ensure(source, undefined, base);
+    await manager.ensure(source, undefined, base);
+    assert.equal(loads, 1, "identical init reuses the slot");
+    // Four fields the loader reads but the old key ignored — each one is a
+    // real setting the user can change, so each must reload the context.
+    await manager.ensure(source, undefined, { ...base, devices: ["HTP:0"] });
+    assert.equal(loads, 2, "devices change must reload");
+    await manager.ensure(source, undefined, { ...base, devices: ["HTP:0"], no_extra_bufts: false });
+    assert.equal(loads, 3, "weight-repacking change must reload");
+    await manager.ensure(
+      source,
+      undefined,
+      { ...base, devices: ["HTP:0"], no_extra_bufts: false, model_draft: "/m/draft.gguf" },
+    );
+    assert.equal(loads, 4, "draft-model change must reload");
+    await manager.ensure(
+      source,
+      undefined,
+      {
+        ...base,
+        devices: ["HTP:0"],
+        no_extra_bufts: false,
+        model_draft: "/m/draft.gguf",
+        image_max_tokens: 512,
+      },
+    );
+    assert.equal(loads, 5, "image budget change must reload");
+  });
+
   it("releaseAll drops the slot so the next ensure reloads", async () => {
     let loads = 0;
     const manager = new EngineManager(

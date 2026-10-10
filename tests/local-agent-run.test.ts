@@ -5,6 +5,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { runLocalAgent } from "../lib/agent/runner.ts";
+import {
+  allowReadUrls,
+  isReadUrlAllowed,
+  resetReadUrlAllowlist,
+} from "../lib/agent/allowlist.ts";
 import type {
   CompletionEngine,
   EngineToolCall,
@@ -114,6 +119,32 @@ describe("runLocalAgent", () => {
     assert.equal(result.steps.length, 1);
     assert.equal(result.steps[0].tool, "calculate");
     assert.equal(result.steps[0].status, "done");
+  });
+
+  it("clears the read_url allowlist when a run starts", async () => {
+    // The allowlist is process-global. Production never called the reset
+    // (only tests did), so a URL found in conversation A stayed readable
+    // from conversation B for the whole app session — a cross-chat leak
+    // that also grew without bound (audit finding 4). A run begins by
+    // forgetting everything earlier runs approved.
+    resetReadUrlAllowlist();
+    allowReadUrls(["https://stale.example/from-last-conversation"]);
+    assert.equal(isReadUrlAllowed("https://stale.example/from-last-conversation"), true);
+
+    await runLocalAgent({
+      engine: scriptedEngine([]),
+      messages: [{ role: "user", content: "hi" }],
+      tools: [],
+      fetchImpl: fetch,
+      search: null,
+      onEvent: () => {},
+    });
+
+    assert.equal(
+      isReadUrlAllowed("https://stale.example/from-last-conversation"),
+      false,
+      "a fresh run must not inherit the previous run's readable URLs",
+    );
   });
 
   it("rejects talents outside the advertised set", async () => {

@@ -127,6 +127,13 @@ export class AndroidDownloadService {
       // The store syncs those rows through persistence' setModelProgress
       // loop, which does not need the completion callback.
       if (!isTerminalState(record.state)) this.seenTerminal.delete(record.id);
+      else {
+        // Adopted as ALREADY terminal: the mirror carries it for the
+        // store's one-time sync, and the Room row goes — it persists the
+        // full headers map, Authorization included, and a finished
+        // download never needs to re-authenticate again (audit finding 5).
+        void this.native.forgetDownload(record.id).catch(() => {});
+      }
     }
     return records.map((r) => r.modelId);
   }
@@ -251,6 +258,13 @@ private apply(
       const success = record.state === "completed";
       onComplete?.(next, success);
       this.callbacks.onComplete?.(next, success);
+      // Delete the Room row NOW, not on removeJob: it persists the full
+      // headers map — Authorization included (DownloadEntity.kt:49) — and
+      // a terminal row keeps that token at rest for as long as it exists.
+      // The mirror keeps the job for getJob; only the durable row (and its
+      // headers) goes. Fire-and-forget: a failed delete must not re-fire
+      // or block the completion.
+      void this.native?.forgetDownload(record.id).catch(() => {});
     }
   }
 

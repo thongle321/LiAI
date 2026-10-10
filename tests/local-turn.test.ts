@@ -182,6 +182,57 @@ describe("createTurnRunner", () => {
     );
   });
 
+  it("removes the saved image files after a successful turn", async () => {
+    const removed: string[] = [];
+    const images = ["data:image/jpeg;base64,AAA", "data:image/jpeg;base64,BB"];
+    const runTurn = createTurnRunner({
+      ...deps(),
+      saveImage: async (uri: string) => `/tmp/img-${uri.length}.jpg`,
+      removeImages: async (paths: string[]) => {
+        removed.push(...paths);
+      },
+    });
+    const out = await runTurn(
+      "look",
+      { sessionId: "s1", history: [], images },
+      undefined,
+    );
+    assert.equal(out.reply, "hello");
+    assert.deepEqual(
+      removed,
+      images.map((u) => `/tmp/img-${u.length}.jpg`),
+    );
+  });
+
+  it("removes the saved image files even when the run fails", async () => {
+    const removed: string[] = [];
+    const runTurn = createTurnRunner({
+      ...deps(),
+      ensureEngine: async () => ({
+        completion: async () => {
+          throw new Error("boom");
+        },
+        stopCompletion: async () => {},
+      }),
+      saveImage: async (uri: string) => `/tmp/img-${uri.length}.jpg`,
+      removeImages: async (paths: string[]) => {
+        removed.push(...paths);
+      },
+    });
+    const images = ["data:image/jpeg;base64,AAA"];
+    await assert.rejects(
+      runTurn(
+        "look",
+        { sessionId: "s1", history: [], images },
+        undefined,
+      ),
+    );
+    assert.deepEqual(
+      removed,
+      images.map((u) => `/tmp/img-${u.length}.jpg`),
+    );
+  });
+
   it("skips the user append on retry", async () => {
     const store = memoryStore();
     const runTurn = createTurnRunner({

@@ -197,9 +197,14 @@ export class TinyBaseSessionStore implements SessionStore {
     // served from memory.
     let turns = this.hydrated.get(sessionId);
     if (turns === undefined) {
+      // ONE pass over toolRuns for the WHOLE session (audit finding 7):
+      // the old path scanned the full table once per message —
+      // O(messages × toolRuns) — which froze the UI on a large imported
+      // history (the import cap alone allows 10k turns).
+      const index = this.stepsIndex();
       turns = this.rowsOf(sessionId)
         .sort((a, b) => a.row.seq - b.row.seq)
-        .map((entry) => this.toTurn(entry.id, entry.row));
+        .map((entry) => this.toTurn(entry.id, entry.row, index.get(entry.id) ?? []));
       this.hydrated.set(sessionId, turns);
     }
     // A fresh array per caller: the cached one must never be sorted or
@@ -291,9 +296,9 @@ export class TinyBaseSessionStore implements SessionStore {
     this.touch(sessionId);
   }
 
-  /** Row -> turn, reattaching the turn's tool calls in call order. */
-  private toTurn(messageId: string, row: MessageRow): StoredMessage {
-    const steps = this.stepsFor(messageId);
+  /** Row -> turn, reattaching the turn's tool calls in call order.
+   *  `steps` arrives pre-grouped from the ONE-pass index below. */
+  private toTurn(messageId: string, row: MessageRow, steps: AgentStep[]): StoredMessage {
     return {
       // The row id travels with the turn, so callers can address it
       // later without re-deriving an index.
@@ -345,14 +350,15 @@ export class TinyBaseSessionStore implements SessionStore {
     };
   }
 
-  /** Tool calls for a message, ordered by `position` — the child table
-   * itself is unordered, so this column is the only thing that restores
-   * call order. */
-  private stepsFor(messageId: string): AgentStep[] {
-    const steps: AgentStep[] = [];
+  /** Tool calls for MANY messages in ONE pass over the child table,
+   * grouped by messageId (audit finding 7). The table itself is
+   * unordered, so each group sorts by `position` — the column that
+   * restores call order. */
+  private stepsIndex(): Map<string, AgentStep[]> {
+    const index = new Map<string, AgentStep[]>();
     for (const [id, raw] of Object.entries(this.store.getTable("toolRuns"))) {
-      if (!isRecord(raw) || raw["messageId"] !== messageId) continue;
-      steps.push({
+      if (!isRecord(raw) || typeof raw["messageId"] !== "string") continue;
+      const step: AgentStep = {
         id,
         tool: str(raw["tool"]),
         position: num(raw["position"]),
@@ -377,9 +383,13 @@ export class TinyBaseSessionStore implements SessionStore {
           },
         }
       : {}),
-      });
+      };
+      const list = index.get(raw["messageId"]);
+      if (list) list.push(step);
+      else index.set(raw["messageId"], [step]);
     }
-    return steps.sort((a, b) => a.position - b.position);
+    for (const list of index.values()) list.sort((a, b) => a.position - b.position);
+    return index;
   }
 
   async listSessions(): Promise<SessionInfo[]> {
@@ -418,8 +428,10 @@ export class TinyBaseSessionStore implements SessionStore {
     if (!this.store.hasRow("sessions", sessionId)) return false;
     // Tool calls are keyed independently of their message, so they are
     // collected first: deleting the message rows would orphan them.
-    for (const entry of this.rowsOf(sessionId)) {
-      this.deleteStepsOf(entry.id);
+    // ONE pass over the child table for the WHOLE session (audit finding 7).
+    const sessionRows = this.rowsOf(sessionId);
+    this.deleteStepsOfMany(new Set(sessionRows.map((entry) => entry.id)));
+    for (const entry of sessionRows) {
       this.store.delRow("messages", entry.id);
     }
     this.store.delRow("sessions", sessionId);
@@ -456,8 +468,17 @@ export class TinyBaseSessionStore implements SessionStore {
   }
 
   private deleteStepsOf(messageId: string): void {
+    this.deleteStepsOfMany(new Set([messageId]));
+  }
+
+  /** Drop tool rows for MANY messages in ONE pass over the table. */
+  private deleteStepsOfMany(messageIds: ReadonlySet<string>): void {
     for (const [id, raw] of Object.entries(this.store.getTable("toolRuns"))) {
-      if (isRecord(raw) && raw["messageId"] === messageId) {
+      if (
+        isRecord(raw) &&
+        typeof raw["messageId"] === "string" &&
+        messageIds.has(raw["messageId"])
+      ) {
         this.store.delRow("toolRuns", id);
       }
     }
@@ -474,9 +495,11 @@ export class TinyBaseSessionStore implements SessionStore {
     // silently destroy.
     if (index < 0) return false;
     for (const { id } of ordered.slice(index)) {
-      this.deleteStepsOf(id);
       this.store.delRow("messages", id);
     }
+    // ONE pass over the child table for the whole tail (audit finding 7),
+    // after the message ids are known.
+    this.deleteStepsOfMany(new Set(ordered.slice(index).map((entry) => entry.id)));
     return true;
   }
 

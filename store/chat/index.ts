@@ -20,6 +20,7 @@ import type { ChatCtx, ChatDeps, ChatState, TurnRunner } from "./types.ts";
 import { createToolTokenCounter } from "../../lib/chat/tool-token-count.ts";
 import { selectEngineSource, type EngineSource } from "../../lib/inference/engine.ts";
 import { EngineManager } from "../../lib/inference/manager.ts";
+import type { LlamaInitParams } from "../../lib/inference/local-engine.ts";
 import { projectorPathForFileName } from "../../lib/inference/mmproj.ts";
 import { resolveSampler, type SamplerParams } from "../../lib/inference/sampler.ts";
 import { resolveThinking } from "../../lib/inference/thinking.ts";
@@ -94,7 +95,86 @@ export async function reloadLocalEngine(): Promise<void> {
     source.kind === "local"
       ? await projectorPathForFileName(source.fileName)
       : undefined,
+    // The init MUST ride along: without it the key stays on "default",
+    // ensure() returns the warm context, and this function — the
+    // context-full banner's whole recovery — reloads nothing (finding 1).
+    source.kind === "local" ? await resolveInit() : undefined,
   );
+}
+
+/** The init params a local load runs with — the ONE source for both the
+ *  loader and EngineManager's slot key.
+ *
+ *  Why this function exists (audit finding 1): ensure() only reloads
+ *  when its key changes, and the key is the `init` argument. The loader
+ *  used to hand-build these params while BOTH production ensure() call
+ *  sites passed no init at all, so every inference-settings change
+ *  (context size, GPU layers, cache types, draft model…) was ignored
+ *  while the model stayed warm, and the context-full banner's
+ *  "smaller window + reload" reloaded nothing. One resolver, consumed
+ *  by both sides, is the whole fix. */
+async function resolveInit(): Promise<LlamaInitParams> {
+  const [fs, engine, inference] = await Promise.all([
+    import("expo-file-system/legacy"),
+    import("../../lib/inference/engine.ts"),
+    import("../inference.ts"),
+  ]);
+  const params = inference.useInference.getState();
+  const docsDir = fs.documentDirectory ?? "";
+  // A separate draft GGUF, if one is chosen and still downloaded.
+  let modelDraft: string | undefined;
+  if (params.draftModelId) {
+    try {
+      const { useModelStore } = await import("../modelStore.ts");
+      const draft = useModelStore
+        .getState()
+        .models.find(
+          (m) =>
+            m.id === params.draftModelId &&
+            m.downloadStatus === "completed",
+        );
+      const file = draft?.files[0];
+      if (file) {
+        modelDraft = engine.resolveLocalFile(docsDir, file.name);
+      }
+    } catch {
+      // No draft is fine; embedded MTP still applies.
+    }
+  }
+  // Compute devices resolved against what the phone actually
+  // reports: the raw "HTP*" wildcard is never passed through,
+  // and CPU-only phones init n_gpu_layers 0 (PocketPal's CPU
+  // semantics). This now runs on every ensure() — it is the key's
+  // input — so it must stay the cheap native query it always was.
+  const compute = resolveComputeDevices(
+    params.useHexagonNpu,
+    params.nGpuLayers,
+    await getAvailableDevices(),
+  );
+  return {
+    n_ctx: params.nCtx,
+    n_gpu_layers: compute.nGpuLayers,
+    use_mlock: params.useMlock,
+    use_mmap: params.useMmap,
+    n_batch: params.nBatch,
+    n_ubatch: params.nUbatch,
+    n_threads: params.nThreads,
+    flash_attn_type: params.flashAttn,
+    cache_type_k: params.cacheK,
+    cache_type_v: params.cacheV,
+    speculative: params.speculativeEnabled,
+    spec_draft_n_gpu_layers: params.specDraftGpuLayers,
+    spec_draft_cache_type_k: params.specDraftCacheK,
+    spec_draft_cache_type_v: params.specDraftCacheV,
+    // The UI says "enable repacking"; llama.cpp wants the inverse.
+    no_extra_bufts: !params.useWeightRepacking,
+    // Omitted unless a real HTP device resolved above, because
+    // a missing `devices` is "platform default" and [] is a
+    // different instruction.
+    ...(compute.devices ? { devices: compute.devices } : {}),
+    ...(modelDraft ? { model_draft: modelDraft } : {}),
+    image_max_tokens: params.imageMaxTokens,
+  };
 }
 
 /** One process-wide engine slot (local context cached by file). */
@@ -105,71 +185,17 @@ function getManager(): EngineManager {
     manager = new EngineManager(
       {
         loadLocal: async (fileName, mmprojPath) => {
-          const [fs, engine, local, inference] = await Promise.all([
+          const [fs, engine, local] = await Promise.all([
             import("expo-file-system/legacy"),
             import("../../lib/inference/engine.ts"),
             import("../../lib/inference/local-engine.ts"),
-            import("../inference.ts"),
           ]);
-          const docsDir = fs.documentDirectory ?? "";
-          const params = inference.useInference.getState();
-          // A separate draft GGUF, if one is chosen and still downloaded.
-          let modelDraft: string | undefined;
-          if (params.draftModelId) {
-            try {
-              const { useModelStore } = await import("../modelStore.ts");
-              const draft = useModelStore
-                .getState()
-                .models.find(
-                  (m) =>
-                    m.id === params.draftModelId &&
-                    m.downloadStatus === "completed",
-                );
-              const file = draft?.files[0];
-              if (file) {
-                modelDraft = engine.resolveLocalFile(docsDir, file.name);
-              }
-            } catch {
-              // No draft is fine; embedded MTP still applies.
-            }
-          }
-          // Compute devices resolved against what the phone actually
-          // reports: the raw "HTP*" wildcard is never passed through,
-          // and CPU-only phones init n_gpu_layers 0 (PocketPal's CPU
-          // semantics). A live query is fine here — this path is
-          // already async.
-          const compute = resolveComputeDevices(
-            params.useHexagonNpu,
-            params.nGpuLayers,
-            await getAvailableDevices(),
-          );
-            const ctx = await local.loadLlamaContext(
-            engine.resolveLocalFile(docsDir, fileName),
+          // The SAME resolveInit() that feeds ensure()'s slot key: what
+          // the key claims is what actually loads, always.
+          const ctx = await local.loadLlamaContext(
+            engine.resolveLocalFile(fs.documentDirectory ?? "", fileName),
             mmprojPath,
-            {
-              n_ctx: params.nCtx,
-              n_gpu_layers: compute.nGpuLayers,
-              use_mlock: params.useMlock,
-              use_mmap: params.useMmap,
-              n_batch: params.nBatch,
-              n_ubatch: params.nUbatch,
-              n_threads: params.nThreads,
-              flash_attn_type: params.flashAttn,
-              cache_type_k: params.cacheK,
-              cache_type_v: params.cacheV,
-              speculative: params.speculativeEnabled,
-              spec_draft_n_gpu_layers: params.specDraftGpuLayers,
-              spec_draft_cache_type_k: params.specDraftCacheK,
-              spec_draft_cache_type_v: params.specDraftCacheV,
-              // The UI says "enable repacking"; llama.cpp wants the inverse.
-              no_extra_bufts: !params.useWeightRepacking,
-              // Omitted unless a real HTP device resolved above, because
-              // a missing `devices` is "platform default" and [] is a
-              // different instruction.
-              ...(compute.devices ? { devices: compute.devices } : {}),
-              ...(modelDraft ? { model_draft: modelDraft } : {}),
-              image_max_tokens: params.imageMaxTokens,
-            },
+            await resolveInit(),
           );
           // Thinking capability (PocketParity: updateModelThinkingCapabilities,
             // ModelStore.ts:3280): probe once per load and persist the verdict.
@@ -396,6 +422,10 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
           source.kind === "local"
             ? await projectorPathForFileName(source.fileName)
             : undefined,
+          // Same resolver as the loader: a settings change makes a new
+          // key, the warm context misses, and the next turn reloads at
+          // the settings the user just chose (finding 1).
+          source.kind === "local" ? await resolveInit() : undefined,
         ),
       getEngineSource: () => defaultEngineSource(),
       getStore: () => defaultGetStore(),

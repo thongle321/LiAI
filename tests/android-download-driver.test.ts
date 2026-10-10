@@ -46,3 +46,36 @@ describe("android download driver architecture", () => {
     assert.match(driver, /nativeDestinationPath\(job\.destinationPath\)/);
   });
 });
+
+describe("android download driver secret hygiene (audit finding 5)", () => {
+  // The Room record persists the full headers map — INCLUDING the HF
+  // Authorization bearer — so the worker can re-auth after process death.
+  // That makes the record's lifetime the token's exposure window: every
+  // terminal row that stays in downloads.db is a token at rest that no
+  // longer needs to exist. Forgetting the row is the JS-side half of the
+  // fix (the Kotlin side keeps headers for LIVE work on purpose).
+  const slice = (from: string, to: string): string => {
+    const start = driver.indexOf(from);
+    const end = driver.indexOf(to);
+    assert.ok(start >= 0 && end > start, `slice ${from} -> ${to} must exist`);
+    return driver.slice(start, end);
+  };
+
+  it("forgets the native row when a terminal event lands", () => {
+    const apply = slice("private apply(", "async pauseDownload");
+    assert.match(
+      apply,
+      /claimTerminal[\s\S]*?forgetDownload/,
+      "the terminal branch must delete the Room row (and with it the persisted headers)",
+    );
+  });
+
+  it("forgets terminal rows discovered at cold-start adoption", () => {
+    const reconcile = slice("async reconcileWithNative", "async knownModelIds");
+    assert.match(
+      reconcile,
+      /isTerminalState[\s\S]*?forgetDownload/,
+      "a row adopted as already-terminal is synced once, then forgotten",
+    );
+  });
+});

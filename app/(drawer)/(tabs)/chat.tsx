@@ -24,7 +24,7 @@ import {
   useRouter,
 } from "expo-router";
 import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
-import { Menu, SquarePen } from "lucide-react-native";
+import { ChevronDown, Menu, SquarePen } from "lucide-react-native";
 
 import { colors } from "../../../themes/tokens.ts";
 import { filterMessages } from "../../../lib/chat/filter.ts";
@@ -704,7 +704,13 @@ export default function ChatRoute() {
             placement. It lifts on the same hook as the composer so the two
             rise welded together, and only appears when the reader has
             actually scrolled away from the end, which is the only time the
-            list stopped following along. */}
+            list stopped following along.
+
+            Icon-only, like PocketPal's scroll-to-bottom FAB: a filled
+            circle with a chevron-down (their styles.scrollToBottomButton is
+            a 35px primary circle, chevron 20 in onPrimary — ours is the
+            48dp touch floor DESIGN.md requires, same role). With the label
+            gone, the accessibility label carries the whole meaning. */}
         {!atEnd && messages.length > 0 && (
           <Animated.View
             style={[composerLift, { bottom: composerHeight + tabBarCompensation }]}
@@ -713,13 +719,11 @@ export default function ChatRoute() {
           >
             <Pressable
               onPress={() => listRef.current?.scrollToEnd({ animated: true })}
-              className="btn btn--secondary min-h-12 px-4"
+              className="h-12 w-12 items-center justify-center rounded-full bg-primary"
               accessibilityRole="button"
               accessibilityLabel="Jump to latest message"
             >
-              <Text className="font-sans text-body-sm text-primary">
-                Jump to latest
-              </Text>
+              <ChevronDown size={20} color={colors.onPrimary} />
             </Pressable>
           </Animated.View>
         )}

@@ -148,7 +148,7 @@ describe("keyboard avoidance", () => {
     // or their centring box differs between the two states.
     const chat = read("app/(drawer)/(tabs)/chat.tsx");
     assert.match(chat, /const tabBarCompensation = keyboardVisible \? keyboardOffset : 0/);
-    // The empty state and the jump-to-latest pill are the two column-anchored
+    // The empty state and the jump-to-latest button are the two column-anchored
     // ones; the composer overlays are screen-anchored and must NOT compensate,
     // or they would be pushed off the keyboard.
     const compensated = [...chat.matchAll(/bottom: composerHeight \+ tabBarCompensation/g)];

@@ -64,6 +64,45 @@ describe("createRemoteEngine", () => {
     assert.equal(out.completionTokens, 2);
   });
 
+  it("sends reasoning effort per provider family, and nothing without an override", async () => {
+    // Parity with PocketPal's bodyExtras: llama-server has NO top-level
+    // reasoning_effort (the kwarg is its path); OpenRouter wants it
+    // top-level. Neither key may ride along when the user chose nothing.
+    const bodies: unknown[] = [];
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body ?? "{}")));
+      return jsonResponse({ choices: [{ message: { content: "ok", tool_calls: [] } }] });
+    }) as typeof fetch;
+    const noop = { onToken: () => {} };
+
+    const custom = createRemoteEngine(provider(), async () => "k", { fetchImpl });
+    await custom.completion(
+      { messages: [{ role: "user", content: "hi" }], reasoningEffort: "high" },
+      noop,
+    );
+    assert.deepEqual(
+      (bodies[0] as Record<string, unknown>)["chat_template_kwargs"],
+      { reasoning_effort: "high" },
+    );
+
+    const openrouter = createRemoteEngine(
+      { ...provider(), providerType: "openrouter" },
+      async () => "k",
+      { fetchImpl },
+    );
+    await openrouter.completion(
+      { messages: [{ role: "user", content: "hi" }], reasoningEffort: "low" },
+      noop,
+    );
+    assert.equal((bodies[1] as Record<string, unknown>)["reasoning_effort"], "low");
+    assert.equal("chat_template_kwargs" in (bodies[1] as object), false);
+
+    await custom.completion({ messages: [{ role: "user", content: "hi" }] }, noop);
+    const none = bodies[2] as Record<string, unknown>;
+    assert.equal("reasoning_effort" in none, false);
+    assert.equal("chat_template_kwargs" in none, false);
+  });
+
   it("projects message tool_calls to engine calls with fallback ids", async () => {
     const fetchImpl = (async () =>
       jsonResponse({

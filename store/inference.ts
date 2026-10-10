@@ -14,6 +14,7 @@ import {
   parseSampler,
   type SamplerParams,
 } from "../lib/inference/sampler.ts";
+import { isEffortLevel, type EffortLevel } from "../lib/reasoning-capability.ts";
 
 export const INFERENCE_KEY = "liai_inference_v1";
 
@@ -52,6 +53,14 @@ export interface InferenceParams {
    *  merge-patches like every setter here, so a plain settings save
    *  (which serializes current state) cannot clobber the map. */
   thinkingOverrides: Record<string, boolean>;
+  /** Per-model graded-reasoning effort (PocketPal axis 2): modelId →
+   *  one of EFFORT_LEVELS. Sent to the engine as
+   *  chat_template_kwargs.reasoning_effort, which only models whose
+   *  jinja template reads it (gpt-oss-style) act on it — a template
+   *  that ignores the kwarg is unaffected, never broken. Typed as the
+   *  level union so no consumer needs a cast; the string world stops at
+   *  asEffortOverrides below. */
+  effortOverrides: Record<string, EffortLevel>;
   jinjaEnabled: boolean;
   /** Sampling params, nested so one setter covers the whole group. */
   sampler: SamplerParams;
@@ -91,6 +100,8 @@ export interface InferenceState extends InferenceParams {
   setThinkingEnabled: (on: boolean) => void;
   /** Record the user's explicit per-model thinking choice. */
   setThinkingOverride: (modelId: string, on: boolean) => void;
+  /** Record a per-model effort level, or clear it with null. */
+  setEffortOverride: (modelId: string, effort: string | null) => void;
   setJinjaEnabled: (on: boolean) => void;
   /** Patch any subset; each value is clamped by the sampler module. */
   setSampler: (patch: Partial<SamplerParams>) => void;
@@ -118,6 +129,7 @@ export const DEFAULT_INFERENCE: InferenceParams = {
   specDraftCacheV: "q8_0",
   thinkingEnabled: true,
   thinkingOverrides: {},
+  effortOverrides: {},
   jinjaEnabled: true,
   sampler: { ...DEFAULT_SAMPLER },
   useHexagonNpu: false,
@@ -140,6 +152,17 @@ function asOverrides(value: unknown): Record<string, boolean> {
   const out: Record<string, boolean> = {};
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
     if (typeof v === "boolean") out[k] = v;
+  }
+  return out;
+}
+
+/** Effort map: only canonical levels survive (PocketPal's EFFORT_LEVELS).
+ *  This is the ONE place the persisted string world meets the union. */
+function asEffortOverrides(value: unknown): Record<string, EffortLevel> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, EffortLevel> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (isEffortLevel(v)) out[k] = v;
   }
   return out;
 }
@@ -181,6 +204,7 @@ function asParams(value: unknown): InferenceParams {
     specDraftCacheV: cache("specDraftCacheV", DEFAULT_INFERENCE.specDraftCacheV),
     thinkingEnabled: flag("thinkingEnabled", DEFAULT_INFERENCE.thinkingEnabled),
     thinkingOverrides: asOverrides(v.thinkingOverrides),
+    effortOverrides: asEffortOverrides(v.effortOverrides),
     jinjaEnabled: flag("jinjaEnabled", DEFAULT_INFERENCE.jinjaEnabled),
     sampler: parseSampler(v.sampler),
     useHexagonNpu: flag("useHexagonNpu", DEFAULT_INFERENCE.useHexagonNpu),
@@ -231,6 +255,7 @@ export function createInferenceStore(storage: KeyValueStorage) {
         draftModelId,
         autoOffload,
         thinkingOverrides,
+        effortOverrides,
       } = get();
       try {
         await storage.setItem(
@@ -259,6 +284,7 @@ export function createInferenceStore(storage: KeyValueStorage) {
             draftModelId,
             autoOffload,
             thinkingOverrides,
+            effortOverrides,
           }),
         );
       } catch {
@@ -356,6 +382,18 @@ export function createInferenceStore(storage: KeyValueStorage) {
       setThinkingOverride: (modelId, on) => {
         set({
           thinkingOverrides: { ...get().thinkingOverrides, [modelId]: on },
+        });
+        void persist();
+      },
+      setEffortOverride: (modelId, effort) => {
+        set((s) => {
+          // null CLEARS the model's entry (merge-patch, so one model's
+          // override can never clobber another's); a non-level string is
+          // ignored rather than stored.
+          const next = { ...s.effortOverrides };
+          if (effort === null) delete next[modelId];
+          else if (isEffortLevel(effort)) next[modelId] = effort;
+          return { effortOverrides: next };
         });
         void persist();
       },

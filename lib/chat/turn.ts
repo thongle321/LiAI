@@ -16,6 +16,7 @@ import type {
   EngineSource,
 } from "../inference/engine.ts";
 import type { SamplerParams } from "../inference/sampler.ts";
+import type { EffortLevel } from "../reasoning-capability.ts";
 import { runLocalAgent } from "../agent/runner.ts";
 import { talentDefinitions, type TalentSearchAuth } from "../agent/registry.ts";
 
@@ -58,6 +59,9 @@ export interface TurnDeps {
   /** Local-only thinking preference; `undefined` sends NO flag, leaving
    *  the model's chat template to decide (lib/inference/thinking.ts). */
   getThinking?: () => Promise<boolean | undefined>;
+  /** Per-model graded effort; undefined sends NO kwarg (the model's own
+   *  default reasoning depth stands). */
+  getEffort?: () => Promise<EffortLevel | undefined>;
   /** Local-only jinja template preference; omitted keeps the native default. */
   getJinja?: () => Promise<boolean>;
   /** Local-only sampling params for THIS session, already resolved
@@ -159,6 +163,7 @@ export function createTurnRunner(deps: TurnDeps) {
     const search = await deps.getSearch().catch(() => null);
     const systemPrompt = await deps.getSystemPrompt().catch(() => undefined);
     const thinking = await deps.getThinking?.().catch(() => undefined);
+    const effort = await deps.getEffort?.().catch(() => undefined);
     const jinja = await deps.getJinja?.().catch(() => undefined);
     const sampler = await deps.getSampler?.(sessionId).catch(() => null);
     const stopWords = (await deps.getStopWords?.().catch(() => [])) ?? [];
@@ -198,6 +203,7 @@ export function createTurnRunner(deps: TurnDeps) {
         ? { imageDataUris: paths.images }
         : {}),
       ...(thinking !== undefined ? { enableThinking: thinking } : {}),
+      ...(effort !== undefined ? { reasoningEffort: effort } : {}),
       ...(jinja !== undefined ? { jinja } : {}),
     ...(sampler ? { sampler } : {}),
       ...(stopWords.length > 0 ? { stop: stopWords } : {}),

@@ -14,6 +14,7 @@ import type {
   ToolDefinition,
 } from "../inference/engine.ts";
 import type { SamplerParams } from "../inference/sampler.ts";
+import type { EffortLevel } from "../reasoning-capability.ts";
 import type { TurnOutcomeFlags, ToolMetrics, TurnBlock } from "../../types/chat.ts";
 import { runTalent, type TalentSearchAuth } from "./registry.ts";
 import { resetReadUrlAllowlist } from "./allowlist.ts";
@@ -78,6 +79,8 @@ export interface AgentRunOptions {
   imageDataUris?: string[];
   /** Local-only: jinja thinking blocks on/off for every loop turn. */
   enableThinking?: boolean;
+  /** Local-only: graded reasoning effort for every loop turn. */
+  reasoningEffort?: EffortLevel;
   /** Local-only: jinja chat template on/off for every loop turn. */
   jinja?: boolean;
   /** Local-only: resolved sampling params for every loop turn. */
@@ -190,6 +193,9 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
               : {}),
             ...(options.enableThinking !== undefined
               ? { enableThinking: options.enableThinking }
+              : {}),
+            ...(options.reasoningEffort !== undefined
+              ? { reasoningEffort: options.reasoningEffort }
               : {}),
             ...(options.jinja !== undefined ? { jinja: options.jinja } : {}),
             ...(options.sampler ? { sampler: options.sampler } : {}),

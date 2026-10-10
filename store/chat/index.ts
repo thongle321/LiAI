@@ -24,6 +24,10 @@ import type { LlamaInitParams } from "../../lib/inference/local-engine.ts";
 import { projectorPathForFileName } from "../../lib/inference/mmproj.ts";
 import { resolveSampler, type SamplerParams } from "../../lib/inference/sampler.ts";
 import { resolveThinking } from "../../lib/inference/thinking.ts";
+import {
+  resolveEffort,
+  type EffortLevel,
+} from "../../lib/reasoning-capability.ts";
 import type { ThinkingChatProbe } from "../../lib/inference/thinking-detection.ts";
 import {
   getAvailableDevices,
@@ -310,6 +314,33 @@ async function defaultThinking(): Promise<boolean | undefined> {
   }
 }
 
+/** Graded effort for the ACTIVE model (PocketPal axis-2 parity).
+ *
+ *  Axis 1 gates the send: with "Reasoning model" OFF the kwarg is not
+ *  sent at all — a kwarg the model ignores would otherwise ride along on
+ *  every turn of a model the user told us does not think. Remote models
+ *  included: their sheet shows Reasoning too, and the remote engine
+ *  carries the provider-appropriate body field. */
+async function defaultEffort(): Promise<EffortLevel | undefined> {
+  try {
+    const { useInference } = await import("../inference.ts");
+    const { useModelStore } = await import("../modelStore.ts");
+    const m = useModelStore.getState();
+    const id = m.activeModelId;
+    if (id === null) return undefined;
+    const spec = m.models.find((model) => model.id === id);
+    const thinkingOn = resolveThinking({
+      modelId: id,
+      reasoning: spec?.reasoning,
+      overrides: useInference.getState().thinkingOverrides,
+    }).enabled;
+    if (thinkingOn !== true) return undefined;
+    return resolveEffort(useInference.getState().effortOverrides[id]);
+  } catch {
+    return undefined;
+  }
+}
+
 /** Local-only jinja preference from the inference store. */
 async function defaultJinja(): Promise<boolean> {
   try {
@@ -438,8 +469,9 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
       getChatTemplate: () => defaultChatTemplate(),
       getAddGenerationPrompt: () => defaultAddGenerationPrompt(),
       getThinking: () => defaultThinking(),
+      getEffort: () => defaultEffort(),
       getJinja: () => defaultJinja(),
-    getSampler: (sid) => defaultSampler(sid),
+      getSampler: (sid) => defaultSampler(sid),
       saveImage: (uri: string) => defaultSaveImage(uri),
     });
     return runTurn(text, paths, onToken, onReasoning, onToolStart, onToolDelta);

@@ -97,6 +97,29 @@ describe("engine params — untouched model", () => {
     });
     assert.equal(on.enable_thinking, true);
   });
+
+  it("forwards reasoning effort as chat_template_kwargs.reasoning_effort", async () => {
+    // llama.rn 0.13.0-rc.7 has no named effort param: the supported
+    // equivalent of llama.cpp's --reasoning-effort is the kwarg, which
+    // llama.cpp merges into the jinja template input (chat.cpp:955).
+    // A template that does not read it is unaffected.
+    const params = await send({
+      messages: [{ role: "user", content: "hi" }],
+      reasoningEffort: "high",
+    });
+    assert.deepEqual(params.chat_template_kwargs, { reasoning_effort: "high" });
+  });
+
+  it("omits chat_template_kwargs entirely when no effort is chosen", async () => {
+    const params = await send({
+      messages: [{ role: "user", content: "hi" }],
+    });
+    assert.equal(
+      "chat_template_kwargs" in params,
+      false,
+      "no effort override → the model's own default reasoning depth stands",
+    );
+  });
 });
 
 describe("engine params — configured model", () => {

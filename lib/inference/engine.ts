@@ -7,6 +7,7 @@
  */
 
 import { buildRemoteModelSpec } from "../models/remote-api.ts";
+import type { EffortLevel } from "../reasoning-capability.ts";
 import type { ModelOrigin, ModelSpec, RemoteApiProvider } from "../../types/models.ts";
 // The timings shape is a DOMAIN type, defined once in types/chat.ts and
 // shared: the engine projects it, the store persists it, the footer reads
@@ -111,6 +112,12 @@ export interface CompletionRequest {
   /** Per-model chat-template override (PocketPal chatTemplate). llama.rn
    *  only; remote engines use the provider's own template. "" = default. */
   chatTemplate?: string;
+  /** Graded reasoning effort. Undefined sends nothing — the model's own
+   *  default depth stands. Reaches llama.rn as
+   *  `chat_template_kwargs.reasoning_effort`, the supported equivalent of
+   *  llama.cpp's --reasoning-effort; only templates that read the kwarg act
+   *  on it (lib/reasoning-capability.ts). */
+  reasoningEffort?: EffortLevel;
   /** Per-model add-generation-prompt override (PocketPal parity).
    *  llama.rn only. */
   addGenerationPrompt?: boolean;

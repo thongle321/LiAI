@@ -63,6 +63,9 @@ describe("inference store", () => {
         specDraftCacheV: s.specDraftCacheV,
         thinkingEnabled: s.thinkingEnabled,
         thinkingOverrides: s.thinkingOverrides,
+        // Axis 2 (PocketParity): the per-model effort map rides the same
+        // defaults/persist round trip as the thinking overrides.
+        effortOverrides: s.effortOverrides,
         jinjaEnabled: s.jinjaEnabled,
         sampler: s.sampler,
         useHexagonNpu: s.useHexagonNpu,

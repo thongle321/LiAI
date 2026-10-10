@@ -193,6 +193,12 @@ export interface ModelSettings {
   displayName: string;
   systemPrompt: string;
   stopWords: string[];
+  /** Which base-template preset the Edit Chat Template dialog has selected
+   *  (PocketPal's config `name`). "custom" = the model default; absent on
+   *  rows written before presets existed, which parse back as "custom".
+   *  Stored so the picker shows the selection without matching template
+   *  strings by content. */
+  templateName?: string;
   /** Token overrides (PocketPal parity). BOS is persisted but not
    *  injected today — llama.rn applies the GGUF template's own BOS. */
   addBosToken: boolean;

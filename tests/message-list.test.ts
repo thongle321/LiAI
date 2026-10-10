@@ -38,7 +38,7 @@ describe("message list stability", () => {
     );
   });
 
-  it("renders adapter rows: date headers plus flagged turns", () => {
+  it("renders adapter rows: flagged turns, with no day dividers", () => {
     // buildRows owns grouping/avatar/status/date derivation; the list and
     // the bubble consume rows without re-deriving — one derivation, or the
     // parts disagree about what a group is.
@@ -57,7 +57,11 @@ describe("message list stability", () => {
     const chat = read("app/(drawer)/(tabs)/chat.tsx");
     assert.match(chat, /buildRows\(visible, \{ sending, stopping \}\)/);
     assert.match(chat, /useMemo\(\s*\(\) => buildRows/, "rows memoized: new identity must not retrigger follow");
-    assert.match(chat, /<DateHeader label=\{row\.label\} \/>/);
+    assert.doesNotMatch(
+      chat,
+      /DateHeader/,
+      "no day dividers: PocketPal's showDateHeaders defaults false, so their list — and ours — renders none",
+    );
     const item = read("components/chat/MessageListItem.tsx");
     // One row in, not three flags: the adapter's flags travel together.
     assert.match(item, /row: MessageRow/);

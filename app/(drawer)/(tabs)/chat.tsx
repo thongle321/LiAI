@@ -43,7 +43,6 @@ import { useInference } from "../../../store/inference.ts";
 import { useKeyboardLift } from "../../../hooks/useKeyboardLift.ts";
 import { MessageListItem } from "../../../components/chat/MessageListItem.tsx";
 import { ChatEmptyPlaceholder } from "../../../components/chat/ChatEmptyPlaceholder.tsx";
-import { DateHeader } from "../../../components/chat/DateHeader.tsx";
 import { PendingIndicator } from "../../../components/chat/PendingIndicator.tsx";
 import { MessageInput } from "../../../components/chat/MessageInput.tsx";
 import { SuggestedPrompts } from "../../../components/chat/SuggestedPrompts.tsx";
@@ -212,7 +211,9 @@ export default function ChatRoute() {
   const [query, setQuery] = useState("");
 
   const visible = searchOpen ? filterMessages(messages, query) : messages;
-  // Adapter rows for the list: date headers + group/avatar/status flags.
+  // Adapter rows for the list: group/avatar/status flags. No day dividers
+  // — PocketPal's date-header prop defaults false and their screen never
+  // passes it, so their chat has none either (lib/chat/rows.ts).
   // Memoized so the list's row-count follow effect can't retrigger on
   // identity churn — a re-render alone must never move the list.
   const rows = useMemo(
@@ -659,9 +660,7 @@ export default function ChatRoute() {
             onEndVisibleChange={setAtEnd}
             streaming={streaming}
             renderRow={(row, widths) =>
-              row.kind === "date" ? (
-                <DateHeader label={row.label} />
-              ) : row.kind === "pending" ? (
+              row.kind === "pending" ? (
                 <PendingIndicator startedAt={turnStartedAt} widths={widths} />
               ) : (
                 <MessageListItem

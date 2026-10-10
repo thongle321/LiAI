@@ -25,11 +25,10 @@ describe("buildRows", () => {
     assert.deepEqual(buildRows([]), []);
   });
 
-  it("opens with a Today header, then the message ungrouped and sent", () => {
+  it("returns the message ungrouped and sent", () => {
     const at = atMidday(2026, 9, 27);
     const message = user("hi", at);
     assert.deepEqual(buildRows([message], { now: atMidday(2026, 9, 27) }), [
-      { kind: "date", id: "date-2026-9-27", label: "Today" },
       {
         kind: "message",
         message,
@@ -46,22 +45,22 @@ describe("buildRows", () => {
     const first = assistant("one", now);
     const second = assistant("two", now);
     const rows = buildRows([q, first, second], { now });
-    assert.equal(rows.length, 4); // header + 3 turns, same day
-    assert.deepEqual(rows[1], {
+    assert.equal(rows.length, 3); // just the 3 turns, same day
+    assert.deepEqual(rows[0], {
       kind: "message",
       message: q,
       grouped: false,
       isActiveRun: false,
       status: "sent",
     });
-    assert.deepEqual(rows[2], {
+    assert.deepEqual(rows[1], {
       kind: "message",
       message: first,
       grouped: true,
       isActiveRun: false,
       status: "sent",
     });
-    assert.deepEqual(rows[3], {
+    assert.deepEqual(rows[2], {
       kind: "message",
       message: second,
       grouped: false,
@@ -70,21 +69,19 @@ describe("buildRows", () => {
     });
   });
 
-  it("opens a new dated header when the day changes", () => {
+  it("emits no dated header rows at all", () => {
+    // PocketPal parity: `showDateHeaders` defaults false and ChatScreen never
+    // passes it, so PocketPal's chat renders no dividers — and neither does
+    // ours. The guard is on the ROW KIND: a projection change that reintroduced
+    // dividers would have to add a "date" kind back here.
     const rows = buildRows(
-      [user("yesterday", atMidday(2026, 9, 26)), user("today", atMidday(2026, 9, 27))],
+      [
+        user("yesterday", atMidday(2026, 9, 26)),
+        user("today", atMidday(2026, 9, 27)),
+      ],
       { now: atMidday(2026, 9, 27) },
     );
-    assert.deepEqual(
-      rows.map((r) =>
-        r.kind === "date"
-          ? r.label
-          : r.kind === "message"
-            ? r.message.text
-            : "",
-      ),
-      ["Yesterday", "yesterday", "Today", "today"],
-    );
+    assert.deepEqual(rows.map((r) => r.kind), ["message", "message"]);
   });
 
   it("marks only the newest streaming turn as the active run", () => {
@@ -123,12 +120,14 @@ describe("buildRows", () => {
     const rows = buildRows([assistant("late", late), assistant("early", early)], {
       now: early,
     });
+    // The DAY BOUNDARY still ends the group even with no divider to separate
+    // them — only the divider row is gone, not the rhythm break.
     assert.deepEqual(
-      rows.map((r) => (r.kind === "date" ? r.label : r.kind)),
-      ["Yesterday", "message", "Today", "message"],
+      rows.map((r) => r.kind),
+      ["message", "message"],
     );
     assert.deepEqual(
-      rows.filter((r) => r.kind === "message").map((r) => r.kind === "message" && r.grouped),
+      rows.map((r) => (r.kind === "message" && r.grouped)),
       [false, false],
     );
   });
@@ -157,7 +156,6 @@ function userStatuses(messages: ChatMessage[], sending = false): unknown[] {
     .filter((r) => r.kind === "message" && r.message.role === "user")
     .map((r) => (r.kind === "message" ? r.status : null));
 }
-
 describe("delivery state", () => {
   const now = atMidday(2026, 9, 27);
   const failed: ApiError = { code: "llm_error", message: "boom" };

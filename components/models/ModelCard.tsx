@@ -2,11 +2,18 @@
  * row.
  *
  * PocketParity: pocketpal-ai/src/screens/ModelsScreen/ModelCard/ModelCard.tsx
- * (:688-818 and styles.ts). Compact header — type icon, middle-elided name,
- * then size and a status dot on the right — followed by the warnings, the
- * progress bar and ONE action row. The header's author line and the
+ * (:688-818 and styles.ts). The anatomy is the reference's, verbatim: a
+ * compact header (type icon, middle-elided name, the Cpu+size cluster and a
+ * status dot) followed by ONE content container that owns the horizontal
+ * padding and holds the warnings, the progress bar, ONE action row and —
+ * when open — the expanded details. The header's author line and the
  * type/size/file-count chips are gone: the reference carries none of them,
  * and the author is in the expanded grid instead (:962-971).
+ *
+ * The SKIN is this app's (DESIGN.md wins every token), so the reference's
+ * 24px card radius and 40px button heights are replaced by the Default 8px
+ * step and the 48dp floor; see docs/research's card parity record for the
+ * full copied/diverged list.
  *
  * The row itself is decided by lib/models/card-actions.ts (one pure
  * function, tested); this file draws what it returns.
@@ -15,7 +22,16 @@
 import { useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
-import { ChevronDown, ChevronRight, Power, Settings, Trash2, X } from "lucide-react-native";
+import {
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Cpu,
+  Eject,
+  Play,
+  Settings,
+  Trash2,
+  X,
+} from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
 import { useModelStore } from "../../store/modelStore";
@@ -39,15 +55,23 @@ import {
 } from "./ModelBits.tsx";
 import { ModelCardDetails } from "./ModelCardDetails.tsx";
 
-/** PocketPal's card geometry: 24px radius, 1px outline, no elevation
- *  (styles.ts:7-14). Ours drops the `margin: 6` — the group column already
- *  spaces the cards. */
+/** PocketPal's card geometry: 8px radius (DESIGN.md's Default step),
+ *  1px outline, no elevation (styles.ts:7-14). The 24px radius this card
+ *  used to carry was PocketPal's value, taken wholesale over the design
+ *  system's — retired 2026-10-10, see docs/research's card parity record.
+ *  The list owns the gutter; the card owns only its own `mb-3`. */
 const CARD =
-  "mb-3 overflow-hidden rounded-[24px] border border-border bg-surface-1";
-/** PocketPal's icon button: 40px square, 16px radius (styles.ts:178-186).
- *  Ours keeps a 48px pressable around it so the tap target is legal. */
+  "mb-3 overflow-hidden rounded-lg border border-border bg-surface-1";
+/** The 16px leading icon inside a 48px target. DESIGN.md l.377: "the visual
+ *  circle is 40px; the touch target is 48×48dp minimum. Pad the hit area, not
+ *  the circle" — so the icon sits directly in the pressable and there is no
+ *  wrapper box around it. PocketPal's `styles.iconButton` is exactly this
+ *  (40px, radius 16, transparent); ours keeps the legal target. */
 const ICON_BUTTON = "h-12 w-12 items-center justify-center";
-const ICON_SURFACE = "h-10 w-10 items-center justify-center rounded-2xl";
+/** Destructive only: Alert Tint is DESIGN.md l.238's documented fill for
+ *  destructive icon buttons, so the trash keeps a ground while settings and
+ *  expand stay bare. */
+const ICON_DESTRUCTIVE = "rounded-full bg-error/10";
 
 export function ModelCard({
   item,
@@ -143,10 +167,11 @@ export function ModelCard({
 
   return (
     <View className={CARD}>
-      {/* PocketPal's compact header (styles.ts:53-95): icon + name on the
-          left, size then status dot on the right. The dot reads "loaded"
-          when green and "downloaded" when grey — never a word. */}
-      <View className="flex-row items-center gap-2 px-4 pt-4">
+      {/* PocketPal's compact header (styles.ts:53-95): type icon + name on
+          the left, the size cluster (Cpu chip + size, :86-99) then the
+          status dot on the right. The dot reads "loaded" when green and
+          "downloaded" when grey — never a word. */}
+      <View className="flex-row items-center gap-2 px-4 py-3">
         <ModelTypeIcon type={item.type} />
         {/* flex-1/shrink so a long name truncates instead of pushing the
             dot past the card edge. middle-ellipsis keeps the informative
@@ -160,9 +185,15 @@ export function ModelCard({
           {title}
         </Text>
         {fileBytes > 0 ? (
-          <Text className="font-sans text-caption text-secondary-text">
-            {formatBytes(fileBytes)}
-          </Text>
+          // PocketPal's sizeInfo: a 10px CpuChip before the size text. Ours
+          // runs the glyph at 12px, the caption size it sits beside, because
+          // a 10px icon is off this system's scale.
+          <View className="flex-row items-center gap-1">
+            <Cpu size={12} color={colors.secondaryText} />
+            <Text className="font-sans text-caption text-secondary-text">
+              {formatBytes(fileBytes)}
+            </Text>
+          </View>
         ) : null}
         {dot !== null ? (
           <View
@@ -176,141 +207,148 @@ export function ModelCard({
         ) : null}
       </View>
 
-      {/* While a transfer is in flight the row IS the cancel (PocketParity:
-          the downloading branch returns one wide Cancel, :426-453), with
-          the progress bar above it — the global banner is gone, so this is
-          the only progress readout a bookmark has. */}
-      {actions[0] === "cancel" ? (
-        <View className="mt-2 px-4">
-          <DownloadProgressBar
-            progress={item.downloadProgress}
-            downloaded={item.downloadedBytes}
-            total={item.totalBytes}
-            speed={item.speedBytesPerSec}
-          />
-          <CancelDownloadButton
-            onPress={() => void cancelModelDownload(item.id)}
-          />
-        </View>
-      ) : null}
-
-      {/* The shortfall, on the card: a disabled button with no reason is
-          the failure this line exists to prevent. */}
-      {onDownload && item.downloadStatus !== "completed" && fit.message ? (
-        <Text className="storage-warning mt-2 px-4">{fit.message}</Text>
-      ) : null}
-
-      {/* One row (PocketParity: styles.ts:156-172 — gap 8, the primary
-          action flex:1 at 40px tall with a 16px radius, the rest 40px
-          icon buttons). Wraps so a long name plus four actions reflow
-          instead of clipping at 320pt. Nothing renders while a transfer is
-          in flight: that row is the Cancel above, and an empty view here
-          would only add phantom padding under it. */}
-      {actions.length > 1 ? (
-      <View className="mt-3 flex-row flex-wrap items-center gap-2 px-4 pb-4">
-        {actions.includes("download") && onDownload ? (
-          <DownloadButton
-            status={item.downloadStatus}
-            progress={item.downloadProgress}
-            onPress={onDownload}
-            onPause={() => void pauseModelDownload(item.id)}
-            onResume={() => void resumeModelDownload(item.id)}
-            disabled={!fit.fits || item.downloadStatus === "completed"}
-          />
-        ) : null}
-
-        {actions.includes("load") || actions.includes("offload") ? (
-          <Pressable
-            onPress={isActive ? onDeactivate : onActivate}
-            className={`btn flex-1 rounded-2xl px-5 ${
-              isActive ? "btn--secondary" : "btn--primary"
-            }`}
-            accessibilityRole="button"
-            accessibilityLabel={isActive ? `Offload ${title}` : `Load ${title}`}
-          >
-            <Power
-              size={16}
-              color={isActive ? colors.primary : colors.onPrimary}
+      {/* PocketPal's cardContent (styles.ts:19-23): ONE wrapper owns the
+          horizontal padding, and the action row plus the expanded details
+          live inside it rather than each carrying its own px. */}
+      <View className="px-4 pb-3">
+        {/* While a transfer is in flight the row IS the cancel (PocketParity:
+            the downloading branch returns one wide Cancel, :426-453), with
+            the progress bar above it — the global banner is gone, so this is
+            the only progress readout a bookmark has. */}
+        {actions[0] === "cancel" ? (
+          <View className="mt-2">
+            <DownloadProgressBar
+              progress={item.downloadProgress}
+              downloaded={item.downloadedBytes}
+              total={item.totalBytes}
+              speed={item.speedBytesPerSec}
             />
-            <Text
-              className={`ml-2 font-sans text-body-sm ${
-                isActive ? "text-primary" : "text-on-primary"
-              }`}
-            >
-              {/* PocketParity: the loaded model's button says "Offload"
-                    (en.json models.modelCard.buttons.offload), and the icon is
-                    an eject rather than a power glyph. */}
-              {isActive ? "Offload" : "Load"}
-            </Text>
-          </Pressable>
+            <CancelDownloadButton
+              onPress={() => void cancelModelDownload(item.id)}
+            />
+          </View>
         ) : null}
 
-        {actions.includes("settings") ? (
-          <Pressable
-            onPress={onSettings}
-            className={ICON_BUTTON}
-            accessibilityRole="button"
-            accessibilityLabel={`Settings for ${title}`}
-          >
-            <View className={`${ICON_SURFACE} border border-border bg-surface-1`}>
-              <Settings size={16} color={colors.secondaryText} />
-            </View>
-          </Pressable>
+        {/* The shortfall, on the card: a disabled button with no reason is
+            the failure this line exists to prevent. */}
+        {onDownload && item.downloadStatus !== "completed" && fit.message ? (
+          <Text className="storage-warning mt-2">{fit.message}</Text>
         ) : null}
 
-        {/* A bookmark is removed with X, a downloaded file with trash:
-            the glyph says whether anything on disk goes away. */}
-        {actions.includes("remove") || actions.includes("delete") ? (
-          <Pressable
-            onPress={confirmDestructive}
-            className={ICON_BUTTON}
-            accessibilityRole="button"
-            accessibilityLabel={
-              actions.includes("remove") ? `Remove ${title}` : `Delete ${title}`
-            }
-          >
-            <View className={`${ICON_SURFACE} bg-error/10`}>
-              {actions.includes("remove") ? (
-                <X size={16} color={colors.error} />
-              ) : (
-                <Trash2 size={16} color={colors.error} />
-              )}
-            </View>
-          </Pressable>
+        {/* One row (PocketParity: styles.ts:156-172 — gap 8, the primary
+            action flex:1, the rest bare icon buttons). Wraps so a long name
+            plus four actions reflow instead of clipping at 320pt. Nothing
+            renders while a transfer is in flight: that row is the Cancel
+            above, and an empty view here would only add phantom padding
+            under it. */}
+        {actions.length > 1 ? (
+          <View className="mt-3 flex-row flex-wrap items-center gap-2">
+            {actions.includes("download") && onDownload ? (
+              <DownloadButton
+                status={item.downloadStatus}
+                progress={item.downloadProgress}
+                onPress={onDownload}
+                onPause={() => void pauseModelDownload(item.id)}
+                onResume={() => void resumeModelDownload(item.id)}
+                disabled={!fit.fits || item.downloadStatus === "completed"}
+              />
+            ) : null}
+
+            {actions.includes("load") || actions.includes("offload") ? (
+              <Pressable
+                onPress={isActive ? onDeactivate : onActivate}
+                className="btn btn--tonal flex-1"
+                accessibilityRole="button"
+                accessibilityLabel={isActive ? `Offload ${title}` : `Load ${title}`}
+              >
+                {/* PocketParity: the reference's glyph pair — a play circle
+                    while the model is loadable, an eject once it is loaded
+                    (ModelCard.tsx renderModelLoadButton). Its label is
+                    already the state word, so the icon reinforces. */}
+                {isActive ? (
+                  <Eject size={16} color={colors.primary} />
+                ) : (
+                  <Play size={16} color={colors.primary} />
+                )}
+                <Text className="ml-2 font-sans text-body-sm text-primary">
+                  {/* PocketParity: the loaded model's button says "Offload"
+                        (en.json models.modelCard.buttons.offload) — the state word
+                        is the label, and the glyph reinforces it. */}
+                  {isActive ? "Offload" : "Load"}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {actions.includes("settings") ? (
+              <Pressable
+                onPress={onSettings}
+                className={ICON_BUTTON}
+                accessibilityRole="button"
+                accessibilityLabel={`Settings for ${title}`}
+              >
+                <Settings size={16} color={colors.secondaryText} />
+              </Pressable>
+            ) : null}
+
+            {/* A bookmark is removed with X, a downloaded file with trash:
+                the glyph says whether anything on disk goes away. The only
+                icon button that keeps a ground — Alert Tint is DESIGN.md's
+                documented fill for destructive icon buttons. */}
+            {actions.includes("remove") || actions.includes("delete") ? (
+              <Pressable
+                onPress={confirmDestructive}
+                className={`${ICON_BUTTON} ${ICON_DESTRUCTIVE}`}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  actions.includes("remove") ? `Remove ${title}` : `Delete ${title}`
+                }
+              >
+                {actions.includes("remove") ? (
+                  <X size={16} color={colors.error} />
+                ) : (
+                  <Trash2 size={16} color={colors.error} />
+                )}
+              </Pressable>
+            ) : null}
+
+            {/* PocketPal's expand glyph pair: ChevronSelectorVertical when
+                collapsed, ChevronSelectorExpandedVertical when open
+                (ModelCard.tsx expand-details-button). The real icons rather
+                than a rotation — a style-rotated lucide glyph rendered
+                invisible on this phone once before. */}
+            {actions.includes("expand") ? (
+              <Pressable
+                onPress={() => setExpanded((v) => !v)}
+                className={ICON_BUTTON}
+                accessibilityRole="button"
+                accessibilityState={{ expanded }}
+                accessibilityLabel={
+                  expanded ? "Collapse details" : "Expand details"
+                }
+              >
+                {expanded ? (
+                  <ChevronsDownUp size={20} color={colors.secondaryText} />
+                ) : (
+                  <ChevronsUpDown size={20} color={colors.secondaryText} />
+                )}
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
 
-        {/* Glyph swap, not a transform: a style-rotated lucide icon
-            rendered invisible on this phone before (SettingsRows
-            AdvancedGroup). Right when closed, down when open. */}
-        {actions.includes("expand") ? (
-          <Pressable
-            onPress={() => setExpanded((v) => !v)}
-            className={ICON_BUTTON}
-            accessibilityRole="button"
-            accessibilityState={{ expanded }}
-            accessibilityLabel={
-              expanded ? "Collapse details" : "Expand details"
-            }
+        {/* The details are a continuation of the card interior, not a second
+            region: PocketPal's detailsContent has no divider either, and
+            DESIGN.md separates with spacing and the card's own hairline. */}
+        {expanded ? (
+          <Animated.View
+            entering={fadeEntering(duration)}
+            exiting={fadeExiting(duration)}
+            className="mt-3"
           >
-            {expanded ? (
-              <ChevronDown size={20} color={colors.secondaryText} />
-            ) : (
-              <ChevronRight size={20} color={colors.secondaryText} />
-            )}
-          </Pressable>
+            <ModelCardDetails item={item} fileBytes={fileBytes} />
+          </Animated.View>
         ) : null}
       </View>
-      ) : null}
-
-      {expanded ? (
-        <Animated.View
-          entering={fadeEntering(duration)}
-          exiting={fadeExiting(duration)}
-          className="border-t border-border px-4 pb-4"
-        >
-          <ModelCardDetails item={item} fileBytes={fileBytes} />
-        </Animated.View>
-      ) : null}
     </View>
   );
 }
@@ -328,8 +366,11 @@ export function RemoteProviderCard({
   onActivate: () => void;
   onRemove: () => void;
 }) {
+  // Same Default 8px step and hairline as every other card (DESIGN.md
+  // "Default radius… buttons, inputs, cards"); the 24px this carried was
+  // PocketPal's value, retired 2026-10-10.
   return (
-    <View className="mb-3 bg-surface-1 border border-border rounded-[24px] overflow-hidden">
+    <View className="mb-3 overflow-hidden rounded-lg border border-border bg-surface-1">
       <View className="p-5 flex-row items-center justify-between">
         <View className="flex-1">
           <View className="flex-row items-center gap-2">
@@ -370,13 +411,11 @@ export function RemoteProviderCard({
         )}
         <Pressable
           onPress={onRemove}
-          className="h-12 w-12 items-center justify-center"
+          className={`${ICON_BUTTON} ${ICON_DESTRUCTIVE}`}
           accessibilityRole="button"
           accessibilityLabel={`Remove ${item.name}`}
         >
-          <View className="h-10 w-10 items-center justify-center rounded-2xl bg-error/10">
-            <Trash2 size={16} color={colors.error} />
-          </View>
+          <Trash2 size={16} color={colors.error} />
         </Pressable>
       </View>
     </View>

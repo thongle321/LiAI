@@ -296,6 +296,11 @@ export default function ModelsRoute() {
                 tintColor={colors.primary}
               />
             }
+            // The screen gutter, DESIGN.md's `5` step (20px): the models
+            // screen was the only list in the app without one, so cards
+            // sat flush to the window edge. `MessageList` and onboarding
+            // both already carry it (`p-5`).
+            contentContainerClassName="px-5"
             contentContainerStyle={{ paddingBottom: FAB_STACK_HEIGHT }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"

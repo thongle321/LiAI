@@ -166,7 +166,6 @@ export function DownloadButton({
     : isFailed
     ? "Retry"
     : "Download";
-
   // Completed is a state, not an action: Mist fill with a Jade check, and
   // the row is inert. Every other state is a real button — 48dp tall, 8px
   // radius, 1px Hairline, Ink label.
@@ -189,7 +188,11 @@ export function DownloadButton({
       className={
         disabled
           ? "min-h-12 items-center justify-center rounded-lg border border-border bg-surface-2 px-3 py-2"
-          : "min-h-12 items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
+          : // PocketPal's btnDownload trio (#ecfdf5 ground / #bbf7d0 border /
+            // #047857 label), carried by LiAI's own three green tokens. Its
+            // border value is 1.21:1 and could never clear the non-text floor
+            // here, so the border takes the 3:1 mark step instead.
+            "min-h-12 items-center justify-center rounded-lg border border-success-mark bg-success-fill px-3 py-2"
       }
       accessibilityRole="button"
       accessibilityState={{ disabled }}
@@ -205,17 +208,17 @@ export function DownloadButton({
     >
       <View className="flex-row items-center gap-2">
         {isDownloading ? (
-          <Pause size={16} color={disabled ? colors.secondaryText : colors.primary} />
+          <Pause size={16} color={disabled ? colors.secondaryText : colors.successDeep} />
         ) : isPaused ? (
-          <Play size={16} color={disabled ? colors.secondaryText : colors.primary} />
+          <Play size={16} color={disabled ? colors.secondaryText : colors.successDeep} />
         ) : (
-          <Download size={16} color={disabled ? colors.secondaryText : colors.primary} />
+          <Download size={16} color={disabled ? colors.secondaryText : colors.successDeep} />
         )}
         <Text
           className={
             disabled
               ? "font-sans text-body-sm text-secondary-text"
-              : "font-sans text-body-sm text-primary-text"
+              : "font-sans text-body-sm text-success-deep"
           }
         >
           {label}

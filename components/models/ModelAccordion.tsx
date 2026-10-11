@@ -56,7 +56,12 @@ export function ModelAccordion({
         onPress={() => onToggle(!open)}
         onPressIn={() => setPressed(true)}
         onPressOut={() => setPressed(false)}
-        className={`min-h-12 flex-row items-center justify-between rounded-lg px-3 ${
+        // `px-1`, not `px-3`: the models list now owns the 20px screen
+        // gutter, and a second inset on this header would stack it (DESIGN.md
+        // "Gutters are owned by one layer"). The header therefore lands at
+        // 24px — just inside the cards at 20px, the same relationship PocketPal
+        // has (its header 16px vs its cards 8px).
+        className={`min-h-12 flex-row items-center justify-between rounded-lg px-1 ${
           pressed ? "bg-surface-3" : ""
         }`}
         accessibilityRole="button"
@@ -71,7 +76,7 @@ export function ModelAccordion({
         )}
       </Pressable>
       {description !== undefined ? (
-        <Text className="mb-3 mt-1 px-3 font-sans text-caption text-secondary-text">
+        <Text className="mb-3 mt-1 px-1 font-sans text-caption text-secondary-text">
           {description}
         </Text>
       ) : null}

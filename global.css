@@ -27,6 +27,16 @@
   /* Coolant cyan is reserved for machine-in-the-loop states (thinking, vision, streaming). */
   --color-info: #06b6d4;
   --color-success: #10b981;
+  /* The download button's green, in the same two-step shape as the signal
+     and the reds: `success-fill` is the tonal ground, `success-mark` the
+     1px border step (3:1), `success-deep` the label step (4.5:1 on all four
+     surfaces). Derived from PocketPal's btnDownload trio (#ecfdf5 / #bbf7d0 /
+     #047857) — its border value is 1.21:1 and would never clear the non-text
+     floor here, so the border takes the 600 step instead. `success` above
+     stays the Jade icon colour and never carries text. */
+  --color-success-fill: #ecfdf5;
+  --color-success-mark: #059669;
+  --color-success-deep: #047857;
   --color-warning: #f59e0b;
   /* Same split as the signal: #ef4444 is a mark (3.76:1, clears the 3:1
      non-text floor on borders and dots); #b91c1c is the step that carries
@@ -151,6 +161,18 @@
   border-width: 1px;
   border-style: solid;
   /* Border is a mark: Signal Blue clears the 3:1 non-text floor at 3.69. */
+  border-color: #3882f6;
+  color: #2563eb;
+}
+/* Tonal — PocketPal's btnPrimary trio (#eff6ff ground / #bfdbff border /
+   #1447e6 label), carried by LiAI's own tokens: Surface Tint ground, Signal
+   Mark border, Signal label. The reference's Load/Offload button, and the
+   one place Surface Tint is used as a button ground rather than a selected
+   element's. */
+.btn--tonal {
+  background-color: #eff6ff;
+  border-width: 1px;
+  border-style: solid;
   border-color: #3882f6;
   color: #2563eb;
 }

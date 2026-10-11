@@ -364,8 +364,10 @@ Confident and flat. Buttons never lift, never glow, and never animate their own 
 - **Solid (primary):** Signal (`#2563EB`) fill, Clean White label. **The default choice.** One per screen.
 - **Solid hover/pressed:** Deep Signal (`#1D4ED8`) fill on hover; Deep Signal plus a 2% scale-down on press.
 - **Outline (secondary):** Clean White fill, 1px Signal Mark border, Signal label. Hover steps the border to Deep Signal. Use for the second action of equal importance.
+- **Tonal:** Surface Tint (`#EFF6FF`) fill, 1px Signal Mark border, Signal label. This is PocketPal's `btnPrimary` shape and LiAI's Load/Offload button. **Recorded exception to The Tint Rule:** Surface Tint is otherwise a ground for a *selected* element and never a button fill — this is the one button that uses it, because the reference's tonal treatment is what makes a secondary-but-primary-in-context action read as quieter than Solid without going outline. Its three steps are the same tokens Outline already uses; only the ground differs, so it adds no colour.
 - **Ghost (tertiary):** transparent fill, no border, Signal label. Use for the third-and-beyond action, and for destructive-adjacent actions that should not compete with a solid red.
 - **Destructive:** Alert Red (`#B91C1C`) fill, Clean White label. Reserved for irreversible actions — delete, wipe, revoke. If a screen has both a solid primary and a destructive action, the destructive one is Outline with an Alert Red Mark border and label, not a second solid.
+- **The download green** is a fourth ground, and the only place Jade's family carries an action rather than a state: three tokens (`success-fill` `#ECFDF5`, `success-mark` `#059669`, `success-deep` `#047857`) standing in for PocketPal's `btnDownload` trio, pinned by `tests/color-contrast.test.ts` at 4.5:1 for the label on all four surfaces and 3:1 for the border. Jade itself (`#10B981`) stays the check-glyph colour and never carries text.
 - **Disabled:** Mist fill, Slate label, no border, no shadow. Disabled is a *fill and label* change, never opacity on a live element — the element must still be legible enough to be found.
 
 ### Icon Buttons
@@ -395,6 +397,8 @@ Confident and flat. Buttons never lift, never glow, and never animate their own 
 - **Border:** 1px Hairline, on all four sides — except a full-bleed element, whose left and right edges coincide with the screen edge and so take a top divider only (the composer is the only such element today). A card without a border is a mistake unless it is Mist-on-Mist.
 - **Internal padding:** 20px (`5`) on all sides. 16px for a card that contains a list of rows rather than prose.
 - **Row cards** (settings, model list, session history) drop the internal padding to 0 and let a 16px horizontal / 12px vertical row padding define the rhythm, so the divider lines run edge to edge.
+- **Model cards** are the row-card case with one refinement, taken from PocketPal's `ModelCard` anatomy (see `docs/research/2026-10-10-model-card-architecture-parity.md`): a *header* block carries its own 16px horizontal padding, and then ONE content wrapper carries it again for everything below it — the warnings, the progress bar, the action row, and the expanded details when open. The action row and the details therefore carry no padding of their own, which is what lets the hairline-bearing header, the scrolled content and the expansion all share one left edge. The details are a continuation of that wrapper, not a second region: no `border-t` re-opens a divider inside the card, and the card's own 1px border is the only enclosure.
+- **Recorded correction (2026-10-10).** The model card shipped for a while at PocketPal's 24px radius, taken wholesale over this step. It was the one card that had not been re-derived against the design system, and it is now 8px. The lesson is worth naming: *parity is a licence to copy anatomy, never a licence to copy a token.*
 
 ### Settings
 

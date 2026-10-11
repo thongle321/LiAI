@@ -6,6 +6,7 @@ export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
   displayName: "",
   systemPrompt: "",
   stopWords: [],
+  templateName: "custom",
   addBosToken: false,
   addEosToken: false,
   bosToken: "",
@@ -21,6 +22,9 @@ export function parseModelSettings(value: unknown): ModelSettings {
   return {
     displayName: typeof v.displayName === "string" ? v.displayName : "",
     systemPrompt: typeof v.systemPrompt === "string" ? v.systemPrompt : "",
+    // Absent = "custom": rows written before presets existed ARE the
+    // model-default config, so the picker reads them as Custom.
+    templateName: typeof v.templateName === "string" ? v.templateName : "custom",
     stopWords: Array.isArray(v.stopWords)
       ? v.stopWords.filter((w): w is string => typeof w === "string")
       : [],

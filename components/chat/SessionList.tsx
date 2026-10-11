@@ -17,7 +17,7 @@
  * Cancel, and a successful bulk action.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Modal, Pressable, SectionList, Text, TextInput, View } from "react-native";
 import {
   CheckCircle2,
@@ -42,6 +42,78 @@ interface MenuAnchor {
   x: number;
   y: number;
 }
+
+/** One history row, extracted and memoized (Part 2 audit, P3): the drawer
+ *  re-renders for menu anchors, notices and rename state that no row
+ *  depends on, and an inline renderItem closure re-created every row on
+ *  every one of those. Props are the only things a row reads. */
+const SessionRow = memo(function SessionRow({
+  item,
+  active,
+  marked,
+  selecting,
+  onSelect,
+  onLongPress,
+}: {
+  item: ChatSession;
+  /** The open conversation — its title is primary and its row tinted. */
+  active: boolean;
+  /** Checked, in selection mode. */
+  marked: boolean;
+  selecting: boolean;
+  onSelect: (session: ChatSession) => void;
+  onLongPress: (
+    session: ChatSession,
+    event: { nativeEvent: { pageX: number; pageY: number } },
+  ) => void;
+}) {
+  return (
+    <Pressable
+      onPress={() => onSelect(item)}
+      // PocketParity: the menu is the row's ONLY long-press, and it
+      // does not exist in selection mode — there, a tap toggles.
+      onLongPress={
+        selecting ? undefined : (e) => onLongPress(item, e as never)
+      }
+      delayLongPress={350}
+      className={`menu-row ${active ? "bg-surface-2" : ""}`}
+      accessibilityRole="button"
+      accessibilityLabel={item.title}
+      accessibilityState={{ selected: active }}
+    >
+      {selecting ? (
+        // Leading checkbox (PocketParity): the row reads as
+        // "this is selectable" from its left edge, where a list
+        // starts, instead of after the text.
+        <View className="mr-3">
+          {marked ? (
+            <CheckCircle2 size={20} color={colors.primary} />
+          ) : (
+            <Circle size={20} color={colors.secondaryText} />
+          )}
+        </View>
+      ) : null}
+      <View className="flex-1">
+        <Text
+          numberOfLines={1}
+          className={`font-sans text-body-md ${
+            active ? "text-primary" : "text-primary-text"
+          }`}
+        >
+          {item.title === "" ? "New conversation" : item.title}
+        </Text>
+        <Text className="font-sans text-body-sm text-secondary-text">
+          {formatTime(item.at)}
+        </Text>
+      </View>
+      {/* The pin star is the row's only trailing chrome now that
+          Pin/Rename/Delete moved into the long-press menu. */}
+      {!selecting && item.pinned ? (
+        <Star size={14} color={colors.primary} fill={colors.primary} />
+      ) : null}
+    </Pressable>
+  );
+});
 
 export function SessionList({
   sessions,
@@ -97,14 +169,14 @@ export function SessionList({
     setSelecting(true);
   }
 
-  function toggleSelected(id: string): void {
+  const toggleSelected = useCallback((id: string): void => {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  }
+  }, []);
 
   function toggleAll(): void {
     setSelected(allSelected ? new Set() : new Set(sessions.map((s) => s.id)));
@@ -158,17 +230,44 @@ export function SessionList({
     if (ok) setRenaming(null);
   }
 
-  async function openSession(s: ChatSession): Promise<void> {
-    // Tapping the already-open conversation does nothing further.
-    if (s.id === sessionId) return;
-    setNotice(null);
-    const ok = await onOpen(s.id);
-    if (!ok) setNotice("Couldn't load that conversation.");
-  }
+  const openSession = useCallback(
+    async (s: ChatSession): Promise<void> => {
+      // No early return for the already-open conversation: the caller
+      // navigates to the chat screen, and the drawer only closes once it
+      // has somewhere to be. Bailing out here used to make the tap look
+      // dead from any screen other than chat, where the panel happened
+      // to be covering the screen the user wanted anyway.
+      setNotice(null);
+      const ok = await onOpen(s.id);
+      if (!ok) setNotice("Couldn't load that conversation.");
+    },
+    [onOpen],
+  );
 
-  function openRowMenu(session: ChatSession, event: { nativeEvent: { pageX: number; pageY: number } }): void {
-    setMenu({ session, x: event.nativeEvent.pageX, y: event.nativeEvent.pageY });
-  }
+  const openRowMenu = useCallback(
+    (
+      session: ChatSession,
+      event: { nativeEvent: { pageX: number; pageY: number } },
+    ): void => {
+      setMenu({
+        session,
+        x: event.nativeEvent.pageX,
+        y: event.nativeEvent.pageY,
+      });
+    },
+    [],
+  );
+
+  /** One row's tap: toggle in selection mode, open otherwise. Stable —
+   *  it changes only with `selecting` and `onOpen`, which is exactly what
+   *  the memoized row must re-render for. */
+  const handleRowSelect = useCallback(
+    (s: ChatSession): void => {
+      if (selecting) toggleSelected(s.id);
+      else void openSession(s);
+    },
+    [selecting, toggleSelected, openSession],
+  );
 
   const menuSession = menu?.session;
 
@@ -253,7 +352,7 @@ export function SessionList({
       <SectionList<ChatSession, SessionSection>
         sections={sections}
         keyExtractor={(s) => s.id}
-        extraData={[sessionId, selected]}
+        extraData={[sessionId, selected, selecting]}
         // The drawer panel has no outer scroll container (AppDrawer is
         // plain flex Views), so this list owns long-history
         // reachability — rows past the fold must stay openable, and
@@ -273,57 +372,14 @@ export function SessionList({
           </Text>
         }
         renderItem={({ item }) => (
-          <Pressable
-            onPress={() => {
-              if (selecting) toggleSelected(item.id);
-              else void openSession(item);
-            }}
-            // PocketParity: the menu is the row's ONLY long-press, and it
-            // does not exist in selection mode — there, a tap toggles.
-            onLongPress={
-              selecting
-                ? undefined
-                : (e) => openRowMenu(item, e as never)
-            }
-            delayLongPress={350}
-            className={`menu-row ${
-              item.id === sessionId ? "bg-surface-2" : ""
-            }`}
-            accessibilityRole="button"
-            accessibilityLabel={item.title}
-            accessibilityState={{ selected: item.id === sessionId }}
-          >
-            {selecting ? (
-              // Leading checkbox (PocketParity): the row reads as
-              // "this is selectable" from its left edge, where a list
-              // starts, instead of after the text.
-              <View className="mr-3">
-                {selected.has(item.id) ? (
-                  <CheckCircle2 size={20} color={colors.primary} />
-                ) : (
-                  <Circle size={20} color={colors.secondaryText} />
-                )}
-              </View>
-            ) : null}
-            <View className="flex-1">
-              <Text
-                numberOfLines={1}
-                className={`font-sans text-body-md ${
-                  item.id === sessionId ? "text-primary" : "text-primary-text"
-                }`}
-              >
-                {item.title === "" ? "New conversation" : item.title}
-              </Text>
-              <Text className="font-sans text-body-sm text-secondary-text">
-                {formatTime(item.at)}
-              </Text>
-            </View>
-            {/* The pin star is the row's only trailing chrome now that
-                Pin/Rename/Delete moved into the long-press menu. */}
-            {!selecting && item.pinned ? (
-              <Star size={14} color={colors.primary} fill={colors.primary} />
-            ) : null}
-          </Pressable>
+          <SessionRow
+            item={item}
+            active={item.id === sessionId}
+            marked={selected.has(item.id)}
+            selecting={selecting}
+            onSelect={handleRowSelect}
+            onLongPress={openRowMenu}
+          />
         )}
       />
 

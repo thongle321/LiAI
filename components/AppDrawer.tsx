@@ -8,7 +8,7 @@
 
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, usePathname } from "expo-router";
 import Constants from "expo-constants";
 import {
   CircleHelp,
@@ -31,7 +31,7 @@ import { SessionList } from "./chat/SessionList.tsx";
 
 const VERSION = Constants.expoConfig?.version ?? "0.1.0";
 
-export function AppDrawerContent({ onClose }: { onClose: () => void }) {
+export function AppDrawerContent() {
   const sessionId = useChatStore((s) => s.sessionId);
   const sessions = useChatStore((s) => s.sessions);
   const newConversation = useChatStore((s) => s.newConversation);
@@ -40,6 +40,11 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
   const deleteSessions = useChatStore((s) => s.deleteSessions);
   const renameSession = useChatStore((s) => s.renameSession);
   const setPinned = useChatStore((s) => s.setPinned);
+  // The highlight is a screen fact, not a store fact: the store keeps the
+  // last session loaded while you are on another screen, and drawing it
+  // there claims you are reading it. Tapping a row still opens it from
+  // anywhere — this only affects the drawn state.
+  const onChat = usePathname() === "/chat";
 
   /** Export exactly these sessions, one JSON per conversation through the
    *  SAME serializer and read path as ChatMenu's single-session export
@@ -78,14 +83,28 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
   }
 
   async function openSession(id: string): Promise<boolean> {
-    // Tapping the already-open conversation just closes the drawer.
-    if (id === sessionId) {
-      onClose();
-      return true;
-    }
+    // Opening a conversation is only useful if you can SEE it, so this
+    // navigates to the chat screen. Without it the session really does
+    // switch in the store, but from Models / Voice / Settings / About the
+    // user is left on the screen they came from with no sign the tap did
+    // anything. From the chat screen it looked fine, because that is where
+    // they already were - which is why this read as intermittent.
+    //
+    // Switch FIRST, navigate after: going early would mount the chat screen
+    // on the PREVIOUS conversation and then swap it out under the user.
+    //
+    // No id !== sessionId check here: SessionList returns before calling
+    // this when the row tapped is already open, so that branch is
+    // unreachable from the only caller.
     const ok = await switchSession(id);
-    if (ok) onClose();
-    return ok;
+    // switchSession answers false for the session ALREADY open as well as
+    // for real failures (missing session, no store, failed load). Only the
+    // first still means "show me this one": from another screen the
+    // navigation is the entire point, so it must not be treated as a
+    // refusal to open.
+    if (!ok && id !== sessionId) return false;
+    go("/chat");
+    return true;
   }
 
   return (
@@ -96,7 +115,7 @@ export function AppDrawerContent({ onClose }: { onClose: () => void }) {
         <View className="flex-1">
           <SessionList
             sessions={sessions}
-            sessionId={sessionId}
+            sessionId={onChat ? sessionId : null}
             onOpen={(id) => openSession(id)}
             onDelete={(id) => void deleteSession(id)}
             onRename={(id, title) => renameSession(id, title)}

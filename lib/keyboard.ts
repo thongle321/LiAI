@@ -53,3 +53,35 @@ export function keyboardOcclusion(height: number, insetsBottom = 0): number {
   "worklet";
   return Math.max(0, Math.abs(height) - insetsBottom);
 }
+
+/** Seeded height of the tab bar, excluding the bottom safe-area inset.
+ *
+ * The CANONICAL definition is TAB_BAR_HEIGHT in components/BottomNav.tsx
+ * (a source scan lives in tests/keyboard-avoidance.test.ts and locks that
+ * file). This module is its only re-declaration, and it exists because
+ * BottomNav.tsx imports React Native and Uniwind: a store importing it for
+ * one number drags the native type graph into the ambient program and
+ * breaks the augmentation loading. One re-declaration, here, in the module
+ * the geometry already lives in. The value is the bar's class sum at
+ * DEFAULT font scale (listed on TAB_BAR_HEIGHT in BottomNav.tsx) — an
+ * ESTIMATE the bar's own onLayout replaces, because the label scales with
+ * the OS font setting up to 1.5x and a grown bar measures taller than any
+ * fixed sum. */
+export const TAB_BAR_HEIGHT_SEED = 69;
+
+/** The tab bar's measured height wins over the seeded class-sum constant —
+ * but a nonsense measurement must never poison it.
+ *
+ * The bar's slot height is the chat screen's keyboard compensation
+ * (keyboardOffset) AND the list's offset prop: a 0, negative or NaN there
+ * under-compensates by exactly that much, and a vertically centred child
+ * absorbs half of it as drift — the same failure mode as three disagreeing
+ * copies of the constant (60 in code, 64 in prose, 75 real). An onLayout
+ * can legitimately report 0 before first paint, so "reject, keep the
+ * seeded value" is the only safe reading of a bad number. Pure so the
+ * store's guard stays testable here — node can load this module, and it
+ * cannot load a React Native component. */
+export function resolveTabBarHeight(current: number, measured: number): number {
+  if (!Number.isFinite(measured) || measured <= 0) return current;
+  return measured;
+}

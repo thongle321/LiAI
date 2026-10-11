@@ -41,6 +41,10 @@ export const colors = {
    *  One step darker than the board's #64748B, which failed on Mist (4.34)
    *  and Surface Tint (4.37). */
   secondaryText: "#475569",
+  /** The quiet step: text that should recede but is still read. Replaces
+   *  the 70%-alpha habit, which composited Slate to 3.59:1 on white — under
+   *  the 4.5:1 floor for 14px. This is measured, not chosen by eye. */
+  secondaryTextMuted: "#5F6B7C",
   primaryText: "#0F172A",
   inverseText: "#FFFFFF",
 } as const;
@@ -94,4 +98,16 @@ export const spacing = {
   md: 16,
   lg: 24,
   xl: 32,
+} as const;
+
+/** Type sizes on THIRD-PARTY surfaces that have no Uniwind rung of their
+ * own: the markdown renderer's bubble scale (the parts `typeScale` cannot
+ * express) and inline/block code. Pinned by tests/font-scale.test.ts —
+ * one home so the chat scale cannot drift into two copies (Part 2 audit,
+ * P3). */
+export const embeddedText = {
+  /** Markdown h3 — the bubble scale's one size between title 20 and body 16. */
+  markdownH3: 18,
+  /** Inline (codespan) and block code. */
+  code: 13,
 } as const;

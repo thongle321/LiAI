@@ -22,11 +22,15 @@ function read(rel: string): string {
 
 function sourceFiles(dir: string, exts: string[]): string[] {
   const out: string[] = [];
+  // The ON-DEVICE model store at the repo root, not a source directory.
+  // Matched by absolute path: an entry-name check (`entry === "models"`)
+  // also skipped components/models/, which is 17 files of UI — the whole
+  // models screen was invisible to this guard.
+  const modelStore = path.join(ROOT, "models");
   for (const entry of readdirSync(path.join(ROOT, dir))) {
     if (entry === "node_modules" || entry === "pocketpal-ai") continue;
-    // The on-device model store, not a source directory.
-    if (entry === "models") continue;
     const full = path.join(dir, entry);
+    if (path.resolve(full) === path.resolve(modelStore)) continue;
     if (statSync(full).isDirectory()) {
       out.push(...sourceFiles(full, exts));
     } else if (exts.some((e) => entry.endsWith(e))) {
@@ -59,20 +63,106 @@ describe("touch target floor", () => {
     // the floor. Match from <Pressable to its className rather than to the
     // tag's closing >: an onPress={() => ...} arrow contains that >, so a
     // tag-shaped match truncates before ever reading the className.
-    const offenders: string[] = [];
-    for (const file of [
-      ...sourceFiles("components", [".tsx"]),
-      ...sourceFiles("app", [".tsx"]),
-    ]) {
-      const src = readFileSync(file, "utf8");
-      for (const [, before, classes] of src.matchAll(
-        /<Pressable([\s\S]*?)className="([^"]*)"/g,
-      )) {
-        if (!/onPress|onLongPress/.test(before)) continue;
-        const bad = classes.match(/\b(?:min-)?h-(?:10|11)\b/);
-        if (bad) offenders.push(`${path.relative(ROOT, file)}: ${bad[0]}`);
-      }
-    }
+    const offenders = pressables(
+      (classes) => classes.match(/\b(?:min-)?h-(?:10|11)\b/)?.[0] ?? null,
+    );
     assert.deepEqual(offenders, [], `sub-${MIN_TARGET_DP}dp pressables:\n${offenders.join("\n")}`);
   });
+
+  it("the bare text links and filter chips declare a floor", () => {
+    // A pressable with no min-h- and no padding — a text link, a filter chip
+    // — renders at its text height: ~20px, ~28px. Four of those shipped in
+    // the models cluster.
+    //
+    // NOT a blanket rule, and deliberately so. "No height declared" reads as
+    // a defect everywhere, but it is only one when nothing supplies the
+    // height: a Pressable inside a `.row` (min-height 48) or a flex parent
+    // inherits a floor this scan cannot see, and generalising the check
+    // flagged ~160 sites across a codebase whose floor is otherwise held by
+    // the BEM blocks. So the real cases are pinned by name instead, and a
+    // blanket check waits until something can resolve parent height.
+    const pinned: Array<[string, string]> = [
+      ["components/models/ModelCardDetails.tsx", "View on Hugging Face"],
+      ["components/models/DownloadErrorDialog.tsx", "View on Hugging Face"],
+      ["components/models/HFModelSearch.tsx", "setAuthorOpen(true)"],
+      ["components/models/HFModelSearch.tsx", "setSortOpen(true)"],
+    ];
+    const missing: string[] = [];
+    for (const [file, anchor] of pinned) {
+      const src = readFileSync(path.join(ROOT, file), "utf8").replace(
+        /\/\*[\s\S]*?\*\//g,
+        "",
+      );
+      const at = src.indexOf(anchor);
+      assert.ok(at >= 0, `anchor not found: ${file} — ${anchor}`);
+      const tag = src.slice(src.lastIndexOf("<Pressable", at), src.indexOf(">", at));
+      // Tailwind's 4px scale spells 48dp as `h-12` / `min-h-12` (12 x 4),
+      // NOT `min-h-48` — the number in the class is the scale step.
+      if (!/\b(?:min-)?h-12\b/.test(tag)) {
+        missing.push(`${file}: ${anchor}`);
+      }
+    }
+    assert.deepEqual(
+      missing,
+      [],
+      `these pressables declare no ${MIN_TARGET_DP}dp floor:\n${missing.join("\n")}`,
+    );
+  });
 });
+
+/** Read one element's className, whichever spelling it uses.
+ *
+ *  All three matter, and each one has hidden a regression: `"…"`, `` `…` ``,
+ *  and `{…}` — where the braces hold a MULTI-LINE ternary
+ *  (`className={disabled ? "a" : "b"}`). A regex for the last needs balanced
+ *  brace counting, because the strings inside it contain braces of their own
+ *  in the template-literal case, and the value can span lines. */
+function classNameOf(src: string, at: number): string | null {
+  const eq = src.indexOf("=", at) + 1;
+  if (eq === 0) return null;
+  let i = eq;
+  while (i < src.length && /\s/.test(src[i]!)) i += 1;
+  const open = src[i];
+  if (open === '"' || open === "`") {
+    const end = src.indexOf(open, i + 1);
+    return end === -1 ? null : src.slice(i + 1, end);
+  }
+  if (open !== "{") return null;
+  let depth = 0;
+  for (let j = i; j < src.length; j += 1) {
+    if (src[j] === "{") depth += 1;
+    else if (src[j] === "}") {
+      depth -= 1;
+      if (depth === 0) return src.slice(i + 1, j);
+    }
+  }
+  return null;
+}
+
+/** Every pressable with an onPress, and the verdict `judge` gives its
+ *  classes (a string to report, or null to pass). */
+function pressables(judge: (classes: string) => string | null): string[] {
+  const offenders: string[] = [];
+  for (const file of [
+    ...sourceFiles("components", [".tsx"]),
+    ...sourceFiles("app", [".tsx"]),
+  ]) {
+    const src = readFileSync(file, "utf8");
+    for (const m of src.matchAll(/<Pressable\b/g)) {
+      const tag = src.slice(m.index, src.indexOf(">", m.index));
+      if (!/onPress|onLongPress/.test(tag)) continue;
+      const raw = classNameOf(src, m.index + "<Pressable".length);
+      if (raw === null) continue;
+      // A ternary's arms are quoted; take every literal so each arm counts.
+      const classes = [...raw.matchAll(/["`]([^"`]*)["`]/g)]
+        .map((a) => a[1]!)
+        .join(" ");
+      const verdict = judge(classes);
+      if (verdict) {
+        const line = src.slice(0, m.index).split("\n").length;
+        offenders.push(`${path.relative(ROOT, file)}:${line}: ${verdict}`);
+      }
+    }
+  }
+  return offenders;
+}

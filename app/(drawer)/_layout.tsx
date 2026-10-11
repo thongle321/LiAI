@@ -17,6 +17,7 @@
  * (pocketpal-ai/App.tsx:120-206, SidebarContent navigates only).
  */
 
+import { View } from "react-native";
 import { Drawer } from "expo-router/drawer";
 
 import { colors, scrim } from "../../themes/tokens.ts";
@@ -27,21 +28,23 @@ export { DrawerErrorBoundary as ErrorBoundary } from "../../components/RouteErro
 
 export default function DrawerLayout() {
   return (
-    <Drawer
-      screenOptions={{
-        headerShown: false,
-        drawerStyle: { width: 280, backgroundColor: colors.surface1 },
-        overlayColor: scrim,
-      }}
-      drawerContent={(props) => (
-        <AppDrawerContent onClose={() => props.navigation.closeDrawer()} />
-      )}
-    >
-      <Drawer.Screen name="(tabs)" />
-      <Drawer.Screen name="models" />
-      <Drawer.Screen name="settings" />
-      <Drawer.Screen name="voice-settings" />
-      <Drawer.Screen name="about" />
-    </Drawer>
+    <View className="flex-1">
+      <View className="flex-1">
+        <Drawer
+          screenOptions={{
+            headerShown: false,
+            drawerStyle: { width: 280, backgroundColor: colors.surface1 },
+            overlayColor: scrim,
+          }}
+          drawerContent={() => <AppDrawerContent />}
+        >
+          <Drawer.Screen name="(tabs)" />
+          <Drawer.Screen name="models" />
+          <Drawer.Screen name="settings" />
+          <Drawer.Screen name="voice-settings" />
+          <Drawer.Screen name="about" />
+        </Drawer>
+      </View>
+    </View>
   );
 }

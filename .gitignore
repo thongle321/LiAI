@@ -22,7 +22,11 @@ expo-env.d.ts
 
 # Generated native projects (regenerate with expo prebuild)
 /ios/
-/android/
+# android/ is deliberately COMMITTED — PocketPal's way: the generated
+# manifest carries the two uses-feature camera lines (camera + camera.any,
+# required=false) that keep camera-less devices installable from the Play
+# Store, and android/.gitignore keeps build/, .cxx/, .gradle/ out.
+# `expo prebuild --clean` discards tracked native edits — restore from git.
 
 # Reference / scratch — never part of the app
 scratch/

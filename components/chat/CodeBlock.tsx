@@ -5,7 +5,7 @@ import { Check, Copy } from "lucide-react-native";
 import CodeHighlighter from "react-native-code-highlighter";
 import github from "react-syntax-highlighter/dist/esm/styles/hljs/github";
 
-import { colors, font } from "../../themes/tokens.ts";
+import { colors, font, typeScale } from "../../themes/tokens.ts";
 import { useCopy } from "../../hooks/useCopy.ts";
 
 /** github's own white code background cleared so the Mist card shows through. */
@@ -48,7 +48,11 @@ export function CodeBlock({
         // (Single Family Rule — no monospace exception).
         hljsStyle={CODE_STYLE}
         language={language}
-        textStyle={{ fontSize: 14, fontFamily: font.sans, lineHeight: 20 }}
+        textStyle={{
+          fontSize: typeScale.bodyMd.size,
+          fontFamily: font.sans,
+          lineHeight: typeScale.bodyMd.lineHeight,
+        }}
       >
         {text}
       </CodeHighlighter>

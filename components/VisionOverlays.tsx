@@ -66,7 +66,10 @@ export function VisionPreview({
           <Text className="text-center font-sans text-body-md text-primary-text">
             Camera access is needed to see.
           </Text>
-          <Pressable onPress={onOpenSettings} className="btn btn--primary mt-4">
+          <Pressable onPress={onOpenSettings} className="btn btn--primary mt-4"
+            accessibilityRole="button"
+            accessibilityLabel="Open settings"
+          >
             <Text className="font-sans-semibold text-on-primary">
               Open settings
             </Text>
@@ -297,6 +300,11 @@ export function VisionBottomPanel({
                 onPress={onOpenSettings}
                 onPressIn={settingsPress.onPressIn}
                 onPressOut={settingsPress.onPressOut}
+                accessibilityRole="button"
+                // The label IS the rendered text (label-in-name): the
+                // twin fix in voice.tsx does the same — a screen reader
+                // must announce what's on screen, not a paraphrase.
+                accessibilityLabel={issue}
               >
                 <Text className="text-center font-sans text-body-md text-primary">
                   {issue}

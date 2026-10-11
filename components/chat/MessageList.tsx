@@ -23,8 +23,8 @@
  * beside this list instead, where no inset can move it.
  */
 
-import { useCallback, useEffect, useRef, type ReactElement, type RefObject } from "react";
-import { FlatList, Platform, type ScrollViewProps } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, type ReactElement, type RefObject } from "react";
+import { FlatList, Platform, useWindowDimensions, type ScrollViewProps } from "react-native";
 import {
   KeyboardChatScrollView,
 } from "react-native-keyboard-controller";
@@ -32,6 +32,7 @@ import type { SharedValue } from "react-native-reanimated";
 
 
 import type { ChatRow } from "../../lib/chat/rows.ts";
+import { messageWidths, type MessageWidths } from "../../lib/chat/message-width.ts";
 
 /** PocketPal STICK/LEAVE hysteresis (ChatView.tsx:451): re-arm "at latest"
  * below 24px from the end, leave it above 40px. The library's own end
@@ -61,7 +62,7 @@ export function MessageList({
   listRef: RefObject<FlatList<ChatRow> | null>;
   /** Adapter rows (date headers + turns): the list never re-derives. */
   rows: ChatRow[];
-  renderRow: (row: ChatRow) => ReactElement | null;
+  renderRow: (row: ChatRow, widths: MessageWidths) => ReactElement | null;
   offset: number;
   extraContentPadding: SharedValue<number>;
   blankSpace: SharedValue<number>;
@@ -73,6 +74,13 @@ export function MessageList({
    *  shove the reader. iOS-only prop, a no-op on Android. */
   streaming: boolean;
 }) {
+  // ONE width measurement for the whole list, handed to every row
+  // (PocketParity: ChatView.tsx:836-842 computes `min(screenWidth * 0.92,
+  // 900)` once and threads it down). useWindowDimensions rather than a
+  // module-load Dimensions read, so a rotation re-measures.
+  const { width: windowWidth } = useWindowDimensions();
+  const widths = useMemo(() => messageWidths(windowWidth), [windowWidth]);
+
   // Mirrors the end state for the scroll effect, which must not re-subscribe
   // to it (it changes on every scroll and would restart the animation).
   const atEndRef = useRef(true);
@@ -156,7 +164,7 @@ export function MessageList({
       ref={listRef}
       data={rows}
       keyExtractor={(row) => (row.kind === "message" ? row.message.id : row.id)}
-      renderItem={({ item }) => renderRow(item)}
+      renderItem={({ item }) => renderRow(item, widths)}
       renderScrollComponent={renderScrollComponent}
       onScroll={handleScroll}
       onContentSizeChange={handleContentSizeChange}

@@ -19,7 +19,7 @@ import { useModelStore } from "../../store/modelStore";
 import { useChatStore } from "../../store/chat";
 import { Sheet } from "../Sheet.tsx";
 import { colors } from "../../themes/tokens.ts";
-import { formatBytes } from "./ModelBits.tsx";
+import { formatBytes, progressCaption } from "./ModelBits.tsx";
 import type { ModelFile, ModelSpec } from "../../types/models";
 
 export function ProjectorSelectorSheet({
@@ -76,9 +76,13 @@ export function ProjectorSelectorSheet({
       onClose();
       if (isActive) void releaseEngine();
       if (dependents.length > 0) {
+        // PocketParity: the dependent list gets its own labelled line
+        // (en.json models.multimodal.dependentModels). Ours DETACHES the
+        // projector rather than deleting it — a projector is not a row of
+        // its own here — so the title stays ours; only the list is copied.
         Alert.alert(
           "Vision disabled",
-          `This projector was shared. Vision is now off for: ${dependents.join(", ")}.`,
+          `This projector was shared, so vision is now off for its other models.\n\nDependent models: ${dependents.join(", ")}`,
         );
       }
     })();
@@ -124,7 +128,11 @@ export function ProjectorSelectorSheet({
                   </Text>
                   <Text className="font-sans text-body-sm text-secondary-text">
                     {inFlight
-                      ? `${model.downloadProgress}%`
+                      ? progressCaption(
+                          model.downloadedBytes,
+                          model.totalBytes,
+                          model.speedBytesPerSec ?? 0,
+                        )
                       : downloaded
                         ? "Downloaded"
                         : formatBytes(file.size)}

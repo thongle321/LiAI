@@ -23,7 +23,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { getFreeDiskStorageAsync } from "expo-file-system/legacy";
 import {
   ArrowLeft,
   Bookmark,
@@ -39,6 +38,7 @@ import {
 
 import { Sheet } from "../Sheet.tsx";
 import { useSnackbar } from "../Snackbar.tsx";
+import { useFreeSpacePoll } from "../../hooks/useStorageDisclosure.ts";
 import { colors } from "../../themes/tokens.ts";
 import { useShallow } from "zustand/shallow";
 import { useModelStore } from "../../store/modelStore";
@@ -51,6 +51,7 @@ import {
   visionSizeBreakdown,
 } from "../../lib/models/hf-format.ts";
 import { hfFileWarnings } from "../../lib/models/hf-warnings.ts";
+import { storageDisclosure } from "../../lib/models/storage-disclosure.ts";
 import type { HFWarningCode } from "../../lib/models/hf-warnings.ts";
 import type { HFModelFile, HFModelSearchResult, ModelDownloadStatus } from "../../types/models";
 import {
@@ -306,7 +307,9 @@ export function HFModelSearch({
   const [visionSheetFile, setVisionSheetFile] = useState<HFModelFile | null>(
     null,
   );
-  const [freeBytes, setFreeBytes] = useState<number | null>(null);
+  // Polled while the details sheet is open, not read once when it opened:
+  // the user may free space while looking at the file list.
+  const { freeBytes, checked } = useFreeSpacePoll(selected !== null);
   // Bumped by the filter sheets so the debounce effect re-runs: the store
   // holds the filters, and its identity never changes.
   const [filtersVersion, setFiltersVersion] = useState(0);
@@ -342,16 +345,9 @@ export function HFModelSearch({
     setSelected(result);
     setFiles([]);
     setFilesLoading(true);
-    setFreeBytes(null);
     try {
-      const [loaded, free] = await Promise.all([
-        getModelFiles(result.modelId),
-        // Free disk is best-effort: a null means "unknown", which must
-        // never disable the download button.
-        getFreeDiskStorageAsync().catch(() => null),
-      ]);
+      const loaded = await getModelFiles(result.modelId);
       setFiles(loaded);
-      setFreeBytes(free);
     } catch (error) {
       console.error("Failed to load model files:", error);
     } finally {
@@ -452,7 +448,12 @@ export function HFModelSearch({
       freeBytes,
       learnedCeilingBytes: largestSuccessfulBytes,
     });
-    const outOfSpace = freeBytes !== null && breakdown.total > freeBytes;
+    const fit = storageDisclosure({
+      modelBytes: breakdown.llmSize,
+      projectorBytes: breakdown.mmprojSize ?? 0,
+      freeBytes,
+      checked,
+    });
 
     return (
       <View className="py-3 border-b border-border">
@@ -461,6 +462,17 @@ export function HFModelSearch({
             <Text className="font-sans text-body-md text-primary-text">{file.name}</Text>
             <View className="flex-row flex-wrap items-center gap-2 mt-2">
               <Chip label="GGUF" />
+              {/* A gated repo's file needs the HF token; without the chip a
+                  download 401s halfway (PocketParity: ModelFileCard.tsx
+                  :323-338). */}
+              {result.gated ? (
+                <View className="flex-row items-center gap-1 rounded bg-surface-2 px-2 py-0.5">
+                  <Lock size={10} color={colors.secondaryText} />
+                  <Text className="font-sans text-caption text-secondary-text">
+                    Requires Token
+                  </Text>
+                </View>
+              ) : null}
               {/* Vision is a DECISION, not a label: it opens the sheet that
                   downloads the pair (or deliberately skips it). The plain
                   Download button beside it still takes the default. */}
@@ -478,14 +490,14 @@ export function HFModelSearch({
               ) : null}
               {/* A vision model's real footprint is the pair, so the
                   projector is priced into the number next to the button. */}
-              <Text className="font-sans text-body-sm text-secondary-text/70">
+              <Text className="font-sans text-body-sm text-secondary-text-muted">
                 {breakdown.mmprojSize !== null
                   ? `${formatBytes(breakdown.llmSize)} + ${formatBytes(breakdown.mmprojSize)} projector`
                   : formatBytes(file.size)}
               </Text>
-              {outOfSpace ? (
-                <Text className="font-sans text-caption text-error">
-                  {`Only ${formatBytes(freeBytes ?? 0)} free`}
+              {fit.message ? (
+                <Text className="storage-warning">
+                  {fit.message}
                 </Text>
               ) : null}
             </View>
@@ -508,15 +520,11 @@ export function HFModelSearch({
                 fill={bookmarked ? colors.primary : "none"}
               />
             </Pressable>
-            {isProgressVisible(status) ? (
-              <CancelDownloadButton
-                onPress={() => void cancelModelDownload(specId)}
-              />
-            ) : (
+            {isProgressVisible(status) ? null : (
               <DownloadButton
                 status={status}
                 progress={progress}
-                disabled={outOfSpace || status === "completed"}
+                disabled={!fit.fits || status === "completed"}
                 onPress={() => onDownload(result, file)}
                 onPause={() => void pauseModelDownload(specId)}
                 onResume={() => void resumeModelDownload(specId)}
@@ -532,7 +540,15 @@ export function HFModelSearch({
           </View>
         ) : null}
         {isProgressVisible(status) ? (
-          <DownloadProgressBar progress={progress} speed={spec?.speedBytesPerSec} />
+          <>
+            <DownloadProgressBar
+              progress={progress}
+              downloaded={spec?.downloadedBytes ?? 0}
+              total={spec?.totalBytes ?? 0}
+              speed={spec?.speedBytesPerSec}
+            />
+            <CancelDownloadButton onPress={() => void cancelModelDownload(specId)} />
+          </>
         ) : null}
       </View>
     );
@@ -556,20 +572,20 @@ export function HFModelSearch({
               {extractHFModelTitle(result.modelId)}
             </Text>
           </View>
-          <Text className="font-sans text-body-sm text-secondary-text/70 mt-1">
+          <Text className="font-sans text-body-sm text-secondary-text-muted mt-1">
             {`by ${result.author}`}
           </Text>
         </View>
         <ChevronRight size={20} color={colors.secondaryText} />
       </View>
       <View className="flex-row flex-wrap items-center gap-2 mt-2">
-        <Text className="font-sans text-body-sm text-secondary-text/70">
+        <Text className="font-sans text-body-sm text-secondary-text-muted">
           {result.lastModified ? timeAgo(result.lastModified, Date.now(), false) : ""}
         </Text>
-        <Text className="font-sans text-body-sm text-secondary-text/70">
+        <Text className="font-sans text-body-sm text-secondary-text-muted">
           {`${formatNumber(result.downloads)} downloads`}
         </Text>
-        <Text className="font-sans text-body-sm text-secondary-text/70">
+        <Text className="font-sans text-body-sm text-secondary-text-muted">
           {`${formatNumber(result.likes)} likes`}
         </Text>
         {result.gated ? (
@@ -625,7 +641,7 @@ export function HFModelSearch({
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="pt-2">
               <Pressable
                 onPress={() => setAuthorOpen(true)}
-                className={`flex-row items-center gap-1 rounded-full px-3 py-1.5 ${
+                className={`min-h-12 flex-row items-center gap-1 rounded-full px-3 ${
                   searchFilters.author
                     ? " bg-surface-3"
                     : " border border-border"
@@ -642,7 +658,7 @@ export function HFModelSearch({
               </Pressable>
               <Pressable
                 onPress={() => setSortOpen(true)}
-                className={`ml-2 flex-row items-center gap-1 rounded-full px-3 py-1.5 ${
+                className={`ml-2 min-h-12 flex-row items-center gap-1 rounded-full px-3 ${
                   "border border-border"
                 }`}
                 accessibilityRole="button"
@@ -737,7 +753,7 @@ export function HFModelSearch({
                 >
                   <ArrowLeft size={20} color={colors.secondaryText} />
                 </Pressable>
-                <Text className="flex-1 font-sans text-body-sm text-secondary-text/70">
+                <Text className="flex-1 font-sans text-body-sm text-secondary-text-muted">
                   {selected.author}
                 </Text>
                 {isVision ? <Chip label="Vision" /> : null}
@@ -753,7 +769,10 @@ export function HFModelSearch({
                 ) : null}
               </View>
               <Text className="font-sans-semibold text-body-md text-primary-text mt-3 mb-1">
-                Files
+                {/* en.json `models.details.title`, verbatim — it names the
+                    file KIND, which is the whole difference between this
+                    list and a folder of repository files. */}
+                Available GGUF Files
               </Text>
             </View>
             {filesLoading ? (

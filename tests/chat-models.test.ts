@@ -11,10 +11,17 @@ import assert from "node:assert/strict";
 
 import { pickableModels, providerHost } from "../lib/chat/models.ts";
 
+// A realistic ModelSpec slice. `files` and `origin` are load-bearing, not
+// decoration: readiness is the engine's `isLocalModelReady`, which requires
+// a file on disk and rejects a remote provider's spec. A fixture without
+// them describes a model that could never be loaded, and would pass here
+// while the composer said "Model not loaded.".
 const dl = (id: string, status = "completed") => ({
   id,
   name: `model ${id}`,
   downloadStatus: status,
+  origin: "huggingface" as const,
+  files: [{ name: `${id}.gguf` }],
 });
 
 describe("pickableModels", () => {
@@ -53,6 +60,13 @@ describe("pickableModels", () => {
 
   it("is empty when nothing is available, so the submenu is omitted", () => {
     assert.deepEqual(pickableModels([dl("a", "downloading")], [], null), []);
+  });
+
+  it("hides a completed spec that has no file to load", () => {
+    // The engine cannot load it, so the menu must not offer it — the two
+    // used to disagree here and the composer was the one that lost.
+    const headless = { ...dl("a"), files: [] };
+    assert.deepEqual(pickableModels([headless], [], null), []);
   });
 });
 

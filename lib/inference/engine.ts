@@ -7,7 +7,8 @@
  */
 
 import { buildRemoteModelSpec } from "../models/remote-api.ts";
-import type { ModelSpec, RemoteApiProvider } from "../../types/models.ts";
+import type { EffortLevel } from "../reasoning-capability.ts";
+import type { ModelOrigin, ModelSpec, RemoteApiProvider } from "../../types/models.ts";
 // The timings shape is a DOMAIN type, defined once in types/chat.ts and
 // shared: the engine projects it, the store persists it, the footer reads
 // it. Restating it here would be a second definition waiting to drift.
@@ -111,6 +112,12 @@ export interface CompletionRequest {
   /** Per-model chat-template override (PocketPal chatTemplate). llama.rn
    *  only; remote engines use the provider's own template. "" = default. */
   chatTemplate?: string;
+  /** Graded reasoning effort. Undefined sends nothing — the model's own
+   *  default depth stands. Reaches llama.rn as
+   *  `chat_template_kwargs.reasoning_effort`, the supported equivalent of
+   *  llama.cpp's --reasoning-effort; only templates that read the kwarg act
+   *  on it (lib/reasoning-capability.ts). */
+  reasoningEffort?: EffortLevel;
   /** Per-model add-generation-prompt override (PocketPal parity).
    *  llama.rn only. */
   addGenerationPrompt?: boolean;
@@ -129,6 +136,34 @@ export type EngineSource =
   | { kind: "local"; fileName: string }
   | { kind: "remote"; provider: RemoteApiProvider };
 
+/** Can this spec be loaded as a LOCAL model right now?
+ *
+ * ONE predicate, because two readers used to answer this differently and
+ * the composer lost. `selectEngineSource` needed a file; the header's
+ * pickableModels only checked `downloadStatus`. A remote provider is
+ * written into `models` as a spec — `origin: "remote_api"`, `files: []`,
+ * `downloadStatus: "completed"` (lib/models/remote-api.ts) — because that
+ * spec is the only thing that can mark a remote model active in the header.
+ * So the header offered it as a local model, chat.tsx's
+ * `target.host === undefined` handed its `remote-…` id to
+ * `setActiveModel(id, "local")`, and from then on the composer read
+ * "Model not loaded." beneath a header still naming the model.
+ *
+ * `origin` is tested alongside the file so the rule reads the same at both
+ * call sites and survives a spec that carries a placeholder file.
+ */
+export function isLocalModelReady(spec: {
+  origin?: ModelOrigin;
+  downloadStatus: string;
+  files?: ReadonlyArray<unknown>;
+}): boolean {
+  return (
+    spec.origin !== "remote_api" &&
+    spec.downloadStatus === "completed" &&
+    (spec.files?.length ?? 0) > 0
+  );
+}
+
 /** Local-first pick from the same active-model state the chat uses. */
 export function selectEngineSource(input: {
   activeModelId: string | null;
@@ -146,7 +181,7 @@ export function selectEngineSource(input: {
   }
   const spec = input.models.find((m) => m.id === activeModelId);
   const file = spec?.files[0];
-  if (!spec || !file || spec.downloadStatus !== "completed") return null;
+  if (!spec || !file || !isLocalModelReady(spec)) return null;
   return { kind: "local", fileName: file.name };
 }
 

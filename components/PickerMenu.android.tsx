@@ -23,7 +23,7 @@ import {
 import { defaultMinSize, menuAnchor } from "@expo/ui/jetpack-compose/modifiers";
 import { ChevronDown } from "lucide-react-native";
 
-import { colors } from "../themes/tokens.ts";
+import { colors, typeScale } from "../themes/tokens.ts";
 import type { PickerMenuProps } from "./PickerMenu";
 
 export function PickerMenu<T extends string>({
@@ -60,7 +60,7 @@ export function PickerMenu<T extends string>({
                 actually reads a long name. */}
             <ComposeText
               color={colors.secondaryText}
-              style={{ fontSize: 14 }}
+              style={{ fontSize: typeScale.bodyMd.size }}
               maxLines={1}
               overflow="ellipsis"
             >
@@ -88,7 +88,7 @@ export function PickerMenu<T extends string>({
                 }}
               >
                 <DropdownMenuItem.Text>
-                  <ComposeText color={colors.primaryText} style={{ fontSize: 14 }}>
+                  <ComposeText color={colors.primaryText} style={{ fontSize: typeScale.bodyMd.size }}>
                     {show(option)}
                   </ComposeText>
                 </DropdownMenuItem.Text>

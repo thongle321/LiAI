@@ -35,9 +35,13 @@ export function buildLocalModelSpec(input: {
   };
 }
 
-/** Numbered fallback for keep-both collisions: "model.gguf" -> "model (2).gguf". */
+/** Numbered fallback for keep-both collisions: "model.gguf" -> "model_1.gguf".
+ *
+ *  PocketParity: ModelsScreen.tsx:231-244 splits the extension off, loops
+ *  `counter` from 1 until the name is free, and writes `${name}_${counter}.
+ *  ${ext}` — underscore, from one, not a parenthesised count. */
 export function numberedFileName(fileName: string, n: number): string {
   const dot = fileName.lastIndexOf(".");
-  if (dot <= 0) return `${fileName} (${n})`;
-  return `${fileName.slice(0, dot)} (${n})${fileName.slice(dot)}`;
+  if (dot <= 0) return `${fileName}_${n}`;
+  return `${fileName.slice(0, dot)}_${n}${fileName.slice(dot)}`;
 }

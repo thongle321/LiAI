@@ -201,13 +201,21 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
     const model = get().getModel(modelId);
     if (model && model.origin !== "remote_api" && model.files[0]) {
       const fs = await legacyFs();
-      // Delete local file if exists (downloads in models/, imports in models/local/)
+      // Delete local file if exists (downloads in models/, imports in models/local/).
+      // The paired projector goes with it (audit finding 6): an mmproj has
+      // no owner once the model is deleted, and no other UI path can ever
+      // reclaim the hundreds of MB it holds.
+      const names = [model.files[0].name, model.projector?.name].filter(
+        (name): name is string => typeof name === "string" && name !== "",
+      );
       for (const dir of ["models/", "models/local/"]) {
-        const filePath = `${fs.documentDirectory}${dir}${model.files[0].name}`;
-        try {
-          await fs.deleteAsync(filePath, { idempotent: true });
-        } catch {
-          // Ignore
+        for (const name of names) {
+          const filePath = `${fs.documentDirectory}${dir}${name}`;
+          try {
+            await fs.deleteAsync(filePath, { idempotent: true });
+          } catch {
+            // Ignore
+          }
         }
       }
     }

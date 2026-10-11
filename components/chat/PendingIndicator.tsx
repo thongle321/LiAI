@@ -47,8 +47,8 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { APP_NAME } from "../../constants/app.ts";
-import { AssistantAvatar } from "./AssistantAvatar.tsx";
 import { MOTION_DURATION_MS, fadeEntering, fadeExiting } from "../../lib/motion.ts";
+import type { MessageWidths } from "../../lib/chat/message-width.ts";
 import { useChatStore } from "../../store/chat";
 import { formatPendingRow, phaseLabel } from "../../lib/chat/pending-phase.ts";
 
@@ -80,7 +80,15 @@ function useElapsed(startedAt: number | null): number {
   return elapsed;
 }
 
-export function PendingIndicator({ startedAt }: { startedAt: number | null }) {
+export function PendingIndicator({
+  startedAt,
+  widths,
+}: {
+  startedAt: number | null;
+  /** The list's one measured width, so this row lines up with the reply
+   *  it is standing in for. */
+  widths: MessageWidths;
+}) {
   const duration = MOTION_DURATION_MS;
   const elapsed = useElapsed(startedAt);
   // The in-flight talent arrives through the store, not a prop: the
@@ -107,7 +115,8 @@ export function PendingIndicator({ startedAt }: { startedAt: number | null }) {
     <Animated.View
       entering={fadeEntering(duration)}
       exiting={fadeExiting(duration)}
-      className="my-1 max-w-[75%] flex-row self-start"
+      className="mb-4 self-start"
+      style={{ maxWidth: widths.assistant }}
       accessibilityRole="progressbar"
       accessibilityLiveRegion="polite"
       // Seconds are spoken, not just drawn: a screen-reader user gets the
@@ -121,8 +130,10 @@ export function PendingIndicator({ startedAt }: { startedAt: number | null }) {
             : `${APP_NAME} is replying${phaseWords}, ${elapsed} seconds`
       }
     >
-      <AssistantAvatar shown />
-      <View className="flex-row items-center gap-2 rounded-xl rounded-tl-sm border border-border bg-surface-1 px-5 py-4">
+      {/* No bubble and no avatar, matching PocketPal's PendingIndicator
+          (styles.ts:7-19): a bare dot row on the page. The dots keep our
+          own size — that is a token value, not their architecture. */}
+      <View className="flex-row items-center gap-2 py-2.5">
         <Dot delayMs={0} />
         <Dot delayMs={200} />
         <Dot delayMs={400} />

@@ -24,7 +24,7 @@ import {
   useRouter,
 } from "expo-router";
 import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
-import { Menu, SquarePen } from "lucide-react-native";
+import { ChevronDown, Menu, SquarePen } from "lucide-react-native";
 
 import { colors } from "../../../themes/tokens.ts";
 import { filterMessages } from "../../../lib/chat/filter.ts";
@@ -36,18 +36,15 @@ import {
   usePressFeedback,
 } from "../../../lib/motion.ts";
 import { APP_NAME } from "../../../constants/app.ts";
-import { TAB_BAR_HEIGHT } from "../../../components/BottomNav.tsx";
 import { useChatStore } from "../../../store/chat.ts";
+import { useKeyboardStore } from "../../../store/keyboard.ts";
 import { useModelStore } from "../../../store/modelStore";
 import { useInference } from "../../../store/inference.ts";
 import { useKeyboardLift } from "../../../hooks/useKeyboardLift.ts";
-import { useKeyboardState } from "react-native-keyboard-controller";
 import { MessageListItem } from "../../../components/chat/MessageListItem.tsx";
 import { ChatEmptyPlaceholder } from "../../../components/chat/ChatEmptyPlaceholder.tsx";
-import { DateHeader } from "../../../components/chat/DateHeader.tsx";
 import { PendingIndicator } from "../../../components/chat/PendingIndicator.tsx";
 import { MessageInput } from "../../../components/chat/MessageInput.tsx";
-import { UsageStats } from "../../../components/chat/UsageStats.tsx";
 import { SuggestedPrompts } from "../../../components/chat/SuggestedPrompts.tsx";
 import { MessageList } from "../../../components/chat/MessageList.tsx";
 import {
@@ -69,6 +66,7 @@ import { useModelReady } from "../../../hooks/useModelReady.ts";
 import { GenerationSettingsSheet } from "../../../components/chat/GenerationSettingsSheet.tsx";
 import { ChatWarningSnackbar } from "../../../components/chat/ChatWarningSnackbar.tsx";
 import { ChatMenu } from "../../../components/chat/ChatMenu.tsx";
+import { ModelPickerSheet } from "../../../components/chat/ModelPickerSheet.tsx";
 
 export default function ChatRoute() {
   const messages = useChatStore((s) => s.messages);
@@ -114,6 +112,19 @@ export default function ChatRoute() {
   const checkHealth = useChatStore((s) => s.checkHealth);
   const send = useChatStore((s) => s.send);
   const retry = useChatStore((s) => s.retry);
+  // The failed turn's own retry, which used to live on the card this screen
+  // no longer renders. The snackbar carries no message id, so the newest
+  // message still carrying an error is the turn it stands for — the same
+  // turn the deleted card sat on.
+  const retryFailedTurn = () => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.error !== undefined) {
+        void retry(m.id);
+        return;
+      }
+    }
+  };
   const regenerate = useChatStore((s) => s.regenerate);
   const newConversation = useChatStore((s) => s.newConversation);
   const startEdit = useChatStore((s) => s.startEdit);
@@ -160,6 +171,29 @@ export default function ChatRoute() {
     },
     [menuModels, setActiveModel, setActiveRemoteApi],
   );
+  // Row actions carry the message id instead of closing over the row: a
+  // per-row arrow is a fresh prop identity on every screen render, which
+  // defeats memo(MessageListItem) and re-renders every visible row on each
+  // keyboard toggle — the jank half of the reported flash with a model
+  // loaded. Rows are memoized, so stable handlers let a keyboard toggle
+  // skip the rows entirely. startEdit already has this exact signature and
+  // identity, so it passes through unwrapped; the other two bind the id
+  // onto a store action that takes only part of it.
+  const handleRegenerate = useCallback(
+    (messageId: string) => {
+      void regenerate(messageId);
+    },
+    [regenerate],
+  );
+  const handleRegenerateWith = useCallback(
+    (messageId: string, modelId: string) => {
+      // Switch first, then re-answer: EngineManager swaps the slot on the
+      // next ensure(), so the rerun lands on the model the user picked.
+      switchToModel(modelId);
+      void regenerate(messageId);
+    },
+    [switchToModel, regenerate],
+  );
   const activeModelLabel = useMemo(() => {
     const m = menuModels.find((x) => x.active);
     if (m === undefined) return null;
@@ -177,7 +211,9 @@ export default function ChatRoute() {
   const [query, setQuery] = useState("");
 
   const visible = searchOpen ? filterMessages(messages, query) : messages;
-  // Adapter rows for the list: date headers + group/avatar/status flags.
+  // Adapter rows for the list: group/avatar/status flags. No day dividers
+  // — PocketPal's date-header prop defaults false and their screen never
+  // passes it, so their chat has none either (lib/chat/rows.ts).
   // Memoized so the list's row-count follow effect can't retrigger on
   // identity churn — a re-render alone must never move the list.
   const rows = useMemo(
@@ -220,7 +256,13 @@ export default function ChatRoute() {
   // only with no model and no conversation; the empty thread with a model is
   // SuggestedPrompts' job.
   const emptyState = messages.length === 0 && query.trim() === "";
-  const showPlaceholder = !ready && emptyState;
+  // PocketPal's single-source gate: the placeholder asks whether a MODEL is
+  // active, not whether the transport is healthy. Gating it on `connection`
+  // made it a health flap — connection is resolved only at mount and on
+  // model change, so it goes stale in both directions, and the card could
+  // vanish while a model sat loaded. `ready` keeps its real consumers:
+  // send-enable and the prompt chips.
+  const showPlaceholder = activeModelId === null && emptyState;
 
   const motionDuration = MOTION_DURATION_MS;
 
@@ -355,7 +397,11 @@ export default function ChatRoute() {
   const [atEnd, setAtEnd] = useState(true);
   const [listHeight, setListHeight] = useState(0);
   // What the list must clear: the tab bar and the safe-area inset below it.
-  const keyboardOffset = insets.bottom + TAB_BAR_HEIGHT;
+  // The bar's own height is seeded from its class-sum constant and
+  // replaced by its measured height (store/keyboard.ts), so a class change
+  // cannot silently drift the compensation again.
+  const tabBarHeight = useKeyboardStore((s) => s.tabBarHeight);
+  const keyboardOffset = insets.bottom + tabBarHeight;
   // The tab bar renders null while the keyboard is up ((tabs)/_layout.tsx:42),
   // so the screen — and this column with it — GROWS by exactly that much. A
   // vertically centred child would then slide down by half of it, which is
@@ -363,8 +409,41 @@ export default function ChatRoute() {
   // keyboard opened. The keyboard height is not the cause; this is. Give the
   // two column-anchored overlays the same bottom back so their centring box is
   // identical in both states. The screen-anchored ones need nothing.
-  const keyboardVisible = useKeyboardState((s) => s.isVisible);
+  //
+  // BOTH this flag and the bar's unmount come from one store
+  // (store/keyboard.ts), written in one place (KeyboardVisibilitySync in
+  // app/_layout.tsx), so they commit together — two independent
+  // useKeyboardState subscribers could land a frame apart, shifting the
+  // column-anchored overlays for a frame even though the static geometry
+  // is exact.
+  const keyboardVisible = useKeyboardStore((s) => s.isVisible);
   const tabBarCompensation = keyboardVisible ? keyboardOffset : 0;
+  // TEMPORARY __DEV__ PROBE — the empty card was reported moving on a
+  // 2026-10-07 Android build (post-fix, see docs/research/2026-10-08-
+  // pocketpal-chat-empty-view-keyboard.md) while every static input says
+  // its box is invariant. Printing both boxes on each keyboard toggle turns
+  // "I don't know if the whole screen moves" into numbers. Strip with its
+  // two onLayout hooks before committing any fix.
+  const probeColumn = useRef(0);
+  const probeOverlay = useRef(0);
+  useEffect(() => {
+    if (!__DEV__) return;
+    console.log(
+      "[empty-view probe]",
+      JSON.stringify({
+        keyboard: keyboardVisible,
+        column: probeColumn.current,
+        overlay: probeOverlay.current,
+        list: listHeight,
+        composer: composerHeight,
+        compensation: tabBarCompensation,
+        offset: keyboardOffset,
+      }),
+    );
+    // Probe deliberately keyed on the toggle alone: the numbers are only
+    // interesting at the two keyboard states, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyboardVisible]);
   // Height of the field, which IS the composer. NOT a delta from a baseline,
   // unlike the library's example: the field is out of flow, so nothing else
   // accounts for it and the newest message would sit behind it. The banners
@@ -413,6 +492,12 @@ export default function ChatRoute() {
   const menuPress = usePressFeedback();
   const penPress = usePressFeedback();
   const [generationOpen, setGenerationOpen] = useState(false);
+  // PocketPal's in-chat model picker: opened from the empty thread's CTA so
+  // activating a model no longer means leaving the conversation. There is
+  // deliberately no composer chevron (that decision predates this: the
+  // header title routes to /models, and each message offers "Regenerate
+  // with…"); the picker is the no-model path only.
+  const [pickerOpen, setPickerOpen] = useState(false);
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
 
@@ -556,7 +641,12 @@ export default function ChatRoute() {
           keyboard opens. The library's guide is also explicit that
           KeyboardAvoidingView is the wrong tool for chat, so there is no KAV
           on this screen. */}
-      <View className="flex-1">
+      <View
+        className="flex-1"
+        onLayout={(e) => {
+          probeColumn.current = e.nativeEvent.layout.height;
+        }}
+      >
         <View
           className="flex-1"
           onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
@@ -569,30 +659,20 @@ export default function ChatRoute() {
             blankSpace={blankSpace}
             onEndVisibleChange={setAtEnd}
             streaming={streaming}
-            renderRow={(row) =>
-              row.kind === "date" ? (
-                <DateHeader label={row.label} />
-              ) : row.kind === "pending" ? (
-                <PendingIndicator startedAt={turnStartedAt} />
+            renderRow={(row, widths) =>
+              row.kind === "pending" ? (
+                <PendingIndicator startedAt={turnStartedAt} widths={widths} />
               ) : (
                 <MessageListItem
                   row={row}
-                  onRetry={() => void retry(row.message.id)}
+                  widths={widths}
                   contextBannerVisible={contextFullShowing}
                   canRun={canRun}
                   models={menuModels}
-                  onEdit={() => startEdit(row.message.id)}
-                  onRegenerateWith={(modelId: string) => {
-                    // Switch first, then re-answer: EngineManager swaps
-                    // the slot on the next ensure(), so the rerun lands on
-                    // the model the user picked.
-                    switchToModel(modelId);
-                    void regenerate(row.message.id);
-                  }}
+                  onEdit={startEdit}
+                  onRegenerateWith={handleRegenerateWith}
                   onRegenerate={
-                    row.message.role === "assistant"
-                      ? () => void regenerate(row.message.id)
-                      : null
+                    row.message.role === "assistant" ? handleRegenerate : null
                   }
                 />
               )
@@ -609,9 +689,14 @@ export default function ChatRoute() {
           <View
             className="absolute inset-x-0 top-0"
             style={{ bottom: composerHeight + tabBarCompensation }}
+            onLayout={(e) => {
+              probeOverlay.current = e.nativeEvent.layout.height;
+            }}
             pointerEvents="box-none"
           >
-            <ChatEmptyPlaceholder />
+            <ChatEmptyPlaceholder
+              onSelectModel={() => setPickerOpen(true)}
+            />
           </View>
         )}
         {/* Jump to latest: an overlay pinned to the content column's
@@ -619,7 +704,13 @@ export default function ChatRoute() {
             placement. It lifts on the same hook as the composer so the two
             rise welded together, and only appears when the reader has
             actually scrolled away from the end, which is the only time the
-            list stopped following along. */}
+            list stopped following along.
+
+            Icon-only, like PocketPal's scroll-to-bottom FAB: a filled
+            circle with a chevron-down (their styles.scrollToBottomButton is
+            a 35px primary circle, chevron 20 in onPrimary — ours is the
+            48dp touch floor DESIGN.md requires, same role). With the label
+            gone, the accessibility label carries the whole meaning. */}
         {!atEnd && messages.length > 0 && (
           <Animated.View
             style={[composerLift, { bottom: composerHeight + tabBarCompensation }]}
@@ -628,17 +719,40 @@ export default function ChatRoute() {
           >
             <Pressable
               onPress={() => listRef.current?.scrollToEnd({ animated: true })}
-              className="btn btn--secondary min-h-12 px-4"
+              className="h-12 w-12 items-center justify-center rounded-full bg-primary"
               accessibilityRole="button"
               accessibilityLabel="Jump to latest message"
             >
-              <Text className="font-sans text-body-sm text-primary">
-                Jump to latest
-              </Text>
+              <ChevronDown size={20} color={colors.onPrimary} />
             </Pressable>
           </Animated.View>
         )}
       </View>
+
+      {/* Keyboard strip. While the keyboard animates in, the frames between
+          the tab bar unmounting and the keyboard covering its slot would
+          show this screen's base colour where the bar's Clean White used to
+          be — a colour flash on every open and close (most exposed with a
+          model loaded, because then the strip is visible rather than covered
+          by the placeholder card). This is the bar's own colour and height,
+          flipped by the SAME store in the SAME commit as the bar's unmount,
+          so no frame mixes the two. Behind the fully open keyboard it is
+          invisible; it exists only for the transition.
+
+          Paint order is load-bearing: it sits BEFORE the composer and the
+          overlay group precisely so they paint OVER it. Those are lifted by
+          the keyboard, so for the transition frames their lower edges cross
+          this band — and the composer's control row carries coloured
+          buttons (the send fill). A strip above them would hide the send
+          button for the length of the keyboard animation. pointerEvents is
+          none, so the only thing this box can do is paint. */}
+      {keyboardVisible && (
+        <View
+          className="absolute inset-x-0 bottom-0 bg-surface-1"
+          style={{ height: keyboardOffset }}
+          pointerEvents="none"
+        />
+      )}
 
       {/* The composer. It IS the floating box: absolutely positioned, out of
           the column's flow, lifting itself, and reporting its own height.
@@ -678,6 +792,7 @@ export default function ChatRoute() {
           <ChatWarningSnackbar
             warning={chatWarning}
             onDismiss={dismissWarning}
+            onRetry={retryFailedTurn}
           />
   {/* `?? 0` is dead-in-practice: a FULL banner implies the local engine
       (remote hardcodes contextFull: false) so windowSize is nCtx there,
@@ -704,7 +819,6 @@ export default function ChatRoute() {
         {ready && emptyState && (
           <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
         )}
-        <UsageStats messages={messages} />
       </Animated.View>
       {/* The ladder lives OUTSIDE the overlay row: it is a modal sheet
           with its own scrim, so it must not inherit the composer's lift
@@ -734,6 +848,10 @@ export default function ChatRoute() {
       <GenerationSettingsSheet
         visible={generationOpen}
         onClose={() => setGenerationOpen(false)}
+      />
+      <ModelPickerSheet
+        visible={pickerOpen}
+        onClose={() => setPickerOpen(false)}
       />
     </SafeAreaView>
   );

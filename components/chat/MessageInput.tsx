@@ -24,6 +24,7 @@ import {
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
 import Animated from "react-native-reanimated";
+import { KeyboardControllerNative } from "react-native-keyboard-controller";
 
 import * as Haptics from "expo-haptics";
 
@@ -322,6 +323,14 @@ export function MessageInput({
     // Spurious stop() with nothing live confuses the native session;
     // only stop an active dictate before sending.
     if (listening) safeStopDictation();
+    // PocketPal parity (ChatView.tsx:447): sending dismisses the
+    // keyboard. The message is committed; the keyboard's job is done,
+    // and leaving it up strands the composer over the reply that is
+    // about to stream in behind it. KeyboardControllerNative.dismiss is
+    // this version's API (1.21.9 exports no `Keyboard` class; that is
+    // the newer surface pocketpal-ai is on). keepFocus=false matches
+    // Keyboard.dismiss()'s default.
+    KeyboardControllerNative.dismiss(false, true);
     // The store clears the draft once the text lives in its bubble.
     await onSend(draft, attached.length > 0 ? attached : undefined);
     setAttached([]);
@@ -629,7 +638,12 @@ function PlusItem({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} className="flex-row items-center gap-3 px-5 py-2">
+    <Pressable
+      onPress={onPress}
+      className="flex-row items-center gap-3 px-5 py-2"
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
       <Icon size={18} color={colors.primary} />
       <Text className="font-sans text-body-sm text-primary-text">{label}</Text>
     </Pressable>

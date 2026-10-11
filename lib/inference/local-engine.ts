@@ -90,6 +90,10 @@ export interface LlamaCompletionParams extends Partial<LlamaSamplerParams> {
   stop?: Array<string>;
   /** Per-model chat-template override, forwarded flat like jinja. */
   chat_template?: string;
+  /** jinja template kwargs (llama.rn CompletionBaseParams). The effort
+   *  path rides here: llama.cpp merges these into the template input, so
+   *  `reasoning_effort` behaves exactly like the --reasoning-effort flag. */
+  chat_template_kwargs?: Record<string, string | number | boolean>;
   /** Per-model generation-prompt override, forwarded flat like jinja. */
   add_generation_prompt?: boolean;
   // The sampler's 16 fields arrive as FLAT, top-level siblings here — they
@@ -179,6 +183,11 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
             : {}),
           ...(request.enableThinking !== undefined
             ? { enable_thinking: request.enableThinking }
+            : {}),
+          // Effort as a template kwarg — absent entirely when unset, so
+          // the template's own default reasoning depth stands.
+          ...(request.reasoningEffort !== undefined
+            ? { chat_template_kwargs: { reasoning_effort: request.reasoningEffort } }
             : {}),
           ...(request.jinja !== undefined ? { jinja: request.jinja } : {}),
           // Flat, top-level, and NOT nested under a key: llama.rn's

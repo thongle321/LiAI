@@ -8,7 +8,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { resumeDataForPartial } from "../lib/models/resume-state.ts";
+import { classifyFileOnDisk, resumeDataForPartial } from "../lib/models/resume-state.ts";
 
 describe("resumeDataForPartial", () => {
   it("returns the partial size when a middle chunk exists", () => {
@@ -30,5 +30,33 @@ describe("resumeDataForPartial", () => {
   it("returns null for non-finite or unknown totals", () => {
     assert.equal(resumeDataForPartial(100, 0), null);
     assert.equal(resumeDataForPartial(100, Number.NaN), null);
+  });
+});
+
+describe("classifyFileOnDisk", () => {
+  it("calls an exact-length file complete", () => {
+    assert.equal(classifyFileOnDisk(1000, 1000), "complete");
+  });
+
+  it("calls a short file partial", () => {
+    assert.equal(classifyFileOnDisk(400, 1000), "partial");
+  });
+
+  it("calls an overshoot corrupt, the case that used to fall through", () => {
+    // An error body appended onto a partial. Not complete, not resumable:
+    // there is no clean partial left to extend, so it has to be deleted.
+    assert.equal(classifyFileOnDisk(1200, 1000), "corrupt");
+  });
+
+  it("calls a zero-length file absent", () => {
+    assert.equal(classifyFileOnDisk(0, 1000), "absent");
+  });
+
+  it("refuses to judge when the expected size is unknown", () => {
+    // Acting on a guess here is how a good file gets deleted.
+    assert.equal(classifyFileOnDisk(1000, 0), "unknown");
+    assert.equal(classifyFileOnDisk(1000, Number.NaN), "unknown");
+    assert.equal(classifyFileOnDisk(Number.NaN, 1000), "unknown");
+    assert.equal(classifyFileOnDisk(1000, Number.POSITIVE_INFINITY), "unknown");
   });
 });

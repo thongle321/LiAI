@@ -31,8 +31,11 @@ describe("buildLocalModelSpec", () => {
 });
 
 describe("numberedFileName", () => {
-  it("inserts (n) before the extension", () => {
-    assert.equal(numberedFileName("m.gguf", 2), "m (2).gguf");
-    assert.equal(numberedFileName("noext", 2), "noext (2)");
+  it("appends _n before the extension, counting from 1", () => {
+    // PocketParity: ModelsScreen.tsx:231-244 — the keep-both loop starts at
+    // `counter = 1` and writes "name_1.gguf", not "name (2).gguf".
+    assert.equal(numberedFileName("m.gguf", 1), "m_1.gguf");
+    assert.equal(numberedFileName("m.gguf", 2), "m_2.gguf");
+    assert.equal(numberedFileName("noext", 1), "noext_1");
   });
 });

@@ -37,9 +37,15 @@ const AnimatedChevron = Animated.createAnimatedComponent(ChevronDown);
 export function ReasoningBlock({
   text,
   autoCollapse = false,
+  maxWidth,
 }: {
   text: string;
   autoCollapse?: boolean;
+  /** The turn's measured width, so the reasoning body wraps like the
+   *  reply does. Reasoning is often the longest text in a turn, so
+   *  leaving it unconstrained brings back the intrinsic-width overflow
+   *  the list's width threading exists to prevent. */
+  maxWidth?: number;
 }) {
   const [state, setState] = useState<BubbleState>("partial");
   const userToggledRef = useRef(false);
@@ -102,7 +108,7 @@ export function ReasoningBlock({
           state === "partial" ? "h-[150px] overflow-hidden px-4 pb-4" : "px-4 pb-4"
         }
       >
-        <MarkdownView text={text} dense />
+        <MarkdownView text={text} dense maxWidth={maxWidth} />
         {state === "partial" ? (
           <Svg
             pointerEvents="none"

@@ -4,7 +4,7 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
-import { getModelFiles, isHuggingFaceUrl, searchModels } from "../lib/models/huggingface.ts";
+import { getModelFiles, hfDownloadUrl, isHuggingFaceUrl, searchModels } from "../lib/models/huggingface.ts";
 
 function mockFetch(impl: (url: string, init?: RequestInit) => Promise<Response>): void {
   (globalThis as Record<string, unknown>).fetch = impl;
@@ -22,6 +22,40 @@ describe("isHuggingFaceUrl", () => {
     assert.equal(isHuggingFaceUrl("https://huggingface.co/Qwen/x/resolve/main/y.gguf"), true);
     assert.equal(isHuggingFaceUrl("https://example.com/model.gguf"), false);
     assert.equal(isHuggingFaceUrl("not a url"), false);
+  });
+
+  // The token is attached on the strength of this predicate, so a suffix
+  // match hands it to whoever owns the lookalike host. These are the whole
+  // reason it must be an exact match.
+  it("refuses hosts that merely end in huggingface.co", () => {
+    for (const url of [
+      "https://evil-huggingface.co/Qwen/x/resolve/main/y.gguf",
+      "https://huggingface.co.attacker.net/Qwen/x/resolve/main/y.gguf",
+      "https://notreallyhuggingface.co/",
+      "https://huggingface.co.evil.com/",
+    ]) {
+      assert.equal(isHuggingFaceUrl(url), false, `leaked the token to ${url}`);
+    }
+  });
+});
+
+describe("hfDownloadUrl", () => {
+  it("percent-encodes each path segment but keeps the separators", () => {
+    assert.equal(
+      hfDownloadUrl("org/model", "Q4_K_M/my model.gguf"),
+      "https://huggingface.co/org/model/resolve/main/Q4_K_M/my%20model.gguf",
+    );
+    assert.equal(
+      hfDownloadUrl("org/model", "plain.gguf"),
+      "https://huggingface.co/org/model/resolve/main/plain.gguf",
+    );
+  });
+
+  it("does not double-encode a segment that is already encoded", () => {
+    assert.equal(
+      hfDownloadUrl("org/model", "Q4_K_M/my%20model.gguf"),
+      "https://huggingface.co/org/model/resolve/main/Q4_K_M/my%20model.gguf",
+    );
   });
 });
 

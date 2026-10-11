@@ -1,12 +1,22 @@
 /** Every model the user could switch to, in ONE place.
  *
- * Two surfaces offer this list: the header menu's "Model" submenu
- * (components/chat/ChatMenu.tsx) and each message's "Regenerate with…"
- * submenu. They must never disagree about which models exist or which is
- * active, so neither builds the list itself.
+ * THREE surfaces offer this list: the header menu's "Model" submenu
+ * (components/chat/ChatMenu.tsx), each message's "Regenerate with…"
+ * submenu, and the chat thread's model picker sheet
+ * (components/chat/ModelPickerSheet.tsx). They must never disagree about
+ * which models exist or which is active, so no surface builds the list
+ * itself.
+ *
+ * Local readiness is NOT decided here: `isLocalModelReady` is the engine's
+ * predicate, shared so this list and the composer cannot classify the same
+ * spec differently — they did, and the composer reported "Model not
+ * loaded." under a header still naming the model.
  *
  * Pure, so it is node-testable without the model store or react-native.
  */
+
+import { isLocalModelReady } from "../inference/engine.ts";
+import type { ModelOrigin } from "../../types/models.ts";
 
 /** A selectable model. `host` is present only for remote entries, and is
  *  what tells two servers offering the same model name apart. */
@@ -21,6 +31,8 @@ interface DownloadLike {
   id: string;
   name: string;
   downloadStatus: string;
+  origin?: ModelOrigin;
+  files?: ReadonlyArray<unknown>;
 }
 
 interface RemoteLike {
@@ -46,7 +58,7 @@ export function pickableModels(
   activeModelId: string | null,
 ): PickableModel[] {
   const local: PickableModel[] = models.flatMap((m) =>
-    m.downloadStatus === "completed"
+    isLocalModelReady(m)
       ? [{ id: m.id, name: m.name, active: m.id === activeModelId }]
       : [],
   );

@@ -54,8 +54,8 @@ const done = (
 ): TalentOutcome => (data !== undefined ? { ok: true, content, data } : { ok: true, content });
 const fail = (content: string): TalentOutcome => ({ ok: false, content });
 
-const MAX_TALENT_TURNS = 5;
-export const DEFAULT_MAX_TURNS = MAX_TALENT_TURNS;
+/** Deadline for the reader fetch (lib/agent/registry.ts read_url). */
+export const READ_TIMEOUT_MS = 15_000;
 
 export function talentDefinitions(): ToolDefinition[] {
   return [
@@ -258,7 +258,16 @@ export async function runTalent(
   try {
     // PocketPal reader strategy: keyless r.jina.ai default reader returns
     // clean plain text — no trafilatura equivalent needed on-device.
-    const resp = await ctx.fetchImpl(`https://r.jina.ai/${url}`, { method: "GET" });
+    //
+    // The deadline is not optional: this is the ONE outbound fetch in the
+    // app without one (audit finding 3). A reader that accepts the
+    // connection and then stalls would otherwise hold the whole turn —
+    // Stop aborts the ENGINE's completion, not a tool's fetch. 15s, the
+    // same ceiling the search providers get.
+    const resp = await ctx.fetchImpl(`https://r.jina.ai/${url}`, {
+      method: "GET",
+      signal: AbortSignal.timeout(READ_TIMEOUT_MS),
+    });
     if (!resp.ok) return fail(`read_url: request failed (${resp.status})`);
     const raw = await resp.text();
     const READ_CAP = 6000;

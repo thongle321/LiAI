@@ -8,9 +8,9 @@
 import { View } from "react-native";
 import { router, Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useKeyboardState } from "react-native-keyboard-controller";
 
 import { BottomNav, type ChatTab } from "../../../components/BottomNav.tsx";
+import { useKeyboardStore } from "../../../store/keyboard.ts";
 
 // Same story as the root boundary: this was `app/(drawer)/(tabs)/+error.tsx`.
 export { TabsErrorBoundary as ErrorBoundary } from "../../../components/RouteErrorBoundaries.tsx";
@@ -37,7 +37,11 @@ export default function TabLayout() {
  */
 function TabBar({ state }: { state: { index: number; routeNames: string[] } }) {
   const insets = useSafeAreaInsets();
-  const keyboardVisible = useKeyboardState((s) => s.isVisible);
+  // Same store as the chat screen (store/keyboard.ts): one writer at the
+  // root, so the bar's unmount and the screen's column compensation
+  // commit together instead of a frame apart.
+  const keyboardVisible = useKeyboardStore((s) => s.isVisible);
+  const setTabBarHeight = useKeyboardStore((s) => s.setTabBarHeight);
   // Hidden on the keyboard only: it would sit directly on top of it and
   // steal height from whatever input opened it. Hidden here rather than
   // via screenOptions.tabBarHideOnKeyboard because this app supplies a
@@ -53,7 +57,18 @@ function TabBar({ state }: { state: { index: number; routeNames: string[] } }) {
         : "chat";
 
   return (
-    <View className="bg-surface-1" style={{ paddingBottom: insets.bottom }}>
+    <View
+      className="bg-surface-1"
+      style={{ paddingBottom: insets.bottom }}
+      // Measure the bar so the keyboard compensation can never drift
+      // again: the class-sum constant seeds store/keyboard.ts, this
+      // measurement replaces it. The wrapper carries the bottom inset
+      // padding, so that much comes back off — the store holds the bar's
+      // own height only.
+      onLayout={(e) =>
+        setTabBarHeight(e.nativeEvent.layout.height - insets.bottom)
+      }
+    >
       <BottomNav
         active={active}
         onSelect={(t) => {

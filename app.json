@@ -76,7 +76,6 @@
       ],
       "expo-sharing",
       "expo-splash-screen",
-      "./plugins/withOptionalCameraHardware",
       "expo-sqlite"
     ],
     "extra": {

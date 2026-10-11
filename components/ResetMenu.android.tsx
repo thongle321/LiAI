@@ -13,7 +13,7 @@ import {
 import { defaultMinSize, menuAnchor } from "@expo/ui/jetpack-compose/modifiers";
 import { ChevronDown } from "lucide-react-native";
 
-import { colors } from "../themes/tokens.ts";
+import { colors, typeScale } from "../themes/tokens.ts";
 import type { ResetMenuProps } from "./ResetMenu";
 
 export function ResetMenu({ items }: ResetMenuProps) {
@@ -34,7 +34,7 @@ export function ResetMenu({ items }: ResetMenuProps) {
             horizontalArrangement="start"
             modifiers={[menuAnchor()]}
           >
-            <ComposeText color={colors.primary} style={{ fontSize: 14 }}>
+            <ComposeText color={colors.primary} style={{ fontSize: typeScale.bodyMd.size }}>
               Reset
             </ComposeText>
           </Row>
@@ -54,7 +54,7 @@ export function ResetMenu({ items }: ResetMenuProps) {
                 }}
               >
                 <DropdownMenuItem.Text>
-                  <ComposeText color={colors.primaryText} style={{ fontSize: 14 }}>
+                  <ComposeText color={colors.primaryText} style={{ fontSize: typeScale.bodyMd.size }}>
                     {item.label}
                   </ComposeText>
                 </DropdownMenuItem.Text>

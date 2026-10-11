@@ -4,15 +4,13 @@ import { Pressable, Text, View } from "react-native";
 import { CheckCircle2, Download, Eye, MessageSquare, Pause, Play, X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
+import { clampPercent, formatBytes, progressCaption } from "../../lib/models/progress.ts";
 import type { ModelDownloadStatus, ModelType } from "../../types/models";
 
-export function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-}
+// Re-exported so the six existing importers keep one import path. The
+// implementation lives in lib/ now, where it is testable by `node --test`
+// and where the PocketParity port is documented.
+export { formatBytes, progressCaption };
 
 /** Compact stat for HF rows (e.g. 12.4k downloads). */
 export function formatCompact(n: number): string {
@@ -81,47 +79,59 @@ export function StatusBadge({ status }: { status: ModelDownloadStatus }) {
   );
 }
 
+/** The bar itself: track plus fill. The clamp is shared so every surface
+ *  showing a transfer cannot drift from the others. 8px tall with a 5px
+ *  radius, the reference app's proportions. */
+export function ProgressTrack({ progress }: { progress: number }) {
+  const clamped = clampPercent(progress);
+  return (
+    <View className="h-2 overflow-hidden rounded-[5px] bg-surface-2">
+      <View className="h-full rounded-[5px] bg-primary" style={{ width: `${clamped}%` }} />
+    </View>
+  );
+}
+
 export function DownloadProgressBar({
   progress,
+  downloaded,
+  total,
   speed,
 }: {
   progress: number;
-  /** Live bytes/sec; shown PocketPal-style when known. */
+  /** Bytes on disk right now, and the transfer's full size. */
+  downloaded: number;
+  total: number;
+  /** Live bytes/sec. */
   speed?: number;
 }) {
-  // Mist track, Signal Blue fill, Micro radius on both. The status line is
+  // Mist track, Signal Blue fill, 5px radius on both. The caption is
   // Caption Slate, right-aligned: it counts bytes, so it is metadata.
   return (
     <View className="mx-0.5 mb-3 mt-1">
-      <View className="h-1 overflow-hidden rounded-full bg-surface-2">
-        <View
-          className="h-full rounded-full bg-primary"
-          style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-        />
-      </View>
+      <ProgressTrack progress={progress} />
       <Text className="mt-1 text-right font-sans text-caption text-secondary-text">
-        {speed !== undefined && speed > 0
-          ? `${Math.round(progress)}% · ${formatBytes(speed)}/s`
-          : `${Math.round(progress)}%`}
+        {progressCaption(downloaded, total, speed ?? 0)}
       </Text>
     </View>
   );
 }
 
-/** Abandon a download. Sits beside DownloadButton and matches its shape
- * (48dp, 8px radius, 1px Hairline) so the pair reads as one control
- * cluster. Labelled rather than an icon alone: it deletes the partial
- * file, and a bare X does not say that. */
+/** Abandon a download. PocketPal's shape (ModelCard.tsx:435-449): an
+ * outlined, full-width destructive button sitting UNDER the progress bar,
+ * error-tinted ground, error label, close icon. Ours carries the same
+ * geometry in LiAI's own tokens — Error border and label, Clean White
+ * ground, 48dp tall, 8px radius. Labelled rather than an icon alone: it
+ * deletes the partial file, and a bare X does not say that. */
 export function CancelDownloadButton({ onPress }: { onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
-      className="min-h-12 flex-row items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
+      className="mt-1 min-h-12 w-full flex-row items-center justify-center rounded-lg border border-error bg-surface-1 px-3 py-2"
       accessibilityRole="button"
       accessibilityLabel="Cancel download and delete downloaded data"
     >
       <X size={16} color={colors.error} />
-      <Text className="ml-2 font-sans text-body-sm text-primary-text">Cancel</Text>
+      <Text className="ml-2 font-sans text-body-sm text-error">Cancel</Text>
     </Pressable>
   );
 }
@@ -146,8 +156,11 @@ export function DownloadButton({
   const isPaused = status === "paused";
   const isCompleted = status === "completed";
   const isFailed = status === "failed";
+  // The button names the ACTION; the number belongs to the progress bar
+  // already sitting next to it (DownloadProgressBar), and "42%" on a
+  // pause button read as a value, not something to tap.
   const label = isDownloading
-    ? `${Math.round(progress)}%`
+    ? "Pause"
     : isPaused
     ? "Paused"
     : isFailed
@@ -170,8 +183,16 @@ export function DownloadButton({
     <Pressable
       onPress={isDownloading ? onPause ?? onPress : isPaused ? onResume ?? onPress : onPress}
       disabled={disabled}
-      className="min-h-12 items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
+      // Disabled is a FILL and LABEL change, never opacity (DESIGN.md): a
+      // button that looks live and does nothing is worse than no button,
+      // because the only way to find out is to tap it and be ignored.
+      className={
+        disabled
+          ? "min-h-12 items-center justify-center rounded-lg border border-border bg-surface-2 px-3 py-2"
+          : "min-h-12 items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
+      }
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
       accessibilityLabel={
         isDownloading
           ? `Pause download, ${Math.round(progress)} percent`
@@ -184,13 +205,21 @@ export function DownloadButton({
     >
       <View className="flex-row items-center gap-2">
         {isDownloading ? (
-          <Pause size={16} color={colors.primary} />
+          <Pause size={16} color={disabled ? colors.secondaryText : colors.primary} />
         ) : isPaused ? (
-          <Play size={16} color={colors.primary} />
+          <Play size={16} color={disabled ? colors.secondaryText : colors.primary} />
         ) : (
-          <Download size={16} color={colors.primary} />
+          <Download size={16} color={disabled ? colors.secondaryText : colors.primary} />
         )}
-        <Text className="font-sans text-body-sm text-primary-text">{label}</Text>
+        <Text
+          className={
+            disabled
+              ? "font-sans text-body-sm text-secondary-text"
+              : "font-sans text-body-sm text-primary-text"
+          }
+        >
+          {label}
+        </Text>
       </View>
     </Pressable>
   );

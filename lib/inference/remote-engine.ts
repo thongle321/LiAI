@@ -130,6 +130,19 @@ export function createRemoteEngine(
             ...(request.stop && request.stop.length > 0
               ? { stop: request.stop }
               : {}),
+            // Reasoning effort rides the provider's own channel (PocketPal
+            // bodyExtras parity): OpenRouter takes a top-level
+            // reasoning_effort, while llama-server/vLLM-style endpoints
+            // ignore it and read chat_template_kwargs instead.
+            ...(request.reasoningEffort !== undefined
+              ? provider.providerType === "openrouter"
+                ? { reasoning_effort: request.reasoningEffort }
+                : {
+                    chat_template_kwargs: {
+                      reasoning_effort: request.reasoningEffort,
+                    },
+                  }
+              : {}),
           }),
           signal: controller.signal,
         });

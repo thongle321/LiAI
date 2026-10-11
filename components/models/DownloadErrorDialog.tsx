@@ -13,23 +13,38 @@
  * AGENTS.md exception list); everything else is Uniwind.
  */
 
-import { Modal, Pressable, Text, View } from "react-native";
+import { Linking, Modal, Pressable, Text, View } from "react-native";
 
 import { scrim } from "../../themes/tokens.ts";
 import { downloadErrorCopy } from "../../lib/models/download-error.ts";
+import type { DownloadErrorCode } from "../../types/models.ts";
 
 export function DownloadErrorDialog({
   error,
+  errorCode,
+  modelUrl,
   onDismiss,
   onRetry,
+  onRetryWithoutToken,
 }: {
   /** The stored failure reason, or null to stay hidden. */
   error: string | null;
+  /** Machine-readable failure kind, when the UI can offer a real fix. */
+  errorCode?: DownloadErrorCode;
+  /** Hugging Face page for the model, when known. Powers "View on Hugging
+   *  Face" — the licence a 403 asks for is accepted over there. */
+  modelUrl?: string;
   onDismiss: () => void;
   onRetry: () => void;
+  /** Offered only for "authentication": drop the token and try again. */
+  onRetryWithoutToken?: () => void;
 }) {
   if (error === null) return null;
-  const { title, body } = downloadErrorCopy(error);
+  const { title, body, steps } = downloadErrorCopy(error);
+  // Only 401 carries this. A 403 means the account cannot read the repo, and
+  // retrying without a token cannot grant that — offering the button there
+  // would be a dead end dressed up as help.
+  const showTokenRecovery = errorCode === "authentication" && onRetryWithoutToken !== undefined;
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
       <View
@@ -46,6 +61,44 @@ export function DownloadErrorDialog({
           <Text className="mb-4 font-sans text-body-md text-secondary-text">
             {body}
           </Text>
+          {steps.length > 0 && (
+            <View className="mb-4 gap-1">
+              {steps.map((step, index) => (
+                <View key={step} className="flex-row gap-2">
+                  <Text className="font-sans text-body-md text-secondary-text">
+                    {`${index + 1}.`}
+                  </Text>
+                  <Text className="flex-1 font-sans text-body-md text-secondary-text">
+                    {step}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+          {modelUrl ? (
+            <Pressable
+              onPress={() => void Linking.openURL(modelUrl)}
+              className="mb-2 min-h-12 w-full items-center"
+              accessibilityRole="link"
+              accessibilityLabel="View this model on Hugging Face"
+            >
+              <Text className="font-sans text-body-md text-primary">
+                View on Hugging Face
+              </Text>
+            </Pressable>
+          ) : null}
+          {showTokenRecovery && (
+            <Pressable
+              onPress={onRetryWithoutToken}
+              className="btn btn--secondary mb-2 w-full"
+              accessibilityRole="button"
+              accessibilityLabel="Download again without your Hugging Face token"
+            >
+              <Text className="font-sans text-body-md text-primary">
+                Retry without token
+              </Text>
+            </Pressable>
+          )}
           <View className="flex-row gap-2">
             <Pressable
               onPress={onDismiss}

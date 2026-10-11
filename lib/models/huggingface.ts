@@ -575,13 +575,33 @@ export async function getModelFiles(
  * sibling LFS metadata above. */
 
 export function hfDownloadUrl(modelId: string, path: string): string {
-  return `${HF_HUB_BASE}/${modelId}/resolve/main/${path}`;
+  // Encode each segment but keep the separators: a repo can nest GGUFs in a
+  // folder, and a filename with a space in it is otherwise a broken request.
+  // Decoding first keeps an already-encoded segment from doubling up.
+  const encoded = path
+    .split("/")
+    .map((seg) => {
+      try {
+        return encodeURIComponent(decodeURIComponent(seg));
+      } catch {
+        return encodeURIComponent(seg);
+      }
+    })
+    .join("/");
+  return `${HF_HUB_BASE}/${modelId}/resolve/main/${encoded}`;
 }
 
-/** PocketPal parity: the HF token only ever leaves the device for huggingface.co. */
+/**
+ * PocketPal parity: the HF token only ever leaves the device for huggingface.co.
+ *
+ * Exactly that host. A suffix match also accepts "evil-huggingface.co" and
+ * "huggingface.co.attacker.net", which would post the user's token to whoever
+ * registered the lookalike — and this predicate is the only thing standing
+ * between a redirect and that leak.
+ */
 export function isHuggingFaceUrl(url: string): boolean {
   try {
-    return new URL(url).hostname.endsWith("huggingface.co");
+    return new URL(url).hostname === "huggingface.co";
   } catch {
     return false;
   }

@@ -4,6 +4,7 @@ import type { StateCreator } from "zustand";
 
 import type { ModelStore, PersistenceSlice } from "./types";
 import { parseModelSettingsMap } from "../../lib/model-settings";
+import { platformDownloadService } from "../../lib/download-service";
 import { HF_TOKEN_SS_KEY, providerKeySS } from "../../lib/secrets";
 import {
   upgradeModelList,
@@ -66,6 +67,28 @@ export const createPersistenceSlice: StateCreator<
           // Killed downloads leave partial files: mark them paused so the
           // manual Resume button continues from kept bytes (no auto-start).
           await get().reconcileInterrupted();
+          // THEN ask the platform what is still running. Order matters: the
+          // disk pass marks an interrupted row "paused", and only after that
+          // does a live native transfer get the chance to override it. Without
+          // this, a download that survived a force-stop kept running under
+          // WorkManager while the app showed it paused and never regained
+          // control of it — the transfer outliving JS is the entire point of
+          // the module, so JS has to come back and ask.
+          const adopted = await platformDownloadService.reconcileWithNative?.();
+          for (const modelId of adopted ?? []) {
+            const spec = get().models.find((m) => m.id === modelId);
+            const job = platformDownloadService
+              .getAllJobs()
+              .find((j) => j.modelId === modelId);
+            if (spec && job) {
+              get().setModelProgress(modelId, {
+                downloadStatus: job.status,
+                downloadProgress: job.progress,
+                downloadedBytes: job.downloadedBytes,
+                totalBytes: job.totalBytes,
+              });
+            }
+          }
         } catch {
           // Corrupt payload: start empty rather than crash.
           set({ models: [] });

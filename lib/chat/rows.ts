@@ -2,9 +2,15 @@
  *
  * The adapter the phase-1 port agreed on: the store keeps Zustand
  * `ChatMessage[]`, and this pure module derives everything the list needs
- * that the messages don't state — day dividers, group flags (avatar once
- * per group), the active run, and the user-turn status. View components
- * read rows, never re-derive.
+ * that the messages don't state — group flags (avatar once per group), the
+ * active run, and the user-turn status. View components read rows, never
+ * re-derive.
+ *
+ * PonPal parity: no day dividers. PocketPal's `showDateHeaders` defaults
+ * false and ChatScreen never passes it, so their list renders none — this
+ * adapter matches, and the date header component is deleted. The day
+ * boundary still exists in the DATA: it ends a visual group, so turns that
+ * straddle midnight are not welded into one.
  *
  * ponytail: no delivered/seen statuses — the store tracks sent only;
  * add when it tracks more.
@@ -12,57 +18,35 @@
 
 import type { ChatMessage } from "../../types/chat.ts";
 
-export interface DateHeaderRow {
-  kind: "date";
-  id: string;
-  label: string;
-}
-
 export interface MessageRow {
   kind: "message";
   message: ChatMessage;
-  /** Next turn continues the group: hide this row's avatar, tighten corners. */
+  /** Next turn continues the group: tighter vertical rhythm. */
   grouped: boolean;
-  /** Assistant row closing its group: the one avatar for the group. */
-  showAvatar: boolean;
   /** Newest turn while tokens arrive: the pending row's anchor. */
   isActiveRun: boolean;
   /** User-turn delivery state. `failed` when the turn's own reply carries
    * an error: the store records a failed send on the assistant stub, and
-   * retry() clears it before rerunning. The assistant-side tap-to-retry
-   * error card is unaffected — the row only reports the delivery. */
+   * retry() clears it before rerunning. The row only reports delivery —
+   * a failed turn's reason and its retry live in the snackbar
+   * (PocketParity: PocketPal has no error bubble in the list at all). */
   status: "sending" | "sent" | "failed";
 }
 
 /** Active-run indicator (PocketPal PendingIndicator): the visual bottom of
- * the list while tokens arrive. Appended by the adapter — never stored. */
+ * the list while tokens arrive. Appended by the adapter — never stored.
+ * Not exported: nothing outside this module names it — the exported
+ * ChatRow union carries it (knip:export). */
 export interface PendingRow {
   kind: "pending";
   id: "pending";
 }
 
-export type ChatRow = DateHeaderRow | MessageRow | PendingRow;
+export type ChatRow = MessageRow | PendingRow;
 
 function dayKey(at: number): string {
   const d = new Date(at);
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-}
-
-function dayLabel(at: number, now: number): string {
-  const day = 24 * 60 * 60 * 1000;
-  const startOf = (t: number): number => {
-    const d = new Date(t);
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
-  };
-  const diffDays = Math.round((startOf(now) - startOf(at)) / day);
-  if (diffDays <= 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  return new Date(at).toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
 }
 
 /** One delivery state per user row, in the order it can apply.
@@ -80,25 +64,21 @@ function deliveryStatus(
   return next?.error !== undefined ? "failed" : "sent";
 }
 
-/** Rows for the list: a date header opening each day, then its turns. */
+/** Rows for the list: one row per turn, plus the pending row while a
+ * reply streams. */
 export function buildRows(
   messages: ChatMessage[],
   opts?: { now?: number; sending?: boolean; stopping?: boolean },
 ): ChatRow[] {
-  const now = opts?.now ?? Date.now();
   const sending = opts?.sending ?? false;
   const stopping = opts?.stopping ?? false;
   const rows: ChatRow[] = [];
-  let lastDay = "";
   messages.forEach((message, index) => {
     const key = dayKey(message.at);
-    if (key !== lastDay) {
-      lastDay = key;
-      rows.push({ kind: "date", id: `date-${key}`, label: dayLabel(message.at, now) });
-    }
     const next = messages[index + 1];
-    // Grouping resets at day boundaries: a date header between two
-    // same-role turns ends the group, or the divider would sit inside it.
+    // Grouping resets at day boundaries even with no divider to separate
+    // them: turns straddling midnight are one conversation in the data but
+    // a jump in the reader's eye, so the tighter rhythm ends there.
     const grouped =
       next !== undefined && next.role === message.role && dayKey(next.at) === key;
     const isLast = index === messages.length - 1;
@@ -106,7 +86,6 @@ export function buildRows(
       kind: "message",
       message,
       grouped,
-      showAvatar: message.role === "assistant" && !grouped,
       isActiveRun: isLast && message.streaming === true,
       status: deliveryStatus(message, next, sending && isLast),
     });

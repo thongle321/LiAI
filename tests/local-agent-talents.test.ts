@@ -5,7 +5,10 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { runTalent, talentDefinitions } from "../lib/agent/registry.ts";
-import { resetReadUrlAllowlist } from "../lib/agent/allowlist.ts";
+import {
+  allowReadUrls,
+  resetReadUrlAllowlist,
+} from "../lib/agent/allowlist.ts";
 
 function fakeFetch(body: unknown, status = 200): typeof fetch {
   return (async () =>
@@ -151,6 +154,46 @@ describe("runTalent web_search", () => {
 });
 
 describe("runTalent read_url", () => {
+  it("passes a timeout signal on the reader fetch", async () => {
+    // The reader is the ONE outbound fetch in the app that used to have
+    // no deadline: a server that accepts the connection and then stalls
+    // would hold the whole turn (audit finding 3).
+    resetReadUrlAllowlist();
+    let seen: RequestInit | undefined;
+    const out = await runTalent(
+      "read_url",
+      JSON.stringify({ url: "https://slow.example/article" }),
+      {
+        fetchImpl: (async (_url: string, init?: RequestInit) => {
+          seen = init;
+          return new Response("some readable article text");
+        }) as unknown as typeof fetch,
+        search: null,
+      },
+    );
+    // Seeding happens via userTexts in production; seed directly here.
+    void out;
+    // Not allowed yet -> refused before fetch. Seed and retry.
+    allowReadUrls(["https://slow.example/article"]);
+    const read = await runTalent(
+      "read_url",
+      JSON.stringify({ url: "https://slow.example/article" }),
+      {
+        fetchImpl: (async (_url: string, init?: RequestInit) => {
+          seen = init;
+          return new Response("some readable article text");
+        }) as unknown as typeof fetch,
+        search: null,
+      },
+    );
+    assert.equal(read.ok, true);
+    assert.ok(seen, "the reader fetch was called");
+    assert.ok(
+      seen?.signal instanceof AbortSignal,
+      "read_url must carry an AbortSignal so a stalled reader cannot hold the turn",
+    );
+  });
+
   it("refuses non-http targets without fetching", async () => {
     let calls = 0;
     const out = await runTalent(

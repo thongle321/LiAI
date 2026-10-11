@@ -16,6 +16,7 @@ import type {
   EngineSource,
 } from "../inference/engine.ts";
 import type { SamplerParams } from "../inference/sampler.ts";
+import type { EffortLevel } from "../reasoning-capability.ts";
 import { runLocalAgent } from "../agent/runner.ts";
 import { talentDefinitions, type TalentSearchAuth } from "../agent/registry.ts";
 
@@ -58,6 +59,9 @@ export interface TurnDeps {
   /** Local-only thinking preference; `undefined` sends NO flag, leaving
    *  the model's chat template to decide (lib/inference/thinking.ts). */
   getThinking?: () => Promise<boolean | undefined>;
+  /** Per-model graded effort; undefined sends NO kwarg (the model's own
+   *  default reasoning depth stands). */
+  getEffort?: () => Promise<EffortLevel | undefined>;
   /** Local-only jinja template preference; omitted keeps the native default. */
   getJinja?: () => Promise<boolean>;
   /** Local-only sampling params for THIS session, already resolved
@@ -73,6 +77,35 @@ export interface TurnDeps {
   getAddGenerationPrompt?: () => Promise<boolean | undefined>;
   /** Data-uri → temp file path for multimodal turns; null = text-only. */
   saveImage(dataUri: string): Promise<string | null>;
+  /** Remove the temp media files once the engine is done with them.
+   *  Optional so existing test deps stay valid; the default is the real
+   *  file deletion (see removeSavedImages). */
+  removeImages?(paths: string[]): Promise<void>;
+}
+
+/** Best-effort deletion of this turn's temp media files.
+ *
+ *  WHY: `saveImage` writes one JPEG per attachment into
+ *  `documentDirectory/chat-images/` and NOTHING else in the app ever
+ *  cleans that directory — every photo a user sends otherwise stays on
+ *  disk for the life of the install, on a device that is already
+ *  holding multi-GB GGUFs (audit finding 2). The engine only reads the
+ *  path during its completion, so the file is dead weight the moment
+ *  runLocalAgent settles.
+ *
+ *  Dynamic import, like every other native touch in this graph: plain
+ *  Node tests import this module, and a failure to load or delete must
+ *  never take down a turn whose answer is already in. */
+async function removeSavedImages(paths: string[]): Promise<void> {
+  if (paths.length === 0) return;
+  try {
+    const FS = await import("expo-file-system/legacy");
+    await Promise.all(
+      paths.map((path) => FS.deleteAsync(path, { idempotent: true })),
+    );
+  } catch {
+    // Best-effort: an undeletable temp file must not fail the turn.
+  }
 }
 
 function toAgentMessages(
@@ -130,6 +163,7 @@ export function createTurnRunner(deps: TurnDeps) {
     const search = await deps.getSearch().catch(() => null);
     const systemPrompt = await deps.getSystemPrompt().catch(() => undefined);
     const thinking = await deps.getThinking?.().catch(() => undefined);
+    const effort = await deps.getEffort?.().catch(() => undefined);
     const jinja = await deps.getJinja?.().catch(() => undefined);
     const sampler = await deps.getSampler?.(sessionId).catch(() => null);
     const stopWords = (await deps.getStopWords?.().catch(() => [])) ?? [];
@@ -150,7 +184,9 @@ export function createTurnRunner(deps: TurnDeps) {
       if (saved.length > 0) imagePaths = saved;
     }
 
-    const result = await runLocalAgent({
+    let result: Awaited<ReturnType<typeof runLocalAgent>>;
+    try {
+      result = await runLocalAgent({
       engine,
       messages: toAgentMessages(
         paths.history,
@@ -167,6 +203,7 @@ export function createTurnRunner(deps: TurnDeps) {
         ? { imageDataUris: paths.images }
         : {}),
       ...(thinking !== undefined ? { enableThinking: thinking } : {}),
+      ...(effort !== undefined ? { reasoningEffort: effort } : {}),
       ...(jinja !== undefined ? { jinja } : {}),
     ...(sampler ? { sampler } : {}),
       ...(stopWords.length > 0 ? { stop: stopWords } : {}),
@@ -185,8 +222,12 @@ export function createTurnRunner(deps: TurnDeps) {
         if (event.type === "tool_call_started") onToolStart?.(event.call.name);
         if (event.type === "tool_call_delta") onToolDelta?.();
       },
-    });
-
+      });
+    } finally {
+      // The engine is done with the media files the moment the run settles
+      // (success or failure): drop them before persisting the turn.
+      await (deps.removeImages ?? removeSavedImages)(imagePaths ?? []);
+    }
     // Backend parity: an empty reply with no tool provenance is a failed
     // turn (error bubble), never a persisted empty assistant message.
     if (result.text.trim() === "" && result.steps.length === 0) {

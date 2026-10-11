@@ -25,7 +25,9 @@ export interface EngineLoader {
   ): CompletionEngine;
 }
 
-/** Slot key fragment: any init change reloads the local context. */
+/** Slot key fragment: ANY field the loader reads at init time belongs
+ *  here — a field left out means a setting the user changes that does
+ *  nothing while the slot stays warm (audit finding 1). */
 function initKey(init: LlamaInitParams): string {
   return [
     init.n_ctx,
@@ -42,6 +44,11 @@ function initKey(init: LlamaInitParams): string {
     init.spec_draft_n_gpu_layers,
     init.spec_draft_cache_type_k,
     init.spec_draft_cache_type_v,
+    // The four the key used to ignore: each one reaches the loader.
+    init.no_extra_bufts ? 1 : 0,
+    (init.devices ?? []).join(","),
+    init.model_draft ?? "none",
+    init.image_max_tokens ?? 0,
   ].join("/");
 }
 

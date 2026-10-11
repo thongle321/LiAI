@@ -59,13 +59,37 @@ describe("settings drop section titles (Q6=B)", () => {
 });
 
 describe("chat body rises to pocketpal 16 (Q1)", () => {
-  it("markdown body 16 + headings pinned 24/20/18/16 (Q4)", () => {
+  it("markdown body 16 + headings pinned 24/20/18/16 via ONE shared scale (Q4)", () => {
     const md = read("components/chat/MarkdownView.tsx");
-    assert.match(md, /fontSize: 16,/);
-    assert.match(md, /h1: \{[^}]*fontSize: 24/);
-    assert.match(md, /h2: \{[^}]*fontSize: 20/);
-    assert.match(md, /h3: \{[^}]*fontSize: 18/);
-    assert.match(md, /h4: \{[^}]*fontSize: 16/);
+    // No bare size literals left in the renderer: every rung comes from
+    // themes/tokens.ts, so the bubble scale cannot drift into two copies
+    // (Part 2 audit, P3 — the type tokens are the one source of truth).
+    assert.doesNotMatch(md, /fontSize: \d/);
+    assert.match(md, /typeScale\.bodyLg/); // body 16 + h4/h5/h6
+    assert.match(md, /typeScale\.bodyMd/); // dense reasoning 14/20
+    assert.match(md, /typeScale\.h2\.size/); // markdown h1 = 24
+    assert.match(md, /typeScale\.h3\.size/); // markdown h2 = 20
+    assert.match(md, /embeddedText\.markdownH3/); // the one size with no rung: 18
+    assert.match(md, /embeddedText\.code/); // 13
+    // The pinned VALUES live in the shared home now.
+    const tokens = read("themes/tokens.ts");
+    assert.match(tokens, /markdownH3: 18/);
+    assert.match(tokens, /code: 13/);
+  });
+
+  it("code highlighter and Android Compose menus share the 14 rung", () => {
+    for (const file of [
+      "components/chat/CodeBlock.tsx",
+      "components/PickerMenu.android.tsx",
+      "components/ResetMenu.android.tsx",
+    ]) {
+      assert.doesNotMatch(
+        read(file),
+        /fontSize: \d/,
+        `${file} must not carry a bare fontSize literal`,
+      );
+      assert.match(read(file), /typeScale\.bodyMd/, `${file} takes the 14/20 rung`);
+    }
   });
 
   it("user bubble, composer input, menu rows at 16", () => {
@@ -112,11 +136,22 @@ describe("the small rungs land", () => {
     assert.match(read("components/models/HFModelSearch.tsx"), /text-body-lg/);
   });
 
-  it("bottom nav label pinned to pocketpal 11/14 with the bar resummed", () => {
+  it("bottom nav label scales to 1.5x and the bar is measured, not pinned", () => {
+    // The old pocketpal 11/14 pin is gone (Part 2 audit, P2, approved
+    // refactor): the label follows the global caption rung and the OS
+    // font setting up to 1.5x; the bar's REAL height flows to the
+    // keyboard compensation through store/keyboard.ts's onLayout
+    // measurement ((tabs)/_layout.tsx), so a grown bar cannot drift it.
     const nav = read("components/BottomNav.tsx");
-    assert.match(nav, /"--text-caption": 11/);
-    assert.match(nav, /"--text-caption--line-height": 14/);
-    assert.match(nav, /TAB_BAR_HEIGHT = 67/);
+    assert.doesNotMatch(nav, /"--text-caption": 11/, "the 11/14 pin must stay gone");
+    assert.match(nav, /maxFontSizeMultiplier=\{1\.5\}/);
+    // RN's absolute line-height does NOT scale with the OS font setting:
+    // the label must track PixelRatio.getFontScale() or the enlarged
+    // glyphs clip inside the caption's 16px box.
+    assert.match(nav, /PixelRatio\.getFontScale\(\)/);
+    // Class sum RESUMMED for the global caption box (16, not the pinned
+    // 14): 1 border + 8 pt-2 + 40 icon + 16 label + 4 pb-1.
+    assert.match(nav, /TAB_BAR_HEIGHT = 69/);
   });
 });
 

@@ -134,7 +134,11 @@ describe("SessionList wiring (C11)", () => {
   it("renders accessible headers and keeps selection + empty state", () => {
     assert.match(src, /renderSectionHeader=/);
     assert.match(src, /accessibilityRole="header"/, "headers must announce");
-    assert.match(src, /extraData=\{\[sessionId, selected\]/, "current session stays visibly selected");
+    // The array gained `selecting` when the row became a memo() component:
+    // the leading checkbox depends on it, so extraData must carry it or
+    // memo would keep stale checkboxes mounted. The pin's intent —
+    // selection stays visibly selected — is unchanged.
+    assert.match(src, /extraData=\{\[sessionId, selected, selecting\]/, "current session stays visibly selected");
     assert.match(src, /No conversations yet\./, "today's empty state survives");
   });
 

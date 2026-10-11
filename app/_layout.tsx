@@ -9,12 +9,13 @@ import {
 } from "@expo-google-fonts/inter";
 import { Host } from "@expo/ui";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { KeyboardProvider } from "react-native-keyboard-controller";
+import { KeyboardProvider, useKeyboardState } from "react-native-keyboard-controller";
 import { ScopedVariables, Uniwind } from "uniwind";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { colors } from "../themes/tokens.ts";
 import { SnackbarProvider } from "../components/Snackbar.tsx";
+import { useKeyboardStore } from "../store/keyboard.ts";
 import { useEngineOffload } from "../hooks/useEngineOffload.ts";
 import { useFluidTextVariables } from "../hooks/useFluidTextScale.ts";
 
@@ -33,6 +34,18 @@ void SplashScreen.preventAutoHideAsync().catch(() => {});
 // expo-router's route scanner throws on any route node starting with '+',
 // so the app died before rendering anything.
 export { RootErrorBoundary as ErrorBoundary } from "../components/RouteErrorBoundaries.tsx";
+
+/** Bridges react-native-keyboard-controller's events into the store the
+ * whole app reads (store/keyboard.ts explains why one writer matters).
+ * Renders nothing. */
+function KeyboardVisibilitySync() {
+  const isVisible = useKeyboardState((s) => s.isVisible);
+  const setVisible = useKeyboardStore((s) => s.setVisible);
+  useEffect(() => {
+    setVisible(isVisible);
+  }, [isVisible, setVisible]);
+  return null;
+}
 
 export default function RootLayout() {
   const [loaded] = useFonts({
@@ -79,6 +92,13 @@ export default function RootLayout() {
             launch. (An earlier comment here claimed they were what made the
             keyboard height correct. That was a guess, and it was wrong.) */}
         <KeyboardProvider>
+          {/* The app's ONE keyboard-state subscriber: everything else
+              reads store/keyboard.ts. One writer means the tab bar's
+              unmount and the chat screen's column compensation commit in
+              the same React pass — two independent subscriptions could
+              land a frame apart, which shifted the column-anchored
+              overlays for a frame or two (the card that still moved). */}
+          <KeyboardVisibilitySync />
           <SnackbarProvider>
           <Stack
             screenOptions={{

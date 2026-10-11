@@ -148,7 +148,7 @@ describe("keyboard avoidance", () => {
     // or their centring box differs between the two states.
     const chat = read("app/(drawer)/(tabs)/chat.tsx");
     assert.match(chat, /const tabBarCompensation = keyboardVisible \? keyboardOffset : 0/);
-    // The empty state and the jump-to-latest pill are the two column-anchored
+    // The empty state and the jump-to-latest button are the two column-anchored
     // ones; the composer overlays are screen-anchored and must NOT compensate,
     // or they would be pushed off the keyboard.
     const compensated = [...chat.matchAll(/bottom: composerHeight \+ tabBarCompensation/g)];
@@ -164,7 +164,48 @@ describe("keyboard avoidance", () => {
     );
   });
 
-  it("the tab bar height has one definition, imported by its consumers", () => {
+  it("keyboard visibility has exactly one writer, read by the bar and the screen", () => {
+    // The race this store removes (store/keyboard.ts). The tab bar and the
+    // chat screen BOTH react to the keyboard — the bar unmounts, the screen
+    // compensates the column the bar vacates — and each used to subscribe
+    // to useKeyboardState itself, in its own subtree. The two updates are
+    // not guaranteed to land in the same React commit, so for a frame the
+    // column had grown while the compensation had not, and the centred
+    // empty card shifted by half the bar slot on a build whose static
+    // geometry was already exact. One writer at the root: one
+    // notification, one batched commit, both consumers move together.
+    const chat = read("app/(drawer)/(tabs)/chat.tsx");
+    const tabs = read("app/(drawer)/(tabs)/_layout.tsx");
+    const layout = read("app/_layout.tsx");
+
+    assert.doesNotMatch(
+      chat,
+      /useKeyboardState/,
+      "the screen reads the store, not the events",
+    );
+    assert.doesNotMatch(
+      tabs,
+      /useKeyboardState/,
+      "the bar reads the store, not the events",
+    );
+    assert.match(
+      layout,
+      /useKeyboardState/,
+      "the root layout is the one place that subscribes",
+    );
+    assert.match(chat, /useKeyboardStore/, "the screen reads the shared store");
+    assert.match(tabs, /useKeyboardStore/, "the bar reads the shared store");
+
+    // Exactly one call site writes the flag. (The store's OWN definition
+    // is `setVisible: (visible) =>` — a colon, not a call — and store/ is
+    // not scanned, so this counts writers, not declarations.)
+    const writers = allSources()
+      .filter(({ source }) => /setVisible\(/.test(stripComments(source)))
+      .map(({ file }) => file);
+    assert.deepEqual(writers, ["app/_layout.tsx"]);
+  });
+
+  it("the tab bar height has one definition, seeded into the store and measured live", () => {
     // Root cause of the no-model card drifting ~7.5px when the keyboard
     // opened: three numbers for one bar (constant 60, prose 64, real 75).
     // The compensation subtracted 60+inset while the column grew by
@@ -180,11 +221,27 @@ describe("keyboard avoidance", () => {
       defs.map(({ file }) => file),
       ["components/BottomNav.tsx"],
     );
+    // The screen no longer imports the constant: it reads the bar's
+    // measured height from store/keyboard.ts (the bar measures itself on
+    // layout — see the single-writer test below). The ONE re-declaration
+    // is lib/keyboard.ts's seed, because a store importing BottomNav
+    // drags the React Native type graph into the ambient program and
+    // breaks the Uniwind augmentation loading. The seed must equal the
+    // bar's height, or the compensation is wrong until the first layout.
     const chat = read("app/(drawer)/(tabs)/chat.tsx");
     assert.match(
       chat,
-      /import \{ TAB_BAR_HEIGHT \} from "\.\.\/\.\.\/\.\.\/components\/BottomNav\.tsx"/,
-      "the chat route must import the height, not invent its own number",
+      /const tabBarHeight = useKeyboardStore\(\(s\) => s\.tabBarHeight\)/,
+      "the screen takes the measured height from the store, not a literal",
+    );
+    const barHeight = read("components/BottomNav.tsx").match(
+      /const TAB_BAR_HEIGHT = (\d+)/,
+    );
+    const seed = read("lib/keyboard.ts").match(/TAB_BAR_HEIGHT_SEED = (\d+)/);
+    assert.equal(
+      seed?.[1],
+      barHeight?.[1],
+      "the seed duplicates the bar's height: change both together",
     );
     assert.doesNotMatch(
       chat,
@@ -402,14 +459,11 @@ describe("keyboard avoidance", () => {
     // field's 16px content, and that misalignment is visible on every screen.
     // DESIGN.md: "gutters are owned by one layer".
     const offenders: string[] = [];
-    // Only the ROOT of each overlay is checked. A chip or a pill padding
-    // ITSELF (px-3 on the usage pill, px-4 on a prompt chip) is internal
-    // padding and perfectly legal; what must not come back is a container
-    // adding a screen inset on top of the group's.
-    for (const file of [
-      "components/chat/SuggestedPrompts.tsx",
-      "components/chat/UsageStats.tsx",
-    ]) {
+    // Only the ROOT of each overlay is checked. A chip padding ITSELF
+    // (px-4 on a prompt chip) is internal padding and perfectly legal; what
+    // must not come back is a container adding a screen inset on top of the
+    // group's.
+    for (const file of ["components/chat/SuggestedPrompts.tsx"]) {
       const root = read(file).match(/className="[^"]*"/)?.[0] ?? "";
       if (/\bpx-[45]\b/.test(root)) {
         offenders.push(`${file}: its root carries a screen inset: ${root}`);
@@ -493,7 +547,7 @@ describe("keyboard avoidance", () => {
     // The issue lines live here too, for the same reason.
     assert.match(field, /px-4 pb-1 font-sans text-xs text-secondary-text/);
     // ...and the banners must NOT, or they are overlays again.
-    assert.doesNotMatch(field, /SuggestedPrompts|UsageStats/, "the banners are overlays");
+    assert.doesNotMatch(field, /SuggestedPrompts/, "the banners are overlays");
   });
 
   it("the docked field keeps the tokens the amended design system requires", () => {
@@ -517,6 +571,96 @@ describe("keyboard avoidance", () => {
     assert.match(input, /flex-row items-end gap-2 px-4 py-3/);
     assert.doesNotMatch(input, /className=\{`[^`]*\bpx-5\b/);
     assert.doesNotMatch(input, /mb-3 flex-row items-end/, "flush with the bottom edge");
+  });
+
+  it("sending dismisses the keyboard, via this version's dismiss API", () => {
+    // PocketPal's send path calls Keyboard.dismiss() (ChatView.tsx:447): the
+    // message is committed, so the keyboard's job is done and leaving it up
+    // strands the composer over the streaming reply. This app pins
+    // react-native-keyboard-controller 1.21.9, which exports no `Keyboard`
+    // class — the API here is KeyboardControllerNative.dismiss(keepFocus,
+    // animated). The second assertion doubles as a guard against the newer
+    // spelling being pasted in: it does not compile here.
+    const input = read("components/chat/MessageInput.tsx");
+    assert.match(
+      input,
+      /KeyboardControllerNative\.dismiss\(false, true\)/,
+      "sending must dismiss the keyboard (keepFocus=false, animated)",
+    );
+    assert.doesNotMatch(
+      input,
+      /\bKeyboard\.dismiss\(/,
+      "`Keyboard` is not exported by 1.21.9 — that spelling does not compile",
+    );
+  });
+
+  it("the empty thread's CTA opens the in-chat picker, not only a route", () => {
+    // PocketPal parity: the no-model card's action opens their
+    // ChatPalModelPickerSheet, so activating a model no longer means
+    // leaving the conversation. The Download branch (nothing pickable at
+    // all) still routes to /models.
+    const chat = read("app/(drawer)/(tabs)/chat.tsx");
+    const placeholder = read("components/chat/ChatEmptyPlaceholder.tsx");
+    assert.match(
+      chat,
+      /<ChatEmptyPlaceholder\s+onSelectModel=\{\(\) => setPickerOpen\(true\)\}\s*\/>/,
+      "the screen wires the card's CTA to the picker",
+    );
+    assert.match(
+      chat,
+      /<ModelPickerSheet\s+visible=\{pickerOpen\}/,
+      "the picker sheet renders from the chat screen",
+    );
+    assert.doesNotMatch(
+      placeholder,
+      /buttonText === "Download Model"/,
+      "the CTA dispatches on a field, not on display copy: a rewording must not re-route the button",
+    );
+    assert.match(
+      placeholder,
+      /cta === "download" \|\| onSelectModel === undefined/,
+      "download — or no picker offered — routes to /models",
+    );
+    assert.match(
+      placeholder,
+      /onSelectModel\(\)/,
+      "an offered picker opens in place",
+    );
+    // The picker dismisses the keyboard on open (it is opened from the
+    // composer end of the screen) and selects through the SAME
+    // local/remote discriminator as the header menu.
+    const picker = read("components/chat/ModelPickerSheet.tsx");
+    assert.match(picker, /KeyboardControllerNative\.dismiss\(false, true\)/);
+    assert.match(
+      picker,
+      /if \(host === undefined\) setActiveModel\(id, "local"\)/,
+      "a local entry has no host — the same discriminator as the menus",
+    );
+    assert.match(picker, /pickableModels\(/);
+  });
+
+  it("the keyboard strip paints under the composer and the overlays", () => {
+    // The strip exists only for the frames while the keyboard animates in,
+    // and the composer and the overlay group are lifted by the keyboard, so
+    // their lower edges cross the strip's band for exactly those frames.
+    // Painted after them, the strip would hide the composer's control row —
+    // the send button is a filled circle sitting in that band — for the
+    // length of the keyboard animation. Earlier in the tree paints first;
+    // pointerEvents="none" keeps the strip out of touch entirely.
+    const chat = read("app/(drawer)/(tabs)/chat.tsx");
+    const strip = chat.indexOf("absolute inset-x-0 bottom-0 bg-surface-1");
+    const composer = chat.indexOf("<MessageInput");
+    const overlays = chat.indexOf('className="absolute inset-x-0 px-4"');
+    assert.notEqual(strip, -1, "the strip exists");
+    assert.notEqual(composer, -1, "the composer exists");
+    assert.notEqual(overlays, -1, "the overlay group exists");
+    assert.ok(strip < composer, "the strip must paint under the composer");
+    assert.ok(strip < overlays, "the strip must paint under the overlay group");
+    assert.match(
+      chat.slice(strip, composer),
+      /pointerEvents="none"/,
+      "the strip never takes touches",
+    );
   });
 
   it("the shared helper is callable from the UI runtime", () => {

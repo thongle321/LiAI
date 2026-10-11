@@ -14,8 +14,10 @@ import type {
   ToolDefinition,
 } from "../inference/engine.ts";
 import type { SamplerParams } from "../inference/sampler.ts";
+import type { EffortLevel } from "../reasoning-capability.ts";
 import type { TurnOutcomeFlags, ToolMetrics, TurnBlock } from "../../types/chat.ts";
 import { runTalent, type TalentSearchAuth } from "./registry.ts";
+import { resetReadUrlAllowlist } from "./allowlist.ts";
 
 export interface AgentStep {
   id: string;
@@ -77,6 +79,8 @@ export interface AgentRunOptions {
   imageDataUris?: string[];
   /** Local-only: jinja thinking blocks on/off for every loop turn. */
   enableThinking?: boolean;
+  /** Local-only: graded reasoning effort for every loop turn. */
+  reasoningEffort?: EffortLevel;
   /** Local-only: jinja chat template on/off for every loop turn. */
   jinja?: boolean;
   /** Local-only: resolved sampling params for every loop turn. */
@@ -144,6 +148,13 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
   let endFlags: TurnOutcomeFlags | undefined;
 
   onEvent({ type: "run_started" });
+  // The read_url allowlist is process-global (a module-level Set). Every
+  // run starts from empty so a URL approved by an EARLIER conversation
+  // can never be fetched from a later one, and the set cannot grow for
+  // the life of the process (audit finding 4). This is the one reset
+  // production needed; the seeds below (userTexts, search hits) still
+  // fill it for THIS run only.
+  resetReadUrlAllowlist();
 
   try {
     for (let turn = 0; ; turn += 1) {
@@ -182,6 +193,9 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
               : {}),
             ...(options.enableThinking !== undefined
               ? { enableThinking: options.enableThinking }
+              : {}),
+            ...(options.reasoningEffort !== undefined
+              ? { reasoningEffort: options.reasoningEffort }
               : {}),
             ...(options.jinja !== undefined ? { jinja: options.jinja } : {}),
             ...(options.sampler ? { sampler: options.sampler } : {}),

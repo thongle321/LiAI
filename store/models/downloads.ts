@@ -19,11 +19,12 @@ import {
   hfRefFromSearch,
   isHuggingFaceUrl,
 } from "../../lib/models/huggingface";
-import { downloadService } from "../../lib/download-service";
+import { platformDownloadService, failureCode } from "../../lib/download-service";
 import { latestJobForModel } from "../../lib/models/download-jobs.ts";
-import { resumeDataForPartial } from "../../lib/models/resume-state.ts";
+import { resumeDataForPartial, classifyFileOnDisk } from "../../lib/models/resume-state.ts";
 import { findProjectorFile, pairDownloadStep } from "../../lib/models/vision-pairing.ts";
 import { readGgufMetadata } from "../../lib/models/gguf-header.ts";
+import { modelFitsOnDevice } from "../../lib/storage-fit.ts";
 import { asyncStorage, MEMORY_GUARD_KEY, generateId } from "./storage";
 
 function hfRefFor(modelId: string, results: HFModelSearchResult[]) {
@@ -39,17 +40,10 @@ function presetFor(modelId: string, presets: PresetModel[]): PresetModel {
   return preset;
 }
 
-/** Min gap between transient progress pushes to the store (~4 fps). The bar
- *  animates smoothly at this rate; the native tick can fire far faster. */
-const PROGRESS_PUSH_MS = 250;
-/** Last push time per model id, so throttle is per-download not global. */
-const progressPushedAt = new Map<string, number>();
-
 export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSlice> = (
   set,
   get,
 ) => ({
-  activeDownloads: new Map(),
   largestSuccessfulBytes: 0,
 
   saveMemoryGuard: async () => {
@@ -107,12 +101,12 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
 
     // One live job per model: double-taps and retries must not stack tasks
     // on the same file (stale entries made resume grab dead jobs and throw).
-    const live = latestJobForModel(downloadService.getAllJobs(), specId);
+    const live = latestJobForModel(platformDownloadService.getAllJobs(), specId);
     if (live && (live.status === "downloading" || live.status === "paused")) return;
-    for (const stale of downloadService
+    for (const stale of platformDownloadService
       .getAllJobs()
       .filter((j) => j.modelId === specId)) {
-      downloadService.removeJob(stale.id);
+      platformDownloadService.removeJob(stale.id);
     }
 
     // Create the spec once; a re-download keeps its existing row.
@@ -177,6 +171,9 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
         ? Math.round((partialBytes / activeFile.size) * 100)
         : 0;
     const auth = get().activeHfToken(token) ?? undefined;
+// HF's LFS content id, when we have one: the resume validator below.
+// PresetModelFile has no oid (only HFModelFile does), hence the `in` check.
+const oid: string | undefined = "oid" in file ? file.oid : undefined;
 
     const job: DownloadJob = {
       id: `download-${generateId()}`,
@@ -190,6 +187,19 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
         ...(auth && isHuggingFaceUrl(activeFile.downloadUrl)
           ? { Authorization: `Bearer ${auth}` }
           : {}),
+        // If-Range closes the splice hole: a resume (Range: bytes=N-) against
+        // a repo whose file changed would otherwise append the NEW bytes to
+        // the OLD partial and land on exactly the right length with a wrong
+        // middle. HF answers 200 instead of 206 when the validator fails,
+        // and the service already restarts cleanly on that. Ignored by
+        // servers when no Range is sent, so a fresh download is unaffected.
+        //
+        // The value MUST be a quoted entity-tag (RFC 7232 s3.2): HF serves
+        // LFS files with ETag: "<lfs-sha256>", which is the oid. A bare hex
+        // string is a malformed tag, so the server cannot match it and is
+        // entitled to ignore the whole header — which would leave the
+        // splice exactly as unprotected as sending nothing at all.
+        ...(oid ? { "If-Range": `"${oid}"` } : {}),
       },
       destinationPath: `${LegacyFileSystem.documentDirectory}models/${activeFile.name}`,
       status: "downloading",
@@ -199,6 +209,46 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       resumable: true,
     };
 
+    // PocketPal parity: refuse before bytes move when the disk can't fit it.
+    // FAILS CLOSED — a free-space read that throws leaves `free` null, which
+    // the pure decision blocks on. This reverses our old fail-open policy: a
+    // transfer that runs out reports its own failure honestly, a refused one
+    // explains itself here. Blast radius: a device whose read ALWAYS throws
+    // can never start a download. Reverting is one line (treat null as fit).
+    let free: number | null = null;
+    try {
+      const reading = await LegacyFileSystem.getFreeDiskStorageAsync();
+      free = Number.isFinite(reading) ? reading : null;
+    } catch {
+      // Unreadable free space is not permission to fill the disk.
+    }
+    if (
+      !modelFitsOnDevice({
+        modelBytes: activeFile.size,
+        // The projector leg runs AFTER this one, so the main leg's
+        // requirement is the pair — a vision model that only half fits
+        // does not fit.
+        ...(step === "main" && spec.projector
+          ? { projectorBytes: spec.projector.size }
+          : {}),
+        freeBytes: free,
+      })
+    ) {
+      get().updateModel(specId, {
+        downloadStatus: "failed",
+        error:
+          free === null
+            ? "Not enough storage space to download: free space on this device could not be determined"
+            : "Not enough storage space to download the model",
+      });
+      return;
+    }
+
+    // No notification permission is requested (removed): the Android
+    // worker's foreground-service notification is what lifts WorkManager's
+    // ten-minute cap on a multi-GB transfer, and it is posted whether or not
+    // the user has answered any prompt — on Android 13+ it stays suppressed
+    // until the permission is granted from system settings.
     get().updateModel(specId, {
       downloadStatus: "downloading",
       downloadProgress: resumeProgress,
@@ -207,23 +257,9 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       error: undefined,
     });
 
-    // PocketPal parity: refuse before bytes move when the disk can't fit it.
-    try {
-      const free = await LegacyFileSystem.getFreeDiskStorageAsync();
-      if (Number.isFinite(free) && free < activeFile.size) {
-        get().updateModel(specId, {
-          downloadStatus: "failed",
-          error: "Not enough storage space to download the model",
-        });
-        return;
-      }
-    } catch {
-      // Unknown free space: attempt anyway, the transfer reports the truth.
-    }
-
     // The service's callbacks are global (last registered wins); keying each
     // update off the job's own modelId makes re-registration harmless.
-    downloadService.setProgressCallback((downloadJob) => {
+    platformDownloadService.setProgressCallback((downloadJob) => {
       // Persist only on a real status transition (idle->downloading,
       // ->paused, ->failed). Progress bytes go through the transient path so
       // a many-per-second tick never hits AsyncStorage (the models screen
@@ -236,27 +272,19 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
           error: downloadJob.error,
         });
       }
-      // Throttle the transient push so the bar animates smoothly (~4 fps)
-      // instead of re-rendering every preset card on every native tick.
-      // pocketpal ships the unthrottled version; that is the hotspot.
-      const now = Date.now();
-      const last = progressPushedAt.get(downloadJob.modelId) ?? 0;
-      if (now - last >= PROGRESS_PUSH_MS) {
-        progressPushedAt.set(downloadJob.modelId, now);
-        get().setModelProgress(downloadJob.modelId, {
-          downloadProgress: downloadJob.progress,
-          downloadedBytes: downloadJob.downloadedBytes,
-          totalBytes: downloadJob.totalBytes,
-          speedBytesPerSec: downloadJob.speedBytesPerSec,
-        });
-        // syncDownloadStatus builds a fresh Map and notifies subscribers, so
-        // it rides the same throttle — running it every tick was the last
-        // per-tick store notification.
-        get().syncDownloadStatus();
-      }
+      // One transient push per emitted tick. There is deliberately no gate here:
+//      // progress is already throttled once, at the emitter, in
+      // download-service.ts (PocketPal's per-byte-loop throttle). A second
+      // gate in the store was only ever a second place to forget one.
+      get().setModelProgress(downloadJob.modelId, {
+        downloadProgress: downloadJob.progress,
+        downloadedBytes: downloadJob.downloadedBytes,
+        totalBytes: downloadJob.totalBytes,
+        speedBytesPerSec: downloadJob.speedBytesPerSec,
+      });
     });
 
-    downloadService.setCompleteCallback((downloadJob, success) => {
+    platformDownloadService.setCompleteCallback((downloadJob, success) => {
       const specNow = get().getModel(downloadJob.modelId);
       // Pair handoff (vision-series 01): the MAIN leg finishing while a
       // projector is still missing does NOT complete the model — the
@@ -290,11 +318,9 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
             ? `${LegacyFileSystem.documentDirectory}models/${mainFile.name}`
             : downloadJob.destinationPath,
         });
-        // First download activates itself: no manual step, and a working
-        // chat is never yanked away (only-when-none scope).
-        if (!get().activeModelId) {
-          get().setActiveModel(downloadJob.modelId, "local");
-        }
+        // Nothing selects the model here: activation is an explicit Load
+        // (PocketPal parity), so the row flipping to Downloaded is the whole
+        // of what a finished download does.
         // The file is whole: read what it says about itself while it is
         // still known-fresh. Fire-and-forget — metadata is a bonus, and
         // the row is already correct without it.
@@ -318,34 +344,51 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
         get().updateModel(downloadJob.modelId, {
           downloadStatus: "failed",
           error: message,
+          errorCode: downloadJob.errorCode,
         });
       }
-      get().syncDownloadStatus();
     });
 
     try {
-      await downloadService.startDownload(job, undefined, undefined, resume ?? undefined);
+      await platformDownloadService.startDownload(job, undefined, undefined, resume ?? undefined);
     } catch (error) {
       get().updateModel(specId, {
         downloadStatus: "failed",
         error: error instanceof Error ? error.message : "Download failed",
+        errorCode: failureCode(error),
       });
     }
   },
 
+  /** Recovery for a 401: drop the token and try the download again.
+   *
+   * Distinct from disableHfTokenAndRetry, which re-runs a search. This
+   * re-runs the download, because the thing that failed was a transfer and
+   * the user is looking at a model card, not a search box. Only 401 gets
+   * here — 403 means the account cannot read the repo, and no token state
+   * we can reach from this screen changes that. */
+  retryWithoutToken: async (specId) => {
+    get().setUseHfToken(false);
+    const spec = get().getModel(specId);
+    const file = spec?.files[0];
+    if (!spec || !file) return;
+    // Clearing the code first: the card would otherwise keep offering a
+    // button for a failure this action is about to supersede.
+    get().updateModel(specId, { error: undefined, errorCode: undefined });
+    await get().startSpecDownload(spec, file, undefined);
+  },
+
   pauseDownload: async (jobId) => {
-    await downloadService.pauseDownload(jobId);
-    get().syncDownloadStatus();
+    await platformDownloadService.pauseDownload(jobId);
   },
 
   resumeDownload: async (jobId) => {
-    await downloadService.resumeDownload(jobId);
-    get().syncDownloadStatus();
+    await platformDownloadService.resumeDownload(jobId);
   },
 
   pauseModelDownload: async (specId) => {
     try {
-      const job = latestJobForModel(downloadService.getAllJobs(), specId);
+      const job = latestJobForModel(platformDownloadService.getAllJobs(), specId);
       if (!job) return;
       await get().pauseDownload(job.id);
     } catch {
@@ -355,7 +398,7 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
 
   resumeModelDownload: async (specId) => {
     try {
-      const job = latestJobForModel(downloadService.getAllJobs(), specId);
+      const job = latestJobForModel(platformDownloadService.getAllJobs(), specId);
       if (job) {
         await get().resumeDownload(job.id);
         return;
@@ -370,7 +413,7 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
     // Cancel, not pause: the service deletes the partial file, so this
     // abandons the download rather than parking it. No fallback resume
     // path exists on purpose — there is nothing left on disk to resume.
-    const job = latestJobForModel(downloadService.getAllJobs(), specId);
+    const job = latestJobForModel(platformDownloadService.getAllJobs(), specId);
     if (!job) return;
     await get().cancelDownload(job.id);
   },
@@ -409,7 +452,20 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
 
   reconcileInterrupted: async () => {
     const dir = `${LegacyFileSystem.documentDirectory}models/`;
+    // Native wins, and this runs BEFORE reconcileWithNative adopts anything
+    // (persistence.ts keeps the disk pass first, deliberately). The worker
+    // reconciles disk-vs-DB itself against the SERVER's adopted total (the
+    // serverTotal block and the end-of-transfer size check in
+    // DownloadWorker.kt), while this pass classifies by the CATALOG's size —
+    // so on a file whose real size no longer matches the catalog
+    // (re-quantized upstream), this pass would mark a completed download
+    // "paused" or DELETE it as corrupt before adoption could correct it.
+    // Read-only peek; the mirror stays untouched.
+    const nativeKnown = new Set(
+      (await platformDownloadService.knownModelIds?.()) ?? [],
+    );
     for (const spec of get().models) {
+      if (nativeKnown.has(spec.id)) continue;
       // Already whole: nothing to reconcile, but it may predate the GGUF
       // metadata read — backfill it here, once, from the file at rest.
       // That is the whole point of the second hook: a model downloaded
@@ -425,8 +481,12 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       if (!file || !(file.size > 0)) continue;
       try {
         const info = await LegacyFileSystem.getInfoAsync(dir + file.name);
-        if (!info.exists || !("size" in info) || typeof info.size !== "number") continue;
-        if (info.size >= file.size) {
+if (!info.exists || !("size" in info) || typeof info.size !== "number") continue;
+      // `===`, not `>=`: an oversized file is the fingerprint of an error
+      // body appended onto a partial by the native writer, and calling that
+      // "completed" hands the user a corrupt model that loads and misbehaves.
+      const state = classifyFileOnDisk(info.size, file.size);
+      if (state === "complete") {
           // Whole file on disk but never marked: killed at the finish line.
           get().updateModel(spec.id, {
             downloadStatus: "completed",
@@ -436,7 +496,24 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
             localPath: dir + file.name,
             error: undefined,
           });
-        } else if (resumeDataForPartial(info.size, file.size) !== null) {
+        } else if (state === "corrupt") {
+          // Overshoot: nothing here is resumable and nothing is whole. It
+          // used to match neither branch and simply sit on disk forever,
+          // holding gigabytes the user cannot reclaim from the UI. Delete it
+          // and hand the row back so Download works again.
+          await LegacyFileSystem.deleteAsync(dir + file.name, { idempotent: true }).catch(
+            () => {
+              // Unremovable: leave the row honest about why it cannot load.
+            },
+          );
+          get().updateModel(spec.id, {
+            downloadStatus: "idle",
+            downloadProgress: 0,
+            downloadedBytes: 0,
+            totalBytes: file.size,
+            error: "A partial download was left corrupt on disk — tap Download to start again",
+          });
+        } else if (state === "partial") {
           // Partial file: manual Resume continues it, nothing auto-starts.
           get().updateModel(spec.id, {
             downloadStatus: "paused",
@@ -450,7 +527,6 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
         // Unreadable file: leave the row as loaded.
       }
     }
-    get().syncDownloadStatus();
   },
 
   refreshGgufMetadata: async (specId) => {
@@ -471,13 +547,13 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
   },
 
   cancelDownload: async (jobId) => {
-    const job = downloadService.getJob(jobId);
+    const job = platformDownloadService.getJob(jobId);
     // Reset AFTER the service resolves, not before: the service's terminal
     // "cancelled" event carries the last known byte count, so an early reset
     // was immediately overwritten and left a stale 40% on the row. Awaiting
     // first also keeps the card on its real state while the abort is in
     // flight, then it snaps straight to Download.
-    await downloadService.cancelDownload(jobId);
+    await platformDownloadService.cancelDownload(jobId);
     if (job) {
       get().updateModel(job.modelId, {
         downloadStatus: "idle",
@@ -485,13 +561,5 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
         downloadedBytes: 0,
       });
     }
-    get().syncDownloadStatus();
-  },
-
-  syncDownloadStatus: () => {
-    const activeDownloads = new Map(
-      downloadService.getAllJobs().map((job) => [job.id, job.status]),
-    );
-    set({ activeDownloads });
   },
 });

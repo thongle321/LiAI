@@ -28,6 +28,7 @@ describe("parseModelSettings", () => {
       displayName: "N",
       systemPrompt: "Be nice",
       stopWords: ["x"],
+      templateName: "llama3",
       addBosToken: true,
       addEosToken: true,
       bosToken: "<s>",

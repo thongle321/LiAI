@@ -24,6 +24,7 @@ colors:
   hairline-strong: "#CBD5E1"
   ink: "#0F172A"
   slate: "#475569"
+  muted: "#5F6B7C"
   alert-tint: "rgba(239, 68, 68, 0.12)"
   scrim: "rgba(15, 23, 42, 0.6)"
 typography:
@@ -226,6 +227,7 @@ Signal Blue is **one hue in two steps**, and which step you pick is a contrast d
 - **Hairline Strong** (`#CBD5E1`): a hovered or emphasised border. Use to answer "is this row tappable?" without lifting it.
 - **Ink** (`#0F172A`): all body and heading text. Primary text is always Ink, never a muted grey.
 - **Slate** (`#475569`): secondary text only — timestamps, hints, counts, placeholders, unit labels, row descriptions. Slate is never used for a heading and never for a control label. One step darker than the board's `#64748B`, which passed on Clean White at 4.76:1 but failed on the two recessed grounds — 4.34 on Mist and 4.37 on Surface Tint — and a description is exactly the kind of text that lands on a tint.
+- **Muted** (`#5F6B7C`): the quiet step, for text that should recede but is still **read** — a second-line description, a file's metadata, a URL under a provider name. It sits between Slate and the tints without touching either, and clears 4.5:1 on all four grounds (5.41 Clean White, 5.08 Cool Paper, 4.94 Mist, 4.97 Surface Tint). **Muted replaces the alpha habit:** `text-secondary-text/70` was the old way to recede and composited Slate to 3.59:1 on white — unreadable at 14px, invisible in review, and unverifiable by a token test because the alpha lives in the call site. Recede with Muted, or with a fill change; never with `/NN` on a text colour (`tests/color-contrast.test.ts` fails the build on one).
 - **Scrim** (`rgba(15, 23, 42, 0.6)`): modal and sheet backdrops.
 
 ### Tints
@@ -251,7 +253,9 @@ Two tints exist, and they exist for a specific reason: a selected element needs 
 
 **The Scrim Rule.** Backdrops are near-black at 60% (`rgba(15, 23, 42, 0.6)`) and never take a hue. A tinted scrim turns a system dialog into a product statement. **Recorded exception:** the hand-rolled sheet in `components/Sheet.tsx` paints this scrim, and the four Material sheets cannot — `@expo/ui`'s community bottom sheet accepts no scrim prop, so those four use the platform default. The rule stands for anything the app draws; where the platform owns the backdrop, the platform wins, and the trade is recorded here rather than hidden.
 
-**The Ink-and-Slate Rule.** Text is Ink or Slate, never blue, never a status colour, and never a third grey. Status colour lives in the icon or the surface, not in the sentence.
+**The Ink-and-Slate Rule.** Text is Ink, Slate or Muted, never blue, never a status colour, and never a third grey. Status colour lives in the icon or the surface, not in the sentence.
+
+**The No-Alpha-Text Rule.** A text colour is never dimmed with an opacity modifier (`text-secondary-text/70`). Alpha on text cannot be measured by the contrast suite, because the suite reads tokens and the alpha lives in a call site — so the failure is structurally invisible to the check that is supposed to catch it, and to a screenshot. Three steps, in order: **Muted** (`text-secondary-text-muted`) for text that recedes but is read, a fill or colour change for anything else, and a new measured token when neither fits. Opacity remains legal on **fills** — Alert Tint is `rgba(239,68,68,0.12)` — and on nothing else.
 
 ## Typography
 
@@ -287,7 +291,7 @@ Two tints exist, and they exist for a specific reason: a selected element needs 
 
 The spatial model is a 4px scale — 4, 8, 12, 16, 20, 24, 32, 40, 48 — with **no off-scale values**. On Uniwind/Tailwind this scale is already the default (`p-1` through `p-12`), so no custom spacing configuration is needed; the discipline is in *choosing* from it, not in defining it.
 
-**Token names are descriptive here and terse in code.** This file names colours and type steps by role — Signal, Signal Mark, Slate, Body Small — because that is what an agent should reach for. `global.css` and `themes/tokens.ts` mirror the same values under short names for use in class strings, and the two are the code mirror of this file, not a second system. Display, Headline, Title, Body, Body Small and Caption are `h1`, `h2`, `h3`, `h4`, `body-lg`, `body-md` and `body-sm`; Screen title, Label and Meta are `title`, `xs` and `micro`; Signal, Signal Mark, Deep Signal, Ink, Slate, Clean White, Cool Paper, Mist and Surface Tint are `primary`, `primary-mark`, `primary-hover`, `primary-text`, `secondary-text`, `surface-1`, `base`, `surface-2` and `surface-3`. The values are identical in all three places, and a test fails if the CSS and TypeScript mirrors drift apart.
+**Token names are descriptive here and terse in code.** This file names colours and type steps by role — Signal, Signal Mark, Slate, Muted, Body Small — because that is what an agent should reach for. `global.css` and `themes/tokens.ts` mirror the same values under short names for use in class strings, and the two are the code mirror of this file, not a second system. Display, Headline, Title, Body, Body Small and Caption are `h1`, `h2`, `h3`, `h4`, `body-lg`, `body-md` and `body-sm`; Screen title, Label and Meta are `title`, `xs` and `micro`; Signal, Signal Mark, Deep Signal, Ink, Slate, Clean White, Cool Paper, Mist and Surface Tint are `primary`, `primary-mark`, `primary-hover`, `primary-text`, `secondary-text`, `secondary-text-muted`, `surface-1`, `base`, `surface-2` and `surface-3`. The values are identical in all three places, and a test fails if the CSS and TypeScript mirrors drift apart.
 
 **Gutters and padding.** The screen gutter is one `5` step (20px) on every edge, including horizontal insets for cards, list rows, and form fields. Cards carry 20px (`5`) internal padding — generous, because a card is a small plane, not a dense module. Fields sit at 12px/16px (`3`/`4`) vertical/horizontal. Message bubbles sit at 12px/16px (`3`/`4`).
 
@@ -319,6 +323,8 @@ Modals and sheets add a third, separate layer: the Scrim (`rgba(15, 23, 42, 0.6)
 **The Hairline Rule.** Every separation is a 1px line or a single surface step. If a design needs a drop shadow to be legible, the border is too light or the surface step is missing — fix that instead of adding depth.
 
 **The No-Glow Rule.** Nothing emits light. No shadow, no inner glow, no coloured blur, no neon. Sci-fi is signalled by geometry — 2px line icons, corner brackets, dot trails — not by luminance.
+
+**The Mask Gradient Rule.** A gradient is never decoration, but it earns one job: **fading a value out at a truncation edge** so clipped text reads as "there is more" instead of chopped mid-glyph. Exactly one place ships it today — the chat-template preview in Model Settings (`TemplatePreview`, an SVG `LinearGradient` from the sheet's own fill to transparent over the right 30% of the row), mirroring the reference app's `MaskedView`. It paints no colour, no hue, no luminance: it is a mask over the surface colour. Anything that fades for spectacle rather than to mark a cut is banned like any other gradient.
 
 **The Three-Plane Rule.** Only three surface values exist. A fourth is a bug: either something is raised (Clean White) or recessed (Mist), and nothing is both.
 
@@ -396,7 +402,7 @@ A settings screen is a stack of **row cards** on Cool Paper, grouped by subject 
 
 - **Section:** one Clean White row card with a 1px Hairline border and Default radius, no heading. Sections are spaced 24px (`6`) apart.
 - **Row:** 48–56px minimum, 16px horizontal / 12px vertical padding, dividers running edge to edge between rows (never around the card's outside edge).
-- **Every row carries a description.** The label is Body (16/24) Ink; the line under it is Label (11/16) Slate and says what the value does or what happens if you change it. A row with no description available does not ship — a bare label tells the user nothing about the consequence.
+- **Every row carries a description.** The label is Body (16/24) Ink; the line under it is Label (11/16) Slate and says what the value does or what happens if you change it. A row with no description available does not ship — a bare label tells the user nothing about the consequence. **Recorded exception:** the Model Settings sheet, the one surface held to PocketPal's copy verbatim — its token rows are bare label+switch because the reference's are, and the rows that do need explaining (Reasoning, graded effort) carry PocketPal's own help text beneath them.
 - **Controls sit right-aligned**; the label block takes the remaining width. A value that needs explaining beyond the description is a picker, not a wider label.
 - **Trailing chevron means "this opens something."** A row that navigates carries one; a row that edits in place does not. The one exception is the Advanced group, which expands in place and so carries the chevron that says so. Chevrons are 2px stroke at 16px in Slate.
 - **"Advanced" is a collapsed group by default** and renders as a full-width row with a chevron that rotates to point down when open. A screen with more than ~8 visible rows uses one; the tuning a power user wants is not what a first-run user should read past.
@@ -457,6 +463,8 @@ Machine-in-the-loop feedback. These are the only places Coolant Cyan is allowed.
 - **Do** meet the accessibility floor on every screen: 4.5:1 text contrast, 48×48dp touch targets, 16px minimum body text and dynamic type support. Motion always plays at full PocketPal timing — the OS reduce-motion setting is deliberately not honoured. Contrast is machine-checked against the real token values (`tests/color-contrast.test.ts`); touch targets and the type floor are held in the BEM blocks in `global.css`, not at call sites.
 - **Do** pair every status colour with a glyph and a word — check, exclamation, dot trail, word. Colour is never the only indicator. The one documented exception is the bottom tab bar, where the active tab is tint alone (see Navigation).
 - **Do** use Coolant Cyan only for machine-in-the-loop states (thinking, vision, streaming) and Signal everywhere else.
+- **Do** reach for a mask gradient only where it marks a truncation edge — one instance, the template preview. Never as a surface, a fill or a heading.
+- **Do** treat "PocketPal parity" as structure and copy, never as Material components. Where the reference uses react-native-paper, this system supplies the native equivalent (a real `@expo/ui` switch seeded Signal Blue) or the nearest token from this file (`.input` for a filled Paper field). The reference's anatomy and words carry; its component library does not.
 - **Do** keep nav chrome and the composer static. Only the content behind them transitions.
 - **Do** apply safe-area insets exactly once per edge, at the component that owns that edge.
 - **Do** use Inter, and gate first paint on the font resolving so nothing flashes in the system typeface.
@@ -464,12 +472,13 @@ Machine-in-the-loop feedback. These are the only places Coolant Cyan is allowed.
 ### Don't:
 
 - **Don't** reintroduce the retired v0 world: near-black surfaces (`#0B0C0C`), the lime accent (`#D8E87D`), Raleway, soft surface elevation, clipped octagonal corners, or emoji used as interface glyphs. That world is dead.
-- **Don't** add a shadow, a glow, a blur, or a decorative gradient. There is no such token, and adding one means this file is out of date.
+- **Don't** add a shadow, a glow, a blur, or a decorative gradient. There is no such token, and adding one means this file is out of date. The one exception is the mask gradient above, which is a truncation cue and paints nothing.
 - **Don't** use a second typeface or a monospace exception. Inter carries code and metadata.
 - **Don't** render text below Caption (12px), and don't drop reading text below Body Small (14px) to make a layout fit.
 - **Don't** use colour as the only signal. Every *status* carries a glyph and a word. Selection state in platform-native navigation (the active bottom tab) is the exception, and it is tint alone.
 - **Don't** let two status colours appear in one component. One component, one status.
 - **Don't** tint a border, an icon, or a label. Tints are grounds for selected surfaces only.
+- **Don't** dim a text colour with an alpha modifier, and don't grey out a disabled control with `opacity-N` — disabled is Mist fill + Slate label, per *Buttons*. Seven `text-secondary-text/70` sites once sat in this codebase, all of them 14px reading text at 3.59:1; the guard in `tests/color-contrast.test.ts` now fails the build on the pattern.
 - **Don't** animate loopingly or decoratively, and don't exceed 300ms. State changes and feedback only; motion always plays (PocketPal parity — no reduce-motion branch).
 - **Don't** animate the tab bar, the header, or the composer, and don't let the bar's height change under the user's thumb — a bar that shifts is a bug, not a transition.
 - **Don't** invent a colour that isn't in this file. If a design needs one, add the token here first, with a reason.

@@ -63,6 +63,8 @@ export interface ModelSpec {
   /** Live bytes/sec while downloading; transient, never persisted. */
   speedBytesPerSec?: number;
   error?: string;
+  /** Machine-readable failure kind; see DownloadErrorCode. */
+  errorCode?: DownloadErrorCode;
   // Catalog metadata (PocketPal parity, minus pal features)
   params?: number; // parameter count, e.g. 135_000_000
   capabilities?: string[];
@@ -122,6 +124,12 @@ export interface HFModelFile {
   oid?: string;
 }
 
+/** Why a download failed, in a form the UI can act on rather than parse out
+ *  of a sentence. One member is the whole need today: it is the only
+ *  failure with a one-tap fix. Anything else stays a plain message, so this
+ *  earns a member when a real affordance appears for it, not before. */
+export type DownloadErrorCode = "authentication";
+
 export interface DownloadJob {
   id: string;
   modelId: string;
@@ -137,6 +145,8 @@ export interface DownloadJob {
   error?: string;
   resumable: boolean;
   pauseToken?: string;
+  /** Machine-readable failure kind, when the UI can offer a fix for it. */
+  errorCode?: DownloadErrorCode;
   /** Live bytes/sec while downloading; computed per progress callback. */
   speedBytesPerSec?: number;
 }
@@ -183,6 +193,12 @@ export interface ModelSettings {
   displayName: string;
   systemPrompt: string;
   stopWords: string[];
+  /** Which base-template preset the Edit Chat Template dialog has selected
+   *  (PocketPal's config `name`). "custom" = the model default; absent on
+   *  rows written before presets existed, which parse back as "custom".
+   *  Stored so the picker shows the selection without matching template
+   *  strings by content. */
+  templateName?: string;
   /** Token overrides (PocketPal parity). BOS is persisted but not
    *  injected today — llama.rn applies the GGUF template's own BOS. */
   addBosToken: boolean;

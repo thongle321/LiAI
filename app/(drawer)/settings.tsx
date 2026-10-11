@@ -7,6 +7,10 @@
  * it would render empty. Cache & Storage is a PocketPal Shortcuts cache
  * this app has no subject for. Export Options was excluded.
  *
+ * There is deliberately NO storage card either: free space is reported on
+ * the download cards themselves, where the size it is compared against is
+ * (see hooks/useStorageDisclosure.ts).
+ *
  * There is deliberately NO sampling card: sampling is per conversation and
  * lives in the chat screen's "Generation settings" sheet, which is where
  * PocketPal keeps it.
@@ -28,7 +32,6 @@ import {
 } from "../../components/InferenceSettings.tsx";
 import { SearchSettings } from "../../components/SearchSettings.tsx";
 import { HfTokenSettings } from "../../components/HfTokenSettings.tsx";
-import { StorageSettings } from "../../components/StorageSettings.tsx";
 
 export default function SettingsScreen() {
   return (
@@ -41,7 +44,6 @@ export default function SettingsScreen() {
           <ModelLoadingSettings />
           <SearchSettings />
           <HfTokenSettings />
-          <StorageSettings />
         </ContentColumn>
       </ScrollView>
     </SafeAreaView>

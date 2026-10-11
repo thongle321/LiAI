@@ -1,7 +1,7 @@
 /** Floating action button + its three add-model actions. */
 
-import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { BackHandler, Pressable, Text, View } from "react-native";
 import Animated, {
   type BaseAnimationBuilder,
 } from "react-native-reanimated";
@@ -77,6 +77,23 @@ export function FABGroup({
   onAddRemoteModel: () => void;
 }) {
   const [open, setOpen] = useState(false);
+
+  // Android Back consumes the INNERMOST transient layer first. Without this
+  // the open menu left the screen entirely — Back popped the models route
+  // with the FAB still expanded over the next one. Returning true claims
+  // the event; the listener exists only while the menu is open, so Back
+  // keeps its normal meaning the rest of the time.
+  useEffect(() => {
+    if (!open) return;
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        setOpen(false);
+        return true;
+      },
+    );
+    return () => subscription.remove();
+  }, [open]);
   // PocketPal parity: the group always plays, ignoring the OS reduce-motion
   // setting (paper hardcodes its durations the same way).
   const actionMs = ACTION_DURATION_MS;
@@ -153,6 +170,7 @@ export function FABGroup({
         onPress={() => setOpen(!open)}
         className="h-14 w-14 items-center justify-center rounded-full"
         accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
         accessibilityLabel={open ? "Close add model menu" : "Add a model"}
       >
         <View

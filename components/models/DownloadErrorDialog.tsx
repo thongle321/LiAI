@@ -78,7 +78,7 @@ export function DownloadErrorDialog({
           {modelUrl ? (
             <Pressable
               onPress={() => void Linking.openURL(modelUrl)}
-              className="mb-2 w-full items-center py-1"
+              className="mb-2 min-h-12 w-full items-center"
               accessibilityRole="link"
               accessibilityLabel="View this model on Hugging Face"
             >

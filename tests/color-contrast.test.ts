@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -116,6 +116,7 @@ test("every text-on-surface pair clears 4.5:1", () => {
     "primary": token(css, "primary"),
     "primary text / ink": token(css, "primary-text"),
     "secondary text / slate": token(css, "secondary-text"),
+    "secondary text muted": token(css, "secondary-text-muted"),
     "error": token(css, "error"),
   };
   const failures: string[] = [];
@@ -162,6 +163,46 @@ test("every mark role clears the 3:1 non-text floor", () => {
   assert.deepEqual(failures, [], `marks below 3:1 — ${failures.join(", ")}`);
 });
 
+// ------------------------------------------------- no alpha on a text class
+
+function sourceFiles(dir: string): string[] {
+  const out: string[] = [];
+  const modelStore = join(ROOT, "models");
+  for (const entry of readdirSync(join(ROOT, dir))) {
+    if (entry === "node_modules" || entry === "pocketpal-ai") continue;
+    const full = join(dir, entry);
+    if (full === modelStore) continue;
+    if (statSync(full).isDirectory()) out.push(...sourceFiles(full));
+    else if (entry.endsWith(".tsx")) out.push(full);
+  }
+  return out;
+}
+
+test("no text colour is dimmed with an alpha modifier", () => {
+  // The failure this closes: `text-secondary-text/70` on 14px body text
+  // composited Slate to 3.59:1 on white and passed every review, because a
+  // screenshot cannot show you a contrast ratio and a token test cannot see
+  // an alpha that lives in a call site. Seven sites carried it at once.
+  //
+  // Recede with `text-secondary-text-muted` (a measured token the test above
+  // polices), or with a fill change. Never with `/NN` on a text colour.
+  // Fills are NOT covered: `bg-error/10` is the Alert Tint and is correct.
+  const ALPHA_TEXT =
+    /\btext-(?:primary|on-primary|primary-text|secondary-text|error|success|warning|info)(?:-mark|-muted)?\/\d+\b/g;
+  const offenders: string[] = [];
+  for (const file of [...sourceFiles("components"), ...sourceFiles("app")]) {
+    const src = readFileSync(join(ROOT, file), "utf8");
+    for (const m of src.matchAll(ALPHA_TEXT)) {
+      offenders.push(`${file}: ${m[0]}`);
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `text colours dimmed by alpha (unmeasurable, and below 4.5:1):\n${offenders.join("\n")}`,
+  );
+});
+
 // ------------------------------------------------------------------ the mirror
 
 test("themes/tokens.ts mirrors global.css exactly", () => {
@@ -180,6 +221,7 @@ test("themes/tokens.ts mirrors global.css exactly", () => {
     ["border", token(css, "border")],
     ["primaryText", token(css, "primary-text")],
     ["secondaryText", token(css, "secondary-text")],
+    ["secondaryTextMuted", token(css, "secondary-text-muted")],
   ];
   const drift = pairs
     .map(([name, expected]) => ({ name, expected, actual: tsToken(ts, name) }))

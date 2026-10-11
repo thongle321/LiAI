@@ -49,6 +49,14 @@
      #64748b, which passed on white (4.76) but failed on the two recessed
      grounds — 4.34 on Mist and 4.37 on Surface Tint. */
   --color-secondary-text: #475569;
+  /* The quiet step, for text that should recede but is still READ.
+     Chosen by measurement, not by eye: 70% alpha over Slate was the habit
+     it replaces, and that composites to (126,136,150) = 3.59:1 on white —
+     under the 4.5:1 floor for 14px reading text. This clears all four
+     grounds and is held there by the text-role test in
+     tests/color-contrast.test.ts. An alpha modifier on a text class can
+     never be verified that way, which is why it is banned outright. */
+  --color-secondary-text-muted: #5f6b7c;
   --color-primary-text: #0f172a;
   --color-inverse-text: #ffffff;
 
@@ -237,6 +245,16 @@
 }
 .row:last-child {
   border-bottom-width: 0;
+}
+
+/* Section title (PocketPal's 18px bold section headers, ModelSettings
+   sheet + the "Multimodal Settings" / "Reasoning" headings). 20px semibold
+   is the rung above Body on this project's scale. */
+.section-title {
+  font-family: var(--font-sans-semibold);
+  font-size: 20px;
+  line-height: 28px;
+  color: #0f172a;
 }
 
 /* Segmented pickers: .seg + .seg--active | .seg-label + .seg-label--active */

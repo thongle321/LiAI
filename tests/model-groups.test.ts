@@ -12,6 +12,8 @@ import {
   READY_TO_USE,
   UNKNOWN_GROUP,
   buildModelGroups,
+  flattenModelGroups,
+  type ModelGroup,
 } from "../lib/models/model-groups.ts";
 import { presetSpecId } from "../lib/models/huggingface.ts";
 import type { ModelSpec, PresetModel, RemoteApiProvider } from "../types/models.ts";
@@ -167,6 +169,26 @@ describe("models screen grouping", () => {
     assert.equal(groups.length, 1);
   });
 
+  it("a downloading preset shows only its card, never a duplicate spec row", () => {
+    const specId = presetSpecId("p1", "p1.gguf");
+    const downloading = spec({
+      id: specId,
+      origin: "preset",
+      downloadStatus: "downloading",
+      files: [{ name: "p1.gguf", size: 10, downloadUrl: "u" }],
+    });
+    const groups = buildModelGroups({
+      specs: [downloading, spec({ id: "bookmark", origin: "huggingface" })],
+      remotes: [],
+      presets: [preset()],
+      filters: off,
+    });
+    assert.deepEqual(groups[0].items, [
+      { kind: "spec", id: "bookmark" },
+      { kind: "preset", id: "p1" },
+    ]);
+  });
+
   it("falls back to Unknown for a group key it cannot name", () => {
     const groups = buildModelGroups({
       specs: [spec({ type: undefined as unknown as ModelSpec["type"] })],
@@ -178,5 +200,69 @@ describe("models screen grouping", () => {
       groups.map((g) => g.key),
       [UNKNOWN_GROUP],
     );
+  });
+});
+
+describe("flattened rows for the one virtualizer", () => {
+  const twoGroups: ModelGroup[] = [
+    { key: READY_TO_USE, label: "Ready to Use", items: [{ kind: "spec", id: "s1" }] },
+    {
+      key: AVAILABLE_TO_DOWNLOAD,
+      label: "Available to Download",
+      items: [
+        { kind: "preset", id: "p1" },
+        { kind: "spec", id: "h1" },
+      ],
+    },
+  ];
+
+  it("a collapsed group contributes its header and nothing else", () => {
+    const rows = flattenModelGroups(twoGroups, {});
+    assert.deepEqual(rows.map((r) => r.key), [READY_TO_USE, AVAILABLE_TO_DOWNLOAD]);
+    assert.ok(rows.every((r) => r.kind === "group"));
+  });
+
+  it("an expanded group interleaves its cards straight after its header", () => {
+    const rows = flattenModelGroups(twoGroups, { [AVAILABLE_TO_DOWNLOAD]: true });
+    assert.deepEqual(rows.map((r) => r.key), [
+      READY_TO_USE,
+      AVAILABLE_TO_DOWNLOAD,
+      `${AVAILABLE_TO_DOWNLOAD}:preset:p1`,
+      `${AVAILABLE_TO_DOWNLOAD}:spec:h1`,
+    ]);
+    assert.deepEqual(
+      rows.filter((r) => r.kind === "item").map((r) => r.item),
+      [{ kind: "preset", id: "p1" }, { kind: "spec", id: "h1" }],
+    );
+  });
+
+  it("expanding one group leaves the other's rows out of the list", () => {
+    // The whole point: a collapsed group's cards are NOT in the row list, so
+    // they are never mounted and cannot re-render on a download tick.
+    const rows = flattenModelGroups(twoGroups, { [READY_TO_USE]: true });
+    const items = rows.filter((r) => r.kind === "item");
+    assert.equal(items.length, 1);
+    assert.equal(items[0].key, `${READY_TO_USE}:spec:s1`);
+  });
+
+  it("row keys are unique across groups — two groups can hold the same id", () => {
+    const rows = flattenModelGroups(
+      [
+        { key: "llm", label: "llm", items: [{ kind: "spec", id: "same" }] },
+        { key: "vision", label: "vision", items: [{ kind: "spec", id: "same" }] },
+      ],
+      { llm: true, vision: true },
+    );
+    const keys = rows.map((r) => r.key);
+    assert.equal(
+      new Set(keys).size,
+      keys.length,
+      `duplicate row key: ${keys.join(", ")}`,
+    );
+  });
+
+  it("an explicitly closed group stays closed even if the map carries it", () => {
+    const rows = flattenModelGroups(twoGroups, { [READY_TO_USE]: false });
+    assert.equal(rows.filter((r) => r.kind === "item").length, 0);
   });
 });

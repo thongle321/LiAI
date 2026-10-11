@@ -222,7 +222,7 @@ export function ModelCard({
         {actions.includes("load") || actions.includes("offload") ? (
           <Pressable
             onPress={isActive ? onDeactivate : onActivate}
-            className={`btn min-h-10 flex-1 rounded-2xl px-5 ${
+            className={`btn flex-1 rounded-2xl px-5 ${
               isActive ? "btn--secondary" : "btn--primary"
             }`}
             accessibilityRole="button"
@@ -340,7 +340,11 @@ export function RemoteProviderCard({
               {item.name}
             </Text>
           </View>
-          <Text className="font-sans text-body-sm text-secondary-text/70 mt-0.5">
+          <Text
+            numberOfLines={2}
+            ellipsizeMode="middle"
+            className="font-sans text-body-sm text-secondary-text-muted mt-0.5"
+          >
             {item.baseUrl} • {item.modelName}
           </Text>
           <View className="flex-row items-center gap-2 mt-2">

@@ -85,3 +85,40 @@ describe("text-as-button pressables announce as buttons", () => {
     assert.match(block, /accessibilityRole="button"/);
   });
 });
+
+describe("disabled and transient controls state themselves", () => {
+  it("the download button shows AND announces its disabled state", () => {
+    // A disabled control that looks enabled is worse than no control: the
+    // user taps a live-looking button and nothing happens. DESIGN.md is
+    // explicit that disabled is a FILL and LABEL change, never opacity.
+    const src = read("components/models/ModelBits.tsx");
+    const button = src.slice(src.indexOf("export function DownloadButton"));
+    assert.match(
+      button,
+      /accessibilityState=\{\{ disabled/,
+      "a disabled button must announce that it is disabled",
+    );
+    assert.match(button, /bg-surface-2/, "disabled must change the fill");
+    assert.match(button, /text-secondary-text/, "the label must step down too");
+    assert.doesNotMatch(
+      button,
+      /opacity-\d+/,
+      "disabled is never opacity on a live element",
+    );
+  });
+
+  it("the models FAB group announces its expanded state", () => {
+    const block = pressableBlock(
+      read("components/models/FABGroup.tsx"),
+      "onPress={() => setOpen(!open)}",
+    );
+    assert.match(block, /accessibilityState=\{\{ expanded/);
+  });
+
+  it("Android Back closes the open FAB menu before anything else", () => {
+    // Material expects Back to consume the innermost transient layer. With
+    // no handler, Back popped the models route with the menu still open.
+    const src = read("components/models/FABGroup.tsx");
+    assert.match(src, /BackHandler/, "the transient menu must own Back first");
+  });
+});

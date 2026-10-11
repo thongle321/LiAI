@@ -2,11 +2,13 @@
  * Download, or one group per model type when `grouped` is on — plus the
  * header filter menu and the add FAB.
  *
- * PocketParity: ModelsScreen.tsx:386-478. A FlatList whose items are
- * GROUPS, each an accordion wrapping its models (`:397-412`, `:346-377`).
- * The grouping itself is lib/models/model-groups.ts; the expansion state
- * is keyed by group key, exactly as the reference keys it
- * (UIStore.ts:28-30). Empty groups are never rendered (`:378-384`).
+ * PocketParity: ModelsScreen.tsx:386-478. The grouping itself is
+ * lib/models/model-groups.ts; the expansion state is keyed by group key,
+ * exactly as the reference keys it (UIStore.ts:28-30). Empty groups are
+ * never rendered (:378-384).
+ *
+ * The list is ONE FlatList over flattened header+card rows, not groups of
+ * cards — see flattenModelGroups for why nesting was the worse answer.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -26,7 +28,9 @@ import { useModelsUi } from "../../store/modelsUi.ts";
 import { isProviderActive } from "../../lib/model-providers.ts";
 import {
   buildModelGroups,
+  flattenModelGroups,
   type ModelGroup,
+  type ModelRow,
 } from "../../lib/models/model-groups.ts";
 import { DownloadErrorDialog } from "../../components/models/DownloadErrorDialog.tsx";
 import { ModelsHeaderRight } from "../../components/models/ModelsHeaderRight.tsx";
@@ -144,6 +148,15 @@ export default function ModelsRoute() {
     [models, remoteApis, presets, downloadedOnly, hfOnly, grouped],
   );
 
+  // ONE virtualizer over headers AND cards (flattenModelGroups): a
+  // collapsed group's cards are not rows, so they are never mounted and
+  // never re-render on a download tick. Rebuilt only when the grouping or
+  // the expansion map actually moves.
+  const rows = useMemo(
+    () => flattenModelGroups(groups, expandedGroups),
+    [groups, expandedGroups],
+  );
+
   const specById = useMemo(() => new Map(models.map((m) => [m.id, m])), [models]);
   const presetById = useMemo(() => new Map(presets.map((p) => [p.id, p])), [presets]);
   const remoteById = useMemo(() => new Map(remoteApis.map((r) => [r.id, r])), [remoteApis]);
@@ -219,16 +232,29 @@ export default function ModelsRoute() {
     );
   }
 
-  const renderGroup = ({ item: group }: { item: ModelGroup }) => (
-    <ModelAccordion
-      title={group.label}
-      {...(group.description !== undefined ? { description: group.description } : {})}
-      open={expandedGroups[group.key] ?? false}
-      onToggle={(next) => toggleGroup(group.key, next)}
-    >
-      {group.items.map((item) => renderItem(item, guardedDownload))}
-    </ModelAccordion>
-  );
+  /** One FlatList row. A group header renders as the accordion's own chrome
+   *  (its cards are separate rows, not its children); a card renders as
+   *  whatever kind it is.
+   *
+   *  The 24px gap BETWEEN groups rides on the header, not on a wrapper around
+   *  the group's cards: with the cards as rows of their own there is no block
+   *  left to hang a bottom margin on, and putting the space above every header
+   *  but the first reproduces the old rhythm exactly. */
+  const renderRow = ({ item: row, index }: { item: ModelRow; index: number }) => {
+    if (row.kind === "group") {
+      const group = row.group;
+      return (
+        <ModelAccordion
+          title={group.label}
+          {...(group.description !== undefined ? { description: group.description } : {})}
+          open={expandedGroups[group.key] ?? false}
+          onToggle={(next) => toggleGroup(group.key, next)}
+          {...(index === 0 ? {} : { className: "mt-6" })}
+        />
+      );
+    }
+    return renderItem(row.item, guardedDownload);
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
@@ -248,20 +274,21 @@ export default function ModelsRoute() {
         }
       />
       <View className="flex-1">
-        {/* PocketParity: the list's own items are GROUPS, each rendering its
-            models — ModelsScreen.tsx:397-412, :362-376. shortcut: no nested
-            FlatList per group (the reference has one), so a group's items are
-            all mounted; windowing is the outer list's only lever. Nest one when
-            the catalog outgrows a screen's worth of cards. One ContentColumn
-            wraps the whole list so group headers line up with the cards on a
-            wide screen; `paddingBottom` is an inline style, not a class: it
-            is derived from FAB_STACK_HEIGHT, and a dynamically-composed
-            Uniwind class has failed to resolve on device before. */}
+        {/* PocketParity: the reference's list items are GROUPS, each an
+            accordion wrapping its models (:397-412, :362-376). Ours keeps
+            the same on-screen anatomy — a header, then that group's cards —
+            but flattens both into ONE row list, because a FlatList whose
+            items hold unvirtualized children virtualizes nothing: an open
+            group mounted its whole catalog and re-rendered all of it on
+            every progress tick. See flattenModelGroups.
+            `paddingBottom` is an inline style, not a class: it is derived
+            from FAB_STACK_HEIGHT, and a dynamically-composed Uniwind class
+            has failed to resolve on device before. */}
         <ContentColumn className="w-full flex-1">
           <FlatList
-            data={groups}
-            keyExtractor={(group) => group.key}
-            renderItem={renderGroup}
+            data={rows}
+            keyExtractor={(row) => row.key}
+            renderItem={renderRow}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}

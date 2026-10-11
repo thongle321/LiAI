@@ -139,6 +139,13 @@ describe("settings card pattern", () => {
   it("gives every row a description", () => {
     // DESIGN.md, Settings: a bare label says nothing about what the value
     // does. Three rows shipped without one before this existed.
+    //
+    // EXCEPTION, models/ModelSettingsSheet.tsx: the Model Settings sheet is
+    // the one surface held to PocketPal's copy verbatim, and the reference's
+    // token rows are bare label+switch ("BOS", "EOS"). A description there
+    // is a divergence from the reference, not an oversight — the rows that
+    // DO need explaining (Reasoning, graded effort) carry help text below
+    // them, which is where PocketPal puts it.
     const rows =
       /<(ToggleRow|StepperRow|SliderRow|PickerRow|Segmented|ActionRow|TextFieldRow)\b[\s\S]*?\/>/g;
     for (const file of [
@@ -147,7 +154,6 @@ describe("settings card pattern", () => {
       "HfTokenSettings.tsx",
       "InferenceSettings.tsx",
       "SamplerRows.tsx",
-      "models/ModelSettingsSheet.tsx",
     ]) {
       const source = read(`components/${file}`);
       for (const m of source.matchAll(rows)) {

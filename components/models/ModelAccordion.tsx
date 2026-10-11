@@ -31,6 +31,7 @@ export function ModelAccordion({
   description,
   open,
   onToggle,
+  className,
   children,
 }: {
   title: string;
@@ -39,11 +40,18 @@ export function ModelAccordion({
   open: boolean;
   /** Receives the next state, matching the header's own toggle. */
   onToggle: (next: boolean) => void;
-  children: ReactNode;
+  /** The screen owns the spacing BETWEEN groups now: it renders this as
+   *  one row of a flat list and puts the 24px gap on every header after the
+   *  first, so the gap follows the header rather than the block below it. */
+  className?: string;
+  /** Optional since the models screen flattened headers and cards into one
+   *  row list — the header is now a row of its own and the cards are rows
+   *  after it. Any other caller may still nest content here. */
+  children?: ReactNode;
 }) {
   const [pressed, setPressed] = useState(false);
   return (
-    <View className="mb-6">
+    <View className={className}>
       <Pressable
         onPress={() => onToggle(!open)}
         onPressIn={() => setPressed(true)}

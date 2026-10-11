@@ -10,6 +10,10 @@
  *
  * Empty groups are dropped, never rendered as a "Ready to Use (0)" header.
  *
+ * A preset's spec row never appears while its preset card does — the card
+ * carries that model's progress, quantizations and cancel, so both would
+ * show one model twice.
+ *
  * Divergence: PocketPal sorts downloaded-first when `grouped` is OFF
  * (:280-289). Our two buckets already split on downloaded/available, so
  * the sort would be a no-op — the items in a bucket are all one or the
@@ -18,6 +22,7 @@
 
 import type { ModelSpec, PresetModel } from "../../types/models";
 import type { RemoteApiProvider } from "../../types/models";
+import { presetSpecId } from "./huggingface.ts";
 import { isPresetDownloaded } from "./file-state.ts";
 
 export const READY_TO_USE = "ready_to_use";
@@ -78,6 +83,16 @@ export function buildModelGroups({
     visibleSpecs = visibleSpecs.filter((s) => s.downloadStatus === "completed");
   }
 
+  // A preset's spec row IS its preset card: the card reads progress,
+  // quantizations and Cancel off that very row. While the card is in
+  // Available, rendering the row too lists the same model twice — so the
+  // row only earns a card once the preset has fully left Available and the
+  // completed model has to be shown from Ready.
+  const coveredByPresetCard = new Set(
+    visiblePresets.flatMap((p) => p.files.map((f) => presetSpecId(p.id, f.name))),
+  );
+  visibleSpecs = visibleSpecs.filter((s) => !coveredByPresetCard.has(s.id));
+
   const items: ModelGroupItem[] = [
     ...visibleSpecs.map((s): ModelGroupItem => ({ kind: "spec", id: s.id })),
     ...visibleRemotes.map((r): ModelGroupItem => ({ kind: "remote", id: r.id })),
@@ -136,4 +151,48 @@ export function buildModelGroups({
     }
     return presetById.get(item.id)?.type ?? UNKNOWN_GROUP;
   }
+}
+
+/** ONE row of the models screen's FlatList: a group header, or one of the
+ * cards inside it.
+ *
+ * THE VIRTUALIZATION ANSWER. The screen used to hand the FlatList the
+ * GROUPS and let each accordion render every one of its cards, so an
+ * expanded group mounted its whole catalog. Nothing outside the viewport
+ * was windowed, and every card subscribed to the whole `models` array — so
+ * one download's progress tick re-rendered every card in every open group,
+ * cost growing with the catalog.
+ *
+ * Flattening headers and cards into a single row list puts ONE virtualizer
+ * over the whole screen: no nested scroller, no second orientation to
+ * reconcile, and the mounted set is the viewport plus an overscan. A
+ * collapsed group's cards are simply not rows, so they cost nothing.
+ * Nesting a VirtualizedList per group was the other option and is worse:
+ * React Native warns against it explicitly, same-orientation scrollers
+ * fight each other, and it fixes the mounting problem without the
+ * re-render one. */
+export type ModelRow =
+  | { kind: "group"; key: string; group: ModelGroup }
+  | { kind: "item"; key: string; item: ModelGroupItem };
+
+/** `expanded` is the persisted per-group map; anything not `true` is shut.
+ *  Row keys are namespaced by group, because grouped mode can legitimately
+ *  hold the same model id under two types. */
+export function flattenModelGroups(
+  groups: ModelGroup[],
+  expanded: Record<string, boolean>,
+): ModelRow[] {
+  const rows: ModelRow[] = [];
+  for (const group of groups) {
+    rows.push({ kind: "group", key: group.key, group });
+    if (expanded[group.key] !== true) continue;
+    for (const item of group.items) {
+      rows.push({
+        kind: "item",
+        key: `${group.key}:${item.kind}:${item.id}`,
+        item,
+      });
+    }
+  }
+  return rows;
 }

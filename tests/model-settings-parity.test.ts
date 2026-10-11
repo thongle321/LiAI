@@ -39,15 +39,18 @@ describe("PocketPal section order", () => {
   it("runs Model Name → tokens → system prompt → template → stop words → multimodal → reasoning → footer", () => {
     const order = [
       "Model Name",
-      "Token settings",
+      // No "Token settings" heading — the reference has none; the token
+      // rows are carried by the dividers between them (BOS is its marker).
+      "BOS",
       "System Prompt",
-      // The template row's preview fallback — a unique string IN the row.
-      // ("Template:" itself also occurs inside `chatTemplate:` in the save
-      // payload, which is why it cannot be the marker.)
-      "Model default",
+      // The template row's render site. ("Template:" itself also occurs
+      // inside `chatTemplate:` in the save payload, and "Model default"
+      // lives inside the TemplatePreview helper above the JSX — neither is
+      // a position in the rendered order.)
+      "<TemplatePreview",
       "STOP WORDS",
-      // The section itself lives in ModelMultimodalSection; what the
-      // sheet carries is the render site.
+      // The reference owns the divider AND the heading around this
+      // component, so both now live in the sheet.
       "<ModelMultimodalSection",
       "Reasoning model",
       "Save Changes",
@@ -68,8 +71,8 @@ describe("PocketPal copy", () => {
   it("labels the rows PocketPal labels", () => {
     for (const copy of [
       "Model Name",
-      "Add BOS token",
-      "Add EOS token",
+      "BOS",
+      "EOS",
       "Add Generation Prompt",
       "STOP WORDS",
       "Add new stop word",
@@ -81,7 +84,7 @@ describe("PocketPal copy", () => {
       "Cancel",
       "Save Changes",
     ]) {
-      const src = copy === "Edit Chat Template" ? DIALOG : copy === "Multimodal Settings" ? MULTIMODAL : SHEET;
+      const src = copy === "Edit Chat Template" ? DIALOG : SHEET;
       assert.ok(src.includes(copy), `missing copy: ${copy}`);
     }
   });

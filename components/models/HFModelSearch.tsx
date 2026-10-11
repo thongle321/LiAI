@@ -490,7 +490,7 @@ export function HFModelSearch({
               ) : null}
               {/* A vision model's real footprint is the pair, so the
                   projector is priced into the number next to the button. */}
-              <Text className="font-sans text-body-sm text-secondary-text/70">
+              <Text className="font-sans text-body-sm text-secondary-text-muted">
                 {breakdown.mmprojSize !== null
                   ? `${formatBytes(breakdown.llmSize)} + ${formatBytes(breakdown.mmprojSize)} projector`
                   : formatBytes(file.size)}
@@ -572,20 +572,20 @@ export function HFModelSearch({
               {extractHFModelTitle(result.modelId)}
             </Text>
           </View>
-          <Text className="font-sans text-body-sm text-secondary-text/70 mt-1">
+          <Text className="font-sans text-body-sm text-secondary-text-muted mt-1">
             {`by ${result.author}`}
           </Text>
         </View>
         <ChevronRight size={20} color={colors.secondaryText} />
       </View>
       <View className="flex-row flex-wrap items-center gap-2 mt-2">
-        <Text className="font-sans text-body-sm text-secondary-text/70">
+        <Text className="font-sans text-body-sm text-secondary-text-muted">
           {result.lastModified ? timeAgo(result.lastModified, Date.now(), false) : ""}
         </Text>
-        <Text className="font-sans text-body-sm text-secondary-text/70">
+        <Text className="font-sans text-body-sm text-secondary-text-muted">
           {`${formatNumber(result.downloads)} downloads`}
         </Text>
-        <Text className="font-sans text-body-sm text-secondary-text/70">
+        <Text className="font-sans text-body-sm text-secondary-text-muted">
           {`${formatNumber(result.likes)} likes`}
         </Text>
         {result.gated ? (
@@ -641,7 +641,7 @@ export function HFModelSearch({
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="pt-2">
               <Pressable
                 onPress={() => setAuthorOpen(true)}
-                className={`flex-row items-center gap-1 rounded-full px-3 py-1.5 ${
+                className={`min-h-12 flex-row items-center gap-1 rounded-full px-3 ${
                   searchFilters.author
                     ? " bg-surface-3"
                     : " border border-border"
@@ -658,7 +658,7 @@ export function HFModelSearch({
               </Pressable>
               <Pressable
                 onPress={() => setSortOpen(true)}
-                className={`ml-2 flex-row items-center gap-1 rounded-full px-3 py-1.5 ${
+                className={`ml-2 min-h-12 flex-row items-center gap-1 rounded-full px-3 ${
                   "border border-border"
                 }`}
                 accessibilityRole="button"
@@ -753,7 +753,7 @@ export function HFModelSearch({
                 >
                   <ArrowLeft size={20} color={colors.secondaryText} />
                 </Pressable>
-                <Text className="flex-1 font-sans text-body-sm text-secondary-text/70">
+                <Text className="flex-1 font-sans text-body-sm text-secondary-text-muted">
                   {selected.author}
                 </Text>
                 {isVision ? <Chip label="Vision" /> : null}

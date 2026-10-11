@@ -183,8 +183,16 @@ export function DownloadButton({
     <Pressable
       onPress={isDownloading ? onPause ?? onPress : isPaused ? onResume ?? onPress : onPress}
       disabled={disabled}
-      className="min-h-12 items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
+      // Disabled is a FILL and LABEL change, never opacity (DESIGN.md): a
+      // button that looks live and does nothing is worse than no button,
+      // because the only way to find out is to tap it and be ignored.
+      className={
+        disabled
+          ? "min-h-12 items-center justify-center rounded-lg border border-border bg-surface-2 px-3 py-2"
+          : "min-h-12 items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
+      }
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
       accessibilityLabel={
         isDownloading
           ? `Pause download, ${Math.round(progress)} percent`
@@ -197,13 +205,21 @@ export function DownloadButton({
     >
       <View className="flex-row items-center gap-2">
         {isDownloading ? (
-          <Pause size={16} color={colors.primary} />
+          <Pause size={16} color={disabled ? colors.secondaryText : colors.primary} />
         ) : isPaused ? (
-          <Play size={16} color={colors.primary} />
+          <Play size={16} color={disabled ? colors.secondaryText : colors.primary} />
         ) : (
-          <Download size={16} color={colors.primary} />
+          <Download size={16} color={disabled ? colors.secondaryText : colors.primary} />
         )}
-        <Text className="font-sans text-body-sm text-primary-text">{label}</Text>
+        <Text
+          className={
+            disabled
+              ? "font-sans text-body-sm text-secondary-text"
+              : "font-sans text-body-sm text-primary-text"
+          }
+        >
+          {label}
+        </Text>
       </View>
     </Pressable>
   );

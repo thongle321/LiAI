@@ -11,6 +11,10 @@
  * projector leg of the existing two-leg download. Selection persists
  * IMMEDIATELY, like PocketPal's list — it is a live capability choice,
  * not part of the sheet's explicit-save transaction.
+ *
+ * The section TITLE is the sheet's, not this file's: the reference owns
+ * both the divider and the heading, so ModelSettingsSheet renders them
+ * around this component.
  */
 
 import { Alert } from "react-native";
@@ -76,9 +80,6 @@ export function ModelMultimodalSection({ model }: { model: ModelSpec }) {
 
   return (
     <View className="gap-2">
-      <Text className="font-sans-semibold text-title text-primary-text">
-        Multimodal Settings
-      </Text>
       {/* The candidate header shows only when there is a choice to make
           (PocketPal parity: the section header hides for a single fit). */}
       {candidates.length > 1 ? (

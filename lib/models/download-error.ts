@@ -52,7 +52,6 @@ export function downloadErrorCopy(message: string): {
         body: "Free up space on this device, then try again.",
         steps: [
           "Delete a model you no longer use, or clear app storage in system Settings.",
-          "Check the free space reported in Settings, then try again.",
         ],
       };
     case "authentication":

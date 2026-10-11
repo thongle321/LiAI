@@ -304,7 +304,7 @@ export function ModelCardDetails({
       {item.hfUrl ? (
         <Pressable
           onPress={() => void Linking.openURL(item.hfUrl as string)}
-          className="mt-3 flex-row items-center gap-2"
+          className="mt-3 min-h-12 flex-row items-center gap-2"
           accessibilityRole="link"
           accessibilityLabel="Open on Hugging Face"
         >

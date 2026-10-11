@@ -68,11 +68,16 @@ describe("download error taxonomy (C1)", () => {
     // getTokenSteps). A 403 asks for a licence accepted over on Hugging
     // Face; a 401 asks for a token fixed in Settings. Both are walks, so
     // both are numbered.
-    for (const message of ["Not enough storage space", "HTTP 401", "HTTP 403"]) {
+    for (const message of ["HTTP 401", "HTTP 403"]) {
       const { steps } = downloadErrorCopy(message);
       assert.ok(steps.length >= 2, `steps for: ${message}`);
       for (const step of steps) assert.ok(step.trim().length > 0);
     }
+    // Out of space is one action — free some up and retry — and the figure
+    // it is judged against now lives on the download card, not in Settings.
+    const storage = downloadErrorCopy("Not enough storage space").steps;
+    assert.ok(storage.length >= 1);
+    for (const step of storage) assert.ok(step.trim().length > 0);
     // Nothing to walk through: a server blip is "try again in a moment",
     // and an unknown failure keeps its raw message instead.
     assert.deepEqual(downloadErrorCopy("HTTP 500").steps, []);

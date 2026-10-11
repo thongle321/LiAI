@@ -17,6 +17,16 @@
  *     inside an absolute-fill container (TrueSheet.js), so the 'auto' detent
  *     measures the screen and every sheet opens near-full. That is a
  *     separate bug, already fixed once; this test keeps it fixed.
+ *
+ * The CHROME arrangement is pinned in tests/sheet.test.ts, not here: the
+ * header and the action bar are plain in-flow children of the sheet's
+ * content view (PocketPal's Sheet.tsx + Actions.tsx), so nothing about
+ * them is a native prop and there is nothing for this file to guard.
+ * Earlier this note claimed the reverse and required a native `footer`
+ * prop; that reversal, and the Kotlin math that settled it
+ * (TrueSheetDetentCalculator.kt ignores footerHeight in the 'auto'
+ * branch, so an absolute footer needs a measured reserve a lift over the
+ * keyboard), is recorded there.
  */
 
 import { describe, it } from "node:test";

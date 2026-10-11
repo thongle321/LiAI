@@ -48,14 +48,18 @@ describe("hugging face token sheet (Q2 bundle)", () => {
     assert.match(src, /!draft\.trim\(\)/, "save disabled while empty");
     assert.match(src, /busy/, "busy cross-lock");
     assert.match(src, /ActivityIndicator/, "spinner while writing");
-    // Grill Q1/Q2: actions ride the scroll body (identical pixels when
-    // the keyboard is closed), never the native footer prop — TrueSheet
-    // lifts its absolute footer above the keyboard without shrinking the
-    // body, so a footer here floats over scrolled content.
+    // Pinned bar, not the native footer prop (see tests/sheet.test.ts for
+    // the reversal): the actions row is the `actions` prop on the shared
+    // Sheet, which renders it below the scroller in normal flex flow.
+    // TrueSheet's native footer is absolute and unmeasured, so a footer
+    // prop here would float over scrolled content.
     assert.doesNotMatch(src, /footer=\{/);
-    assert.ok(
-      src.indexOf("Paste your token here") < src.indexOf(">Save Token<"),
-      "actions flow after the input in the scroll body",
+    const sheetTag = src.match(/<Sheet[\s\S]*?>/);
+    assert.ok(sheetTag, "the token sheet must render through the shared Sheet");
+    assert.match(
+      sheetTag[0],
+      /actions=\{/,
+      "the token sheet's actions belong in the pinned bar",
     );
   });
 

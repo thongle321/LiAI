@@ -67,6 +67,38 @@ export function VisionDownloadSheet({
       onClose={onClose}
       title={file.name}
       testID="vision-download-sheet"
+      actions={
+        /* Pinned action row (PocketPal's Sheet.Actions) — see Sheet.tsx. */
+        <View className="flex-row gap-2">
+          <Pressable
+            onPress={onClose}
+            className="btn btn--secondary flex-1"
+            accessibilityRole="button"
+            accessibilityLabel="Cancel download"
+          >
+            <Text className="font-sans text-body-md text-primary">Cancel</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              const projector = candidates.find((c) => c.name === selected);
+              onConfirm(file, {
+                visionEnabled,
+                ...(visionEnabled && projector !== undefined ? { projector } : {}),
+              });
+              onClose();
+            }}
+            className="btn btn--primary flex-1"
+            accessibilityRole="button"
+            accessibilityLabel={
+              visionEnabled ? "Download with vision" : "Download text only"
+            }
+          >
+            <Text className="font-sans-semibold text-body-md text-on-primary">
+              {visionEnabled ? "Download with vision" : "Download text only"}
+            </Text>
+          </Pressable>
+        </View>
+      }
     >
       <View className="gap-2">
         <ToggleRow
@@ -121,36 +153,6 @@ export function VisionDownloadSheet({
             );
           })
         )}
-
-        <View className="flex-row gap-2 pt-2">
-          <Pressable
-            onPress={onClose}
-            className="btn btn--secondary flex-1"
-            accessibilityRole="button"
-            accessibilityLabel="Cancel download"
-          >
-            <Text className="font-sans text-body-md text-primary">Cancel</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              const projector = candidates.find((c) => c.name === selected);
-              onConfirm(file, {
-                visionEnabled,
-                ...(visionEnabled && projector !== undefined ? { projector } : {}),
-              });
-              onClose();
-            }}
-            className="btn btn--primary flex-1"
-            accessibilityRole="button"
-            accessibilityLabel={
-              visionEnabled ? "Download with vision" : "Download text only"
-            }
-          >
-            <Text className="font-sans-semibold text-body-md text-on-primary">
-              {visionEnabled ? "Download with vision" : "Download text only"}
-            </Text>
-          </Pressable>
-        </View>
       </View>
     </Sheet>
   );

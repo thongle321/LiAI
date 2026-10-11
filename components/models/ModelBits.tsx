@@ -207,12 +207,15 @@ export function DownloadButton({
       }
     >
       <View className="flex-row items-center gap-2">
+        {/* The glyph takes the MARK step and the label the text step —
+            DESIGN.md's Two-Step Rule names icons as mark work. The label
+            alone carries the 4.5:1. */}
         {isDownloading ? (
-          <Pause size={16} color={disabled ? colors.secondaryText : colors.successDeep} />
+          <Pause size={16} color={disabled ? colors.secondaryText : colors.successMark} />
         ) : isPaused ? (
-          <Play size={16} color={disabled ? colors.secondaryText : colors.successDeep} />
+          <Play size={16} color={disabled ? colors.secondaryText : colors.successMark} />
         ) : (
-          <Download size={16} color={disabled ? colors.secondaryText : colors.successDeep} />
+          <Download size={16} color={disabled ? colors.secondaryText : colors.successMark} />
         )}
         <Text
           className={

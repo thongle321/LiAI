@@ -299,7 +299,11 @@ export default function ModelsRoute() {
             // The screen gutter, DESIGN.md's `5` step (20px): the models
             // screen was the only list in the app without one, so cards
             // sat flush to the window edge. `MessageList` and onboarding
-            // both already carry it (`p-5`).
+            // carry the same step as `p-5`; ours is `px-5` because the
+            // vertical edges already have single owners — ScreenHeader and
+            // the group header above, the runtime FAB reserve below (set
+            // inline on the next line, which overrides any class `pb`).
+            // A list `pt` would stack a second top inset.
             contentContainerClassName="px-5"
             contentContainerStyle={{ paddingBottom: FAB_STACK_HEIGHT }}
             keyboardShouldPersistTaps="handled"

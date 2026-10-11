@@ -23,11 +23,10 @@ export const colors = {
   onPrimary: "#FFFFFF",
   success: "#10B981",
   /** The download button's green, in the same two-step shape as the signal
-   *  and the reds. `successFill` is the tonal ground, `successMark` the 1px
-   *  border step, `successDeep` the label step — derived from PocketPal's
-   *  btnDownload trio, whose border value (1.21:1) could never clear the
-   *  non-text floor here. `success` above stays the Jade icon colour and
-   *  never carries text. */
+   *  and the reds: `successFill` the tonal ground, `successMark` the 3:1
+   *  border step, `successDeep` the 4.5:1 label step. `success` above stays
+   *  the Jade icon colour and never carries text. Derivation lives in
+   *  DESIGN.md › Buttons (the download green); mirrored in global.css. */
   successFill: "#ECFDF5",
   successMark: "#059669",
   successDeep: "#047857",

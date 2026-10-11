@@ -68,9 +68,16 @@ const CARD =
  *  wrapper box around it. PocketPal's `styles.iconButton` is exactly this
  *  (40px, radius 16, transparent); ours keeps the legal target. */
 const ICON_BUTTON = "h-12 w-12 items-center justify-center";
-/** Destructive only: Alert Tint is DESIGN.md l.238's documented fill for
- *  destructive icon buttons, so the trash keeps a ground while settings and
- *  expand stay bare. */
+/** Destructive only — settings and expand stay bare. DESIGN.md calls for
+ *  "Destructive: Alert Tint fill, Alert Red Mark icon" (Icon Buttons) and
+ *  circles for what you press, so the trash keeps a ground and a circular
+ *  one. It does NOT carry DESIGN.md's values: this is #B91C1C at 10%, the
+ *  error ground HFModelSearch's chip already uses, and `alert-tint`
+ *  (`rgba(239,68,68,0.12)`) is declared in DESIGN.md's frontmatter but never
+ *  implemented in global.css or themes/tokens.ts — so no `bg-alert-tint`
+ *  class exists to use. The token gap is recorded in the parity doc; closing
+ *  it means a third mirror plus the three other error grounds, not a name.
+ */
 const ICON_DESTRUCTIVE = "rounded-full bg-error/10";
 
 export function ModelCard({

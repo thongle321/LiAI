@@ -28,12 +28,10 @@
   --color-info: #06b6d4;
   --color-success: #10b981;
   /* The download button's green, in the same two-step shape as the signal
-     and the reds: `success-fill` is the tonal ground, `success-mark` the
-     1px border step (3:1), `success-deep` the label step (4.5:1 on all four
-     surfaces). Derived from PocketPal's btnDownload trio (#ecfdf5 / #bbf7d0 /
-     #047857) — its border value is 1.21:1 and would never clear the non-text
-     floor here, so the border takes the 600 step instead. `success` above
-     stays the Jade icon colour and never carries text. */
+     and the reds: `success-fill` the tonal ground, `success-mark` the 3:1
+     border step, `success-deep` the 4.5:1 label step. `success` above stays
+     the Jade icon colour and never carries text. Derivation lives in
+     DESIGN.md › Buttons (the download green); mirrored in themes/tokens.ts. */
   --color-success-fill: #ecfdf5;
   --color-success-mark: #059669;
   --color-success-deep: #047857;

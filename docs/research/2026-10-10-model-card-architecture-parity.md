@@ -24,7 +24,7 @@ The card was the only list surface in the app with no screen gutter:
 
 | | PocketPal | LiAI before | LiAI now |
 |---|---|---|---|
-| screen container | `padding: 2` | none | `p-5` on the list |
+| screen container | `padding: 2` | none | `px-5` on the list |
 | card margin | `margin: 6` | none | none (the list owns it) |
 | **total inset** | **8px** | **0px** | **20px** |
 
@@ -33,6 +33,16 @@ The card was the only list surface in the app with no screen gutter:
 the 20px gutter, so the models screen was the outlier against its own design
 system, not just against the reference. 20px rather than 8px because DESIGN.md
 fixes the gutter at one `5` step on every edge.
+
+**Horizontal only (`px-5`), not `p-5` like those two.** The horizontal inset is
+the bug. The vertical edges already have single owners: the top is where
+`ScreenHeader` ends and the group header starts, so a list `pt` would stack a
+second top inset — DESIGN.md's "gutters are owned by one layer" is about
+exactly that; and the bottom is the runtime FAB reserve
+(`contentContainerStyle={{ paddingBottom: FAB_STACK_HEIGHT }}`), which an
+inline style overrides anyway, so a class `pb` would be dead code. `p-5` would
+have bought 20px of dead space above the first group header and lost nothing
+the list actually needs.
 
 The group header consequently dropped from `px-3` to `px-1`, so it lands at
 24px — just inside the cards at 20px, the same relationship PocketPal has
@@ -103,6 +113,18 @@ gutter, which DESIGN.md calls out as "the defect, not a style choice".
    change.
 6. **Pause/Resume and "Offload" stay** — carried over from the earlier
    slice-2 record, unchanged here.
+7. **`alert-tint` is documented but never implemented.** DESIGN.md's
+   frontmatter declares `alert-tint: "rgba(239, 68, 68, 0.12)"` and its *Tints*
+   section makes it "the fill of destructive icon buttons and error chips",
+   but neither `global.css` nor `themes/tokens.ts` defines it, so no
+   `bg-alert-tint` class exists. Three sites carry the closest thing instead —
+   `bg-error/10` (#B91C1C at 10%) in the model card's destructive icon button,
+   `HFModelSearch`'s error chip and `ContextFullBanner`'s error banner — and
+   the glyph alongside is `error` (#B91C1C), not `error-mark` (#EF4444).
+   Left as is: the mirror test parses `#RRGGBB` only, so an rgba token would
+   need that parser extended, and touching three error grounds across
+   surfaces this change does not otherwise reach is a separate piece of work.
+   The code comment now says this instead of claiming the values.
 
 ## Verification gap
 

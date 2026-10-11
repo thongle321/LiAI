@@ -29,23 +29,23 @@ function read(rel: string): string {
 
 /** Comments stripped: several guards below assert the ABSENCE of a class, and
  *  this file's own neighbours legitimately name them while explaining the
- *  history. */
-function code(rel: string): string {
+ *  history. Differs from `read` only by the stripping, hence the longer name. */
+function sourceWithoutComments(rel: string): string {
   return read(rel)
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/\/\/[^\n]*/g, "");
 }
 
-const CARD = code("components/models/ModelCard.tsx");
-const BITS = code("components/models/ModelBits.tsx");
-const ACCORDION = code("components/models/ModelAccordion.tsx");
-const SCREEN = code("app/(drawer)/models.tsx");
+const CARD = sourceWithoutComments("components/models/ModelCard.tsx");
+const BITS = sourceWithoutComments("components/models/ModelBits.tsx");
+const ACCORDION = sourceWithoutComments("components/models/ModelAccordion.tsx");
+const SCREEN = sourceWithoutComments("app/(drawer)/models.tsx");
 const ALL_MODELS_UI = [
   CARD,
   BITS,
   ACCORDION,
-  code("components/models/AvailableModels.tsx"),
-  code("components/models/ModelCardDetails.tsx"),
+  sourceWithoutComments("components/models/AvailableModels.tsx"),
+  sourceWithoutComments("components/models/ModelCardDetails.tsx"),
 ];
 
 describe("model card radius", () => {

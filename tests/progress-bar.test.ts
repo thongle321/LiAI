@@ -47,7 +47,7 @@ describe("one progress idiom across every download surface", () => {
   it("routes every surface through the shared bar", () => {
     for (const surface of [
       "components/models/AvailableModels.tsx",
-      "components/models/HFModelSearch.tsx",
+      "components/models/HFFileRow.tsx",
       "components/models/ModelCard.tsx",
     ]) {
       assert.match(strip(surface), /DownloadProgressBar/, `${surface} must use the shared bar`);
@@ -56,7 +56,7 @@ describe("one progress idiom across every download surface", () => {
 
   it("does not adopt the reference's gradient wash on file cards", () => {
     assert.doesNotMatch(
-      strip("components/models/HFModelSearch.tsx"),
+      strip("components/models/HFFileRow.tsx"),
       /linear-gradient|expo-linear-gradient/,
       "a gradient wash is not this app's idiom",
     );

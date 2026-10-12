@@ -133,7 +133,7 @@ describe("the small rungs land", () => {
       /text-body-lg/,
     );
     assert.match(read("components/chat/SessionList.tsx"), /text-body-lg/);
-    assert.match(read("components/models/HFModelSearch.tsx"), /text-body-lg/);
+    assert.match(read("components/models/HFSearchView.tsx"), /text-body-lg/);
   });
 
   it("bottom nav label scales to 1.5x and the bar is measured, not pinned", () => {

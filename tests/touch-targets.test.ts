@@ -84,8 +84,11 @@ describe("touch target floor", () => {
     const pinned: Array<[string, string]> = [
       ["components/models/ModelCardDetails.tsx", "View on Hugging Face"],
       ["components/models/DownloadErrorDialog.tsx", "View on Hugging Face"],
-      ["components/models/HFModelSearch.tsx", "setAuthorOpen(true)"],
-      ["components/models/HFModelSearch.tsx", "setSortOpen(true)"],
+      // Anchored on the onPress PROP, not the bare name: the prop is also
+      // destructured at the top of the file, and indexOf would find that
+      // occurrence instead of the one inside the Pressable tag.
+      ["components/models/HFSearchView.tsx", "onPress={onOpenAuthor}"],
+      ["components/models/HFSearchView.tsx", "onPress={onOpenSort}"],
     ];
     const missing: string[] = [];
     for (const [file, anchor] of pinned) {

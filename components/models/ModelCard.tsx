@@ -51,6 +51,7 @@ import {
   DownloadProgressBar,
   ModelTypeIcon,
   StatusDot,
+  confirmDeleteModel,
   formatBytes,
 } from "./ModelBits.tsx";
 import { ModelCardDetails } from "./ModelCardDetails.tsx";
@@ -145,26 +146,24 @@ export function ModelCard({
   function confirmDestructive(): void {
     // Read the same thing the glyph and the a11y label read, so the three
     // cannot disagree about what the button does.
-    const removing = actions.includes("remove");
+    if (!actions.includes("remove")) {
+      // removeModel is async and answers nothing, so there is no result to
+      // report — only the delete can fail silently. The wording is shared
+      // with the HF file row, the other surface that deletes a file.
+      confirmDeleteModel(() => void removeModel(item.id));
+      return;
+    }
     Alert.alert(
-      removing ? "Remove Model" : "Delete Model",
-      removing
-        ? "Are you sure you want to remove this model from the list?"
-        : "Are you sure you want to delete this downloaded model?",
+      "Remove Model",
+      "Are you sure you want to remove this model from the list?",
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: removing ? "Remove" : "Delete",
+          text: "Remove",
           style: "destructive",
           onPress: () => {
-            if (removing) {
-              if (removeBookmark(item.id) === false) {
-                Alert.alert("Error", "Failed to remove the model.");
-              }
-            } else {
-              // removeModel is async and answers nothing, so there is no
-              // result to report — only the delete can fail silently.
-              void removeModel(item.id);
+            if (removeBookmark(item.id) === false) {
+              Alert.alert("Error", "Failed to remove the model.");
             }
           },
         },

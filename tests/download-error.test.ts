@@ -153,7 +153,7 @@ describe("the button is back to a plain Retry (replace)", () => {
       /error=\{item\.error\}/,
     );
     assert.doesNotMatch(
-      read("components/models/HFModelSearch.tsx"),
+      read("components/models/HFFileRow.tsx"),
       /error=\{spec\?\.error\}/,
     );
     assert.doesNotMatch(

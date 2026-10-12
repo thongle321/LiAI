@@ -1,6 +1,6 @@
 /** Shared models bits: formats, chips, status, progress, download button. */
 
-import { Pressable, Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 import { CheckCircle2, Download, Eye, MessageSquare, Pause, Play, X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
@@ -133,6 +133,24 @@ export function CancelDownloadButton({ onPress }: { onPress: () => void }) {
       <X size={16} color={colors.error} />
       <Text className="ml-2 font-sans text-body-sm text-error">Cancel</Text>
     </Pressable>
+  );
+}
+
+/** The one delete confirmation in the app. Two surfaces destroy a
+ *  downloaded file — the models-screen card and the HF file row — and both
+ *  must say the same thing, so the wording lives here rather than in each.
+ *
+ *  This is the CONFIRM only. It deliberately does not give DownloadButton a
+ *  delete mode: its completed branch is an inert state for the card, and
+ *  the HF row draws its own control instead. */
+export function confirmDeleteModel(onConfirm: () => void): void {
+  Alert.alert(
+    "Delete Model",
+    "Are you sure you want to delete this downloaded model?",
+    [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: onConfirm },
+    ],
   );
 }
 

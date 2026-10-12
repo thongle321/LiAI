@@ -4,6 +4,13 @@
 showed the model cards running flush to the window edge, and asked for
 PocketPal's models-settings card to be studied and its architecture copied.
 
+> **Superseded input (2026-10-12).** `pocketpal_card.jpg` is no longer a
+> valid reference and nothing should be derived from it. The source of
+> truth is `pocketpal-ai/` itself. The 2026-10-12 HF model card audit
+> re-derived every claim here from source after being told the screenshot
+> was wrong; its findings are in
+> `2026-10-12-pocketpal-hf-model-card-parity.md`.
+
 **Decision.** Copy PocketPal's *anatomy* — the element tree and the space it
 divides — and re-derive every *token* against `DESIGN.md`. This is the same
 rule the Settings sheet port followed: parity is a licence to copy structure,

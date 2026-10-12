@@ -119,11 +119,16 @@ export const useTts = create<TtsState>()((set, get) => ({
       }));
     await downloadEngine(engine, apply);
     await get().refreshFreeSpace();
-    // Park on the first voice of a pack that just became usable, unless the
-    // user already chose something else.
+    // Never auto-select a voice the engine cannot actually speak: only
+    // System has an implementation today, so parking the user on a neural
+    // voice would replace a working voice with silence. Selection waits
+    // until the engine is implemented (or the user picks it knowingly).
     if (get().engines[engine].state === "ready" && !useVoice.getState().currentVoice) {
-      const first = voicesFor(get().engines, engine)[0];
-      if (first) useVoice.getState().setVoice(first);
+      const { hasEngine } = await import("../lib/tts/engineRegistry.ts");
+      if (hasEngine(engine)) {
+        const first = voicesFor(get().engines, engine)[0];
+        if (first) useVoice.getState().setVoice(first);
+      }
     }
   },
 

@@ -37,6 +37,7 @@ import { useMultimodalAvailable } from "../../hooks/useMultimodalAvailable.ts";
 import { useModelStore } from "../../store/modelStore";
 import { resolveThinking } from "../../lib/inference/thinking.ts";
 import { mergeDictation, VOICE_LISTEN_OPTS } from "../../lib/voiceListen.ts";
+import { VoiceChip } from "../voice/VoiceChip.tsx";
 import { ensureMicAccess } from "../../lib/micAccess.ts";
 import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../../lib/voiceStatus.ts";
 import {
@@ -510,6 +511,7 @@ export function MessageInput({
         accessibilityHint={modelReady ? undefined : composerPlaceholder}
         />
         <View className="flex-row items-center gap-2">
+          <VoiceChip />
           {thinkingSupported && (
             // PocketPal's composer pill (ChatInput.tsx:588-640). State is
             // carried by the fill AND the icon, per DESIGN.md's "pair every

@@ -338,3 +338,94 @@
 .status-dot--offline {
   background-color: #64748b;
 }
+
+/* Voice screen (lib/tts). One expandable card per engine, plus the System
+   card that sits above the list. Colours come from the same slate/blue ramp
+   as the rest of this file — no engine-specific accents until an engine
+   actually ships audio. */
+
+/* The System card, and the frame every engine card sits in. */
+.voice-card {
+  background-color: #ffffff;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #e2e8f0;
+  border-radius: 16px;
+  overflow: hidden;
+}
+/* Modifier: the System card is tinted so it reads as "in use, no download
+   needed" against the plain engine cards below it. */
+.voice-card--active {
+  background-color: #eff6ff;
+  border-color: #bfdbff;
+}
+.voice-card__header {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding-left: 16px;
+  padding-right: 16px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.voice-card__body {
+  padding-left: 16px;
+  padding-right: 16px;
+  padding-bottom: 16px;
+}
+.voice-card__title {
+  font-family: var(--font-sans-semibold);
+  font-size: 16px;
+  line-height: 22px;
+  color: #0f172a;
+}
+.voice-card__spec {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 18px;
+  color: #64748b;
+}
+/* Tier chip (LIGHTWEIGHT / NATURAL / FAST START). */
+.voice-badge {
+  align-self: flex-start;
+  border-radius: 999px;
+  padding-left: 8px;
+  padding-right: 8px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  background-color: #dbeafe;
+}
+.voice-badge__text {
+  font-family: var(--font-sans-semibold);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.4px;
+  color: #2563eb;
+}
+/* Modifier: the two "heavier" packs are labelled in their own ramp so the
+   list scans by tier, not just by position. */
+.voice-badge--warm {
+  background-color: #ffedd5;
+}
+.voice-badge--warm .voice-badge__text {
+  color: #c2410c;
+}
+
+/* One voice inside an expanded engine card. */
+.voice-option {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.voice-option__name {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  color: #0f172a;
+}
+.voice-option__name--selected {
+  font-family: var(--font-sans-semibold);
+}

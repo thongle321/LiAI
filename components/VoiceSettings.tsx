@@ -1,28 +1,50 @@
-/** Voice output settings — auto-speak and the fixed System voice.
+/** Voice screen: how LiAI speaks.
  *
- * v2: the voice is no longer user-selectable (the System default English
- * device voice is used), and Rate/Pitch are gone. What remains here is the
- * System half of the Voice screen; the downloadable-engine list is added
- * alongside it once the download path lands.
+ * Structure from the Voice settings reference — a System card on top, then
+ * "Downloadable engines" with the free-space reading in the heading, then
+ * one expandable card per pack. Colours are this project's tokens, not
+ * PocketPal's paper-and-orange.
+ *
+ * The voice itself is fixed to the System default (see store/voice.ts), so
+ * there is no picker here — the engine cards are where choice lives, and
+ * each one only offers a voice once its pack is actually installed.
  */
 
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { Text, View } from "react-native";
+import { AudioLines, Volume2 } from "lucide-react-native";
 
-import { useVoice } from "../store/voice.ts";
-import { TTS_PREVIEW_SAMPLE } from "../lib/tts/constants.ts";
+import { VoiceEngineCard } from "./voice/VoiceEngineCard.tsx";
+import { ActionRow, SettingsSection, ToggleRow } from "./SettingsRows.tsx";
+import { DOWNLOADABLE_ENGINES, TTS_PREVIEW_SAMPLE } from "../lib/tts/constants.ts";
 import { resolveSystemDefaultVoice } from "../lib/tts/engines/system.ts";
 import { speakReply, stopSpeaking } from "../lib/voiceSpeak.ts";
+import { formatBytes } from "../lib/models/progress.ts";
+import { useTts } from "../store/tts.ts";
+import { useVoice } from "../store/voice.ts";
 import type { Voice } from "../lib/tts/types.ts";
-import { ActionRow, SettingsSection, ToggleRow } from "./SettingsRows.tsx";
+
+function EngineHeading() {
+  const freeBytes = useTts((s) => s.freeBytes);
+  return (
+    <View className="mb-3 mt-6 flex-row items-center justify-between">
+      <Text className="section-title">Downloadable engines</Text>
+      {freeBytes !== null && (
+        <Text className="voice-card__spec">{formatBytes(freeBytes)} available</Text>
+      )}
+    </View>
+  );
+}
 
 export function VoiceSettings() {
   const { autoSpeak, load, setAutoSpeak } = useVoice();
+  const loadEngines = useTts((s) => s.load);
   const [systemVoice, setSystemVoice] = useState<Voice | null>(null);
   const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {
     void load();
+    void loadEngines();
   }, []);
 
   useEffect(() => {
@@ -33,7 +55,7 @@ export function VoiceSettings() {
       })
       .catch(() => {
         // Enumeration failed; the OS still speaks with its own default, so
-        // the row simply stays unnamed rather than blocking the screen.
+        // the card simply stays unnamed rather than blocking the screen.
       });
     return () => {
       cancelled = true;
@@ -55,26 +77,63 @@ export function VoiceSettings() {
   }
 
   return (
-    // No `title`: the route's own header already reads "Voice", and a second
-    // "Voice" stacked directly beneath it reads as one heading printed twice.
-    <SettingsSection description="How replies are read aloud.">
-      <View className="row">
-        <ToggleRow
-          label="Speak replies aloud"
-          description="Read new replies aloud as they arrive."
-          on={autoSpeak}
-          onPress={() => setAutoSpeak(!autoSpeak)}
-        />
+    <View>
+      {/* Screen lede. */}
+      <View className="mb-4 mt-2 flex-row items-center gap-3">
+        <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
+          <AudioLines size={22} color="#2563eb" />
+        </View>
+        <View className="flex-1">
+          <Text className="section-title">Voice output</Text>
+          <Text className="voice-card__spec">Choose how LiAI speaks</Text>
+        </View>
       </View>
-      <View className="row">
-        <ActionRow
-          label={systemVoice ? systemVoice.name : "System voice"}
-          description="Your device's default voice. Always available, works offline."
-          buttonLabel={previewing ? "Stop" : "Preview"}
-          variant="secondary"
-          onPress={togglePreview}
-        />
+
+      {/* System voice — always available, nothing to download. */}
+      <View className="voice-card voice-card--active mb-3">
+        <View className="voice-card__header">
+          <View className="h-9 w-9 items-center justify-center rounded-full bg-orange-100">
+            <Volume2 size={18} color="#c2410c" />
+          </View>
+          <View className="flex-1">
+            <Text className="voice-card__title">System voice</Text>
+            <Text className="voice-card__spec">Use your device&apos;s default voice</Text>
+          </View>
+        </View>
+        <View className="voice-card__body">
+          <View className="mb-3">
+            <ActionRow
+              label={systemVoice ? systemVoice.name : "Default"}
+              description="Always available and works offline."
+              buttonLabel={previewing ? "Stop" : "Preview"}
+              variant="secondary"
+              onPress={togglePreview}
+            />
+          </View>
+        </View>
       </View>
-    </SettingsSection>
+
+      <EngineHeading />
+      <Text className="voice-card__spec mb-3">
+        Voice packs are stored on this device. They use storage space.
+      </Text>
+
+      {DOWNLOADABLE_ENGINES.map((engine) => (
+        <VoiceEngineCard key={engine} engine={engine} />
+      ))}
+
+      <Text className="voice-card__spec mt-1 mb-4">Downloaded voices work offline.</Text>
+
+      <SettingsSection description="How replies are read aloud.">
+        <View className="row">
+          <ToggleRow
+            label="Auto-speak responses"
+            description="Read new replies aloud as they arrive."
+            on={autoSpeak}
+            onPress={() => setAutoSpeak(!autoSpeak)}
+          />
+        </View>
+      </SettingsSection>
+    </View>
   );
 }

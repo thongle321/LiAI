@@ -1,33 +1,25 @@
-/** Voice output settings: auto-speak, voice choice, rate, pitch.
+/** Voice output settings — auto-speak and the fixed System voice.
  *
- * The store's `voiceId` slot existed but nothing ever wrote it, so the
- * system voice was always used. It is now a real choice. The narrowing and
- * ordering rules live in lib/voices.ts (pure, node-tested); this is the UI.
+ * v2: the voice is no longer user-selectable (the System default English
+ * device voice is used), and Rate/Pitch are gone. What remains here is the
+ * System half of the Voice screen; the downloadable-engine list is added
+ * alongside it once the download path lands.
  */
 
 import { useEffect, useState } from "react";
 import { View } from "react-native";
-import * as Speech from "expo-speech";
 
-import { MAX_PITCH, MAX_RATE, MIN_PITCH, MIN_RATE, useVoice } from "../store/voice.ts";
-import {
-  deviceLanguage,
-  filterVoices,
-  SYSTEM_VOICE,
-  voiceOptions,
-  type DeviceVoice,
-} from "../lib/voices.ts";
-import { PickerRow, SettingsSection, StepperRow, ToggleRow } from "./SettingsRows.tsx";
+import { useVoice } from "../store/voice.ts";
+import { TTS_PREVIEW_SAMPLE } from "../lib/tts/constants.ts";
+import { resolveSystemDefaultVoice } from "../lib/tts/engines/system.ts";
+import { speakReply, stopSpeaking } from "../lib/voiceSpeak.ts";
+import type { Voice } from "../lib/tts/types.ts";
+import { ActionRow, SettingsSection, ToggleRow } from "./SettingsRows.tsx";
 
 export function VoiceSettings() {
-  const { rate, pitch, autoSpeak, voiceId, load, setRate, setPitch, setAutoSpeak, setVoice } =
-    useVoice();
-  const [voices, setVoices] = useState<DeviceVoice[]>([]);
-  // "loading" | "failed" | "ok". Kept because the failure is invisible
-  // otherwise: the picker falls back to a single System default option and
-  // the row still claims voices are installed, so a device that cannot
-  // enumerate looks identical to a device with one voice.
-  const [enumState, setEnumState] = useState<"loading" | "failed" | "ok">("loading");
+  const { autoSpeak, load, setAutoSpeak } = useVoice();
+  const [systemVoice, setSystemVoice] = useState<Voice | null>(null);
+  const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {
     void load();
@@ -35,82 +27,52 @@ export function VoiceSettings() {
 
   useEffect(() => {
     let cancelled = false;
-    Speech.getAvailableVoicesAsync()
-      .then((all) => {
-        if (cancelled) return;
-        setVoices(filterVoices(all, deviceLanguage()));
-        setEnumState("ok");
+    resolveSystemDefaultVoice()
+      .then((v) => {
+        if (!cancelled) setSystemVoice(v);
       })
       .catch(() => {
-        // No enumeration available. Say so rather than leaving a one-option
-        // picker under a description that promises more.
-        if (cancelled) return;
-        setVoices([]);
-        setEnumState("failed");
+        // Enumeration failed; the OS still speaks with its own default, so
+        // the row simply stays unnamed rather than blocking the screen.
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const byId = new Map(voices.map((v) => [v.identifier, v]));
+  function togglePreview(): void {
+    if (previewing) {
+      stopSpeaking();
+      setPreviewing(false);
+      return;
+    }
+    setPreviewing(true);
+    speakReply(TTS_PREVIEW_SAMPLE, {
+      onDone: () => setPreviewing(false),
+      onStopped: () => setPreviewing(false),
+      onError: () => setPreviewing(false),
+    });
+  }
 
   return (
     // No `title`: the route's own header already reads "Voice", and a second
-    // "Voice" stacked directly beneath it reads as one heading printed twice
-    // (compare Settings → "Memory Settings", whose section titles differ from
-    // the screen's). The description alone leads the card.
-    <SettingsSection
-      description="How replies are read aloud."
-    >
+    // "Voice" stacked directly beneath it reads as one heading printed twice.
+    <SettingsSection description="How replies are read aloud.">
       <View className="row">
         <ToggleRow
           label="Speak replies aloud"
-          description="Read each reply out as it finishes."
+          description="Read new replies aloud as they arrive."
           on={autoSpeak}
           onPress={() => setAutoSpeak(!autoSpeak)}
         />
       </View>
       <View className="row">
-        <PickerRow
-          label="Reading voice"
-          description={
-            enumState === "loading"
-              ? "Looking for voices installed for this device's language."
-              : enumState === "failed"
-                ? "This device would not report its voices, so only the system default is offered. Replies still read aloud."
-                : voices.length === 0
-                  ? "No voices are installed for this device's language. Replies will use the system default."
-                  : "Voices installed for this device's language."
-          }
-          options={voiceOptions(voices, voiceId)}
-          value={voiceId ?? SYSTEM_VOICE}
-          onChange={(id) => setVoice(id === SYSTEM_VOICE ? null : id)}
-          displayFor={(id) =>
-            id === SYSTEM_VOICE ? "System default" : (byId.get(id)?.name ?? id)
-          }
-        />
-      </View>
-      <View className="row">
-        <StepperRow
-          label="Rate"
-          description="How fast the voice reads."
-          display={`${rate.toFixed(2)}x`}
-          onMinus={() => setRate(rate - 0.25)}
-          onPlus={() => setRate(rate + 0.25)}
-          minusDisabled={rate <= MIN_RATE}
-          plusDisabled={rate >= MAX_RATE}
-        />
-      </View>
-      <View className="row">
-        <StepperRow
-          label="Pitch"
-          description="Voice pitch. Leave at 1.00 unless you have a reason."
-          display={`${pitch.toFixed(2)}x`}
-          onMinus={() => setPitch(pitch - 0.25)}
-          onPlus={() => setPitch(pitch + 0.25)}
-          minusDisabled={pitch <= MIN_PITCH}
-          plusDisabled={pitch >= MAX_PITCH}
+        <ActionRow
+          label={systemVoice ? systemVoice.name : "System voice"}
+          description="Your device's default voice. Always available, works offline."
+          buttonLabel={previewing ? "Stop" : "Preview"}
+          variant="secondary"
+          onPress={togglePreview}
         />
       </View>
     </SettingsSection>

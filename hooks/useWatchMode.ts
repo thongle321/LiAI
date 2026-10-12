@@ -16,7 +16,7 @@ import type { Camera as VisionCameraView } from "react-native-vision-camera";
 import { MAX_IMAGES } from "../lib/chat/attachments.ts";
 import { pushFrame } from "../lib/vision-watch.ts";
 import { snapshotToBase64 } from "../lib/snapshot.ts";
-import { useVoice } from "../store/voice.ts";
+import { useWatch } from "../store/watch.ts";
 
 export function useWatchMode(
   camera: RefObject<VisionCameraView | null>,
@@ -24,8 +24,8 @@ export function useWatchMode(
   active: boolean,
 ) {
   const [watchOn, setWatchOn] = useState(false);
-  const intervalMs = useVoice((s) => s.watchIntervalMs);
-  const setWatchIntervalMs = useVoice((s) => s.setWatchIntervalMs);
+  const intervalMs = useWatch((s) => s.watchIntervalMs);
+  const setWatchIntervalMs = useWatch((s) => s.setWatchIntervalMs);
   const framesRef = useRef<string[]>([]);
   const inFlightRef = useRef(false);
 

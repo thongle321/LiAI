@@ -10,6 +10,7 @@ import type { ChatMessage } from "../../types/chat.ts";
 import { newId } from "../../lib/chat/messages.ts";
 import type { SessionStore } from "../../lib/chat/session-store.ts";
 import { canSeeImages, loadModelState } from "../../lib/inference/mmproj.ts";
+import { autoSpeak } from "../../lib/tts/autoSpeak.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
 function llmError(message: string): ApiError {
@@ -189,6 +190,9 @@ export function createSendSlice(
     }
     // C16: the macrotask beat lives exactly as long as this turn.
     const endStreamYield = startStreamYield();
+    // Auto-speak streams this reply as the model writes it. Opened before
+    // the first token and closed in every exit path below.
+    autoSpeak.begin(opts.assistantId);
     try {
       const outcome = await ctx.runTurn(
         opts.text,
@@ -204,10 +208,12 @@ export function createSendSlice(
         },
         (token) => {
           if (gen !== ctx.streamGen) return;
+          autoSpeak.append(token);
           updateBubble(opts.assistantId, (m) => ({ text: m.text + token }));
         },
         (cumulative) => {
           if (gen !== ctx.streamGen) return;
+          autoSpeak.noteReasoning(cumulative);
           updateBubble(opts.assistantId, { reasoning: cumulative });
         },
         (toolName) => {
@@ -242,6 +248,7 @@ export function createSendSlice(
         ...(outcome.outcome !== undefined ? { outcome: outcome.outcome } : {}),
       });
       adoptSession(outcome.sessionId);
+      void autoSpeak.finish();
       set({ sending: false, turnStartedAt: null, pendingToolName: null });
       // Released with the turn. The `gen` guard above means a superseded
       // run never reaches this, so a NEW turn's lock is never stomped.
@@ -249,6 +256,8 @@ export function createSendSlice(
       void get().refreshSessions();
     } catch (err) {
       if (gen !== ctx.streamGen) return;
+      // A failed turn must not leave half a reply queued for playback.
+      autoSpeak.stop();
       const message = err instanceof Error ? err.message : "Local run failed";
       const error = llmError(message);
       updateBubble(opts.assistantId, {

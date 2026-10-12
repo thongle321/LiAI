@@ -1,88 +1,110 @@
-/** Voice output settings: system voice, rate/pitch, auto-speak. Persisted.
+/** Voice output settings: selected voice, auto-speak, Supertonic options. Persisted.
  *
- * Factory takes storage so tests inject memory (see chat.ts pattern).
- * Defaults preserve current behavior: system voice, 1.0x, auto-speak on.
- * Engine interface left open: voiceId selects among expo-speech system
- * voices today; neural engines slot in later without shape changes.
+ * v2 is a clean break from `liai_voice_v1`: rate, pitch, voiceId and the
+ * unrelated vision `watchIntervalMs` are gone (watchIntervalMs moved to
+ * store/watch.ts). Old blobs are discarded, so every existing user lands on
+ * the System default voice — which is the intended behaviour, since System
+ * is the fixed voice and `currentVoice: null` means exactly that.
+ *
+ * The store stays free of native imports so tests run in plain node; the
+ * engine-release side effect on auto-speak is injected via `onAutoSpeak`.
  */
 
 import { create } from "zustand";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
-import type { KeyValueStorage } from "../lib/storage";
-import { clampWatchInterval, WATCH_INTERVAL_DEFAULT_MS } from "../lib/vision-watch.ts";
+import type { KeyValueStorage } from "../lib/storage.ts";
+import {
+  DEFAULT_SUPERTONIC_LANGUAGE,
+  DEFAULT_SUPERTONIC_STEPS,
+  SUPERTONIC_STEP_CHOICES,
+} from "../lib/tts/constants.ts";
+import type { SupertonicSteps, Voice } from "../lib/tts/types.ts";
 
-export const VOICE_KEY = "liai_voice_v1";
-
-export const DEFAULT_RATE = 1.0;
-export const DEFAULT_PITCH = 1.0;
-export const MIN_RATE = 0.5;
-export const MAX_RATE = 2.0;
-export const MIN_PITCH = 0.5;
-export const MAX_PITCH = 2.0;
+export const VOICE_KEY = "liai_voice_v2";
 
 export interface VoiceState {
-  voiceId: string | null;
-  rate: number;
-  pitch: number;
+  /** null = the System default voice (the fixed English device voice). */
+  currentVoice: Voice | null;
   autoSpeak: boolean;
-  /** Vision watch-mode capture interval (05): a USER setting — never a
-   *  profile field (the product decision keeps profiles chat-only). */
-  watchIntervalMs: number;
+  /** Supertonic only — ignored by every other engine. */
+  supertonicSteps: SupertonicSteps;
+  /** Supertonic only — ignored by every other engine. */
+  supertonicLanguage: string;
+  /** Tri-state escape hatch for the device RAM gate: null = not set. */
+  userTTSOverride: boolean | null;
   loaded: boolean;
   load: () => Promise<void>;
-  setVoice: (voiceId: string | null) => void;
-  setRate: (rate: number) => void;
-  setPitch: (pitch: number) => void;
+  setVoice: (voice: Voice | null) => void;
   setAutoSpeak: (autoSpeak: boolean) => void;
-  setWatchIntervalMs: (ms: number) => void;
+  setSupertonicSteps: (steps: SupertonicSteps) => void;
+  setSupertonicLanguage: (language: string) => void;
+  setUserTTSOverride: (override: boolean | null) => void;
 }
 
-function clamp(n: number, lo: number, hi: number, fallback: number): number {
-  return typeof n === "number" && Number.isFinite(n)
-    ? Math.min(hi, Math.max(lo, n))
-    : fallback;
+function isVoice(v: unknown): v is Voice {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    typeof r.id === "string" &&
+    typeof r.name === "string" &&
+    (r.engine === "system" ||
+      r.engine === "kitten" ||
+      r.engine === "kokoro" ||
+      r.engine === "supertonic")
+  );
 }
 
-function parseVoiceState(raw: string | null): {
-  voiceId: string | null;
-  rate: number;
-  pitch: number;
-  autoSpeak: boolean;
-  watchIntervalMs: number;
-} {
+/** The persisted slice — everything in the blob except `loaded` and the setters. */
+type PersistedVoiceState = Pick<
+  VoiceState,
+  "currentVoice" | "autoSpeak" | "supertonicSteps" | "supertonicLanguage" | "userTTSOverride"
+>;
+
+function parseVoiceState(raw: string | null): PersistedVoiceState {
   const fallback = {
-    voiceId: null as string | null,
-    rate: DEFAULT_RATE,
-    pitch: DEFAULT_PITCH,
+    currentVoice: null as Voice | null,
     autoSpeak: true,
-    watchIntervalMs: WATCH_INTERVAL_DEFAULT_MS,
+    supertonicSteps: DEFAULT_SUPERTONIC_STEPS,
+    supertonicLanguage: DEFAULT_SUPERTONIC_LANGUAGE,
+    userTTSOverride: null as boolean | null,
   };
   if (!raw) return fallback;
   try {
     const v: unknown = JSON.parse(raw);
     if (!v || typeof v !== "object" || Array.isArray(v)) return fallback;
     const r = v as Record<string, unknown>;
+    const steps = r.supertonicSteps as SupertonicSteps;
     return {
-      voiceId: typeof r.voiceId === "string" ? r.voiceId : null,
-      rate: clamp(r.rate as number, MIN_RATE, MAX_RATE, DEFAULT_RATE),
-      pitch: clamp(r.pitch as number, MIN_PITCH, MAX_PITCH, DEFAULT_PITCH),
+      currentVoice: isVoice(r.currentVoice) ? r.currentVoice : null,
       autoSpeak: typeof r.autoSpeak === "boolean" ? r.autoSpeak : true,
-      // Older payloads have no interval: clamp(NaN) lands on the default.
-      watchIntervalMs: clampWatchInterval(r.watchIntervalMs as number),
+      // Guard the persisted enum — a hand-edited or stale blob must not
+      // put an unsupported step count in front of the engine.
+      supertonicSteps: SUPERTONIC_STEP_CHOICES.includes(steps)
+        ? steps
+        : DEFAULT_SUPERTONIC_STEPS,
+      supertonicLanguage:
+        typeof r.supertonicLanguage === "string" ? r.supertonicLanguage : DEFAULT_SUPERTONIC_LANGUAGE,
+      userTTSOverride:
+        typeof r.userTTSOverride === "boolean" ? r.userTTSOverride : null,
     };
   } catch {
     return fallback;
   }
 }
 
-export function createVoiceStore(storage: KeyValueStorage) {
+export function createVoiceStore(
+  storage: KeyValueStorage,
+  /** Called after auto-speak flips so the engine can be released. Injected
+   *  to keep native imports out of the store. */
+  onAutoSpeak?: (enabled: boolean) => void,
+) {
   return create<VoiceState>()((set, get) => {
     async function persist(): Promise<void> {
-      const { voiceId, rate, pitch, autoSpeak, watchIntervalMs } = get();
+      const { currentVoice, autoSpeak, supertonicSteps, supertonicLanguage, userTTSOverride } = get();
       try {
         await storage.setItem(
           VOICE_KEY,
-          JSON.stringify({ voiceId, rate, pitch, autoSpeak, watchIntervalMs }),
+          JSON.stringify({ currentVoice, autoSpeak, supertonicSteps, supertonicLanguage, userTTSOverride }),
         );
       } catch {
         // Ignore persistence failures; voice settings are non-critical.
@@ -90,33 +112,34 @@ export function createVoiceStore(storage: KeyValueStorage) {
     }
 
     return {
-      voiceId: null,
-      rate: DEFAULT_RATE,
-      pitch: DEFAULT_PITCH,
+      currentVoice: null,
       autoSpeak: true,
-      watchIntervalMs: WATCH_INTERVAL_DEFAULT_MS,
+      supertonicSteps: DEFAULT_SUPERTONIC_STEPS,
+      supertonicLanguage: DEFAULT_SUPERTONIC_LANGUAGE,
+      userTTSOverride: null,
       loaded: false,
       load: async () => {
         set({ ...parseVoiceState(await storage.getItem(VOICE_KEY)), loaded: true });
       },
-      setVoice: (voiceId) => {
-        set({ voiceId });
-        void persist();
-      },
-      setRate: (rate) => {
-        set({ rate: clamp(rate, MIN_RATE, MAX_RATE, DEFAULT_RATE) });
-        void persist();
-      },
-      setPitch: (pitch) => {
-        set({ pitch: clamp(pitch, MIN_PITCH, MAX_PITCH, DEFAULT_PITCH) });
+      setVoice: (currentVoice) => {
+        set({ currentVoice });
         void persist();
       },
       setAutoSpeak: (autoSpeak) => {
         set({ autoSpeak });
         void persist();
+        onAutoSpeak?.(autoSpeak);
       },
-      setWatchIntervalMs: (ms) => {
-        set({ watchIntervalMs: clampWatchInterval(ms) });
+      setSupertonicSteps: (supertonicSteps) => {
+        set({ supertonicSteps });
+        void persist();
+      },
+      setSupertonicLanguage: (supertonicLanguage) => {
+        set({ supertonicLanguage });
+        void persist();
+      },
+      setUserTTSOverride: (userTTSOverride) => {
+        set({ userTTSOverride });
         void persist();
       },
     };
@@ -125,16 +148,30 @@ export function createVoiceStore(storage: KeyValueStorage) {
 
 async function rnStorage(): Promise<AsyncStorageStatic> {
   const mod = await import("@react-native-async-storage/async-storage");
+  // SAFETY: the module's default export is the AsyncStorage instance; the
+  // interop wrapper returns the namespace on some bundlers.
   return (mod.default ?? mod) as unknown as AsyncStorageStatic;
 }
 
 /** App singleton backed by on-device AsyncStorage. */
-export const useVoice = createVoiceStore({
-  getItem: async (key) => (await rnStorage()).getItem(key),
-  setItem: async (key, value) => {
-    await (await rnStorage()).setItem(key, value);
+export const useVoice = createVoiceStore(
+  {
+    getItem: async (key) => (await rnStorage()).getItem(key),
+    setItem: async (key, value) => {
+      await (await rnStorage()).setItem(key, value);
+    },
+    removeItem: async (key) => {
+      await (await rnStorage()).removeItem(key);
+    },
   },
-  removeItem: async (key) => {
-    await (await rnStorage()).removeItem(key);
+  // Turning auto-speak off hands the loaded engine's RAM back. Lazy import
+  // keeps the native module out of the module graph until it is needed.
+  (enabled) => {
+    if (enabled) return;
+    void import("../lib/tts/runtime.ts")
+      .then((m) => m.ttsRuntime.release())
+      .catch(() => {
+        // nothing loaded to release
+      });
   },
-});
+);

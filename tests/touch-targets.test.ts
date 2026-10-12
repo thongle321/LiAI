@@ -89,6 +89,19 @@ describe("touch target floor", () => {
       // occurrence instead of the one inside the Pressable tag.
       ["components/models/HFSearchView.tsx", "onPress={onOpenAuthor}"],
       ["components/models/HFSearchView.tsx", "onPress={onOpenSort}"],
+      // The two chips added for the HF feature. The blanket rule above only
+      // catches h-10/h-11, so a regression from min-h-12 to min-h-8 (32dp)
+      // is invisible to it — these are pinned by name, which is what this
+      // list is for.
+      //
+      // Anchored on COPY, not on code, deliberately. The obvious code anchor
+      // (onPress, or the call inside it) is unusable here: this scan slices
+      // to the next ">", and an arrow's "=>" ends that slice before the
+      // className is ever read — the trap the comment above this function
+      // already warns about. The cost is that a copy edit reports "anchor
+      // not found"; that fails loudly, which is the safe direction.
+      ["components/models/HFFileRow.tsx", "Choose vision setup for"],
+      ["components/models/HFFileRow.tsx", "download warning"],
     ];
     const missing: string[] = [];
     for (const [file, anchor] of pinned) {

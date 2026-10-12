@@ -96,8 +96,7 @@ export function HFFileRow({
   onWarn: (messages: string[]) => void;
 }) {
   // Stable selectors: actions never change identity, so each subscribes
-  // alone and a progress tick re-renders this row only.
-  const models = useModelStore((s) => s.models);
+  // alone.
   const bookmarkModel = useModelStore((s) => s.bookmarkModel);
   const isBookmarked = useModelStore((s) => s.isBookmarked);
   const pauseModelDownload = useModelStore((s) => s.pauseModelDownload);
@@ -113,7 +112,9 @@ export function HFFileRow({
   );
 
   const specId = hfSpecId(result.modelId, file.name);
-  const spec = models.find((m) => m.id === specId);
+  // `find`, not `s.models`: the array's identity changes on any download
+  // tick, which would re-render every visible row.
+  const spec = useModelStore((s) => s.models.find((m) => m.id === specId));
   const status = (spec?.downloadStatus ?? "idle") as ModelDownloadStatus;
   const progress = spec?.downloadProgress ?? 0;
   const breakdown = visionSizeBreakdown(file, siblings);
@@ -187,9 +188,7 @@ export function HFFileRow({
                       reference's two labels, verbatim (ModelFileCard.tsx
                       :308-330). */}
                   <Text className="font-sans text-caption text-primary">
-                    {status === "completed"
-                      ? "Vision enabled"
-                      : "Includes vision capability"}
+                    {spec?.visionEnabled ? "Vision enabled" : "Includes vision capability"}
                   </Text>
                   <ChevronRight size={12} color={colors.secondaryText} />
                 </View>
@@ -277,7 +276,7 @@ export function HFFileRow({
             code={warnings[0].code}
             label={
               warnings.length > 1
-                ? `${warnings.length} warnings`
+                ? `${warnings.length} Warnings`
                 : warnings[0].label
             }
           />

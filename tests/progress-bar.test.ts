@@ -55,10 +55,20 @@ describe("one progress idiom across every download surface", () => {
   });
 
   it("does not adopt the reference's gradient wash on file cards", () => {
-    assert.doesNotMatch(
-      strip("components/models/HFFileRow.tsx"),
-      /linear-gradient|expo-linear-gradient/,
-      "a gradient wash is not this app's idiom",
-    );
+    // The WHOLE flow, not just the row. This used to read one file that
+    // happened to contain all of it, so repointing it at the row alone
+    // would have quietly stopped guarding the other three.
+    for (const file of [
+      "components/models/HFModelSearch.tsx",
+      "components/models/HFSearchView.tsx",
+      "components/models/HFDetailsView.tsx",
+      "components/models/HFFileRow.tsx",
+    ]) {
+      assert.doesNotMatch(
+        strip(file),
+        /linear-gradient|expo-linear-gradient/,
+        `${file} must not adopt the gradient wash — it is not this app's idiom`,
+      );
+    }
   });
 });

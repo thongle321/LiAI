@@ -134,9 +134,7 @@ export function HFSearchView({
           </Pressable>
           <Pressable
             onPress={onOpenSort}
-            className={`ml-2 min-h-12 flex-row items-center gap-1 rounded-full px-3 ${
-              "border border-border"
-            }`}
+            className="ml-2 min-h-12 flex-row items-center gap-1 rounded-full px-3 border border-border"
             accessibilityRole="button"
             accessibilityLabel="Sort results"
           >

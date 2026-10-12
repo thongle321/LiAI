@@ -82,6 +82,36 @@ describe("HF details sheet", () => {
     );
   });
 
+  it("keeps a clamped file name reachable to a screen reader", () => {
+    // The clamp hides the tail visually, so the a11y label is the only place
+    // the whole name survives. Ticket 03's second acceptance box, which was
+    // ticked without this assertion existing. Both arms are asserted: the
+    // label is a ternary, and one arm carrying the name is not enough.
+    assert.match(
+      ROW,
+      /`Remove bookmark for \$\{file\.name\}`/,
+      "the bookmarked arm's label must carry the untruncated name",
+    );
+    assert.match(
+      ROW,
+      /`Bookmark \$\{file\.name\}`/,
+      "and so must the un-bookmarked arm",
+    );
+  });
+
+  it("tells the truth about vision: the user's choice, not the download state", () => {
+    // A user can download the LLM only (VisionDownloadChoice.visionEnabled
+    // false), and the store records that on the spec (downloads.ts:94). Keying
+    // the label off the download status instead would tell that user vision is
+    // enabled when no projector was ever fetched — the exact false claim this
+    // chip was built to remove.
+    assert.match(
+      ROW,
+      /spec\?\.visionEnabled\s*\?\s*"Vision enabled"/,
+      "the label must read the recorded choice",
+    );
+  });
+
   it("makes a downloaded file's one action the destructive one", () => {
     assert.match(
       ROW,

@@ -5,7 +5,6 @@ import assert from "node:assert/strict";
 
 import { createVoiceStore, VOICE_KEY } from "../store/voice.ts";
 import type { KeyValueStorage } from "../lib/storage.ts";
-import type { Voice } from "../lib/tts/types.ts";
 
 function memoryStorage(seed: Record<string, string> = {}): KeyValueStorage & {
   data: Record<string, string>;
@@ -23,8 +22,6 @@ function memoryStorage(seed: Record<string, string> = {}): KeyValueStorage & {
   };
 }
 
-const BELLA: Voice = { id: "af_bella", name: "Bella", engine: "kitten" };
-
 describe("voice store", () => {
   let storage: ReturnType<typeof memoryStorage>;
 
@@ -36,64 +33,80 @@ describe("voice store", () => {
     const useStore = createVoiceStore(storage);
     await useStore.getState().load();
     const s = useStore.getState();
-    assert.equal(s.currentVoice, null, "null voice means the fixed system default");
+    assert.equal(s.voiceId, null, "null voice means the device default");
     assert.equal(s.autoSpeak, true);
-    assert.equal(s.supertonicSteps, 5);
-    assert.equal(s.supertonicLanguage, "na");
-    assert.equal(s.userTTSOverride, null);
   });
 
   it("persists and restores the voice and auto-speak", async () => {
     const useStore = createVoiceStore(storage);
     await useStore.getState().load();
-    useStore.getState().setVoice(BELLA);
+    useStore.getState().setVoice("com.apple.voice.samantha");
     useStore.getState().setAutoSpeak(false);
     await new Promise((r) => setTimeout(r, 0));
 
     const useStore2 = createVoiceStore(storage);
     await useStore2.getState().load();
-    assert.deepEqual(useStore2.getState().currentVoice, BELLA);
+    assert.equal(useStore2.getState().voiceId, "com.apple.voice.samantha");
     assert.equal(useStore2.getState().autoSpeak, false);
-    assert.ok(storage.data[VOICE_KEY].includes("af_bella"));
+    assert.ok(storage.data[VOICE_KEY].includes("samantha"));
   });
 
-  it("rejects a persisted voice with an unknown engine", async () => {
-    const store = createVoiceStore(
-      memoryStorage({ [VOICE_KEY]: JSON.stringify({ currentVoice: { id: "x", name: "X", engine: "hal9000" } }) }),
-    );
-    await store.getState().load();
-    assert.equal(store.getState().currentVoice, null);
+  it("persists only the voice and the auto-speak flag", async () => {
+    const useStore = createVoiceStore(storage);
+    await useStore.getState().load();
+    useStore.getState().setAutoSpeak(false);
+    await new Promise((r) => setTimeout(r, 0));
+    assert.deepEqual(JSON.parse(storage.data[VOICE_KEY]), {
+      voiceId: null,
+      autoSpeak: false,
+    });
   });
 
-  it("guards the Supertonic step enum against a hand-edited blob", async () => {
+  it("migrates an engine-era system voice back to a voiceId", async () => {
     const store = createVoiceStore(
-      memoryStorage({ [VOICE_KEY]: JSON.stringify({ supertonicSteps: 4 }) }),
+      memoryStorage({
+        [VOICE_KEY]: JSON.stringify({
+          currentVoice: { id: "com.apple.voice.samantha", name: "Samantha", engine: "system" },
+          autoSpeak: false,
+        }),
+      }),
     );
     await store.getState().load();
-    assert.equal(store.getState().supertonicSteps, 5, "4 is not an offered step");
+    assert.equal(store.getState().voiceId, "com.apple.voice.samantha");
+    assert.equal(store.getState().autoSpeak, false);
+  });
+
+  it("falls back to the system default for a non-system engine voice", async () => {
+    // Kokoro and friends had no implementation, so an id from one of them
+    // can never be spoken — pinning it would leave a dead selection.
+    for (const engine of ["kitten", "kokoro", "supertonic"]) {
+      const store = createVoiceStore(
+        memoryStorage({
+          [VOICE_KEY]: JSON.stringify({ currentVoice: { id: "af_bella", name: "Bella", engine } }),
+        }),
+      );
+      await store.getState().load();
+      assert.equal(store.getState().voiceId, null, `${engine} must not become a voiceId`);
+    }
+  });
+
+  it("prefers voiceId over currentVoice when both are present", async () => {
+    const store = createVoiceStore(
+      memoryStorage({
+        [VOICE_KEY]: JSON.stringify({
+          voiceId: "explicit",
+          currentVoice: { id: "legacy", name: "Legacy", engine: "system" },
+        }),
+      }),
+    );
+    await store.getState().load();
+    assert.equal(store.getState().voiceId, "explicit");
   });
 
   it("falls back to defaults on corrupt payload", async () => {
     const bad = createVoiceStore(memoryStorage({ [VOICE_KEY]: "{bad" }));
     await bad.getState().load();
     assert.equal(bad.getState().autoSpeak, true);
-    assert.equal(bad.getState().supertonicSteps, 5);
-  });
-
-  it("ignores the v1 blob entirely (clean break)", async () => {
-    const store = createVoiceStore(
-      memoryStorage({ liai_voice_v1: JSON.stringify({ voiceId: "com.apple.voice.samantha", rate: 2 }) }),
-    );
-    await store.getState().load();
-    assert.equal(store.getState().currentVoice, null, "old blob must not resurrect a v1 voice");
-  });
-
-  it("reports every auto-speak flip to the injected hook", async () => {
-    const seen: boolean[] = [];
-    const store = createVoiceStore(storage, (enabled) => seen.push(enabled));
-    await store.getState().load();
-    store.getState().setAutoSpeak(false);
-    store.getState().setAutoSpeak(true);
-    assert.deepEqual(seen, [false, true]);
+    assert.equal(bad.getState().voiceId, null);
   });
 });

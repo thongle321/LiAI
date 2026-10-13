@@ -21,6 +21,10 @@ export function VoiceChip() {
   const autoSpeak = useVoice((s) => s.autoSpeak);
   const voice = useVoice((s) => s.currentVoice);
   const setAutoSpeak = useVoice((s) => s.setAutoSpeak);
+  // PocketPal parity (ticket 05 / spec Q14): no TTS hardware, no chip.
+  // userTTSOverride ?? deviceMeetsMemory is the availability rule.
+  const available = useVoice((s) => s.userTTSOverride ?? s.deviceMeetsMemory);
+  if (!available) return null;
 
   const label = voice?.name ?? "Device default voice";
 

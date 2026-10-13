@@ -243,13 +243,23 @@ export function createSendSlice(
         ...(outcome.outcome !== undefined ? { outcome: outcome.outcome } : {}),
       });
       adoptSession(outcome.sessionId);
-      // Auto-speak: the finished reply, read aloud. Stopping first is what
-      // keeps a still-playing previous reply from talking over this one.
+      // Auto-speak: the finished reply, read aloud (ticket 05 / spec
+      // Q3 + Q14) — spoken once per message, only when the user opted
+      // in and the device passes the availability gate. Stopping first
+      // is what keeps a still-playing previous reply from talking over
+      // this one.
       // voiceSpeak is imported lazily (expo-speech pulls expo-modules-core,
       // whose .ts sources node cannot load) and a failed load means no
       // auto-speak — the same degradation speakReply already has when the
       // native module is missing.
-      if (useVoice.getState().autoSpeak && outcome.reply.trim() !== "") {
+      const voice = useVoice.getState();
+      if (
+        voice.autoSpeak &&
+        voice.isTTSAvailable() &&
+        outcome.reply.trim() !== "" &&
+        voice.lastSpokenMessageId !== opts.assistantId
+      ) {
+        voice.markSpoken(opts.assistantId);
         void import("../../lib/voiceSpeak.ts")
           .then((m) => {
             m.stopSpeaking();
@@ -356,6 +366,9 @@ export function createSendSlice(
       // The partial reply stays in its bubble as the turn's text.
       ctx.streamGen += 1;
       ctx.stopEngine();
+      // Aborting the run aborts its audio too (ticket 05 / spec Q14):
+      // a half-spoken reply must not keep talking over the stop.
+      void useVoice.getState().stop();
       // Drop the wake lock HERE, not when the aborted run unwinds: the
       // engine teardown is exactly when the screen must not sleep, and
       // the `gen` guard keeps the unwinding run from touching it again.

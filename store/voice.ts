@@ -44,6 +44,8 @@ export interface VoiceState {
   /** null = no user decision; true/false forces availability. */
   userTTSOverride: boolean | null;
   playbackState: PlaybackState;
+  /** Message id of the last auto-spoken reply, for once-per-turn playback. */
+  lastSpokenMessageId: string | null;
   /** Kokoro download triplet; null when unreadable (node tests). */
   download: TtsModelStatus | null;
   deviceMeetsMemory: boolean;
@@ -54,6 +56,8 @@ export interface VoiceState {
   setCurrentVoice: (voice: Voice | null) => void;
   setAutoSpeak: (autoSpeak: boolean) => void;
   setUserTTSOverride: (override: boolean | null) => void;
+  /** Record that `messageId` was spoken, so repeats do not re-speak it. */
+  markSpoken: (messageId: string) => void;
   /** Speak `text` through the selected engine (spec Q14 "one API"). */
   play: (text: string, options?: { messageId?: string; voice?: Voice; speed?: number }) => Promise<void>;
   stop: () => Promise<void>;
@@ -135,6 +139,7 @@ export function createVoiceStore(storage: KeyValueStorage) {
       autoSpeak: false,
       userTTSOverride: null,
       playbackState: { mode: "idle" },
+      lastSpokenMessageId: null,
       download: null,
       deviceMeetsMemory: false,
       loaded: false,
@@ -173,6 +178,9 @@ export function createVoiceStore(storage: KeyValueStorage) {
       setUserTTSOverride: (userTTSOverride) => {
         set({ userTTSOverride });
         void persist();
+      },
+      markSpoken: (messageId) => {
+        set({ lastSpokenMessageId: messageId });
       },
 
       play: async (text, options = {}) => {

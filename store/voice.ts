@@ -59,6 +59,8 @@ export interface VoiceState {
   stop: () => Promise<void>;
   /** Download the kokoro model, reporting state transitions. */
   startKokoroDownload: () => Promise<string>;
+  /** Cancel the in-flight kokoro download (no-op when idle). */
+  cancelKokoroDownload: () => void;
 }
 
 type PersistedVoiceState = Pick<VoiceState, "currentVoice" | "autoSpeak" | "userTTSOverride">;
@@ -210,6 +212,10 @@ export function createVoiceStore(storage: KeyValueStorage) {
         ttsDownloads.download(KOKORO_MODEL_ID, (status) => {
           set({ download: status });
         }),
+
+      cancelKokoroDownload: () => {
+        ttsDownloads.abort();
+      },
     };
   });
 }

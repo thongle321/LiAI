@@ -1,32 +1,25 @@
 /** Voice screen: how LiAI speaks.
  *
  * Structure from the Voice settings reference — the System voice card on
- * top, then the engine cards, then auto-speak. Colours are this project's
- * tokens, not PocketPal's paper-and-orange.
+ * top, then the Kokoro engine group, then auto-speak. Colours are this
+ * project's tokens, not PocketPal's paper-and-orange.
  *
- * Ticket 03 state: the System card offers exactly one row — the device
- * default voice (spec Q9: system voices are never enumerated). The
- * engine cards are static placeholders (see VoiceEngineCard); ticket 04
- * fills the Kokoro card with its curated voices, download state and
- * preview. Nothing on this screen says "download" yet, because the
- * store's download action is not wired to UI until then.
+ * The Kokoro group (see components/voice/KokoroEngineCard.tsx) is live:
+ * download button with progress, the 11 curated voices as radio rows,
+ * tap-to-preview. Only engines in the v1 scope (system + kokoro, spec
+ * Q2) appear; kitten/supertonic return in phase 2 with their own groups.
  */
 
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { AudioLines, Volume2 } from "lucide-react-native";
 
-import { ENGINES, VoiceEngineCard } from "./voice/VoiceEngineCard.tsx";
-import { KokoroTracer } from "./voice/KokoroTracer.tsx";
+import { KokoroEngineCard } from "./voice/KokoroEngineCard.tsx";
 import { ActionRow, PickerRow, SettingsSection, ToggleRow } from "./SettingsRows.tsx";
 import { DEVICE_DEFAULT_VOICE } from "../lib/tts/types.ts";
+import { VOICE_PREVIEW_SAMPLE } from "../constants/voice-strings.ts";
 import { speakReply, stopSpeaking } from "../lib/voiceSpeak.ts";
 import { useVoice } from "../store/voice.ts";
-
-/** Spoken by the Preview button, so the user hears the voice they picked
- *  rather than the words they just read. */
-const PREVIEW_SAMPLE =
-  "Oh, hello there! I've been waiting for you to test me. I sound pretty good!";
 
 export function VoiceSettings() {
   const { currentVoice, autoSpeak, load, setCurrentVoice, setAutoSpeak } = useVoice();
@@ -43,7 +36,7 @@ export function VoiceSettings() {
       return;
     }
     setPreviewing(true);
-    speakReply(PREVIEW_SAMPLE, {
+    speakReply(VOICE_PREVIEW_SAMPLE, {
       onDone: () => setPreviewing(false),
       onStopped: () => setPreviewing(false),
       onError: () => setPreviewing(false),
@@ -98,10 +91,8 @@ export function VoiceSettings() {
         </View>
       </View>
 
-      <Text className="section-title mb-3 mt-6">Voice engines</Text>
-      {ENGINES.map((engine) => (
-        <VoiceEngineCard key={engine.id} engine={engine} />
-      ))}
+      <Text className="section-title mb-3 mt-6">Neural voice</Text>
+      <KokoroEngineCard />
 
       <SettingsSection description="How replies are read aloud.">
         <View className="row">
@@ -114,8 +105,8 @@ export function VoiceSettings() {
         </View>
       </SettingsSection>
 
-      {/* __DEV__-only kokoro smoke test (issue 02); release builds drop it. */}
-      {__DEV__ ? <KokoroTracer /> : null}
+      {/* Historical dev smoke test lived here (issue 02 KokoroTracer) — the
+          Kokoro group above subsumes it, so the tracer is gone. */}
     </View>
   );
 }

@@ -17,6 +17,7 @@ import { colors } from "../themes/tokens.ts";
 import { SnackbarProvider } from "../components/Snackbar.tsx";
 import { useKeyboardStore } from "../store/keyboard.ts";
 import { useEngineOffload } from "../hooks/useEngineOffload.ts";
+import { useVoiceOffload } from "../hooks/useVoiceOffload.ts";
 import { useFluidTextVariables } from "../hooks/useFluidTextScale.ts";
 
 // Light-locked (DESIGN.md): one theme, and it is the light one —
@@ -56,6 +57,8 @@ export default function RootLayout() {
   // Release the loaded model when the app is backgrounded, so a multi-GB
   // GGUF is not held resident (Settings > Model Loading).
   useEngineOffload();
+  // Stop TTS playback on backgrounding (ticket 05 / spec Q14).
+  useVoiceOffload();
   // Fluid Type (DESIGN.md): --text-* overrides for this device's width.
   // Must be called before any early return (hook order).
   const typeVars = useFluidTextVariables();

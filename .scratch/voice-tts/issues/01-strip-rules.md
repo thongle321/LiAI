@@ -10,9 +10,13 @@ it is a streaming affordance deferred to phase 2.)
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A pure cleaner takes raw assistant text and returns speakable text: think/reasoning tags removed, fenced + inline code removed, links reduced to their label (or removed if labelless), image markup and table syntax removed, prose preserved.
-- [ ] The cleaner handles text arriving as one final string (v1 speak-on-completion path).
-- [ ] Existing speak path (auto-speak + per-message play) routes through the cleaner.
-- [ ] `node --test tests/*.test.ts` covers each rule with representative fixtures; `npm run typecheck` green.
+- [x] A pure cleaner takes raw assistant text and returns speakable text: think/reasoning tags removed, fenced + inline code removed, links reduced to their label (or removed if labelless), image markup and table syntax removed, prose preserved.
+- [x] The cleaner handles text arriving as one final string (v1 speak-on-completion path).
+- [x] Existing speak path (auto-speak + per-message play) routes through the cleaner.
+- [x] `node --test tests/*.test.ts` covers each rule with representative fixtures; `npm run typecheck` green.
+
+## Comments
+
+Resolved 2026-10-13 on integration/voice-tts (coding-only run). All acceptance boxes verified: npm test 1291/1291, typecheck clean.

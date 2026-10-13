@@ -1,6 +1,6 @@
 # Voice feature (TTS) — PocketPal parity on sherpa-onnx
 
-Date: 2026-10-13. Status: **agreed, not implemented**. Produced by a
+Date: 2026-10-13. Status: **implemented on `integration/voice-tts` (coding-only run, 2026-10-13); device proof pending first device session.** Produced by a
 grilling session over `pocketpal-ai/`'s voice architecture; this is the
 decision record. Implementation follows this doc; deviations update it.
 

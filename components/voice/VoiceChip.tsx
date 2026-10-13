@@ -5,53 +5,24 @@
  * auto-speak; the chevron half opens the Voice screen. Both write the same
  * store value.
  *
- * The name lookup enumerates device voices only when a voice is actually
- * picked; with the System default it isn't needed, and the composer should
- * not pay for a native enumeration call on every mount.
+ * Ticket 03 / spec Q9: the label comes from the store's current voice —
+ * system voices are never enumerated, so the composer pays for no
+ * native enumeration call, on any mount.
  */
 
-import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import { Pressable, Text, View } from "react-native";
-import * as Speech from "expo-speech";
 import { ChevronDown, Volume2, VolumeX } from "lucide-react-native";
 
-import { filterVoices, deviceLanguage } from "../../lib/voices.ts";
 import { useVoice } from "../../store/voice.ts";
-
-/** Matches the picker's own name for "no voice chosen". */
-const SYSTEM_VOICE_LABEL = "System default";
 
 export function VoiceChip() {
   const router = useRouter();
   const autoSpeak = useVoice((s) => s.autoSpeak);
-  const voiceId = useVoice((s) => s.voiceId);
+  const voice = useVoice((s) => s.currentVoice);
   const setAutoSpeak = useVoice((s) => s.setAutoSpeak);
-  const [name, setName] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (voiceId === null) {
-      setName(null);
-      return;
-    }
-    let cancelled = false;
-    Speech.getAvailableVoicesAsync()
-      .then((all) => {
-        if (cancelled) return;
-        const hit = filterVoices(all, deviceLanguage()).find((v) => v.identifier === voiceId);
-        // A voice this device no longer has still needs a label; the id is
-        // the honest fallback and the picker will offer the real choices.
-        setName(hit?.name ?? voiceId);
-      })
-      .catch(() => {
-        if (!cancelled) setName(voiceId);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [voiceId]);
-
-  const label = voiceId === null ? SYSTEM_VOICE_LABEL : (name ?? voiceId);
+  const label = voice?.name ?? "Device default voice";
 
   return (
     <View className="h-8 flex-row items-center overflow-hidden rounded-full border border-slate-200 bg-white">

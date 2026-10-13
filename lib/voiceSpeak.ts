@@ -3,6 +3,11 @@
  * Extracted when vision became the second speaker — same language,
  * same callbacks, never throws (a missing native module reports
  * through onError like a playback failure).
+ *
+ * Ticket 03: speakReply/stopSpeaking are now thin adapters over the
+ * voice store's engine layer, so every caller (auto-speak, per-message
+ * play, preview, vision) speaks through the selected engine — system
+ * or kokoro — with no per-caller routing.
  */
 import * as Speech from "expo-speech";
 
@@ -16,20 +21,16 @@ export type SpeakCallbacks = {
 };
 
 export function speakReply(text: string, cbs: SpeakCallbacks = {}): void {
-  const { voiceId } = useVoice.getState();
   try {
     // One choke point: auto-speak and the per-message play button both
     // arrive here, so stripping once covers both (ticket 01 / spec Q10).
-    Speech.speak(stripForSpeech(text), {
-      // Only pin a language when no voice is chosen: forcing "en-US" beside
-      // a picked voice fights it, and the voice already carries its own
-      // language. With no voice this is exactly what it did before.
-      language: voiceId ? undefined : "en-US",
-      voice: voiceId ?? undefined,
-      onDone: () => cbs.onDone?.(),
-      onStopped: () => cbs.onStopped?.(),
-      onError: () => cbs.onError?.(),
-    });
+    void useVoice
+      .getState()
+      .play(stripForSpeech(text))
+      .then(
+        () => cbs.onDone?.(),
+        () => cbs.onError?.(),
+      );
   } catch {
     cbs.onError?.();
   }
@@ -39,7 +40,7 @@ export function speakReply(text: string, cbs: SpeakCallbacks = {}): void {
  * the dep — stop() then throws, so never let it take down the caller. */
 export function stopSpeaking(): void {
   try {
-    void Speech.stop();
+    void useVoice.getState().stop();
   } catch {
     // nothing live to stop
   }

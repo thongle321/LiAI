@@ -46,7 +46,9 @@ describe("stripForSpeech: wiring", () => {
       new URL("../lib/voiceSpeak.ts", import.meta.url),
       "utf8",
     );
-    assert.match(src, /Speech\.speak\(stripForSpeech\(text\)/);
+    // Ticket 03 moved the speak path onto the store's engine layer; the
+    // choke point is unchanged — one strip before either engine plays.
+    assert.match(src, /play\(stripForSpeech\(text\)\)/);
   });
 });
 

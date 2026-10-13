@@ -19,9 +19,7 @@ const engines: Record<EngineId, Engine> = {
     localPath: () => ttsDownloads.localPath(KOKORO_EN_MODEL_ID),
     speakOnce: (options) => speakKokoroOnce(options),
   }),
-  system: createSystemEngine({
-    load: () => import("expo-speech"),
-  }),
+  system: createSystemEngine(() => import("expo-speech")),
 };
 
 export function getEngine(id: EngineId): Engine {

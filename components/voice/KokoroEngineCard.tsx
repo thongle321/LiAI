@@ -12,6 +12,8 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Download, Square, Volume2 } from "lucide-react-native";
 
+import { colors } from "../../themes/tokens.ts";
+
 import { KOKORO_BADGE, KOKORO_SPEC, KOKORO_TITLE, VOICE_PREVIEW_SAMPLE } from "../../constants/voice-strings.ts";
 import { KOKORO_VOICES } from "../../lib/tts/engines/kokoro.ts";
 import { kokoroGroupState, voiceTap } from "../../lib/tts/voiceUi.ts";
@@ -49,7 +51,7 @@ function VoiceRow({
     >
       <RadioDot checked={selected} />
       <Text className="flex-1 font-sans text-body-md text-primary-text">{voice.name}</Text>
-      {previewing ? <Square size={14} color="#2563eb" /> : null}
+      {previewing ? <Square size={14} color={colors.primary} /> : null}
     </Pressable>
   );
 }
@@ -63,16 +65,16 @@ export function KokoroEngineCard() {
   const play = useVoice((s) => s.play);
   const stop = useVoice((s) => s.stop);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const [downloadErrorNote, setDownloadErrorNote] = useState<string | null>(null);
 
   const group = kokoroGroupState(download);
 
   function startDownload(): void {
-    setNote(null);
+    setDownloadErrorNote(null);
     void startKokoroDownload().catch((error: unknown) => {
       // The store triplet already carries reported failures; this only
       // covers a rejection the bridge never reported.
-      setNote(error instanceof Error ? error.message : String(error));
+      setDownloadErrorNote(error instanceof Error ? error.message : String(error));
     });
   }
 
@@ -86,7 +88,7 @@ export function KokoroEngineCard() {
     }
     setCurrentVoice(voice);
     setPreviewingId(voice.id);
-    setNote(null);
+    setDownloadErrorNote(null);
     void play(VOICE_PREVIEW_SAMPLE, { voice })
       .catch(() => {
         // A failed preview is advisory; the selection still stands.
@@ -122,7 +124,7 @@ export function KokoroEngineCard() {
                 onPress={startDownload}
                 className="btn btn--ghost flex-row items-center gap-2 px-5 py-2"
               >
-                <Download size={16} color="#2563eb" />
+                <Download size={16} color={colors.primary} />
                 <Text className="font-sans-semibold text-body-md text-primary">Download</Text>
               </Pressable>
             </View>
@@ -174,15 +176,15 @@ export function KokoroEngineCard() {
               />
             ))}
             <View className="mt-1 flex-row items-center gap-2">
-              <Volume2 size={14} color="#64748b" />
+              <Volume2 size={14} color={colors.secondaryText} />
               <Text className="font-sans text-body-sm text-secondary-text">
                 Tap a voice to select it and hear a sample.
               </Text>
             </View>
           </View>
         ) : null}
-        {note !== null ? (
-          <Text className="mt-2 font-sans text-body-sm text-primary-text">{note}</Text>
+        {downloadErrorNote !== null ? (
+          <Text className="mt-2 font-sans text-body-sm text-primary-text">{downloadErrorNote}</Text>
         ) : null}
       </View>
     </View>

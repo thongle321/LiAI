@@ -25,10 +25,6 @@ import type { TTSModelType } from "react-native-sherpa-onnx/tts";
  *  sibling — same voices, heavier download. */
 export const KOKORO_EN_MODEL_ID = "kokoro-int8-en-v0_19";
 
-/** The canned line the tracer speaks on device. */
-export const KOKORO_CANNED_LINE =
-  "Hello! This is the LiAI neural voice, speaking fully offline on your device.";
-
 /** Minimal structural view of the streaming engine's playback surface —
  *  a subset of the real `StreamingTtsEngine`, so tests can fake it. */
 export interface PcmPlaybackEngine {

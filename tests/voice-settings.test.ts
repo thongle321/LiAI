@@ -14,6 +14,8 @@ import {
   VOICE_KEY,
   KOKORO_MODEL_ID,
   RAM_GATE_BYTES,
+  reconcileVoice,
+  restoreVoice,
 } from "../store/voice.ts";
 import { DEVICE_DEFAULT_VOICE } from "../lib/tts/types.ts";
 import { KOKORO_VOICES } from "../lib/tts/engines/kokoro.ts";
@@ -155,5 +157,34 @@ describe("voice store", () => {
   it("exposes the kokoro model id and RAM gate the spec fixed", () => {
     assert.equal(KOKORO_MODEL_ID, "kokoro-int8-en-v0_19");
     assert.equal(RAM_GATE_BYTES, 4 * 1024 * 1024 * 1024);
+  });
+});
+
+describe("voice reconcile — a persisted voice whose model vanished", () => {
+  const bella = KOKORO_VOICES[1];
+
+  it("stashes the id and falls back to the device default", () => {
+    for (const state of ["not_installed", "error"] as const) {
+      const r = reconcileVoice(bella, { state, percent: 0 });
+      assert.deepEqual(r.voice, DEVICE_DEFAULT_VOICE, state);
+      assert.equal(r.stashed, bella.id, state);
+    }
+  });
+
+  it("keeps the voice when the model is ready", () => {
+    const r = reconcileVoice(bella, { state: "ready", percent: 100 });
+    assert.deepEqual(r.voice, bella);
+    assert.equal(r.stashed, null);
+  });
+
+  it("keeps the voice when the download state is unknown — unknown is not vanished", () => {
+    const r = reconcileVoice(bella, null);
+    assert.deepEqual(r.voice, bella);
+    assert.equal(r.stashed, null);
+  });
+
+  it("restores a stashed id only while still curated", () => {
+    assert.deepEqual(restoreVoice(bella.id), bella);
+    assert.equal(restoreVoice("af_ghost"), null);
   });
 });

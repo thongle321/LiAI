@@ -55,7 +55,10 @@ export interface SherpaTtsDownloadApi {
  *  this module, and the package's enum is not erasable syntax. */
 const TTS_CATEGORY = "tts" as ModelCategory;
 
-function clampPercent(percent: number): number {
+/** Clamp a 0..100 percent to whole points. Shared with the UI rules
+ *  (voiceUi.ts) — the bridge clamps at the source, the UI re-clamps
+ *  because the status is plain data that may cross a process boundary. */
+export function clampPercent(percent: number): number {
   if (!Number.isFinite(percent)) return 0;
   return Math.min(100, Math.max(0, percent));
 }

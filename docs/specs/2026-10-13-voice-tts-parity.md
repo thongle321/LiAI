@@ -83,9 +83,12 @@ VoiceChip / PlayButton                ported as-is
 
 - Persisted: `autoSpeakEnabled` (default `false`), `currentVoice`
   (`{id, engine, name?} | null`), `userTTSOverride` (trististate).
-- Runtime: `playbackState` (`idle | streaming | playing` + messageId),
-  per-engine `DownloadState`/`Progress`/`Error` triplet, `deviceMeetsMemory`,
-  `isSetupSheetOpen`, `lastSpokenMessageId`.
+- Runtime: `playbackState` (`idle | playing` + messageId — the `streaming`
+  variant arrives with phase-2 streaming playback), per-engine
+  `DownloadState`/`Progress`/`Error` triplet, `deviceMeetsMemory`,
+  `lastSpokenMessageId`, `pendingVoiceRestore` (in-memory voice stash).
+  No `isSetupSheetOpen` — the UI stays the existing route, not a global
+  sheet (quiz amendment 1).
 - Derived: `isTTSAvailable` = override ?? (`totalMemory >= 4 GB`).
 - `init()`: reconcile download states from `isModelDownloadedByCategory`,
   clear-then-stash a persisted voice whose model vanished, AppState

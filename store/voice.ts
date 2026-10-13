@@ -46,6 +46,9 @@ export interface VoiceState {
   playbackState: PlaybackState;
   /** Message id of the last auto-spoken reply, for once-per-turn playback. */
   lastSpokenMessageId: string | null;
+  /** Stashed kokoro voice id, restored on the next successful download
+   *  (PocketPal's pendingVoiceRestore — in-memory, never persisted). */
+  pendingVoiceRestore: string | null;
   /** Kokoro download triplet; null when unreadable (node tests). */
   download: TtsModelStatus | null;
   deviceMeetsMemory: boolean;
@@ -126,6 +129,32 @@ function parseVoiceState(raw: string | null): PersistedVoiceState {
   }
 }
 
+/** PocketPal's init-reconcile (spec Q14): clear-then-stash a persisted
+ *  voice whose model vanished. An unknown download state (node, or an
+ *  unreadable disk) leaves the voice alone — unknown is not vanished. */
+export function reconcileVoice(
+  currentVoice: Voice | null,
+  download: TtsModelStatus | null,
+): { voice: Voice | null; stashed: string | null } {
+  // null means never-chosen — the device default by convention, with
+  // nothing to stash. Only a selected voice can vanish.
+  if (currentVoice === null) return { voice: null, stashed: null };
+  const voice = sanitizeVoice(currentVoice);
+  if (
+    voice.engine === "kokoro" &&
+    (download?.state === "not_installed" || download?.state === "error")
+  ) {
+    return { voice: DEVICE_DEFAULT_VOICE, stashed: voice.id };
+  }
+  return { voice, stashed: null };
+}
+
+/** The other half of the reconcile: a stashed id becomes a voice again
+ *  only while still curated, or null when the list moved on. */
+export function restoreVoice(stashed: string): Voice | null {
+  return KOKORO_VOICES.find((v) => v.id === stashed) ?? null;
+}
+
 export function createVoiceStore(storage: KeyValueStorage) {
   return create<VoiceState>()((set, get) => {
     async function persist(): Promise<void> {
@@ -146,20 +175,29 @@ export function createVoiceStore(storage: KeyValueStorage) {
       userTTSOverride: null,
       playbackState: { mode: "idle" },
       lastSpokenMessageId: null,
+      pendingVoiceRestore: null,
       download: null,
       deviceMeetsMemory: false,
       loaded: false,
 
       load: async () => {
-        set({ ...parseVoiceState(await storage.getItem(VOICE_KEY)), loaded: true });
+        const parsed = parseVoiceState(await storage.getItem(VOICE_KEY));
+        set({ ...parsed, loaded: true });
         // Reconcile the kokoro download state from disk (spec Q14). The
         // native module is absent in node — a failed reconcile simply
         // leaves the triplet null.
+        let download: TtsModelStatus | null = null;
         try {
-          set({ download: await ttsDownloads.status(KOKORO_MODEL_ID) });
+          download = await ttsDownloads.status(KOKORO_MODEL_ID);
         } catch {
-          set({ download: null });
+          download = null;
         }
+        const reconciled = reconcileVoice(parsed.currentVoice, download);
+        set({
+          download,
+          currentVoice: reconciled.voice,
+          pendingVoiceRestore: reconciled.stashed,
+        });
         try {
           const total = await readTotalMemory();
           set({ deviceMeetsMemory: total !== null && total >= RAM_GATE_BYTES });
@@ -228,6 +266,16 @@ export function createVoiceStore(storage: KeyValueStorage) {
       startKokoroDownload: async () =>
         ttsDownloads.download(KOKORO_MODEL_ID, (status) => {
           set({ download: status });
+          // A finished download restores the voice stashed at load
+          // (PocketPal's restore-after-re-download, spec Q14).
+          if (status.state === "ready") {
+            const stashed = get().pendingVoiceRestore;
+            if (stashed !== null) {
+              set({ pendingVoiceRestore: null });
+              const restored = restoreVoice(stashed);
+              if (restored !== null) set({ currentVoice: restored });
+            }
+          }
         }),
 
       cancelKokoroDownload: () => {

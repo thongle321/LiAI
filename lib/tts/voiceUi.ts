@@ -7,7 +7,7 @@
  */
 
 import type { Voice } from "./types.ts";
-import type { TtsModelStatus } from "./download.ts";
+import { clampPercent, type TtsModelStatus } from "./download.ts";
 
 /** The Kokoro group's body, derived from the store's download triplet. */
 export type KokoroGroupState =
@@ -24,9 +24,7 @@ export function kokoroGroupState(status: TtsModelStatus | null): KokoroGroupStat
     case "downloading":
       return {
         kind: "downloading",
-        // The bridge clamps at the source; the UI re-clamps because the
-        // status is plain data that may cross a process boundary.
-        percent: Math.min(100, Math.max(0, Math.round(status.percent))),
+        percent: clampPercent(Math.round(status.percent)),
       };
     case "error":
       return { kind: "error", message: status.error ?? null };

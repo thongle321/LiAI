@@ -6,6 +6,7 @@
  */
 import * as Speech from "expo-speech";
 
+import { stripForSpeech } from "./stripForSpeech.ts";
 import { useVoice } from "../store/voice.ts";
 
 export type SpeakCallbacks = {
@@ -17,7 +18,9 @@ export type SpeakCallbacks = {
 export function speakReply(text: string, cbs: SpeakCallbacks = {}): void {
   const { voiceId } = useVoice.getState();
   try {
-    Speech.speak(text, {
+    // One choke point: auto-speak and the per-message play button both
+    // arrive here, so stripping once covers both (ticket 01 / spec Q10).
+    Speech.speak(stripForSpeech(text), {
       // Only pin a language when no voice is chosen: forcing "en-US" beside
       // a picked voice fights it, and the voice already carries its own
       // language. With no voice this is exactly what it did before.

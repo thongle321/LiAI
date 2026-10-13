@@ -63,6 +63,9 @@ export interface SpeakOnceOptions {
   /** Speaker id; kokoro-en-v0_19 has 11 (0..10). */
   sid?: number;
   speed?: number;
+  /** Stop path (ticket 03): aborting cancels the in-flight generation and
+   *  the one-shot then RESOLVES — a stop is a clean terminal state. */
+  signal?: AbortSignal;
 }
 
 /** Generate `text` from a downloaded model and play it through the native
@@ -72,6 +75,7 @@ export async function speakOnce(
   load: () => Promise<SherpaTtsApi>,
   options: SpeakOnceOptions,
 ): Promise<void> {
+  if (options.signal?.aborted) return;
   const api = await load();
   const engine = await api.createStreamingTTS({
     modelPath: { type: "file", path: options.modelPath },
@@ -82,6 +86,25 @@ export async function speakOnce(
     await engine.startPcmPlayer(sampleRate, 1);
     try {
       await new Promise<void>((resolve, reject) => {
+        let handle: { cancel(): Promise<void>; unsubscribe(): void } | null = null;
+        let cancelled = false;
+        const settle = (): void => {
+          options.signal?.removeEventListener("abort", onAbort);
+          resolve();
+        };
+        function onAbort(): void {
+          cancelled = true;
+          if (handle !== null) {
+            void handle
+              .cancel()
+              .catch(() => {
+                // A cancel racing native teardown may throw; the player
+                // stop below still runs either way.
+              })
+              .then(() => settle());
+          }
+        }
+        options.signal?.addEventListener("abort", onAbort);
         const generationOptions =
           options.sid !== undefined || options.speed !== undefined
             ? {
@@ -96,8 +119,20 @@ export async function speakOnce(
               // into the event emitter with nobody to catch it.
               engine.writePcmChunk(chunk.samples).catch(reject);
             },
-            onEnd: () => resolve(),
-            onError: (event) => reject(new Error(event.message)),
+            onEnd: () => settle(),
+            onError: (event) => {
+              if (!cancelled) reject(new Error(event.message));
+            },
+          })
+          .then((h) => {
+            handle = h;
+            // An abort that raced the stream start still cancels.
+            if (cancelled) {
+              void h
+                .cancel()
+                .catch(() => {})
+                .then(() => settle());
+            }
           })
           .catch(reject);
       });

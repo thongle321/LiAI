@@ -17,6 +17,7 @@ import * as Speech from "expo-speech";
 import { AudioLines, Volume2 } from "lucide-react-native";
 
 import { ENGINES, VoiceEngineCard } from "./voice/VoiceEngineCard.tsx";
+import { KokoroTracer } from "./voice/KokoroTracer.tsx";
 import { ActionRow, PickerRow, SettingsSection, ToggleRow } from "./SettingsRows.tsx";
 import {
   deviceLanguage,
@@ -155,6 +156,9 @@ export function VoiceSettings() {
           />
         </View>
       </SettingsSection>
+
+      {/* __DEV__-only kokoro smoke test (issue 02); release builds drop it. */}
+      {__DEV__ ? <KokoroTracer /> : null}
     </View>
   );
 }

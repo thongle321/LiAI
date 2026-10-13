@@ -145,6 +145,31 @@ preflight is the manager's (PocketPal's own ×1.2 preflight is redundant).
 5. **LGPL notice** — sherpa ships FFmpeg + Shine MP3 encoder; clear
    before store submission.
 
+## Findings from ticket 02 (2026-10-13)
+
+Answers to the open items above, verified against the installed 0.4.4
+package (docs-vs-reality differences noted):
+
+1. **Registry model IDs** (GitHub release tag `tts-models`):
+   `kokoro-int8-en-v0_19` — 98.5 MB int8 English, the chosen tracer
+   model; `kokoro-en-v0_19` — 304.8 MB fp32 sibling, same voices. The
+   installed package exports category-first names (`downloadModel`,
+   `refreshModels`, …), NOT the docs site's `downloadModelByCategory`
+   spellings — the bridge wraps what the package ships.
+2. **Speaker count: 11 (sid 0..10)** for the kokoro-en-v0_19 family.
+   This revises ticket 04's “~20 curated voices” to **11 named voices**;
+   sid↔name order still gets runtime confirmation via `getNumSpeakers()`
+   on first device run.
+3. **PCM player is streaming-engine only.** The shipped `TtsEngine`
+   (batch `createTTS`) declarations expose no `startPcmPlayer`; the
+   player lives on `StreamingTtsEngine`. Pre-authorized fallback taken:
+   `speakOnce` uses `createStreamingTTS` + chunked `writePcmChunk` —
+   design unchanged.
+
+Device/Gradle proof: **out of scope this run** (coding-only constraint in
+the amendments above); `KokoroTracer` (__DEV__-only card in Voice
+settings) is the manual smoke surface for the first device session.
+
 ## Risks
 
 - `react-native-sherpa-onnx` is a 0.x, single-maintainer package (0.4.4,

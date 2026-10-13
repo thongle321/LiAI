@@ -10,3 +10,6 @@ spec:
    global sheet the spec assumed — same contents, less churn.
 2. The existing OS-voice picker is **removed** (spec Q9/Q15); persisted
    `voiceId`s migrate to "Device default voice" in ticket 03.
+3. Run constraint (2026-10-13): **coding only — no app builds**. Gradle /
+   dev-client / on-device steps in any ticket are out of scope for this
+   run; they stay as manual follow-ups, not failed acceptance criteria.

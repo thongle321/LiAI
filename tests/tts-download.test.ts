@@ -112,6 +112,25 @@ describe("tts download bridge — download", () => {
     assert.equal(seenSignals[0]?.aborted, false);
   });
 
+  it("populates the registry before downloading, or sherpa rejects the id", async () => {
+    // Regression: sherpa's downloadModel resolves the id through
+    // getModelById, which reads ONLY the on-disk registry cache and never
+    // fetches. With no refreshModels() call first, the cache is empty on a
+    // fresh install and EVERY download throws `Unknown model id: <id>`.
+    const { api, calls } = registryGatedApi();
+    const bridge = createTtsDownloadBridge(async () => api);
+
+    const path = await bridge.download("kokoro-int8-en-v0_19", () => {});
+
+    assert.equal(path, "/models/tts/kokoro-int8-en-v0_19");
+    assert.ok(
+      calls.some((c) => c.fn === "refreshModels"),
+      "registry must be refreshed before downloadModel",
+    );
+    // ...and refreshed first, not after the failed lookup.
+    assert.equal(calls[0]?.fn, "refreshModels");
+  });
+
   it("clamps a percent the native side lost track of", async () => {
     const { api } = fakeApi({
       downloadModel: (_c, id, opts) => {
@@ -146,11 +165,16 @@ describe("tts download bridge — download", () => {
 
   it("abort() cancels the in-flight download back to not_installed", async () => {
     const { api } = fakeApi({
+      // Mirrors sherpa: a signal already aborted when downloadModel is
+      // reached rejects immediately rather than waiting for an event.
       downloadModel: (_c, _id, opts) =>
         new Promise((_resolve, reject) => {
-          opts?.signal?.addEventListener("abort", () => {
-            reject(Object.assign(new Error("Download aborted"), { name: "AbortError" }));
-          });
+          const fail = () =>
+            reject(
+              Object.assign(new Error("Download aborted"), { name: "AbortError" }),
+            );
+          if (opts?.signal?.aborted) return fail();
+          opts?.signal?.addEventListener("abort", fail);
         }),
     });
     const bridge = createTtsDownloadBridge(async () => api);
@@ -190,6 +214,29 @@ describe("tts download bridge — registry refresh", () => {
     });
   });
 });
+
+/** A fake that reproduces sherpa's REAL contract: downloadModel resolves
+ *  the id via getModelById, which lists the on-disk registry cache and
+ *  never fetches — so an unrefreshed cache rejects every id. The plain
+ *  fakeApi resolves unconditionally, which is exactly how the
+ *  missing-refresh bug reached a device with the suite green. */
+function registryGatedApi() {
+  let registered: string[] = [];
+  const { api, calls } = fakeApi({
+    refreshModels: () => {
+      registered = ["kokoro-int8-en-v0_19", "kokoro-en-v0_19"];
+      return Promise.resolve(registered.map((id) => ({ id, bytes: 1 })));
+    },
+  });
+  api.downloadModel = (category, id) => {
+    calls.push({ fn: "downloadModel", args: [category, id] });
+    if (!registered.includes(id)) {
+      return Promise.reject(new Error(`Unknown model id: ${id}`));
+    }
+    return Promise.resolve({ modelId: id, localPath: `/models/tts/${id}` });
+  };
+  return { api, calls };
+}
 
 /** Mutate the fake's disk check without rebuilding the bridge. */
 function fakeApiSetDownloaded(api: SherpaTtsDownloadApi, value: boolean): void {

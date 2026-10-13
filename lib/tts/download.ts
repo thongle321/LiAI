@@ -107,6 +107,11 @@ export function createTtsDownloadBridge(
     active = controller;
     onStatus({ state: "downloading", percent: 0 });
     try {
+      // sherpa resolves the id via getModelById, which reads ONLY the
+      // on-disk registry cache and never fetches. On a fresh install that
+      // cache is empty, so every download threw `Unknown model id: <id>`.
+      // Costs nothing while the cache is fresh (TTL-guarded inside).
+      await api.refreshModels(TTS_CATEGORY, { signal: controller.signal });
       const result = await api.downloadModel(TTS_CATEGORY, modelId, {
         signal: controller.signal,
         onProgress: (progress) =>

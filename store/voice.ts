@@ -58,6 +58,10 @@ export interface VoiceState {
   setUserTTSOverride: (override: boolean | null) => void;
   /** Record that `messageId` was spoken, so repeats do not re-speak it. */
   markSpoken: (messageId: string) => void;
+  /** Forget a spoken mark when a new run starts for the same message
+   *  (retry/regenerate reuses the bubble id — a stale mark would silence
+   *  the new reply). */
+  clearSpoken: (messageId: string) => void;
   /** Speak `text` through the selected engine (spec Q14 "one API"). */
   play: (text: string, options?: { messageId?: string; voice?: Voice; speed?: number }) => Promise<void>;
   stop: () => Promise<void>;
@@ -183,6 +187,11 @@ export function createVoiceStore(storage: KeyValueStorage) {
       },
       markSpoken: (messageId) => {
         set({ lastSpokenMessageId: messageId });
+      },
+      clearSpoken: (messageId) => {
+        if (get().lastSpokenMessageId === messageId) {
+          set({ lastSpokenMessageId: null });
+        }
       },
 
       play: async (text, options = {}) => {

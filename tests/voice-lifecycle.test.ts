@@ -79,6 +79,23 @@ describe("auto-speak at completion", () => {
   });
 });
 
+describe("spoken marks", () => {
+  it("clearSpoken forgets only the matching message id", async () => {
+    resetVoice();
+    const voice = useVoice.getState();
+    try {
+      voice.markSpoken("m1");
+      assert.equal(useVoice.getState().lastSpokenMessageId, "m1");
+      voice.clearSpoken("other");
+      assert.equal(useVoice.getState().lastSpokenMessageId, "m1");
+      voice.clearSpoken("m1");
+      assert.equal(useVoice.getState().lastSpokenMessageId, null);
+    } finally {
+      resetVoice();
+    }
+  });
+});
+
 describe("session navigation stops voice", () => {
   it("switchSession completes while the voice stop is wired in", async () => {
     resetVoice();

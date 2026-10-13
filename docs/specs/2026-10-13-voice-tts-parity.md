@@ -120,10 +120,10 @@ preflight is the manager's (PocketPal's own ×1.2 preflight is redundant).
 | --- | --- |
 | Engine types, registry, runtime | `lib/tts/{types,engineRegistry,runtime}.ts` |
 | SystemEngine (expo-speech), KokoroEngine (sherpa) | `lib/tts/engines/{system,kokoro}/` |
-| Strip cleaner (ported `ThinkingStripper` + Q10 rules) | `lib/tts/strip.ts` |
+| Strip cleaner (ported `ThinkingStripper` + Q10 rules) | `lib/stripForSpeech.ts` (top-level: shared with vision/chat, not engine-specific) |
 | Download bridge to sherpa manager | `lib/tts/download.ts` |
-| Store | `store/tts.ts` |
-| Setup sheet (house Sheet) + voice list + preview + AutoSpeakRow | `components/voice/…` |
+| Store | `store/voice.ts` (extended in place — the existing system-TTS store, not a new module) |
+| Setup sheet (house Sheet) + voice list + preview + AutoSpeakRow | `components/voice/KokoroEngineCard.tsx` + existing `components/voice/VoiceChip.tsx` + voice-settings route (kept, not a global sheet — quiz amendment) |
 | Composer chip | alongside existing chat input controls |
 | Per-message play button | message rendering component |
 | Chat hook wiring (send-capture, complete, abort) | existing chat hook |

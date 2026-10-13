@@ -197,6 +197,9 @@ if (store) await quiet(store.setActiveSessionId(null));
       if (store) await quiet(store.deleteSession(id));
       set((s) => ({ sessions: s.sessions.filter((sess) => sess.id !== id) }));
       if (get().sessionId === id) {
+        // Deleting the session you are reading clears its audio too —
+        // the same no-haunting rule as switching (ticket 05).
+        voiceStop();
         // The deleted session's text must not haunt the fresh composer:
 // fall back to whatever is parked in the unsent slot.
         set({

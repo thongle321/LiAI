@@ -143,6 +143,9 @@ export function createSendSlice(
     // place that has to know a turn started.
     ctx.keepAwake(true);
     set({ turnStartedAt: Date.now() });
+    // A rerun reuses the bubble id: forget any spoken mark from the
+    // previous run, or the new reply would be silenced by it (ticket 05).
+    useVoice.getState().clearSpoken(opts.assistantId);
     // Ticket 03: each turn's tool-call token count starts from zero.
     ctx.toolTokens.turnStart();
     set({ toolTokenCount: 0 });

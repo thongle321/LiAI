@@ -15,9 +15,13 @@ import {
 
 /** Fake streaming engine; `chunks` samples per onChunk, `endOnStream`
  *  decides whether generation auto-ends (true) or waits for an abort
- *  (false — the stop scenario). */
-function fakeEngine(log: string[], options?: { chunks?: number[][]; endOnStream?: boolean }) {
-  const { chunks = [[1, 2]], endOnStream = true } = options ?? {};
+ *  (false — the stop scenario). `numSpeakers` drives the speaker-count
+ *  self-check. */
+function fakeEngine(
+  log: string[],
+  options?: { chunks?: number[][]; endOnStream?: boolean; numSpeakers?: number },
+) {
+  const { chunks = [[1, 2]], endOnStream = true, numSpeakers = 11 } = options ?? {};
   const handlers:
     | {
         onChunk?: (chunk: { samples: number[] }) => void;
@@ -38,6 +42,7 @@ function fakeEngine(log: string[], options?: { chunks?: number[][]; endOnStream?
       log.push("getSampleRate");
       return 24000;
     },
+    getNumSpeakers: async () => numSpeakers,
     startPcmPlayer: async (sampleRate, channels) => {
       log.push(`startPcmPlayer:${sampleRate}:${channels}`);
     },
@@ -73,14 +78,88 @@ function fakeEngine(log: string[], options?: { chunks?: number[][]; endOnStream?
   };
 }
 
-function fakeApi(log: string[], engine: PcmPlaybackEngine): SherpaTtsApi {
-  return {
-    createStreamingTTS: async () => {
+function fakeApi(log: string[], engine: PcmPlaybackEngine) {
+  const api: SherpaTtsApi & { lastOptions?: unknown } = {
+    lastOptions: undefined,
+    createStreamingTTS: async (options: unknown) => {
       log.push("createStreamingTTS");
+      api.lastOptions = options;
       return engine;
     },
   };
+  return api;
 }
+
+describe("speakOnce — engine tuning and self-checks", () => {
+  it("forwards numThreads and provider to engine creation", async () => {
+    const log: string[] = [];
+    const { engine } = fakeEngine(log);
+    const api = fakeApi(log, engine);
+
+    await speakOnce(async () => api, { modelPath: "/m", text: "hi" }, {
+      numThreads: 4,
+      provider: "nnapi",
+    });
+
+    assert.deepEqual(api.lastOptions, {
+      modelPath: { type: "file", path: "/m" },
+      modelType: "kokoro",
+      numThreads: 4,
+      provider: "nnapi",
+    });
+  });
+
+  it("omits tuning keys entirely when no tuning is supplied", async () => {
+    const log: string[] = [];
+    const { engine } = fakeEngine(log);
+    const api = fakeApi(log, engine);
+
+    await speakOnce(async () => api, { modelPath: "/m", text: "hi" });
+
+    assert.deepEqual(api.lastOptions, {
+      modelPath: { type: "file", path: "/m" },
+      modelType: "kokoro",
+    });
+  });
+
+  it("warns when the model's speaker count contradicts the curated table", async () => {
+    const log: string[] = [];
+    const { engine } = fakeEngine(log, { numSpeakers: 7 });
+    const warnings: string[] = [];
+    const realWarn = console.warn;
+    console.warn = (msg: string) => warnings.push(msg);
+    try {
+      await speakOnce(async () => fakeApi(log, engine), {
+        modelPath: "/m",
+        text: "hi",
+        expectedSpeakers: 11,
+      });
+    } finally {
+      console.warn = realWarn;
+    }
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /reports 7 speakers but 11 voices are curated/);
+  });
+
+  it("stays silent when the count matches, and never throws on mismatch", async () => {
+    const log: string[] = [];
+    const { engine } = fakeEngine(log, { numSpeakers: 11 });
+    const warnings: string[] = [];
+    const realWarn = console.warn;
+    console.warn = (msg: string) => warnings.push(msg);
+    try {
+      await speakOnce(async () => fakeApi(log, engine), {
+        modelPath: "/m",
+        text: "hi",
+        expectedSpeakers: 11,
+      });
+    } finally {
+      console.warn = realWarn;
+    }
+    assert.deepEqual(warnings, []);
+    assert.ok(log.includes("destroy"), "playback still completes after a mismatch");
+  });
+});
 
 describe("speakOnce — no signal (existing path)", () => {
   it("plays through the native player and cleans up", async () => {

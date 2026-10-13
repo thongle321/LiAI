@@ -109,16 +109,18 @@ describe("voice store", () => {
   });
 
   it("keeps a curated kokoro voice across the migration", async () => {
+    const bella = KOKORO_VOICES[1];
     const store = createVoiceStore(
       memoryStorage({
         [VOICE_KEY]: JSON.stringify({
-          currentVoice: { id: "bella", name: "Bella", engine: "kokoro" },
+          // Built from the curated table so this test cannot drift from it.
+          currentVoice: bella,
           autoSpeak: false,
         }),
       }),
     );
     await store.getState().load();
-    assert.deepEqual(store.getState().currentVoice, KOKORO_VOICES[1]);
+    assert.deepEqual(store.getState().currentVoice, bella);
   });
 
   it("drops a kokoro voice that is no longer curated", async () => {

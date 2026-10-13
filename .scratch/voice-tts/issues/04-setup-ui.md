@@ -13,7 +13,7 @@ list is gone.
 **Status:** done
 
 - [x] The existing voice-settings route shows the two groups; the System group offers only "Device default voice" — no expo-speech voice enumeration anywhere (spec Q9/Q15).
-- [x] Kokoro group lists the 11 curated named voices (spec Q12 as revised by the ticket-02 findings — ~20 was the pre-registry guess). **[PARTIALLY OPEN: sid↔name order is asserted from the k2-fsa docs, not yet confirmed via `getNumSpeakers()` on a live model — first device session confirms it.]**
+- [x] Kokoro group lists the 11 curated named voices (spec Q12 as revised by the ticket-02 findings — ~20 was the pre-registry guess). **[RESOLVED 2026-10-14: the shipped list was mislabelled — names came from PocketPal's different 22-voice model. Corrected against sherpa's `generate_voices_bin.py`; a test now pins the id order.]**
 - [x] Before the model is downloaded: a download button with state/progress rendering from the store triplet; after: radio selection persists across restart.
 - [x] Tapping a (downloaded) voice row plays the preview sample through that engine; disabled while not installed (spec Q16 — same code/UI as PocketPal).
 - [x] Auto-speak row toggles `autoSpeakEnabled` (spec Q14).

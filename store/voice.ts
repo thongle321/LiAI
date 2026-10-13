@@ -72,6 +72,10 @@ export interface VoiceState {
   startKokoroDownload: () => Promise<string>;
   /** Cancel the in-flight kokoro download (no-op when idle). */
   cancelKokoroDownload: () => void;
+  /** Delete the kokoro model from disk, reclaiming its bytes. Stashes the
+   *  active kokoro voice for the next download and falls back to the
+   *  device default meanwhile. */
+  removeKokoroModel: () => Promise<void>;
 }
 
 type PersistedVoiceState = Pick<VoiceState, "currentVoice" | "autoSpeak" | "userTTSOverride">;
@@ -280,6 +284,17 @@ export function createVoiceStore(storage: KeyValueStorage) {
 
       cancelKokoroDownload: () => {
         ttsDownloads.abort();
+      },
+
+      removeKokoroModel: async () => {
+        await ttsDownloads.remove(KOKORO_MODEL_ID);
+        // A kokoro voice cannot survive its model, so stash it for the next
+        // successful download and fall back to the device default meanwhile.
+        const voice = get().currentVoice;
+        if (voice?.engine === "kokoro") {
+          set({ currentVoice: DEVICE_DEFAULT_VOICE, pendingVoiceRestore: voice.id });
+        }
+        set({ download: { state: "not_installed", percent: 0 } });
       },
     };
   });

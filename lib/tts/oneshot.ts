@@ -29,6 +29,7 @@ export const KOKORO_EN_MODEL_ID = "kokoro-int8-en-v0_19";
  *  a subset of the real `StreamingTtsEngine`, so tests can fake it. */
 export interface PcmPlaybackEngine {
   getSampleRate(): Promise<number>;
+  getNumSpeakers(): Promise<number>;
   startPcmPlayer(sampleRate: number, channels: number): Promise<void>;
   writePcmChunk(samples: number[]): Promise<void>;
   stopPcmPlayer(): Promise<void>;
@@ -44,11 +45,26 @@ export interface PcmPlaybackEngine {
   destroy(): Promise<void>;
 }
 
+/** Inference threads for kokoro. sherpa defaults to 2; its kokoro pages
+ *  measure RTF 3.87 (2 threads) vs 2.77 (4) on a RPi 4, and TTS bursts
+ *  alongside a chat turn, so 4 is the better trade here. */
+const KOKORO_NUM_THREADS = 4;
+
+/** Engine-creation knobs the caller resolves; kept off `SpeakOnceOptions`
+ *  because they are engine setup, not per-utterance intent. */
+export interface EngineTuning {
+  numThreads?: number;
+  /** Execution provider: 'cpu' | 'nnapi' | 'coreml' | ... */
+  provider?: string;
+}
+
 /** The subset of `react-native-sherpa-onnx/tts` the tracer uses. */
 export interface SherpaTtsApi {
   createStreamingTTS(options: {
     modelPath: { type: "file"; path: string };
     modelType?: TTSModelType;
+    numThreads?: number;
+    provider?: string;
   }): Promise<PcmPlaybackEngine>;
 }
 
@@ -59,9 +75,30 @@ export interface SpeakOnceOptions {
   /** Speaker id; kokoro-en-v0_19 has 11 (0..10). */
   sid?: number;
   speed?: number;
+  /** Speaker count the caller's curated voice table assumes. When the model
+   *  reports something else we warn instead of throwing — a stale sid→name
+   *  table should be visible in logs, not fatal to playback. */
+  expectedSpeakers?: number;
   /** Stop path (ticket 03): aborting cancels the in-flight generation and
    *  the one-shot then RESOLVES — a stop is a clean terminal state. */
   signal?: AbortSignal;
+}
+
+/** Warn when the model's speaker count contradicts the curated voice table.
+ *  A reorder would NOT be caught here — only the count — so the table's real
+ *  source of truth stays sherpa's generate_voices_bin.py. This is the cheap
+ *  tripwire for a model swap that changes the count out from under us. */
+async function assertSpeakerCount(
+  engine: PcmPlaybackEngine,
+  expected: number | undefined,
+): Promise<void> {
+  if (expected === undefined) return;
+  const actual = await engine.getNumSpeakers().catch(() => undefined);
+  if (actual !== undefined && actual !== expected) {
+    console.warn(
+      `[tts] kokoro model reports ${actual} speakers but ${expected} voices are curated; the sid→name table is stale`,
+    );
+  }
 }
 
 /** Generate `text` from a downloaded model and play it through the native
@@ -70,14 +107,18 @@ export interface SpeakOnceOptions {
 export async function speakOnce(
   load: () => Promise<SherpaTtsApi>,
   options: SpeakOnceOptions,
+  tuning: EngineTuning = {},
 ): Promise<void> {
   if (options.signal?.aborted) return;
   const api = await load();
   const engine = await api.createStreamingTTS({
     modelPath: { type: "file", path: options.modelPath },
     modelType: "kokoro",
+    ...(tuning.numThreads !== undefined ? { numThreads: tuning.numThreads } : {}),
+    ...(tuning.provider !== undefined ? { provider: tuning.provider } : {}),
   });
   try {
+    await assertSpeakerCount(engine, options.expectedSpeakers);
     const sampleRate = await engine.getSampleRate();
     await engine.startPcmPlayer(sampleRate, 1);
     try {
@@ -144,7 +185,42 @@ export async function speakOnce(
   }
 }
 
+/** Best execution provider for this device, resolved once per app run.
+ *  Android: NNAPI when ONNX Runtime can actually create a session with it
+ *  (sherpa's provider table: 2-4x over CPU). iOS: Core ML when an ANE is
+ *  present. Otherwise CPU — sherpa's own default and the only provider
+ *  guaranteed to exist. Detection failures fall back to cpu rather than
+ *  failing the speak: a wrong provider is worse than a slow one. */
+let providerProbe: Promise<string> | null = null;
+
+async function detectProvider(): Promise<string> {
+  try {
+    const sherpa = await import("react-native-sherpa-onnx");
+    const { Platform } = await import("react-native");
+    if (Platform.OS === "android" && (await sherpa.getNnapiSupport())?.canInit) {
+      return "nnapi";
+    }
+    if (
+      Platform.OS === "ios" &&
+      (await sherpa.getCoreMlSupport())?.hasAccelerator
+    ) {
+      return "coreml";
+    }
+  } catch {
+    // Falls through to cpu below.
+  }
+  return "cpu";
+}
+
+function kokoroProvider(): Promise<string> {
+  providerProbe ??= detectProvider();
+  return providerProbe;
+}
+
 /** The app's one-shot path over the real engine module. */
 export async function speakKokoroOnce(options: SpeakOnceOptions): Promise<void> {
-  await speakOnce(() => import("react-native-sherpa-onnx/tts"), options);
+  await speakOnce(() => import("react-native-sherpa-onnx/tts"), options, {
+    numThreads: KOKORO_NUM_THREADS,
+    provider: await kokoroProvider(),
+  });
 }

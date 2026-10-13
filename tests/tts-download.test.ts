@@ -42,6 +42,7 @@ function fakeApi(overrides: Partial<SherpaTtsDownloadApi> = {}) {
     isModelDownloaded:
       record("isModelDownloaded", overrides.isModelDownloaded ?? (() => Promise.resolve(false))),
     getModelPath: record("getModelPath", overrides.getModelPath ?? (() => Promise.resolve(null))),
+    deleteModel: record("deleteModel", overrides.deleteModel ?? (() => Promise.resolve())),
   };
   return { api, calls };
 }
@@ -193,6 +194,17 @@ describe("tts download bridge — download", () => {
     const { api } = fakeApi();
     const bridge = createTtsDownloadBridge(async () => api);
     assert.doesNotThrow(() => bridge.abort());
+  });
+  it("remove() deletes the model under the TTS category", async () => {
+    const { api, calls } = fakeApi();
+    const bridge = createTtsDownloadBridge(async () => api);
+
+    await bridge.remove("kokoro-int8-en-v0_19");
+
+    assert.deepEqual(calls.at(-1), {
+      fn: "deleteModel",
+      args: ["tts", "kokoro-int8-en-v0_19"],
+    });
   });
 });
 

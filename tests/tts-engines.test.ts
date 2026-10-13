@@ -131,11 +131,23 @@ describe("KokoroEngine — voices", () => {
 
     const voices = await engine.getVoices();
     assert.equal(voices.length, 11, "spec finding 02: 11 speakers, not ~20");
+    // Ids are sherpa's, in the order its own voices.bin generator writes
+    // them (scripts/kokoro/v0.19/generate_voices_bin.py). Names are the
+    // labels for those exact speakers — NOT upstream Kokoro-82M's names,
+    // whose 22-voice ordering mislabels everything past index 4.
+    assert.deepEqual(
+      voices.map((v) => v.id),
+      [
+        "af", "af_bella", "af_nicole", "af_sarah", "af_sky",
+        "am_adam", "am_michael", "bf_emma", "bf_isabella",
+        "bm_george", "bm_lewis",
+      ],
+    );
     assert.deepEqual(
       voices.map((v) => v.name),
       [
-        "Heart", "Bella", "Nicole", "Sarah", "Sky",
-        "Aoede", "Jessica", "Kore", "River", "Adam", "Echo",
+        "Default", "Bella", "Nicole", "Sarah", "Sky",
+        "Adam", "Michael", "Emma", "Isabella", "George", "Lewis",
       ],
     );
     // List order IS sid order; play() derives the sid from it.

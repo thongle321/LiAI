@@ -10,7 +10,7 @@
 
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { Download, Square, Volume2 } from "lucide-react-native";
+import { Download, Square, Trash2, Volume2 } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
 
@@ -62,6 +62,7 @@ export function KokoroEngineCard() {
   const setCurrentVoice = useVoice((s) => s.setCurrentVoice);
   const startKokoroDownload = useVoice((s) => s.startKokoroDownload);
   const cancelKokoroDownload = useVoice((s) => s.cancelKokoroDownload);
+  const removeKokoroModel = useVoice((s) => s.removeKokoroModel);
   const play = useVoice((s) => s.play);
   const stop = useVoice((s) => s.stop);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
@@ -74,6 +75,16 @@ export function KokoroEngineCard() {
     void startKokoroDownload().catch((error: unknown) => {
       // The store triplet already carries reported failures; this only
       // covers a rejection the bridge never reported.
+      setDownloadErrorNote(error instanceof Error ? error.message : String(error));
+    });
+  }
+
+  function onRemove(): void {
+    setPreviewingId(null);
+    setDownloadErrorNote(null);
+    // Stop first: the native PCM player holds the model open.
+    void stop();
+    void removeKokoroModel().catch((error: unknown) => {
       setDownloadErrorNote(error instanceof Error ? error.message : String(error));
     });
   }
@@ -180,6 +191,17 @@ export function KokoroEngineCard() {
               <Text className="font-sans text-body-sm text-secondary-text">
                 Tap a voice to select it and hear a sample.
               </Text>
+            </View>
+            <View className="mt-3 flex-row">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Remove the Kokoro voice model and free its storage"
+                onPress={onRemove}
+                className="btn btn--ghost flex-row items-center gap-2 px-5 py-2"
+              >
+                <Trash2 size={14} color={colors.secondaryText} />
+                <Text className="font-sans-semibold text-body-md text-secondary-text">Remove</Text>
+              </Pressable>
             </View>
           </View>
         ) : null}

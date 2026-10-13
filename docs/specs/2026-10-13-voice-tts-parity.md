@@ -160,9 +160,9 @@ package (docs-vs-reality differences noted):
    `refreshModels`, …), NOT the docs site's `downloadModelByCategory`
    spellings — the bridge wraps what the package ships.
 2. **Speaker count: 11 (sid 0..10)** for the kokoro-en-v0_19 family.
-   This revises ticket 04's “~20 curated voices” to **11 named voices**;
-   sid↔name order still gets runtime confirmation via `getNumSpeakers()`
-   on first device run.
+   This revises ticket 04's “~20 curated voices” to **11 named voices**.
+   The sid→name order was later pinned from sherpa's own voices.bin
+   generator — see “Docs audit” finding 1 below; it is no longer pending.
 3. **PCM player is streaming-engine only.** The shipped `TtsEngine`
    (batch `createTTS`) declarations expose no `startPcmPlayer`; the
    player lives on `StreamingTtsEngine`. Pre-authorized fallback taken:
@@ -172,6 +172,45 @@ package (docs-vs-reality differences noted):
 Device/Gradle proof: **out of scope this run** (coding-only constraint in
 the amendments above); `KokoroTracer` (__DEV__-only card in Voice
 settings) is the manual smoke surface for the first device session.
+
+## Findings from the sherpa-onnx docs audit
+
+Comparing the implementation against the published docs (TTS + Advanced
+sections) and the installed 0.4.4 source:
+
+1. **sid→name order was wrong for 7 of 11 voices — corrected.**
+   The authoritative order is sherpa-onnx's own voices.bin generator,
+   `scripts/kokoro/v0.19/generate_voices_bin.py`, whose `id2speaker` is
+   `af, af_bella, af_nicole, af_sarah, af_sky, am_adam, am_michael,
+   bf_emma, bf_isabella, bm_george, bm_lewis`. The shipped list had been
+   taken from PocketPal, whose model is a **different one**
+   (`onnx-community/Kokoro-82M-v1.0-ONNX`, 22 English voices addressed by
+   per-voice `.bin` filename). Names were therefore right for PocketPal and
+   wrong here — sherpa addresses this model by integer sid, so every voice
+   past index 4 was mislabelled (tapping “Adam” played `bm_george`). Fixed;
+   a test now asserts the id order against that generator.
+2. **`numThreads` + `provider` were never passed** (Q2). Defaults are CPU
+   and 2 threads; sherpa's provider table puts NNAPI at 2–4× on Android and
+   Core ML at 2–3× on iOS. Now resolved once per run, CPU fallback.
+3. **`getNumSpeakers()` is now called** and warns on a count mismatch
+   (Q3). It cannot catch a pure reorder — the generator script is what
+   settles that — so it is a tripwire for a model swap, not proof.
+4. **Model removal added** (Q4). `deleteModel` is wired through the bridge,
+   store and card. A pre-download disk-space check was **not** added: the
+   manager already runs `checkDiskSpace(model.bytes)` inside `downloadModel`
+   and throws `Insufficient disk space`, which the bridge already surfaces
+   as `state: "error"`.
+5. **Background downloader needs no configuration** (Q5). The library calls
+   `ensureAndroidBackgroundDownloaderNotifications()` itself when the host
+   app has not configured it, so `configureBackgroundDownloader` would only
+   restyle notifications. Nothing wired.
+6. **Docs are newer than the installed package.** They document
+   `refreshModelsByCategory` / `downloadModelByCategory` /
+   `getLocalModelPathByCategory` and model types `pocket`/`zipvoice`; 0.4.4
+   exports `refreshModels` / `downloadModel` / `getModelPath`. Code follows
+   the installed package. Separately, the docs' own Kokoro page shows
+   `createTTS(...)` calling `startPcmPlayer`/`generateSpeechStream`, which
+   contradicts its API reference — the player is streaming-only, as shipped.
 
 ## Risks
 

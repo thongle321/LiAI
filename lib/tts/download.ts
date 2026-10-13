@@ -49,6 +49,7 @@ export interface SherpaTtsDownloadApi {
   ): Promise<{ modelId: string; localPath: string }>;
   isModelDownloaded(category: ModelCategory, id: string): Promise<boolean>;
   getModelPath(category: ModelCategory, id: string): Promise<string | null>;
+  deleteModel(category: ModelCategory, id: string): Promise<void>;
 }
 
 /** `ModelCategory.Tts` without a runtime import: node --test type-strips
@@ -138,12 +139,21 @@ export function createTtsDownloadBridge(
     }
   }
 
+  /** Delete a downloaded model from disk, reclaiming its bytes.
+   *  Disk space before a download is already checked by the manager itself
+   *  (`downloadModel` throws `Insufficient disk space`), so this exists for
+   *  the other direction: giving the space back. */
+  async function remove(modelId: string): Promise<void> {
+    const api = await load();
+    await api.deleteModel(TTS_CATEGORY, modelId);
+  }
+
   /** Cancel the in-flight download (no-op when idle). */
   function abort(): void {
     active?.abort();
   }
 
-  return { refresh, localPath, status, download, abort };
+  return { refresh, localPath, status, download, remove, abort };
 }
 
 /** The app's bridge over the real download manager. */

@@ -34,7 +34,7 @@ import {
   visionSizeBreakdown,
 } from "../../lib/models/hf-format.ts";
 import { hfFileWarnings } from "../../lib/models/hf-warnings.ts";
-import { Chip } from "./ModelBits.tsx";
+import { Chip, confirmRemoveModel } from "./ModelBits.tsx";
 import { HFFileRow } from "./HFFileRow.tsx";
 import type { VisionDownloadChoice } from "./VisionDownloadSheet.tsx";
 import type { HFModelFile, HFModelSearchResult } from "../../types/models";
@@ -156,22 +156,11 @@ export function HFDetailsView({
       );
       return;
     }
-    Alert.alert(
-      "Remove Model",
-      "Are you sure you want to remove this model from the list?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            if (!removeBookmark(model.id)) {
-              Alert.alert("Error", "Failed to remove the model.");
-            }
-          },
-        },
-      ],
-    );
+    confirmRemoveModel(() => {
+      if (!removeBookmark(model.id)) {
+        Alert.alert("Error", "Failed to remove the model.");
+      }
+    });
   };
 
   return (

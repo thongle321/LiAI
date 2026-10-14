@@ -56,6 +56,7 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
 ) => ({
   models: [],
   presets: [],
+  dismissedPresetIds: [],
   searchResults: [],
   searchLoading: false,
   searchLoadingMore: false,
@@ -67,8 +68,19 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
   searchFilters: { author: "", sortBy: "relevance" },
 
   loadPresets: async () => {
-    set({ presets: await hfGetPresets() });
+    const presets = await hfGetPresets();
+    // A preset dismissed this session stays gone across refreshes — and
+    // the set is read AFTER the fetch, so a dismissal landing mid-flight
+    // is not resurrected by a stale snapshot.
+    const dismissed = new Set(get().dismissedPresetIds);
+    set({ presets: presets.filter((p) => !dismissed.has(p.id)) });
   },
+
+  dismissPreset: (presetId) =>
+    set((state) => ({
+      dismissedPresetIds: [...state.dismissedPresetIds, presetId],
+      presets: state.presets.filter((p) => p.id !== presetId),
+    })),
 
   loadSearchFilters: async () => {
     try {

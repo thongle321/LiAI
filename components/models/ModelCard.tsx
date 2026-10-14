@@ -52,6 +52,7 @@ import {
   ModelTypeIcon,
   StatusDot,
   confirmDeleteModel,
+  confirmRemoveModel,
   formatBytes,
 } from "./ModelBits.tsx";
 import { ModelCardDetails } from "./ModelCardDetails.tsx";
@@ -68,7 +69,9 @@ const CARD =
  *  the circle" — so the icon sits directly in the pressable and there is no
  *  wrapper box around it. PocketPal's `styles.iconButton` is exactly this
  *  (40px, radius 16, transparent); ours keeps the legal target. */
-const ICON_BUTTON = "h-12 w-12 items-center justify-center";
+/** Exported so the preset card's remove button is the same button: one
+ *  48dp target, one destructive ground, no drift between the cards. */
+export const ICON_BUTTON = "h-12 w-12 items-center justify-center";
 /** Destructive only — settings and expand stay bare. DESIGN.md calls for
  *  "Destructive: Alert Tint fill, Alert Red Mark icon" (Icon Buttons) and
  *  circles for what you press, so the trash keeps a ground and a circular
@@ -79,7 +82,7 @@ const ICON_BUTTON = "h-12 w-12 items-center justify-center";
  *  class exists to use. The token gap is recorded in the parity doc; closing
  *  it means a third mirror plus the three other error grounds, not a name.
  */
-const ICON_DESTRUCTIVE = "rounded-full bg-error/10";
+export const ICON_DESTRUCTIVE = "rounded-full bg-error/10";
 
 export function ModelCard({
   item,
@@ -153,22 +156,11 @@ export function ModelCard({
       confirmDeleteModel(() => void removeModel(item.id));
       return;
     }
-    Alert.alert(
-      "Remove Model",
-      "Are you sure you want to remove this model from the list?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            if (removeBookmark(item.id) === false) {
-              Alert.alert("Error", "Failed to remove the model.");
-            }
-          },
-        },
-      ],
-    );
+    confirmRemoveModel(() => {
+      if (removeBookmark(item.id) === false) {
+        Alert.alert("Error", "Failed to remove the model.");
+      }
+    });
   }
 
   return (

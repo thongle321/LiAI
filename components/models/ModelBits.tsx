@@ -154,6 +154,22 @@ export function confirmDeleteModel(onConfirm: () => void): void {
   );
 }
 
+/** The one remove-from-list confirmation in the app. Three surfaces drop
+ *  a model from the list without touching disk — the preset card's X, the
+ *  bookmark card's X and the HF file row — and all must say the same
+ *  thing, so the wording lives here (PocketParity: pocketpal shares its
+ *  removeTitle/removeMessage across its card and file row the same way). */
+export function confirmRemoveModel(onConfirm: () => void): void {
+  Alert.alert(
+    "Remove Model",
+    "Are you sure you want to remove this model from the list?",
+    [
+      { text: "Cancel", style: "cancel" },
+      { text: "Remove", style: "destructive", onPress: onConfirm },
+    ],
+  );
+}
+
 export function DownloadButton({
   status,
   progress,

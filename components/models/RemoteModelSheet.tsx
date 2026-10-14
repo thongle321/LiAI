@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   Text,
   TextInput,
@@ -13,6 +14,11 @@ import { CheckCircle2, Circle } from "lucide-react-native";
 import { colors } from "../../themes/tokens.ts";
 import { useModelStore } from "../../store/modelStore";
 import { Sheet } from "../Sheet.tsx";
+import {
+  useCameraPermission,
+} from "react-native-vision-camera";
+import { ServerQRScanner } from "./ServerQRScanner.tsx";
+import { ScanLine } from "lucide-react-native";
 import { normalizeTimeoutMs } from "../../lib/inference/remote-engine.ts";
 import type { RemoteApiProvider } from "../../types/models";
 
@@ -41,6 +47,8 @@ export function RemoteModelSheet({
   const [validating, setValidating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [validationWarning, setValidationWarning] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const { hasPermission, requestPermission } = useCameraPermission();
 
   const handleSubmit = async () => {
     if (!name || !baseUrl || !modelName) {
@@ -92,6 +100,7 @@ export function RemoteModelSheet({
   };
 
   return (
+    <>
     // Short sheet on the shared Sheet: TrueSheet's auto detent sizes to
     // the content, and keyboard avoidance comes from the wrapper. This
     // also resolves the accepted iOS risk above: TrueSheet owns the
@@ -197,7 +206,9 @@ export function RemoteModelSheet({
 
         <View>
           <Text className="font-sans text-body-sm text-secondary-text mb-1">Base URL</Text>
-          <TextInput
+          <View className="flex-row items-center gap-2">
+            <TextInput
+              style={{ flex: 1 }}
             value={baseUrl}
             onChangeText={setBaseUrl}
             placeholder={
@@ -207,6 +218,30 @@ export function RemoteModelSheet({
             }
             className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
           />
+            <Pressable
+              onPress={() => {
+                (async () => {
+                  if (!hasPermission) {
+                    const res = await requestPermission();
+                    if (!res) {
+                      Alert.alert(
+                        "Camera access denied",
+                        "Enable camera permission to scan a server QR code.",
+                      );
+                      return;
+                    }
+                  }
+                  setScannerOpen(true);
+                })();
+              }}
+              className="btn btn--secondary"
+              accessibilityRole="button"
+              accessibilityLabel="Scan QR code"
+              testID="remote-url-scan"
+            >
+              <ScanLine size={20} color={colors.primary} />
+            </Pressable>
+          </View>
         </View>
 
         <View>
@@ -248,5 +283,15 @@ export function RemoteModelSheet({
 
       </View>
     </Sheet>
+
+    <ServerQRScanner
+      visible={scannerOpen}
+      onScanned={(receivedUrl) => {
+        setBaseUrl(receivedUrl);
+        setScannerOpen(false);
+      }}
+      onClose={() => setScannerOpen(false)}
+    />
+    </>
   );
 }

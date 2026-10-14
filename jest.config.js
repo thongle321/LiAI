@@ -32,6 +32,15 @@ module.exports = {
       '<rootDir>/__mocks__/external/react-native-sherpa-onnx.js',
     '@kesha-antonov/react-native-background-downloader':
       '<rootDir>/__mocks__/external/@kesha-antonov/react-native-background-downloader.js',
+    // Anchored: subpath imports (`@expo/ui/jetpack-compose`) resolve to the
+    // real platform module, not this universal stub.
+    '^@expo/ui$': '<rootDir>/__mocks__/external/@expo/ui.tsx',
+    '^expo-speech$': '<rootDir>/__mocks__/external/expo-speech.ts',
+    '^expo-speech-recognition$':
+      '<rootDir>/__mocks__/external/expo-speech-recognition.ts',
+    '^expo-sqlite$': '<rootDir>/__mocks__/external/expo-sqlite.ts',
+    '^expo-linking$': '<rootDir>/__mocks__/external/expo-linking.ts',
+    '^expo-font$': '<rootDir>/__mocks__/external/expo-font.ts',
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
 };

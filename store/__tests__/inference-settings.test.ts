@@ -1,51 +1,5 @@
-const assert: any = {
-  ok: (v: unknown, msg?: string) => expect(v).toBeTruthy(),
-  equal: (a: unknown, b: unknown, msg?: string) => expect(a).toEqual(b),
-  deepEqual: (a: unknown, b: unknown, msg?: string) => expect(a).toEqual(b),
-  strictEqual: (a: unknown, b: unknown, msg?: string) => expect(a).toBe(b),
-  notEqual: (a: unknown, b: unknown, msg?: string) => expect(a).not.toEqual(b),
-  notDeepEqual: (a: unknown, b: unknown, msg?: string) => expect(a).not.toEqual(b),
-  match: (value: string, re: RegExp | string, msg?: string) => expect(value).toMatch(re as any),
-  doesNotMatch: (value: string, re: RegExp | string, msg?: string) => expect(value).not.toMatch(re as any),
-  throws: (fn: () => void, re?: RegExp | string, msg?: string) => expect(fn).toThrow(re as any),
-  doesNotThrow: (fn: () => void, msg?: string) => expect(fn).not.toThrow(),
-  rejects: async (input: any, expected?: any, msg?: string) => {
-    const p = typeof input === "function" ? input() : input;
-    let err: unknown;
-    try {
-      await p;
-    } catch (e) {
-      err = e;
-    }
-    if (err === undefined) {
-      throw new Error("Expected promise to reject, but it resolved");
-    }
-    if (expected === undefined) return;
-    if (typeof expected === "function") {
-      if (expected.prototype) {
-        if (!(err instanceof expected)) {
-          throw new Error(msg ?? "rejected value not instance of expected constructor");
-        }
-      } else if (!expected(err)) {
-        throw new Error(msg ?? "rejected value did not satisfy validator");
-      }
-    } else if (expected instanceof RegExp) {
-      if (!expected.test(String((err as Error)?.message ?? err))) {
-        throw new Error(msg ?? "rejected message did not match");
-      }
-    } else if (typeof expected === "string") {
-      if (!String((err as Error)?.message ?? err).includes(expected)) {
-        throw new Error(msg ?? "rejected message did not include expected text");
-      }
-    } else if (expected instanceof Error) {
-      if (((err as Error)?.message ?? String(err)) !== expected.message) {
-        throw new Error(msg ?? "rejected message did not match");
-      }
-    }
-  },
-};
 
-/** Inference params store + engine key tests. Run: node --test tests/inference-settings.test.ts */
+/** Inference params store + engine key tests. */
 
 
 import {
@@ -57,27 +11,7 @@ import {
 } from "../inference";
 import { DEFAULT_SAMPLER } from "../../lib/inference/sampler";
 import { EngineManager } from "../../lib/inference/manager";
-import type { KeyValueStorage } from "../../lib/storage";
-
-// Inference params are a preference, not chat state: they live in
-// AsyncStorage, so this suite carries its own storage fake (as the
-// models-ui, search-settings and voice-settings suites do) rather than
-// borrowing one from the chat fakes.
-function memoryStorage(seed: Record<string, string> = {}): KeyValueStorage & {
-  data: Record<string, string>;
-} {
-  const data: Record<string, string> = { ...seed };
-  return {
-    data,
-    getItem: async (k: string) => data[k] ?? null,
-    setItem: async (k: string, v: string) => {
-      data[k] = v;
-    },
-    removeItem: async (k: string) => {
-      delete data[k];
-    },
-  };
-}
+import { memoryStorage } from "../../jest/storage";
 
 describe("inference store", () => {
   let storage: ReturnType<typeof memoryStorage>;
@@ -90,8 +24,7 @@ describe("inference store", () => {
     const useStore = createInferenceStore(storage);
     await useStore.getState().load();
     const s = useStore.getState();
-    assert.deepEqual(
-      {
+    expect({
         nCtx: s.nCtx,
         nGpuLayers: s.nGpuLayers,
         useMlock: s.useMlock,
@@ -118,10 +51,8 @@ describe("inference store", () => {
         imageMaxTokens: s.imageMaxTokens,
         draftModelId: s.draftModelId,
         autoOffload: s.autoOffload,
-      },
-      { ...DEFAULT_INFERENCE },
-    );
-    assert.equal(s.loaded, true);
+      }).toEqual({ ...DEFAULT_INFERENCE });
+    expect(s.loaded).toEqual(true);
   });
 
   it("patches the sampler, clamps it, and survives a reload", async () => {
@@ -130,25 +61,25 @@ describe("inference store", () => {
     useStore.getState().setSampler({ temperature: 0.15, topP: 9 });
     await new Promise((r) => setTimeout(r, 0));
     const s = useStore.getState();
-    assert.equal(s.sampler.temperature, 0.15);
-    assert.equal(s.sampler.topP, 1, "clamped on the way in");
+    expect(s.sampler.temperature).toEqual(0.15);
+    expect(s.sampler.topP).toEqual(1);
 
     const raw = storage.data[INFERENCE_KEY];
-    assert.ok(raw);
+    expect(raw).toBeTruthy();
     const reloaded = createInferenceStore(memoryStorage({ [INFERENCE_KEY]: raw }));
     await reloaded.getState().load();
-    assert.equal(reloaded.getState().sampler.temperature, 0.15);
-    assert.equal(reloaded.getState().sampler.topP, 1);
+    expect(reloaded.getState().sampler.temperature).toEqual(0.15);
+    expect(reloaded.getState().sampler.topP).toEqual(1);
   });
 
   it("fills a missing or corrupt sampler from an older save", () => {
     const noSampler = parseInferenceParams(JSON.stringify({ nCtx: 8192 }));
-    assert.equal(noSampler.nCtx, 8192, "the rest of the payload still loads");
-    assert.deepEqual(noSampler.sampler, DEFAULT_SAMPLER);
+    expect(noSampler.nCtx).toEqual(8192);
+    expect(noSampler.sampler).toEqual(DEFAULT_SAMPLER);
     const badSampler = parseInferenceParams(
       JSON.stringify({ sampler: { temperature: "hot" } }),
     );
-    assert.equal(badSampler.sampler.temperature, DEFAULT_SAMPLER.temperature);
+    expect(badSampler.sampler.temperature).toEqual(DEFAULT_SAMPLER.temperature);
   });
 
   it("clamps context and gpu layers into range", async () => {
@@ -156,10 +87,10 @@ describe("inference store", () => {
     await useStore.getState().load();
     useStore.getState().setNCtx(1);
     useStore.getState().setNGpuLayers(500);
-    assert.equal(useStore.getState().nCtx, MIN_CONTEXT);
-    assert.equal(useStore.getState().nGpuLayers, 99);
+    expect(useStore.getState().nCtx).toEqual(MIN_CONTEXT);
+    expect(useStore.getState().nGpuLayers).toEqual(99);
     useStore.getState().setNGpuLayers(-4);
-    assert.equal(useStore.getState().nGpuLayers, 0);
+    expect(useStore.getState().nGpuLayers).toEqual(0);
   });
 
   it("clamps batch, threads, and draft layers into range", async () => {
@@ -169,10 +100,10 @@ describe("inference store", () => {
     useStore.getState().setNUbatch(99999);
     useStore.getState().setNThreads(99);
     useStore.getState().setSpecDraftGpuLayers(-1);
-    assert.equal(useStore.getState().nBatch, 1);
-    assert.equal(useStore.getState().nUbatch, 4096);
-    assert.equal(useStore.getState().nThreads, 16);
-    assert.equal(useStore.getState().specDraftGpuLayers, 0);
+    expect(useStore.getState().nBatch).toEqual(1);
+    expect(useStore.getState().nUbatch).toEqual(4096);
+    expect(useStore.getState().nThreads).toEqual(16);
+    expect(useStore.getState().specDraftGpuLayers).toEqual(0);
   });
 
   it("toggles attention, cache, speculative, and thinking prefs", async () => {
@@ -186,18 +117,18 @@ describe("inference store", () => {
     useStore.getState().setThinkingEnabled(false);
     await new Promise((r) => setTimeout(r, 0));
     const s = useStore.getState();
-    assert.equal(s.flashAttn, "off");
-    assert.equal(s.cacheK, "f16");
-    assert.equal(s.cacheV, "q4_0");
-    assert.equal(s.speculativeEnabled, true);
-    assert.equal(s.specDraftCacheK, "f16");
-    assert.equal(s.thinkingEnabled, false);
+    expect(s.flashAttn).toEqual("off");
+    expect(s.cacheK).toEqual("f16");
+    expect(s.cacheV).toEqual("q4_0");
+    expect(s.speculativeEnabled).toEqual(true);
+    expect(s.specDraftCacheK).toEqual("f16");
+    expect(s.thinkingEnabled).toEqual(false);
 
     const raw = storage.data[INFERENCE_KEY];
     const useStore2 = createInferenceStore(memoryStorage({ [INFERENCE_KEY]: raw }));
     await useStore2.getState().load();
-    assert.equal(useStore2.getState().flashAttn, "off");
-    assert.equal(useStore2.getState().thinkingEnabled, false);
+    expect(useStore2.getState().flashAttn).toEqual("off");
+    expect(useStore2.getState().thinkingEnabled).toEqual(false);
   });
 
   it("persists and restores across loads", async () => {
@@ -208,16 +139,16 @@ describe("inference store", () => {
     await new Promise((r) => setTimeout(r, 0));
 
     const raw = storage.data[INFERENCE_KEY];
-    assert.ok(raw);
+    expect(raw).toBeTruthy();
     const useStore2 = createInferenceStore(memoryStorage({ [INFERENCE_KEY]: raw }));
     await useStore2.getState().load();
-    assert.equal(useStore2.getState().nCtx, 8192);
-    assert.equal(useStore2.getState().useMlock, true);
+    expect(useStore2.getState().nCtx).toEqual(8192);
+    expect(useStore2.getState().useMlock).toEqual(true);
   });
 
   it("falls back to defaults on corrupt payloads", () => {
-    assert.deepEqual(parseInferenceParams("not json"), { ...DEFAULT_INFERENCE });
-    assert.deepEqual(parseInferenceParams(null), { ...DEFAULT_INFERENCE });
+    expect(parseInferenceParams("not json")).toEqual({ ...DEFAULT_INFERENCE });
+    expect(parseInferenceParams(null)).toEqual({ ...DEFAULT_INFERENCE });
   });
 });
 
@@ -261,12 +192,12 @@ describe("engine manager init key", () => {
     };
     await manager.ensure(source, undefined, base);
     await manager.ensure(source, undefined, base);
-    assert.equal(loads, 1);
+    expect(loads).toEqual(1);
     await manager.ensure(source, undefined, { ...base, n_ctx: 8192 });
-    assert.equal(loads, 2);
+    expect(loads).toEqual(2);
     await manager.ensure(source, undefined, { ...base, n_ctx: 8192, n_batch: 1024 });
-    assert.equal(loads, 3);
+    expect(loads).toEqual(3);
     await manager.ensure(source, undefined, { ...base, n_ctx: 8192, n_batch: 1024, speculative: true });
-    assert.equal(loads, 4);
+    expect(loads).toEqual(4);
   });
 });

@@ -1,7 +1,4 @@
-/** Chat store tests (local Store sessions + on-device turns).
- * Run: node --test tests/chat-store.test.ts */
-
-import { readFileSync } from "node:fs";
+/** Chat store tests (local Store sessions + on-device turns). */
 
 import { createChatStore } from "../chat.ts";
 import { startStreamYield } from "../chat/send.ts";
@@ -803,13 +800,48 @@ describe("chat warnings (G7)", () => {
     expect(useStore.getState().chatWarning).toBe(null);
   });
 
-  it("every conversation-reset site clears it, not just the one above", () => {
+  it("every conversation-reset site clears it, not just the one above", async () => {
     // newConversation, switchSession, deleteSession and duplicateSession
     // each replace the visible conversation. Missing one leaks the notice
-    // into a chat it has nothing to do with, so the count is pinned
+    // into a chat it has nothing to do with, so every verb is driven here
     // rather than trusting four separate call sites to be remembered.
-    const src = readFileSync("store/chat/sessions.ts", "utf8");
-    expect(src.split("chatWarning: null").length - 1).toBe(4);
+    const { getStore, runTurn } = storeWith(
+      [
+        { id: "s1", title: "One" },
+        { id: "s2", title: "Two", turns: [{ role: "user", content: "hi" }] },
+      ],
+      "s1",
+    );
+    const useStore = createChatStore({ getStore, runTurn });
+    await useStore.getState().loadSession();
+    const raise = () =>
+      useStore.getState().setChatWarning({
+        message: "the image was dropped",
+        severity: "warning",
+        recoverable: false,
+      });
+
+    raise();
+    await useStore.getState().newConversation();
+    expect(useStore.getState().chatWarning).toBe(null);
+
+    raise();
+    expect(await useStore.getState().switchSession("s2")).toBe(true);
+    expect(useStore.getState().chatWarning).toBe(null);
+
+    raise();
+    expect(await useStore.getState().duplicateSession("s2")).toBe(true);
+    expect(useStore.getState().chatWarning).toBe(null);
+
+    // Deleting the conversation you are READING is the reset; deleting
+    // another one must not raise or clear anything on this screen.
+    raise();
+    await useStore.getState().deleteSession("s1");
+    expect(useStore.getState().chatWarning).not.toBe(null);
+    await useStore.getState().deleteSession(
+      useStore.getState().sessionId ?? "",
+    );
+    expect(useStore.getState().chatWarning).toBe(null);
   });
 });
 
@@ -860,15 +892,72 @@ describe("multimodal warning (G12)", () => {
     expect(useStore.getState().chatWarning).toBe(null);
   });
 
-  it("the guard lives in runLocal, so every re-run path shares it", () => {
-    // send, retry, regenerate and edit all funnel through runLocal. A
-    // guard written per-caller would let one of them drift into handing a
-    // text-only model an image again -- so pin the shape, not four copies.
-    const src = readFileSync("store/chat/send.ts", "utf8");
-    expect(src).toMatch(/await ctx\.multimodalAvailable\(\)/);
-    expect(src).toMatch(/\? opts\.images[\s\S]{0,20}?: undefined;/);
-    // Exactly one place decides, so it cannot be bypassed downstream.
-    expect(src.split("multimodalAvailable()").length - 1).toBe(2);
+  it("re-checks the gate on regenerate, not just on the original send", async () => {
+    // The projector can be unpaired (or the model swapped to a text-only
+    // one) between a turn and its rerun, so the rerun asks the capability
+    // question again rather than trusting what the first send was allowed
+    // through with.
+    const image = "data:image/jpeg;base64,AAAA";
+    let canSee = true;
+    const { runTurn, calls } = fakeRunTurn([{ reply: "a cat" }, { reply: "again" }]);
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+      multimodalAvailable: async () => canSee,
+    });
+    await useStore.getState().send("what is this?", [image]);
+    expect(calls.images).toEqual([[image]]);
+    const assistantId = useStore.getState().messages[1].id;
+
+    canSee = false;
+    await useStore.getState().regenerate(assistantId);
+    expect(calls.images).toEqual([[image], undefined]);
+    expect(useStore.getState().chatWarning?.severity).toBe("warning");
+  });
+
+  it("re-checks the gate on retry too, so a rerun cannot smuggle the image", async () => {
+    // retry re-answers a stored question with the user turn's own images.
+    // A guard written per-caller would let exactly this path hand a
+    // text-only model the photo the original send was denied.
+    const image = "data:image/jpeg;base64,AAAA";
+    const { runTurn, calls } = fakeRunTurn([
+      { fail: "boom" },
+      { reply: "recovered" },
+    ]);
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+      multimodalAvailable: async () => false,
+    });
+    await useStore.getState().send("what is this?", [image]);
+    const failedId = useStore.getState().messages[1].id;
+    await useStore.getState().retry(failedId);
+
+    expect(calls.images).toEqual([undefined, undefined]);
+    expect(useStore.getState().chatWarning?.message).toBe(
+      "This model can't see images, so it was sent the text only.",
+    );
+  });
+
+  it("routes edit-and-resend through the same gate", async () => {
+    // Edit commits by calling send, so it inherits the one guard. What
+    // must not regress is a rewritten turn that re-attaches an image the
+    // gate has since started refusing.
+    const image = "data:image/jpeg;base64,AAAA";
+    const fake = fakeSessionStore(
+      [{ id: "s1", title: "T", turns: [{ role: "user", content: "typo here" }] }],
+      "s1",
+    );
+    const { runTurn, calls } = fakeRunTurn([{ reply: "right answer" }]);
+    const useStore = createChatStore({
+      getStore: async () => fake.store,
+      runTurn,
+      multimodalAvailable: async () => true,
+    });
+    await useStore.getState().loadSession();
+    useStore.getState().startEdit(useStore.getState().messages[0].id);
+    expect(await useStore.getState().send("typo fixed", [image])).toBe(true);
+    expect(calls.images).toEqual([[image]]);
   });
 });
 
@@ -931,15 +1020,6 @@ describe("streaming yield (C16)", () => {
     expect(atRelease >= 3).toBeTruthy();
     await new Promise((r) => setTimeout(r, 50));
     expect(ticks).toBe(atRelease);
-  });
-
-  it("runLocal holds the yield for the whole turn and releases it on exit", () => {
-    // Stop must be dispatchable mid-stream: the beat exists only while a
-    // turn runs. Released in `finally` so every exit path — success,
-    // failure, supersede — ends it and idle holds no timer at all.
-    const src = readFileSync("store/chat/send.ts", "utf8");
-    expect(src).toMatch(/= startStreamYield\(\)/);
-    expect(src).toMatch(/finally\s*{[^}]*endStreamYield\(\);[\s\S]*?}/);
   });
 });
 

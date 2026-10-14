@@ -1,49 +1,3 @@
-const assert: any = {
-  ok: (v: unknown, msg?: string) => expect(v).toBeTruthy(),
-  equal: (a: unknown, b: unknown, msg?: string) => expect(a).toEqual(b),
-  deepEqual: (a: unknown, b: unknown, msg?: string) => expect(a).toEqual(b),
-  strictEqual: (a: unknown, b: unknown, msg?: string) => expect(a).toBe(b),
-  notEqual: (a: unknown, b: unknown, msg?: string) => expect(a).not.toEqual(b),
-  notDeepEqual: (a: unknown, b: unknown, msg?: string) => expect(a).not.toEqual(b),
-  match: (value: string, re: RegExp | string, msg?: string) => expect(value).toMatch(re as any),
-  doesNotMatch: (value: string, re: RegExp | string, msg?: string) => expect(value).not.toMatch(re as any),
-  throws: (fn: () => void, re?: RegExp | string, msg?: string) => expect(fn).toThrow(re as any),
-  doesNotThrow: (fn: () => void, msg?: string) => expect(fn).not.toThrow(),
-  rejects: async (input: any, expected?: any, msg?: string) => {
-    const p = typeof input === "function" ? input() : input;
-    let err: unknown;
-    try {
-      await p;
-    } catch (e) {
-      err = e;
-    }
-    if (err === undefined) {
-      throw new Error("Expected promise to reject, but it resolved");
-    }
-    if (expected === undefined) return;
-    if (typeof expected === "function") {
-      if (expected.prototype) {
-        if (!(err instanceof expected)) {
-          throw new Error(msg ?? "rejected value not instance of expected constructor");
-        }
-      } else if (!expected(err)) {
-        throw new Error(msg ?? "rejected value did not satisfy validator");
-      }
-    } else if (expected instanceof RegExp) {
-      if (!expected.test(String((err as Error)?.message ?? err))) {
-        throw new Error(msg ?? "rejected message did not match");
-      }
-    } else if (typeof expected === "string") {
-      if (!String((err as Error)?.message ?? err).includes(expected)) {
-        throw new Error(msg ?? "rejected message did not include expected text");
-      }
-    } else if (expected instanceof Error) {
-      if (((err as Error)?.message ?? String(err)) !== expected.message) {
-        throw new Error(msg ?? "rejected message did not match");
-      }
-    }
-  },
-};
 
 /** What the local engine actually sends to llama.rn (regression loop).
  *
@@ -56,8 +10,6 @@ const assert: any = {
  * The rule pinned here: an UNTOUCHED model forwards none of them. Anything
  * else changes what llama.cpp does with every turn, for every model, and
  * the failure surfaces as an empty bubble rather than an error.
- *
- * Run: node --test tests/engine-params.test.ts
  */
 
 
@@ -97,22 +49,18 @@ describe("engine params — untouched model", () => {
   it("forwards no stop, no template and no generation-prompt override", async () => {
     const params = await send({ messages: [{ role: "user", content: "Hello" }] });
     // Each of these, if present, can end generation before token 1.
-    assert.equal("stop" in params, false, "no stop strings unless the model has them");
-    assert.equal("chat_template" in params, false, "no template override unless set");
-    assert.equal(
-      "add_generation_prompt" in params,
-      false,
-      "no generation-prompt override unless the user chose one",
-    );
+    expect("stop" in params).toEqual(false);
+    expect("chat_template" in params).toEqual(false);
+    expect("add_generation_prompt" in params).toEqual(false);
   });
 
   it("reads the untouched settings as absent, not false", () => {
     // The tri-state: a plain `false` here is what would strip every model's
     // assistant cue (llama.cpp defaults to true) and yield empty replies.
     const s = parseModelSettings({});
-    assert.equal("addGenerationPrompt" in s, false, "absent, never coerced to false");
-    assert.equal(parseModelSettings({ addGenerationPrompt: false }).addGenerationPrompt, false);
-    assert.equal(parseModelSettings({ addGenerationPrompt: true }).addGenerationPrompt, true);
+    expect("addGenerationPrompt" in s).toEqual(false);
+    expect(parseModelSettings({ addGenerationPrompt: false }).addGenerationPrompt).toEqual(false);
+    expect(parseModelSettings({ addGenerationPrompt: true }).addGenerationPrompt).toEqual(true);
   });
 
   it("sends no enable_thinking for an unclassified model", async () => {
@@ -123,11 +71,7 @@ describe("engine params — untouched model", () => {
     const params = await send({
       messages: [{ role: "user", content: "Hello" }],
     });
-    assert.equal(
-      "enable_thinking" in params,
-      false,
-      "unclassified → send nothing, let the chat template decide",
-    );
+    expect("enable_thinking" in params).toEqual(false);
   });
 
   it("forwards enable_thinking both ways when it IS a real value", async () => {
@@ -135,12 +79,12 @@ describe("engine params — untouched model", () => {
       messages: [{ role: "user", content: "hi" }],
       enableThinking: false,
     });
-    assert.equal(off.enable_thinking, false);
+    expect(off.enable_thinking).toEqual(false);
     const on = await send({
       messages: [{ role: "user", content: "hi" }],
       enableThinking: true,
     });
-    assert.equal(on.enable_thinking, true);
+    expect(on.enable_thinking).toEqual(true);
   });
 
   it("forwards reasoning effort as chat_template_kwargs.reasoning_effort", async () => {
@@ -152,18 +96,14 @@ describe("engine params — untouched model", () => {
       messages: [{ role: "user", content: "hi" }],
       reasoningEffort: "high",
     });
-    assert.deepEqual(params.chat_template_kwargs, { reasoning_effort: "high" });
+    expect(params.chat_template_kwargs).toEqual({ reasoning_effort: "high" });
   });
 
   it("omits chat_template_kwargs entirely when no effort is chosen", async () => {
     const params = await send({
       messages: [{ role: "user", content: "hi" }],
     });
-    assert.equal(
-      "chat_template_kwargs" in params,
-      false,
-      "no effort override → the model's own default reasoning depth stands",
-    );
+    expect("chat_template_kwargs" in params).toEqual(false);
   });
 });
 
@@ -173,7 +113,7 @@ describe("engine params — configured model", () => {
       messages: [{ role: "user", content: "hi" }],
       stop: ["<|eot_id|>", "</s>"],
     });
-    assert.deepEqual(params.stop, ["<|eot_id|>", "</s>"]);
+    expect(params.stop).toEqual(["<|eot_id|>", "</s>"]);
   });
 
   it("omits stop entirely when the list is empty", async () => {
@@ -181,7 +121,7 @@ describe("engine params — configured model", () => {
       messages: [{ role: "user", content: "hi" }],
       stop: [],
     });
-    assert.equal("stop" in params, false);
+    expect("stop" in params).toEqual(false);
   });
 
   it("forwards a custom chat template", async () => {
@@ -189,7 +129,7 @@ describe("engine params — configured model", () => {
       messages: [{ role: "user", content: "hi" }],
       chatTemplate: "{{ messages }}",
     });
-    assert.equal(params.chat_template, "{{ messages }}");
+    expect(params.chat_template).toEqual("{{ messages }}");
   });
 
   it("forwards add_generation_prompt both ways — false is a real choice", async () => {
@@ -197,11 +137,11 @@ describe("engine params — configured model", () => {
       messages: [{ role: "user", content: "hi" }],
       addGenerationPrompt: false,
     });
-    assert.equal(off.add_generation_prompt, false);
+    expect(off.add_generation_prompt).toEqual(false);
     const on = await send({
       messages: [{ role: "user", content: "hi" }],
       addGenerationPrompt: true,
     });
-    assert.equal(on.add_generation_prompt, true);
+    expect(on.add_generation_prompt).toEqual(true);
   });
 });

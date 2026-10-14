@@ -1,6 +1,18 @@
 # LiAI Jest Test Architecture Migration
 
-Status: ready-for-agent
+Status: done
+
+> **Migration status.** The cutover from the Node `--test` architecture to
+> Jest is complete: `tests/legacy/` is deleted, `npm test` runs the route
+> filename guard followed by one Jest suite (26 suites, 335 tests), and
+> `npm run typecheck` covers both the app and the test project.
+>
+> Coverage the suite does not yet have is tracked as follow-up tickets
+> rather than claimed here — see `test-inventory.md` and `issues/09` through
+> `issues/17` (chat/session gaps, model download lifecycle, GGUF and model
+> catalog rules, onboarding, component/UI, screen/route behavior,
+> voice/TTS/vision runtime, agent/inference depth, and the review
+> corrections record).
 
 ## Problem Statement
 

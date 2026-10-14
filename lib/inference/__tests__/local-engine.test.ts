@@ -1,52 +1,5 @@
-const assert: any = {
-  ok: (v: unknown, msg?: string) => expect(v).toBeTruthy(),
-  equal: (a: unknown, b: unknown, msg?: string) => expect(a).toEqual(b),
-  deepEqual: (a: unknown, b: unknown, msg?: string) => expect(a).toEqual(b),
-  strictEqual: (a: unknown, b: unknown, msg?: string) => expect(a).toBe(b),
-  notEqual: (a: unknown, b: unknown, msg?: string) => expect(a).not.toEqual(b),
-  notDeepEqual: (a: unknown, b: unknown, msg?: string) => expect(a).not.toEqual(b),
-  match: (value: string, re: RegExp | string, msg?: string) => expect(value).toMatch(re as any),
-  doesNotMatch: (value: string, re: RegExp | string, msg?: string) => expect(value).not.toMatch(re as any),
-  throws: (fn: () => void, re?: RegExp | string, msg?: string) => expect(fn).toThrow(re as any),
-  doesNotThrow: (fn: () => void, msg?: string) => expect(fn).not.toThrow(),
-  rejects: async (input: any, expected?: any, msg?: string) => {
-    const p = typeof input === "function" ? input() : input;
-    let err: unknown;
-    try {
-      await p;
-    } catch (e) {
-      err = e;
-    }
-    if (err === undefined) {
-      throw new Error("Expected promise to reject, but it resolved");
-    }
-    if (expected === undefined) return;
-    if (typeof expected === "function") {
-      if (expected.prototype) {
-        if (!(err instanceof expected)) {
-          throw new Error(msg ?? "rejected value not instance of expected constructor");
-        }
-      } else if (!expected(err)) {
-        throw new Error(msg ?? "rejected value did not satisfy validator");
-      }
-    } else if (expected instanceof RegExp) {
-      if (!expected.test(String((err as Error)?.message ?? err))) {
-        throw new Error(msg ?? "rejected message did not match");
-      }
-    } else if (typeof expected === "string") {
-      if (!String((err as Error)?.message ?? err).includes(expected)) {
-        throw new Error(msg ?? "rejected message did not include expected text");
-      }
-    } else if (expected instanceof Error) {
-      if (((err as Error)?.message ?? String(err)) !== expected.message) {
-        throw new Error(msg ?? "rejected message did not match");
-      }
-    }
-  },
-};
 
-/** Local llama engine: thin wrapper over a llama.rn context (TDD).
- * Run: node --test frontend/tests/local-engine.test.ts */
+/** Local llama engine: thin wrapper over a llama.rn context. */
 
 
 import {
@@ -94,11 +47,11 @@ describe("createLocalEngine", () => {
       { messages: [{ role: "user", content: "hi" }] },
       { onToken: (t) => tokens.push(t) },
     );
-    assert.deepEqual(tokens, ["he", "llo"]);
-    assert.equal(out.text, "hello");
-    assert.equal(out.promptTokens, 5);
-    assert.equal(out.completionTokens, 2);
-    assert.deepEqual(out.toolCalls, []);
+    expect(tokens).toEqual(["he", "llo"]);
+    expect(out.text).toEqual("hello");
+    expect(out.promptTokens).toEqual(5);
+    expect(out.completionTokens).toEqual(2);
+    expect(out.toolCalls).toEqual([]);
   });
 
   it("projects native tool calls with fallback ids", async () => {
@@ -123,10 +76,10 @@ describe("createLocalEngine", () => {
       { messages: [{ role: "user", content: "x" }] },
       { onToken: () => {} },
     );
-    assert.equal(out.toolCalls.length, 2);
-    assert.equal(out.toolCalls[0].name, "calculate");
-    assert.ok(out.toolCalls[0].id.length > 0);
-    assert.equal(out.toolCalls[1].id, "c9");
+    expect(out.toolCalls.length).toEqual(2);
+    expect(out.toolCalls[0].name).toEqual("calculate");
+    expect(out.toolCalls[0].id.length > 0).toBeTruthy();
+    expect(out.toolCalls[1].id).toEqual("c9");
   });
 
   it("forwards enableThinking as enable_thinking, omits when unset", async () => {
@@ -143,8 +96,8 @@ describe("createLocalEngine", () => {
       { onToken: () => {} },
     );
     await engine.completion({ messages: [{ role: "user", content: "y" }] }, { onToken: () => {} });
-    assert.equal(seen[0].enable_thinking, false);
-    assert.equal("enable_thinking" in seen[1], false);
+    expect(seen[0].enable_thinking).toEqual(false);
+    expect("enable_thinking" in seen[1]).toEqual(false);
   });
 
   it("forwards the sampler flat, as llama.rn's sibling keys", async () => {
@@ -166,10 +119,10 @@ describe("createLocalEngine", () => {
     await engine.completion({ messages: [{ role: "user", content: "y" }] }, { onToken: () => {} });
     // Top level, or the native converter drops them: the first version of
     // this nested them under `sampler:`, passed every check, and did nothing.
-    assert.equal(seen[0].temperature, 0.15);
-    assert.equal(seen[0].penalty_freq, 1.5, "not penalty_frequency");
-    assert.equal("sampler" in seen[0], false, "nothing is nested under a sampler key");
-    assert.equal("temperature" in seen[1], false, "an absent sampler stays absent");
+    expect(seen[0].temperature).toEqual(0.15);
+    expect(seen[0].penalty_freq).toEqual(1.5);
+    expect("sampler" in seen[0]).toEqual(false);
+    expect("temperature" in seen[1]).toEqual(false);
   });
 
   it("builds init params, omitting what is not in play", () => {
@@ -194,34 +147,28 @@ describe("createLocalEngine", () => {
 
     // Omitted, not []: llama.rn reads a missing `devices` as "use the
     // platform default", and an empty array is a different instruction.
-    assert.equal("devices" in buildInitParams(base), false);
-    assert.deepEqual(buildInitParams({ ...base, devices: ["HTP*"] }).devices, ["HTP*"]);
+    expect("devices" in buildInitParams(base)).toEqual(false);
+    expect(buildInitParams({ ...base, devices: ["HTP*"] }).devices).toEqual(["HTP*"]);
 
     // Weight repacking is the inverse of the flag llama.cpp wants.
-    assert.equal(buildInitParams(base).no_extra_bufts, true);
-    assert.equal(buildInitParams({ ...base, no_extra_bufts: false }).no_extra_bufts, false);
+    expect(buildInitParams(base).no_extra_bufts).toEqual(true);
+    expect(buildInitParams({ ...base, no_extra_bufts: false }).no_extra_bufts).toEqual(false);
 
-    assert.equal("model_draft" in buildInitParams(base), false);
-    assert.equal(
-      buildInitParams({ ...base, model_draft: "/models/small.gguf" }).model_draft,
-      "/models/small.gguf",
-    );
+    expect("model_draft" in buildInitParams(base)).toEqual(false);
+    expect(buildInitParams({ ...base, model_draft: "/models/small.gguf" }).model_draft).toEqual("/models/small.gguf");
 
     // The speculative sub-block is conditional on the switch above it.
-    assert.equal("spec_draft_n_gpu_layers" in buildInitParams(base), false);
-    assert.equal(
-      buildInitParams({ ...base, speculative: true }).spec_draft_n_gpu_layers,
-      99,
-    );
+    expect("spec_draft_n_gpu_layers" in buildInitParams(base)).toEqual(false);
+    expect(buildInitParams({ ...base, speculative: true }).spec_draft_n_gpu_layers).toEqual(99);
   });
 
   it("forwards stop and release to the native context", async () => {
     const ctx = fakeContext();
     const engine = createLocalEngine(ctx);
     await engine.stopCompletion();
-    assert.equal(ctx.stopped, true);
+    expect(ctx.stopped).toEqual(true);
     await releaseLocalEngine(ctx);
-    assert.equal(ctx.released, true);
+    expect(ctx.released).toEqual(true);
   });
 
   it("surfaces native failures as errors", async () => {
@@ -231,10 +178,7 @@ describe("createLocalEngine", () => {
       },
     });
     const engine = createLocalEngine(ctx);
-    await assert.rejects(
-      engine.completion({ messages: [{ role: "user", content: "x" }] }, { onToken: () => {} }),
-      /context_was_released/,
-    );
+    await expect(engine.completion({ messages: [{ role: "user", content: "x" }] }, { onToken: () => {} })).rejects.toThrow(/context_was_released/);
   });
 });
 
@@ -262,19 +206,19 @@ describe("prompt occupancy (C3)", () => {
     // re-processed) plus generated, post any context shift — what the
     // fill meter actually divides by nCtx.
     const out = await occupancy({ tokens_cached: 1200 });
-    assert.equal(out.promptTokens, 1200);
+    expect(out.promptTokens).toEqual(1200);
   });
 
   it("falls back to the prompt total when the build omits the key", async () => {
     const out = await occupancy({});
-    assert.equal(out.promptTokens, 1000);
+    expect(out.promptTokens).toEqual(1000);
   });
 
   it("treats a reported 0 as a fact, never as absence", async () => {
     // PocketPal's distinction: "old build omits the key" and "cold
     // reports 0" are different facts — only the omission falls back.
     const out = await occupancy({ tokens_cached: 0 });
-    assert.equal(out.promptTokens, 0);
+    expect(out.promptTokens).toEqual(0);
   });
 });
 
@@ -302,41 +246,41 @@ describe("completion stop signals (G1/G4)", () => {
   it("reports context_full straight from the native result", async () => {
     // No string-matching a thrown message: llama.rn hands us the flag.
     const out = await run({ context_full: true });
-    assert.equal(out.contextFull, true);
+    expect(out.contextFull).toEqual(true);
   });
 
   it("reports truncated, which is a second way to fill the context", async () => {
     const out = await run({ truncated: true });
-    assert.equal(out.contextFull, true);
+    expect(out.contextFull).toEqual(true);
   });
 
   it("reports a normal finish as neither full nor cut off", async () => {
     const out = await run({ context_full: false, truncated: false, interrupted: false });
-    assert.equal(out.contextFull, false);
-    assert.equal(out.interrupted, false);
-    assert.equal(out.stoppedEarly, false);
+    expect(out.contextFull).toEqual(false);
+    expect(out.interrupted).toEqual(false);
+    expect(out.stoppedEarly).toEqual(false);
   });
 
   it("reports interrupted, so a stopped reply is not a finished one", async () => {
     const out = await run({ interrupted: true });
-    assert.equal(out.interrupted, true);
+    expect(out.interrupted).toEqual(true);
   });
 
   it("makes stoppedEarly real instead of hardcoded false", async () => {
     // This field was `false` on every completion for the life of the
     // type. A stopped_limit above zero means the sampler hit n_predict.
     const out = await run({ stopped_limit: 1 });
-    assert.equal(out.stoppedEarly, true);
-    assert.equal((await run({ stopped_limit: 0 })).stoppedEarly, false);
+    expect(out.stoppedEarly).toEqual(true);
+    expect((await run({ stopped_limit: 0 })).stoppedEarly).toEqual(false);
   });
 
   it("treats an absent stop field as not stopped, not as a crash", async () => {
     // Older/dev builds may omit the field entirely; the banner must
     // simply not appear rather than the turn failing.
     const out = await run({});
-    assert.equal(out.contextFull, false);
-    assert.equal(out.interrupted, false);
-    assert.equal(out.stoppedEarly, false);
+    expect(out.contextFull).toEqual(false);
+    expect(out.interrupted).toEqual(false);
+    expect(out.stoppedEarly).toEqual(false);
   });
 
   it("projects timings for the turn footer", async () => {
@@ -349,48 +293,44 @@ describe("completion stop signals (G1/G4)", () => {
         predicted_n: 2,
       },
     });
-    assert.equal(out.timings?.promptMs, 120);
-    assert.equal(out.timings?.tokensPerSecond, 25);
-    assert.equal(out.timings?.msPerToken, 40);
+    expect(out.timings?.promptMs).toEqual(120);
+    expect(out.timings?.tokensPerSecond).toEqual(25);
+    expect(out.timings?.msPerToken).toEqual(40);
   });
 
   it("projects prompt throughput for the footer, when the engine reports it", async () => {
     const out = await run({
       timings: { prompt_ms: 120, prompt_per_second: 640.5, prompt_n: 5 },
     });
-    assert.equal(out.timings?.promptTokensPerSecond, 640.5);
+    expect(out.timings?.promptTokensPerSecond).toEqual(640.5);
   });
 
   it("leaves prompt throughput ABSENT, not zero, when unreported", async () => {
     // "the engine did not report it" and "the engine reported zero" are
     // different facts, and only one of them should reach the footer.
     const out = await run({ timings: { prompt_ms: 120 } });
-    assert.equal(out.timings?.promptTokensPerSecond, undefined);
-    assert.equal(
-      "promptTokensPerSecond" in (out.timings ?? {}),
-      false,
-      "an unreported rate must not become 0",
-    );
+    expect(out.timings?.promptTokensPerSecond).toEqual(undefined);
+    expect("promptTokensPerSecond" in (out.timings ?? {})).toEqual(false);
   });
 
   it("keeps a REPORTED zero, so a measured zero is not mistaken for silence", async () => {
     const out = await run({ timings: { prompt_ms: 120, prompt_per_second: 0 } });
-    assert.equal(out.timings?.promptTokensPerSecond, 0);
+    expect(out.timings?.promptTokensPerSecond).toEqual(0);
   });
 
   it("drops a non-finite prompt throughput rather than carrying NaN", async () => {
     const out = await run({
       timings: { prompt_ms: 120, prompt_per_second: Number.NaN },
     });
-    assert.equal(out.timings?.promptTokensPerSecond, undefined);
+    expect(out.timings?.promptTokensPerSecond).toEqual(undefined);
     const inf = await run({
       timings: { prompt_ms: 120, prompt_per_second: Number.POSITIVE_INFINITY },
     });
-    assert.equal(inf.timings?.promptTokensPerSecond, undefined);
+    expect(inf.timings?.promptTokensPerSecond).toEqual(undefined);
   });
 
   it("leaves timings undefined when the engine reports none", async () => {
     const out = await run({});
-    assert.equal(out.timings, undefined);
+    expect(out.timings).toEqual(undefined);
   });
 });

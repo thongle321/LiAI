@@ -1,5 +1,4 @@
-/** On-device engine seam: file resolution + source selection (pure).
- * Run: node --test frontend/tests/engine.test.ts */
+/** On-device engine seam: file resolution + source selection. */
 
 
 import {
@@ -43,54 +42,6 @@ function provider(over: Partial<RemoteApiProvider> = {}): RemoteApiProvider {
     ...over,
   };
 }
-
-const assert: any = {
-  ok: (v: unknown, msg?: string) => expect(v).toBeTruthy(),
-  equal: (a: unknown, b: unknown, msg?: string) => expect(a).toEqual(b),
-  deepEqual: (a: unknown, b: unknown, msg?: string) => expect(a).toEqual(b),
-  strictEqual: (a: unknown, b: unknown, msg?: string) => expect(a).toBe(b),
-  notEqual: (a: unknown, b: unknown, msg?: string) => expect(a).not.toEqual(b),
-  notDeepEqual: (a: unknown, b: unknown, msg?: string) => expect(a).not.toEqual(b),
-  match: (value: string, re: RegExp | string, msg?: string) => expect(value).toMatch(re as any),
-  doesNotMatch: (value: string, re: RegExp | string, msg?: string) => expect(value).not.toMatch(re as any),
-  throws: (fn: () => void, re?: RegExp | string, msg?: string) => expect(fn).toThrow(re as any),
-  doesNotThrow: (fn: () => void, msg?: string) => expect(fn).not.toThrow(),
-  rejects: async (input: any, expected?: any, msg?: string) => {
-    const p = typeof input === "function" ? input() : input;
-    let err: unknown;
-    try {
-      await p;
-    } catch (e) {
-      err = e;
-    }
-    if (err === undefined) {
-      throw new Error("Expected promise to reject, but it resolved");
-    }
-    if (expected === undefined) return;
-    if (typeof expected === "function") {
-      if (expected.prototype) {
-        if (!(err instanceof expected)) {
-          throw new Error(msg ?? "rejected value not instance of expected constructor");
-        }
-      } else if (!expected(err)) {
-        throw new Error(msg ?? "rejected value did not satisfy validator");
-      }
-    } else if (expected instanceof RegExp) {
-      if (!expected.test(String((err as Error)?.message ?? err))) {
-        throw new Error(msg ?? "rejected message did not match");
-      }
-    } else if (typeof expected === "string") {
-      if (!String((err as Error)?.message ?? err).includes(expected)) {
-        throw new Error(msg ?? "rejected message did not include expected text");
-      }
-    } else if (expected instanceof Error) {
-      if (((err as Error)?.message ?? String(err)) !== expected.message) {
-        throw new Error(msg ?? "rejected message did not match");
-      }
-    }
-  },
-};
-
 describe("selectEngineSource", () => {
   it("selects local when a completed GGUF is active", () => {
     const out = selectEngineSource({
@@ -99,7 +50,7 @@ describe("selectEngineSource", () => {
       models: [spec()],
       remoteApis: [],
     });
-    assert.deepEqual(out, { kind: "local", fileName: spec().files[0].name });
+    expect(out).toEqual({ kind: "local", fileName: spec().files[0].name });
   });
 
   it("selects remote when a provider row is active", () => {
@@ -109,7 +60,7 @@ describe("selectEngineSource", () => {
       models: [],
       remoteApis: [provider()],
     });
-    assert.deepEqual(out, {
+    expect(out).toEqual({
       kind: "remote",
       provider: provider(),
     });
@@ -122,32 +73,26 @@ describe("selectEngineSource", () => {
       models: [spec({ downloadStatus: "downloading" })],
       remoteApis: [],
     });
-    assert.equal(out, null);
+    expect(out).toEqual(null);
   });
 
   it("returns null when nothing is active", () => {
-    assert.equal(
-      selectEngineSource({
+    expect(selectEngineSource({
         activeModelId: null,
         activeProviderType: null,
         models: [spec()],
         remoteApis: [],
-      }),
-      null,
-    );
+      })).toEqual(null);
   });
 });
 
 describe("resolveLocalFile", () => {
   it("joins the models dir without touching the network", () => {
-    assert.equal(
-      resolveLocalFile("/docs", "a.gguf"),
-      "/docs/models/a.gguf",
-    );
+    expect(resolveLocalFile("/docs", "a.gguf")).toEqual("/docs/models/a.gguf");
   });
 
   it("strips directory tricks from the file name", () => {
-    assert.equal(resolveLocalFile("/docs", "../evil.gguf"), "/docs/models/evil.gguf");
-    assert.equal(resolveLocalFile("/docs", "sub/a.gguf"), "/docs/models/a.gguf");
+    expect(resolveLocalFile("/docs", "../evil.gguf")).toEqual("/docs/models/evil.gguf");
+    expect(resolveLocalFile("/docs", "sub/a.gguf")).toEqual("/docs/models/a.gguf");
   });
 });

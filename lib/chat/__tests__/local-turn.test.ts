@@ -1,5 +1,4 @@
-/** Local turn: engine + agent + persisted turns (TDD).
- * Run: node --test frontend/tests/local-turn.test.ts */
+/** Local turn: engine + agent + persisted turns. */
 
 import { createTurnRunner } from "../turn.ts";
 import type { CompletionEngine } from "../../inference/engine.ts";

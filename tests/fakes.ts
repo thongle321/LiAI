@@ -4,7 +4,8 @@
  * turn runner, engine source), so these tests never touch fetch, XHR,
  * SQLite, or native modules. There is no storage fake here any more:
  * sessions, the active-session pointer and drafts all live in the
- * session store (ADR-0012).
+ * session store (ADR-0012) — the AsyncStorage/SecureStore stand-ins
+ * live in `jest/storage.ts`, shared by every preference store suite.
  */
 
 import type {
@@ -94,17 +95,17 @@ export function fakeSessionStore(
       row.turns.push({ ...turn, id: id ?? mintId(sessionId) });
       calls.appends.push({ sessionId, turn: { ...turn } });
     },
- listSessions: async (): Promise<SessionInfo[]> =>
- // Mirrors the real store's drawer order: pinned first, insertion
- // order otherwise (the fake seeds share one seq).
- [...sessions.entries()]
- .map(([id, row]) => ({
- id,
- title: row.title,
- pinned: row.pinned,
- updatedAt: row.seq,
- }))
- .sort((a, b) => (a.pinned === b.pinned ? 0 : a.pinned ? -1 : 1)),
+    listSessions: async (): Promise<SessionInfo[]> =>
+      // Mirrors the real store's drawer order: pinned first, insertion
+      // order otherwise (the fake seeds share one seq).
+      [...sessions.entries()]
+        .map(([id, row]) => ({
+          id,
+          title: row.title,
+          pinned: row.pinned,
+          updatedAt: row.seq,
+        }))
+        .sort((a, b) => (a.pinned === b.pinned ? 0 : a.pinned ? -1 : 1)),
     renameSession: async (id: string, title: string) => {
       const row = sessions.get(id);
       if (!row) return false;
@@ -117,7 +118,7 @@ export function fakeSessionStore(
       row.pinned = pinned;
       return true;
     },
-      deleteSession: async (id: string) => {
+    deleteSession: async (id: string) => {
       calls.deletes.push(id);
       // Mirrors the real store: the draft, the sampler override and the
       // pointer are its data.
@@ -132,7 +133,7 @@ export function fakeSessionStore(
       // exists before this is called.
       if (row && row.title === "") row.title = title;
     },
-popLastAssistant: async (id: string) => {
+    popLastAssistant: async (id: string) => {
       const row = sessions.get(id);
       if (!row || row.turns.length === 0) return false;
       const last = row.turns[row.turns.length - 1];

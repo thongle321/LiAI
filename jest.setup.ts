@@ -1,31 +1,53 @@
-jest.mock('uniwind', () => ({
-  withUniwind: (component: any) => component,
+/** Global Jest setup: native/runtime seams that every suite shares.
+ *
+ * Everything here is a *module boundary*, not a fixture: the mocks exist so
+ * a test can import a module that reaches for a native API without a device,
+ * while the shared resets keep one test's recorded calls from leaking into
+ * the next one.
+ */
+
+import {
+  resetRouterMock,
+  // Aliased to the `mock` prefix: babel-plugin-jest-hoist forbids a factory
+  // from closing over an ordinary out-of-scope variable, but allows one whose
+  // name starts with `mock`. The object itself is the shared `routerMock`
+  // this module exports.
+  routerMock as mockRouter,
+} from "./jest/router-mock.ts";
+
+jest.mock("uniwind", () => ({
+  withUniwind: (component: React.ComponentType<unknown>) => component,
   useResolveClassNames: () => undefined,
-  useUniwind: () => ({ theme: 'light' }),
+  useUniwind: () => ({ theme: "light" }),
   useCSSVariable: (name: unknown) =>
     Array.isArray(name) ? name.map(() => undefined) : undefined,
 }));
 
-jest.mock('expo-router', () => {
-  const actual = jest.requireActual('expo-router');
+jest.mock("expo-router", () => {
+  const actual = jest.requireActual("expo-router");
   return {
     ...actual,
-    useRouter: () => ({
-      push: jest.fn(),
-      replace: jest.fn(),
-      back: jest.fn(),
-      setParams: jest.fn(),
-    }),
+    // The SAME object every test can import and assert against. The old
+    // factory minted fresh jest.fn()s per call, so a test body could never
+    // observe a navigation.
+    useRouter: () => mockRouter,
     useLocalSearchParams: () => ({}),
     useGlobalSearchParams: () => ({}),
-    usePathname: () => '/',
+    usePathname: () => "/",
     useSegments: () => [],
   };
 });
 
-jest.mock('expo-constants', () => ({
+jest.mock("expo-constants", () => ({
   default: { expoConfig: {} },
   expoConfig: {},
 }));
 
-jest.mock('@expo/ui', () => ({}));
+// @expo/ui is aliased to __mocks__/external/@expo/ui.tsx by jest.config.js;
+// no inline factory here, so the stub is one module instead of an empty
+// object that crashes on `Host`/`Switch`/`Picker`/`Slider`/`BottomSheet`.
+
+// One recorded navigation must not satisfy an assertion in another test.
+beforeEach(() => {
+  resetRouterMock();
+});

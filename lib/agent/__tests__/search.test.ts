@@ -1,52 +1,5 @@
-const assert: any = {
-  ok: (v: unknown, msg?: string) => expect(v).toBeTruthy(),
-  equal: (a: unknown, b: unknown, msg?: string) => expect(a).toEqual(b),
-  deepEqual: (a: unknown, b: unknown, msg?: string) => expect(a).toEqual(b),
-  strictEqual: (a: unknown, b: unknown, msg?: string) => expect(a).toBe(b),
-  notEqual: (a: unknown, b: unknown, msg?: string) => expect(a).not.toEqual(b),
-  notDeepEqual: (a: unknown, b: unknown, msg?: string) => expect(a).not.toEqual(b),
-  match: (value: string, re: RegExp | string, msg?: string) => expect(value).toMatch(re as any),
-  doesNotMatch: (value: string, re: RegExp | string, msg?: string) => expect(value).not.toMatch(re as any),
-  throws: (fn: () => void, re?: RegExp | string, msg?: string) => expect(fn).toThrow(re as any),
-  doesNotThrow: (fn: () => void, msg?: string) => expect(fn).not.toThrow(),
-  rejects: async (input: any, expected?: any, msg?: string) => {
-    const p = typeof input === "function" ? input() : input;
-    let err: unknown;
-    try {
-      await p;
-    } catch (e) {
-      err = e;
-    }
-    if (err === undefined) {
-      throw new Error("Expected promise to reject, but it resolved");
-    }
-    if (expected === undefined) return;
-    if (typeof expected === "function") {
-      if (expected.prototype) {
-        if (!(err instanceof expected)) {
-          throw new Error(msg ?? "rejected value not instance of expected constructor");
-        }
-      } else if (!expected(err)) {
-        throw new Error(msg ?? "rejected value did not satisfy validator");
-      }
-    } else if (expected instanceof RegExp) {
-      if (!expected.test(String((err as Error)?.message ?? err))) {
-        throw new Error(msg ?? "rejected message did not match");
-      }
-    } else if (typeof expected === "string") {
-      if (!String((err as Error)?.message ?? err).includes(expected)) {
-        throw new Error(msg ?? "rejected message did not include expected text");
-      }
-    } else if (expected instanceof Error) {
-      if (((err as Error)?.message ?? String(err)) !== expected.message) {
-        throw new Error(msg ?? "rejected message did not match");
-      }
-    }
-  },
-};
 
-/** On-device search: budget clip, TTL cache, providers, dispatch (TDD).
- * Run: node --test frontend/tests/local-search.test.ts */
+/** On-device search: budget clip, TTL cache, providers, dispatch. */
 
 
 import {
@@ -83,20 +36,17 @@ describe("clipResults", () => {
       ],
       8,
     );
-    assert.deepEqual(
-      out.map((r) => r.snippet),
-      ["12345", "678"],
-    );
+    expect(out.map((r) => r.snippet)).toEqual(["12345", "678"]);
   });
 
   it("never mutates the input rows", () => {
     const rows = [{ title: "a", url: "https://a.example", snippet: "123456789" }];
     clipResults(rows, 3);
-    assert.equal(rows[0].snippet, "123456789");
+    expect(rows[0].snippet).toEqual("123456789");
   });
 
   it("defaults to the shared budget constant", () => {
-    assert.equal(SEARCH_BUDGET_CHARS, 4000);
+    expect(SEARCH_BUDGET_CHARS).toEqual(4000);
   });
 });
 
@@ -105,11 +55,11 @@ describe("TTLCache", () => {
     let now = 1000;
     const cache = new TTLCache<string, number>(8, 500, { now: () => now });
     cache.set("k", 1);
-    assert.equal(cache.get("k"), 1);
+    expect(cache.get("k")).toEqual(1);
     now += 499;
-    assert.equal(cache.get("k"), 1);
+    expect(cache.get("k")).toEqual(1);
     now += 1;
-    assert.equal(cache.get("k"), null);
+    expect(cache.get("k")).toEqual(null);
   });
 
   it("evicts the oldest entry past maxsize", () => {
@@ -117,8 +67,8 @@ describe("TTLCache", () => {
     cache.set("a", 1);
     cache.set("b", 2);
     cache.set("c", 3);
-    assert.equal(cache.get("a"), null);
-    assert.equal(cache.get("c"), 3);
+    expect(cache.get("a")).toEqual(null);
+    expect(cache.get("c")).toEqual(3);
   });
 });
 
@@ -135,11 +85,11 @@ describe("tavilySearch", () => {
       });
     });
     const out = await tavilySearch(fetchImpl, "k", "query words", 5);
-    assert.equal(seen.url, "https://api.tavily.com/search");
+    expect(seen.url).toEqual("https://api.tavily.com/search");
     const body = JSON.parse(seen.body);
-    assert.equal(body.api_key, "k");
-    assert.equal(body.query, "query words");
-    assert.deepEqual(out, [
+    expect(body.api_key).toEqual("k");
+    expect(body.query).toEqual("query words");
+    expect(out).toEqual([
       { title: "T", url: "https://t.example", snippet: "snippet here" },
     ]);
   });
@@ -150,16 +100,13 @@ describe("tavilySearch", () => {
       calls += 1;
       return jsonResponse({});
     });
-    await assert.rejects(tavilySearch(fetchImpl, "  ", "q", 5), /key is required/);
-    assert.equal(calls, 0);
+    await expect(tavilySearch(fetchImpl, "  ", "q", 5)).rejects.toThrow(/key is required/);
+    expect(calls).toEqual(0);
   });
 
   it("maps HTTP failures to ProviderError", async () => {
     const fetchImpl = fakeFetch(async () => jsonResponse({ error: "x" }, 401));
-    await assert.rejects(
-      tavilySearch(fetchImpl, "k", "q", 5),
-      (err: unknown) => err instanceof ProviderError,
-    );
+    await expect(tavilySearch(fetchImpl, "k", "q", 5)).rejects.toBeInstanceOf(ProviderError);
   });
 });
 
@@ -185,10 +132,10 @@ describe("braveSearch", () => {
       });
     });
     const out = await braveSearch(fetchImpl, "bk", "other words", 3);
-    assert.ok(seen.url.includes("api.search.brave.com"));
-    assert.ok(seen.url.includes("q=other%20words"));
-    assert.equal(seen.headers["X-Subscription-Token"], "bk");
-    assert.deepEqual(out, [
+    expect(seen.url.includes("api.search.brave.com")).toBeTruthy();
+    expect(seen.url.includes("q=other%20words")).toBeTruthy();
+    expect(seen.headers["X-Subscription-Token"]).toEqual("bk");
+    expect(out).toEqual([
       { title: "B", url: "https://b.example", snippet: "brave snippet" },
     ]);
   });
@@ -199,22 +146,16 @@ describe("braveSearch", () => {
       calls += 1;
       return jsonResponse({});
     });
-    await assert.rejects(braveSearch(fetchImpl, "", "q", 5), /key is required/);
-    assert.equal(calls, 0);
+    await expect(braveSearch(fetchImpl, "", "q", 5)).rejects.toThrow(/key is required/);
+    expect(calls).toEqual(0);
   });
 });
 
 describe("searchWeb", () => {
   it("rejects unknown providers and blank keys", async () => {
     const fetchImpl = fakeFetch(async () => jsonResponse({}));
-    await assert.rejects(
-      searchWeb(fetchImpl, "exa", "k", "q", 5),
-      /unknown search provider/,
-    );
-    await assert.rejects(
-      searchWeb(fetchImpl, "tavily", " ", "q", 5),
-      /key is required/,
-    );
+    await expect(searchWeb(fetchImpl, "exa", "k", "q", 5)).rejects.toThrow(/unknown search provider/);
+    await expect(searchWeb(fetchImpl, "tavily", " ", "q", 5)).rejects.toThrow(/key is required/);
   });
 
   it("returns [] on blank queries without fetching", async () => {
@@ -223,8 +164,8 @@ describe("searchWeb", () => {
       calls += 1;
       return jsonResponse({});
     });
-    assert.deepEqual(await searchWeb(fetchImpl, "tavily", "k", "   ", 5), []);
-    assert.equal(calls, 0);
+    expect(await searchWeb(fetchImpl, "tavily", "k", "   ", 5)).toEqual([]);
+    expect(calls).toEqual(0);
   });
 
   it("caches on provider+query+count, sharing across keys", async () => {
@@ -237,7 +178,7 @@ describe("searchWeb", () => {
     });
     const first = await searchWeb(fetchImpl, "tavily", "key-one", "cached query", 5);
     const second = await searchWeb(fetchImpl, "tavily", "key-two", "cached query", 5);
-    assert.deepEqual(first, second);
-    assert.equal(calls, 1);
+    expect(first).toEqual(second);
+    expect(calls).toEqual(1);
   });
 });

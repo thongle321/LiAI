@@ -12,6 +12,8 @@ declare module "expo-router/testing-library" {
   type RenderResult = ReturnType<ReactNativeTestingLibrary.render>;
 
   export const screen: typeof ReactNativeTestingLibrary.screen;
+  export const fireEvent: typeof ReactNativeTestingLibrary.fireEvent;
+  export const act: typeof ReactNativeTestingLibrary.act;
   export const testRouter: {
     navigate(path: string): void;
     push(path: string): void;

@@ -1,55 +1,7 @@
-const assert: any = {
-  ok: (v: unknown, msg?: string) => expect(v).toBeTruthy(),
-  equal: (a: unknown, b: unknown, msg?: string) => expect(a).toEqual(b),
-  deepEqual: (a: unknown, b: unknown, msg?: string) => expect(a).toEqual(b),
-  strictEqual: (a: unknown, b: unknown, msg?: string) => expect(a).toBe(b),
-  notEqual: (a: unknown, b: unknown, msg?: string) => expect(a).not.toEqual(b),
-  notDeepEqual: (a: unknown, b: unknown, msg?: string) => expect(a).not.toEqual(b),
-  match: (value: string, re: RegExp | string, msg?: string) => expect(value).toMatch(re as any),
-  doesNotMatch: (value: string, re: RegExp | string, msg?: string) => expect(value).not.toMatch(re as any),
-  throws: (fn: () => void, re?: RegExp | string, msg?: string) => expect(fn).toThrow(re as any),
-  doesNotThrow: (fn: () => void, msg?: string) => expect(fn).not.toThrow(),
-  rejects: async (input: any, expected?: any, msg?: string) => {
-    const p = typeof input === "function" ? input() : input;
-    let err: unknown;
-    try {
-      await p;
-    } catch (e) {
-      err = e;
-    }
-    if (err === undefined) {
-      throw new Error("Expected promise to reject, but it resolved");
-    }
-    if (expected === undefined) return;
-    if (typeof expected === "function") {
-      if (expected.prototype) {
-        if (!(err instanceof expected)) {
-          throw new Error(msg ?? "rejected value not instance of expected constructor");
-        }
-      } else if (!expected(err)) {
-        throw new Error(msg ?? "rejected value did not satisfy validator");
-      }
-    } else if (expected instanceof RegExp) {
-      if (!expected.test(String((err as Error)?.message ?? err))) {
-        throw new Error(msg ?? "rejected message did not match");
-      }
-    } else if (typeof expected === "string") {
-      if (!String((err as Error)?.message ?? err).includes(expected)) {
-        throw new Error(msg ?? "rejected message did not include expected text");
-      }
-    } else if (expected instanceof Error) {
-      if (((err as Error)?.message ?? String(err)) !== expected.message) {
-        throw new Error(msg ?? "rejected message did not match");
-      }
-    }
-  },
-};
 
-/** Remote BYOK engine: OpenAI-compatible completion (TDD).
- * Run: node --test frontend/tests/remote-engine.test.ts */
+/** Remote BYOK engine: OpenAI-compatible completion. */
 
-import { readFileSync } from "node:fs";
-import path from "node:path";
+import { readSource } from "../../../jest/source";
 
 import {
   createRemoteEngine,
@@ -100,13 +52,13 @@ describe("createRemoteEngine", () => {
       { messages: [{ role: "user", content: "hi" }] },
       { onToken: (t) => tokens.push(t) },
     );
-    assert.ok(seen.url.endsWith("/v1/chat/completions"));
-    assert.equal(seen.headers["Authorization"], "Bearer sk-key");
-    assert.equal(JSON.parse(seen.body).model, "qwen");
-    assert.deepEqual(tokens, ["hello there"]);
-    assert.equal(out.text, "hello there");
-    assert.equal(out.promptTokens, 4);
-    assert.equal(out.completionTokens, 2);
+    expect(seen.url.endsWith("/v1/chat/completions")).toBeTruthy();
+    expect(seen.headers["Authorization"]).toEqual("Bearer sk-key");
+    expect(JSON.parse(seen.body).model).toEqual("qwen");
+    expect(tokens).toEqual(["hello there"]);
+    expect(out.text).toEqual("hello there");
+    expect(out.promptTokens).toEqual(4);
+    expect(out.completionTokens).toEqual(2);
   });
 
   it("sends reasoning effort per provider family, and nothing without an override", async () => {
@@ -125,10 +77,7 @@ describe("createRemoteEngine", () => {
       { messages: [{ role: "user", content: "hi" }], reasoningEffort: "high" },
       noop,
     );
-    assert.deepEqual(
-      (bodies[0] as Record<string, unknown>)["chat_template_kwargs"],
-      { reasoning_effort: "high" },
-    );
+    expect((bodies[0] as Record<string, unknown>)["chat_template_kwargs"]).toEqual({ reasoning_effort: "high" });
 
     const openrouter = createRemoteEngine(
       { ...provider(), providerType: "openrouter" },
@@ -139,13 +88,13 @@ describe("createRemoteEngine", () => {
       { messages: [{ role: "user", content: "hi" }], reasoningEffort: "low" },
       noop,
     );
-    assert.equal((bodies[1] as Record<string, unknown>)["reasoning_effort"], "low");
-    assert.equal("chat_template_kwargs" in (bodies[1] as object), false);
+    expect((bodies[1] as Record<string, unknown>)["reasoning_effort"]).toEqual("low");
+    expect("chat_template_kwargs" in (bodies[1] as object)).toEqual(false);
 
     await custom.completion({ messages: [{ role: "user", content: "hi" }] }, noop);
     const none = bodies[2] as Record<string, unknown>;
-    assert.equal("reasoning_effort" in none, false);
-    assert.equal("chat_template_kwargs" in none, false);
+    expect("reasoning_effort" in none).toEqual(false);
+    expect("chat_template_kwargs" in none).toEqual(false);
   });
 
   it("projects message tool_calls to engine calls with fallback ids", async () => {
@@ -169,11 +118,11 @@ describe("createRemoteEngine", () => {
       { messages: [{ role: "user", content: "x" }] },
       { onToken: () => {} },
     );
-    assert.equal(out.toolCalls.length, 2);
-    assert.equal(out.toolCalls[0].id, "c1");
-    assert.equal(out.toolCalls[0].name, "calculate");
-    assert.equal(out.toolCalls[1].name, "datetime");
-    assert.ok(out.toolCalls[1].id.length > 0);
+    expect(out.toolCalls.length).toEqual(2);
+    expect(out.toolCalls[0].id).toEqual("c1");
+    expect(out.toolCalls[0].name).toEqual("calculate");
+    expect(out.toolCalls[1].name).toEqual("datetime");
+    expect(out.toolCalls[1].id.length > 0).toBeTruthy();
   });
 
   it("marks a length-capped remote turn as stopped, but NOT context-full", async () => {
@@ -190,11 +139,11 @@ describe("createRemoteEngine", () => {
       { messages: [{ role: "user", content: "x" }] },
       { onToken: () => {} },
     );
-    assert.equal(out.stoppedEarly, true);
-    assert.equal(out.contextFull, false);
-    assert.equal(out.interrupted, false);
+    expect(out.stoppedEarly).toEqual(true);
+    expect(out.contextFull).toEqual(false);
+    expect(out.interrupted).toEqual(false);
     // No invented timings: the endpoint reported none.
-    assert.equal(out.timings, undefined);
+    expect(out.timings).toEqual(undefined);
   });
 
   it("leaves a normally-finished remote turn unflagged", async () => {
@@ -208,8 +157,8 @@ describe("createRemoteEngine", () => {
       { messages: [{ role: "user", content: "x" }] },
       { onToken: () => {} },
     );
-    assert.equal(out.stoppedEarly, false);
-    assert.equal(out.contextFull, false);
+    expect(out.stoppedEarly).toEqual(false);
+    expect(out.contextFull).toEqual(false);
   });
 
   it("survives a payload with no finish_reason at all", async () => {
@@ -223,7 +172,7 @@ describe("createRemoteEngine", () => {
       { messages: [{ role: "user", content: "x" }] },
       { onToken: () => {} },
     );
-    assert.equal(out.stoppedEarly, false);
+    expect(out.stoppedEarly).toEqual(false);
   });
 
   it("rejects a missing key before touching the network", async () => {
@@ -233,21 +182,15 @@ describe("createRemoteEngine", () => {
       return jsonResponse({});
     }) as typeof fetch;
     const engine = createRemoteEngine(provider(), async () => null, { fetchImpl });
-    await assert.rejects(
-      engine.completion({ messages: [{ role: "user", content: "x" }] }, { onToken: () => {} }),
-      /key is required/,
-    );
-    assert.equal(calls, 0);
+    await expect(engine.completion({ messages: [{ role: "user", content: "x" }] }, { onToken: () => {} })).rejects.toThrow(/key is required/);
+    expect(calls).toEqual(0);
   });
 
   it("maps HTTP failures to errors", async () => {
     const fetchImpl = (async () =>
       jsonResponse({ error: "nope" }, 401)) as typeof fetch;
     const engine = createRemoteEngine(provider(), async () => "k", { fetchImpl });
-    await assert.rejects(
-      engine.completion({ messages: [{ role: "user", content: "x" }] }, { onToken: () => {} }),
-      /401/,
-    );
+    await expect(engine.completion({ messages: [{ role: "user", content: "x" }] }, { onToken: () => {} })).rejects.toThrow(/401/);
   });
 
   it("stopCompletion aborts the in-flight request", async () => {
@@ -270,8 +213,8 @@ describe("createRemoteEngine", () => {
     // Let the async key lookup settle so the fetch is in flight first.
     await new Promise((r) => setTimeout(r, 10));
     await engine.stopCompletion();
-    assert.ok(observed !== null && (observed as AbortSignal).aborted);
-    await assert.rejects(pending, /abort|cancel/i);
+    expect(observed !== null && (observed as AbortSignal).aborted).toBeTruthy();
+    await expect(pending).rejects.toThrow(/abort|cancel/i);
   });
 });
 
@@ -306,13 +249,13 @@ describe("request timeout", () => {
       { messages: [{ role: "user", content: "x" }] },
       { onToken: () => {} },
     );
-    await assert.rejects(pending, /abort/i);
+    await expect(pending).rejects.toThrow(/abort/i);
     const elapsed = Date.now() - started;
     // Fires (not the 120s default) and not instantly (not zero/negative):
     // the injected 60ms is what armed the timer.
-    assert.ok(elapsed >= 30, `aborted too early: ${elapsed}ms`);
-    assert.ok(elapsed < 5000, `aborted too late: ${elapsed}ms`);
-    assert.ok(signal()?.aborted);
+    expect(elapsed >= 30).toBeTruthy();
+    expect(elapsed < 5000).toBeTruthy();
+    expect(signal()?.aborted).toBeTruthy();
   });
 
   it("a completed turn is unaffected by the timer", async () => {
@@ -333,10 +276,10 @@ describe("request timeout", () => {
       { messages: [{ role: "user", content: "x" }] },
       { onToken: () => {} },
     );
-    assert.equal(out.text, "ok");
+    expect(out.text).toEqual("ok");
     // The finally clears the timer; nothing aborts a finished turn.
     await new Promise((r) => setTimeout(r, 60));
-    assert.ok(observed !== null && !(observed as AbortSignal).aborted);
+    expect(observed !== null && !(observed as AbortSignal).aborted).toBeTruthy();
   });
 
   it("falls back to the default when the value is non-positive or non-finite", async () => {
@@ -351,20 +294,20 @@ describe("request timeout", () => {
     );
     // A zero timeout would abort instantly; the default (120s) must win.
     await new Promise((r) => setTimeout(r, 30));
-    assert.ok(signal() !== null && !signal()!.aborted);
+    expect(signal() !== null && !signal()!.aborted).toBeTruthy();
     await engine.stopCompletion();
-    await assert.rejects(pending, /abort/i);
+    await expect(pending).rejects.toThrow(/abort/i);
   });
 
   it("normalizeTimeoutMs is the one rule: finite and positive, else unset", () => {
-    assert.equal(normalizeTimeoutMs(120_000), 120_000);
-    assert.equal(normalizeTimeoutMs(undefined), undefined);
-    assert.equal(normalizeTimeoutMs(0), undefined);
-    assert.equal(normalizeTimeoutMs(-1), undefined);
-    assert.equal(normalizeTimeoutMs(NaN), undefined);
-    assert.equal(normalizeTimeoutMs(Infinity), undefined);
-    assert.equal(normalizeTimeoutMs("120000"), undefined);
-    assert.equal(normalizeTimeoutMs(null), undefined);
+    expect(normalizeTimeoutMs(120_000)).toEqual(120_000);
+    expect(normalizeTimeoutMs(undefined)).toEqual(undefined);
+    expect(normalizeTimeoutMs(0)).toEqual(undefined);
+    expect(normalizeTimeoutMs(-1)).toEqual(undefined);
+    expect(normalizeTimeoutMs(NaN)).toEqual(undefined);
+    expect(normalizeTimeoutMs(Infinity)).toEqual(undefined);
+    expect(normalizeTimeoutMs("120000")).toEqual(undefined);
+    expect(normalizeTimeoutMs(null)).toEqual(undefined);
   });
 });
 
@@ -389,7 +332,7 @@ describe("remote prompt occupancy (C3)", () => {
       prompt_tokens: 10,
       prompt_tokens_details: { cached_tokens: 4 },
     });
-    assert.equal(out.promptTokens, 10);
+    expect(out.promptTokens).toEqual(10);
   });
 
   it("reads cached_tokens on its own when the server omits prompt_tokens", async () => {
@@ -398,7 +341,7 @@ describe("remote prompt occupancy (C3)", () => {
     const out = await occupancy({
       prompt_tokens_details: { cached_tokens: 4 },
     });
-    assert.equal(out.promptTokens, 4);
+    expect(out.promptTokens).toEqual(4);
   });
 });
 
@@ -406,14 +349,9 @@ describe("timeout wiring", () => {
   it("the store passes the stored provider timeout into the engine options", () => {
     // The seam is RemoteEngineOptions.timeoutMs; without this line the
     // stored value never reaches the abort timer.
-    const source = readFileSync(
+    const source = readSource(
       "store/chat/index.ts",
-      "utf8",
     );
-    assert.match(
-      source,
-      /createRemoteEngine\(\s*provider,\s*getKey,\s*\{\s*timeoutMs:\s*provider\.timeoutMs\s*\}\s*\)/,
-      "createRemote must forward provider.timeoutMs to the engine",
-    );
+    expect(source).toMatch(/createRemoteEngine\(\s*provider,\s*getKey,\s*\{\s*timeoutMs:\s*provider\.timeoutMs\s*\}\s*\)/);
   });
 });

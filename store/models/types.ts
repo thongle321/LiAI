@@ -33,6 +33,10 @@ export interface HFSearchFilters {
 export interface CatalogSlice {
   models: ModelSpec[];
   presets: PresetModel[];
+  /** Session-only: presets dismissed from "Available to Download".
+   *  PocketPal's removeModelFromList is an in-memory splice too — a
+   *  dismissed preset returns on the next launch (ModelStore.ts:1004). */
+  dismissedPresetIds: string[];
   searchResults: HFModelSearchResult[];
   searchLoading: boolean;
   searchLoadingMore: boolean;
@@ -44,6 +48,8 @@ export interface CatalogSlice {
   searchFilters: HFSearchFilters;
 
   loadPresets: () => Promise<void>;
+  /** Drop a preset from "Available to Download" until restart or reset. */
+  dismissPreset: (presetId: string) => void;
   loadSearchFilters: () => Promise<void>;
   /** Runs the search for `query` with the current filters, replacing the
    *  results. An empty query is a real search (PocketParity): the Hub

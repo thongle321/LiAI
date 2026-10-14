@@ -9,9 +9,32 @@
  * `realScreenHeight - topInset` (topInset = the status-bar height when
  * edge-to-edge, which this app always is at targetSdk 36), so tall sheets
  * stop below the status bar by construction — no hand-rolled height math.
- * TrueSheet owns insets, keyboard avoidance and gestures natively.
  *
- * Two learnings from the community-sheet era, kept or adapted:
+ * LAYOUT IS POCKETPAL'S, VERBATIM: Sheet.tsx renders THREE PLAIN CHILDREN
+ * in normal flex flow inside the sheet's content view — a header row, the
+ * scroller, then the action row. Nothing is absolutely positioned, there
+ * is no native footer, and no native header slot. The bar is pinned by
+ * the same thing that pins it in the reference: it is the last child of a
+ * column whose scroller sits above it.
+ *
+ *   TrueSheet, one detent: auto
+ *     View         header: title + close — never scrolls away
+ *     ScrollView   the ONLY scroller
+ *     View         actions: pinned below the scroller
+ *
+ * The reference is pocketpal-ai src/components/Sheet/Sheet.tsx plus its
+ * Actions.tsx; this app's Sheet is the same three children. Nothing about it needs native support: TrueSheet's content
+ * view is a plain RN column when neither `style` nor `scrollable` is
+ * passed (TrueSheet.tsx:569-573), and `contentHeight` — the base of the
+ * 'auto' detent — is the measured height of that whole column
+ * (TrueSheetDetentCalculator.kt:61: contentHeight + headerHeight +
+ * contentBottomInset). Native `header`/`footer` slots and
+ * `footerOptions.keyboardOffset` are deliberately unused: with them the
+ * bar is absolute (TrueSheet.tsx styles.footer) and needs a measured
+ * reserve plus keyboard tuning; in-flow it cannot overlap the body, so it
+ * needs neither.
+ *
+ * Two learnings from the community-sheet era, kept:
  *
  * - Scrollable bodies keep `grow`, never `flex-1`: Uniwind compiles
  *   flex-1 to native `flex: 1`, which Yoga resolves as flexBasis 0% — and
@@ -24,50 +47,74 @@
  *   contentHeight — which IS the 'auto' detent — reports the screen, and
  *   auto collapses to fullscreen (device-observed: every sheet opened
  *   near-full). With it off the content view wraps, and `auto` measures
- *   the real content; each body then carries its own `maxHeight` bound so
+ *   the real content. The body then carries its own `maxHeight` bound so
  *   content taller than the surface scrolls inside a bounded box instead
- *   of being clipped.
- * - v3's auto detent does NOT include the absolute footer (only `peek`
- *   does: TrueSheetDetentCalculator.kt:51), so a body with a footer must
- *   reserve the footer's measured height as bottom padding.
- * - Keyboard avoidance comes from the NATIVE side: the dialog resizes
- *   above the keyboard (adjustResize), so the body must NOT pad or
- *   scroll for the keyboard itself. A KeyboardAwareScrollView did both:
- *   it added keyboard-height padding to the content, auto sized the sheet
- *   to content+pad, and its scroll-to-focus landed inside that padding —
- *   short bodies VOIDED (title, blurb, input all gone) the moment the
- *   keyboard opened, and every keystroke re-measured pad+scroll (stutter
- *   and flicker, device-observed). Tall bodies only scrolled within
- *   range, which is exactly why the HF sheet "worked" and the API-key
- *   sheet did not.
+ *   of being clipped with no way to scroll to it.
  *
- * - Actions live in the SCROLL BODY, never TrueSheet's native `footer`
- *   (grill Q1/Q2): the native footer lifts above the keyboard without
- *   shrinking the body (TrueSheetViewController.positionFooter), so a
- *   footer floats over scrolled content — and no JS channel hears the
- *   dialog keyboard, so no bound can hold. In-body buttons are
- *   pixel-identical when the keyboard is closed.
+ * - Keyboard avoidance comes from the NATIVE side: MainActivity is
+ *   `windowSoftInputMode="adjustResize"`
+ *   (android/app/src/main/AndroidManifest.xml:29), so the dialog resizes
+ *   above the keyboard and the body must NOT pad or scroll for the
+ *   keyboard itself. A KeyboardAwareScrollView did both (device-observed:
+ *   short bodies VOIDED their whole content the moment the keyboard
+ *   opened, and every keystroke re-measured pad+scroll).
  *
- * The shared `footer` prop stays wired to TrueSheet's native footer (the
- * wrapper keeps its safe-area pad inside) for sheets without text
- * inputs; every sheet that hosts an input keeps its actions in-body
- * instead, and footer-less bodies reserve the safe-area bottom so those
- * in-body actions always clear the nav bar.
+ * THE BODY BOUND IS THE SURFACE BOX MINUS THE TWO SIBLINGS. The header and
+ * the actions bar are both measured, because the 'auto' detent is the sum
+ * of all three: a body capped at the full surface box would make the
+ * sheet's last rows — and the pinned bar — extend past what TrueSheet
+ * clamps the surface to. Measured heights are the reserve; both slots
+ * report 0 on the first layout, exactly as the old native footer did.
+ *
+ * `scrollable={false}` is for a body that IS the scroller (a paginated
+ * FlatList): a VirtualizedList nested in a ScrollView warns and never
+ * paginates. Such a body keeps its own padded, bounded wrapper around
+ * `children` — the wrapper wraps the BODY, not the header.
  */
 
-import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
-import { Pressable, ScrollView, StatusBar, Text, View, useWindowDimensions } from "react-native";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
+import {
+  Pressable,
+  ScrollView,
+  StatusBar,
+  Text,
+  View,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+} from "react-native";
 import { TrueSheet, type TrueSheet as TrueSheetType } from "@lodev09/react-native-true-sheet";
 import { X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors } from "../themes/tokens.ts";
 
+/** An in-flow slot's measured height.
+ *
+ *  The header and the actions bar are siblings of the scroller, so their
+ *  heights are part of what the sheet measures — and the body's `maxHeight`
+ *  has to be the surface box minus both. Both start at 0, as the old
+ *  native footer's measured height did. */
+function useSlotHeight(): [number, (event: LayoutChangeEvent) => void] {
+  const [height, setHeight] = useState(0);
+  const onLayout = useCallback((event: LayoutChangeEvent) => {
+    const next = event.nativeEvent.layout.height;
+    setHeight((prev) => (prev === next ? prev : next));
+  }, []);
+  return [height, onLayout];
+}
+
 export function Sheet({
   visible,
   onClose,
   title,
-  footer,
+  actions,
   scrollable = true,
   titleEllipsize = false,
   children,
@@ -77,8 +124,10 @@ export function Sheet({
   visible: boolean;
   onClose: () => void;
   title: string;
-  /** Pinned below the scrolling body, e.g. a reset action. */
-  footer?: ReactNode;
+  /** Pinned below the scrolling body, e.g. a reset action. PocketPal's
+   *  `Sheet.Actions`: a plain in-flow row, the last child of the sheet's
+   *  column. Sheets without commit actions pass none. */
+  actions?: ReactNode;
   /** false for a body that IS the scroller (a paginated FlatList): a
    *  VirtualizedList nested in a ScrollView warns and never paginates. */
   scrollable?: boolean;
@@ -112,9 +161,8 @@ export function Sheet({
   // below the surface instead of being clipped at the top with no way to
   // scroll to it. At-most: short content still wraps to its own height.
   const bodyMaxHeight = windowHeight - topInset - 16;
-  // v3's auto detent ignores the absolute footer, so the body reserves its
-  // measured height; measured at runtime rather than guessed.
-  const [footerHeight, setFooterHeight] = useState(0);
+  const [headerHeight, onHeaderLayout] = useSlotHeight();
+  const [actionsHeight, onActionsLayout] = useSlotHeight();
 
   useEffect(() => {
     if (visible) {
@@ -131,8 +179,21 @@ export function Sheet({
     }
   }, [visible]);
 
+  // One bound for both body branches: the surface box minus the two
+  // in-flow siblings. Both report 0 before their first layout, so a body
+  // that laid out first still starts with the full box. Clamped at zero:
+  // on a very short window with a tall bar the subtraction can go negative,
+  // and a negative maxHeight is meaningless to Yoga.
+  const bodyBound = Math.max(0, bodyMaxHeight - headerHeight - actionsHeight);
+
+  /** The fixed header. PocketPal's Sheet.tsx header row: title, close,
+   *  one row. It is the FIRST of the three children — a sibling of the
+   *  scroller, not a row inside it — so it never scrolls away. */
   const header = (
-    <View className="flex-row items-center justify-between px-4 pb-2 pt-4">
+    <View
+      onLayout={onHeaderLayout}
+      className="flex-row items-center justify-between px-4 pb-2 pt-4"
+    >
       <Text
         className="flex-1 mr-2 font-sans-semibold text-body-lg text-primary-text"
         numberOfLines={titleEllipsize ? 1 : undefined}
@@ -149,6 +210,49 @@ export function Sheet({
       >
         <X size={20} color={colors.secondaryText} />
       </Pressable>
+    </View>
+  );
+
+  /** The pinned action row — PocketPal's Sheet.Actions, in flow, last
+   *  child. Its own `10 + insets.bottom` is the nav-bar clearance, so the
+   *  body above it pads nothing: one owner per inset, never two.` */
+  const actionsBar = actions ? (
+    <View
+      onLayout={onActionsLayout}
+      className="px-4 pt-2.5 gap-2.5"
+      style={{ paddingBottom: 10 + insets.bottom }}
+    >
+      {actions}
+    </View>
+  ) : null;
+
+  /** The scroller, or — for a body that is itself a virtualized list —
+   *  the padded, bounded wrapper the app has always used around
+   *  `children`. The wrapper wraps the BODY; the header and the bar are
+   *  its siblings, never inside it. */
+  const body = scrollable ? (
+    <ScrollView
+      testID={testID}
+      className="grow"
+      contentContainerClassName="px-4 pb-4"
+      keyboardShouldPersistTaps="handled"
+      style={{
+        maxHeight: Math.max(0, bodyBound),
+        // No keyboard pad: the window resizes above the keyboard natively.
+        // And no nav-bar pad when a bar is present — the bar itself clears
+        // the nav bar, so a body pad under it would only be dead space.
+        paddingBottom: actions ? 0 : insets.bottom,
+      }}
+    >
+      {children}
+    </ScrollView>
+  ) : (
+    <View
+      testID={testID}
+      className="grow px-4"
+      style={{ maxHeight: Math.max(0, bodyBound), paddingBottom: actions ? 0 : insets.bottom }}
+    >
+      {children}
     </View>
   );
 
@@ -186,20 +290,6 @@ export function Sheet({
       // it to the behavior in both the setter and sheet creation. So the
       // auto-detent measurement above stays intact.
       scrollableOptions={{ scrollingExpandsSheet: false }}
-      footer={
-        footer ? (
-          <View
-            className="px-4 pt-2"
-            // Device-observed: TrueSheet's footer container did NOT clear
-            // this phone's 3-button nav bar, so the pinned action rendered
-            // behind the system buttons and could not be tapped.
-            style={{ paddingBottom: insets.bottom }}
-            onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
-          >
-            {footer}
-          </View>
-        ) : undefined
-      }
       onDidDismiss={() => {
         presentedRef.current = false;
         if (dismissedRef.current) return;
@@ -207,40 +297,9 @@ export function Sheet({
         onClose();
       }}
     >
-      {scrollable ? (
-        <ScrollView
-          testID={testID}
-          className="grow"
-          contentContainerClassName="px-4 pb-4"
-          keyboardShouldPersistTaps="handled"
-          style={{
-            maxHeight: bodyMaxHeight,
-            // No footer in input sheets (grill Q1/Q2): the row at the
-            // body's end carries the actions, and this pad keeps them
-            // above the nav bar. Footer sheets keep their measured
-            // reserve instead.
-            paddingBottom: footer ? footerHeight : insets.bottom,
-          }}
-        >
-          {header}
-          {children}
-        </ScrollView>
-      ) : (
-        <View
-          testID={testID}
-          className="grow px-4"
-          style={{
-            maxHeight: bodyMaxHeight,
-            // Was `undefined` with no footer, which dropped the nav-bar
-            // inset entirely for every scrollable={false} sheet (hf search,
-            // hf details). Same reserve as the ScrollView branch above.
-            paddingBottom: footer ? footerHeight : insets.bottom,
-          }}
-        >
-          {header}
-          {children}
-        </View>
-      )}
+      {header}
+      {body}
+      {actionsBar}
     </TrueSheet>
   );
 }

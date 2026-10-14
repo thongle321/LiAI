@@ -275,6 +275,50 @@ export function ModelSettingsSheet({
       onClose={onClose}
       title="Model Settings"
       testID="model-settings-sheet"
+      actions={
+        /* Pinned action row — PocketPal's Sheet.Actions (ModelSettingsSheet.tsx
+           in the reference). One row, right-aligned: the text-weight Reset
+           and Cancel share the left, the contained Save Changes takes the
+           right. */
+        <View className="flex-row items-center justify-between gap-2.5">
+          <View className="flex-row items-center gap-2.5">
+            {!isRemote ? (
+              <Pressable
+                onPress={handleReset}
+                className="min-h-12 justify-center"
+                accessibilityRole="button"
+                accessibilityLabel="Reset model settings"
+              >
+                <Text className="text-center font-sans text-body-lg text-secondary-text">
+                  Reset
+                </Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={onClose}
+              className="min-h-12 justify-center"
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+            >
+              <Text className="text-center font-sans text-body-lg text-primary">
+                Cancel
+              </Text>
+            </Pressable>
+          </View>
+          {!isRemote ? (
+            <Pressable
+              onPress={handleSave}
+              className="btn btn--primary"
+              accessibilityRole="button"
+              accessibilityLabel="Save Changes"
+            >
+              <Text className="font-sans-semibold text-body-lg text-on-primary">
+                Save Changes
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      }
     >
       {/* Local models only (PocketPal's !isRemote guards). A remote
           endpoint has no GGUF to name, prompt or template — only its
@@ -503,48 +547,6 @@ export function ModelSettingsSheet({
           </>
         ) : null}
       </View>
-
-      {/* Footer actions in the scroll body, never TrueSheet's native
-          footer: this sheet hosts inputs, and the native footer lifts
-          above the keyboard without shrinking the body (Sheet.tsx).
-          PocketPal's arrangement: the text-weight Reset and Cancel share
-          one row, then a contained Save Changes on its own line. */}
-      <View className="mt-6 flex-row items-center gap-3">
-        {!isRemote ? (
-          <Pressable
-            onPress={handleReset}
-            className="min-h-12 flex-1 justify-center"
-            accessibilityRole="button"
-            accessibilityLabel="Reset model settings"
-          >
-            <Text className="text-center font-sans text-body-lg text-secondary-text">
-              Reset
-            </Text>
-          </Pressable>
-        ) : null}
-        <Pressable
-          onPress={onClose}
-          className="min-h-12 flex-1 justify-center"
-          accessibilityRole="button"
-          accessibilityLabel="Cancel"
-        >
-          <Text className="text-center font-sans text-body-lg text-primary">
-            Cancel
-          </Text>
-        </Pressable>
-      </View>
-      {!isRemote ? (
-        <Pressable
-          onPress={handleSave}
-          className="btn btn--primary mt-3"
-          accessibilityRole="button"
-          accessibilityLabel="Save Changes"
-        >
-          <Text className="font-sans-semibold text-body-lg text-on-primary">
-            Save Changes
-          </Text>
-        </Pressable>
-      ) : null}
 
       <ChatTemplateDialog
         visible={templateDialogOpen}

@@ -25,7 +25,7 @@ const ROOTS = ["app", "components"];
 const ALLOWED = new Map<string, string[]>([
   ["app/(drawer)/(tabs)/chat.tsx", ["in-conversation search"]],
   ["components/VisionOverlays.tsx", ["vision draft input (gated on modelReady)"]],
-  ["components/models/HFModelSearch.tsx", ["model search box"]],
+  ["components/models/HFSearchView.tsx", ["model search box"]],
   ["components/chat/SessionList.tsx", ["new-conversation title"]],
 ]);
 

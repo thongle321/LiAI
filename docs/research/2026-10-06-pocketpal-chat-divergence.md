@@ -87,7 +87,7 @@ backlog rather than two competing lists.
 | Remote `contextFull` always false | `remote-engine.ts:133-143` | A false "context full" banner is worse than none |
 | Session mode hidden for unsent conversations | `GenerationSettingsSheet.tsx:104-107` | No row to override yet |
 | Import not gated on `hasSession` | `components/chat/ChatMenu.tsx` | Restoring into an empty app is the main case |
-| Actions in the scroll body, not a native footer | `GenerationSettingsSheet.tsx` | The native footer lifts over scrolled content |
+| Pinned action bar, not a native footer | `Sheet.tsx` | Reversed the earlier divergence: PocketPal's own `Sheet.Actions` is a plain in-flow View, and a native footer is absolute and never measured by the `auto` detent, so it floats over scrolled content. Recorded in `tests/sheet.test.ts` |
 | `modalAvailable()` returns constant `false` | `store/chat/send.ts:22-32` | Deliberate single flip point until projector pairing exists |
 | Remote vision cap stays `unknown` when `/props` describes a model but omits `modalities` | `lib/models/remote-api.ts` (`asRecord` guard) | PocketPal writes `supportsVision=false` there (`props.ts:109`); absence can't distinguish "no vision" from "a server that never reports modalities", and an absent RemoteCaps field is never coerced to false. No consumer yet. Decision: `issues/06-remote-caps-probe.md` |
 

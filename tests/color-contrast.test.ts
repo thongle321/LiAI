@@ -118,6 +118,7 @@ test("every text-on-surface pair clears 4.5:1", () => {
     "secondary text / slate": token(css, "secondary-text"),
     "secondary text muted": token(css, "secondary-text-muted"),
     "error": token(css, "error"),
+    "success deep (download label)": token(css, "success-deep"),
   };
   const failures: string[] = [];
   for (const [inkName, ink] of Object.entries(inks)) {
@@ -134,6 +135,7 @@ test("labels on their own fills clear 4.5:1", () => {
   const pairs: Array<[string, string, string]> = [
     ["on-primary label on primary fill", token(css, "on-primary"), token(css, "primary")],
     ["error label on error fill", token(css, "on-primary"), token(css, "error")],
+    ["success-deep label on success-fill", token(css, "success-deep"), token(css, "success-fill")],
   ];
   const failures = pairs
     .map(([name, fg, bg]) => ({ name, r: contrast(fg, bg) }))
@@ -143,6 +145,28 @@ test("labels on their own fills clear 4.5:1", () => {
 });
 
 // --------------------------------------------------------- every non-text role
+
+test("the accent hues each carry two steps, never one collapsed role", () => {
+  // The signal's split is asserted above. Same rule for the other two hues
+  // that do more than one job: the mark step must clear 3:1 (it marks) and
+  // must NOT clear 4.5:1 (or the two roles have merged and a site will
+  // start using the mark as text). The download green is the newest pair.
+  for (const [hue, mark, deep] of [
+    ["red", "error-mark", "error"],
+    ["green", "success-mark", "success-deep"],
+  ] as const) {
+    const onWhite = contrast(token(css, mark), token(css, "surface-1"));
+    assert.ok(
+      onWhite >= AA_NON_TEXT,
+      `${hue} mark step ${token(css, mark)} clears only ${onWhite}:1, under the 3:1 non-text floor`,
+    );
+    assert.ok(
+      onWhite < AA_TEXT,
+      `${hue} mark step ${token(css, mark)} also clears 4.5:1 — the two steps have collapsed into one role`,
+    );
+    assert.notEqual(token(css, mark), token(css, deep), `${hue}'s two steps must differ`);
+  }
+});
 
 test("every mark role clears the 3:1 non-text floor", () => {
   // The accent marks only. `--color-border` is deliberately NOT here: a
@@ -155,6 +179,8 @@ test("every mark role clears the 3:1 non-text floor", () => {
     ["primary mark on paper", contrast(token(css, "primary-mark"), token(css, "base"))],
     ["error mark on white", contrast(token(css, "error-mark"), token(css, "surface-1"))],
     ["primary text step as a mark on white", contrast(token(css, "primary"), token(css, "surface-1"))],
+    ["success mark (download border) on white", contrast(token(css, "success-mark"), token(css, "surface-1"))],
+    ["success mark (download border) on its own fill", contrast(token(css, "success-mark"), token(css, "success-fill"))],
   ];
   const failures = marks
     .map(([name, r]) => ({ name, r }))
@@ -215,6 +241,9 @@ test("themes/tokens.ts mirrors global.css exactly", () => {
     ["onPrimary", token(css, "on-primary")],
     ["error", token(css, "error")],
     ["errorMark", token(css, "error-mark")],
+    ["successFill", token(css, "success-fill")],
+    ["successMark", token(css, "success-mark")],
+    ["successDeep", token(css, "success-deep")],
     ["surface1", token(css, "surface-1")],    ["surface2", token(css, "surface-2")],
     ["surface3", token(css, "surface-3")],
     ["base", token(css, "base")],

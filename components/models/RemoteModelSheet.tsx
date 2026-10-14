@@ -102,7 +102,8 @@ export function RemoteModelSheet({
       title="Add API Provider"
       // Pinned, so Add and Cancel stay reachable with the keyboard up —
       // which is the whole reason this surface was full-height before.
-      footer={
+      // PocketPal's RemoteModelSheet does the same with Sheet.Actions.
+      actions={
         <View className="flex-row gap-2">
           <Pressable
             onPress={onClose}

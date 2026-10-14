@@ -9,7 +9,7 @@
 
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { ChevronDown, ChevronUp } from "lucide-react-native";
+import { ChevronDown, ChevronUp, X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
 import { useFreeSpacePoll } from "../../hooks/useStorageDisclosure.ts";
@@ -26,7 +26,9 @@ import {
   ModelTypeIcon,
   formatBytes,
   isProgressVisible,
+  confirmRemoveModel,
 } from "./ModelBits.tsx";
+import { ICON_BUTTON, ICON_DESTRUCTIVE } from "./ModelCard.tsx";
 
 export function PresetModelCard({
   preset,
@@ -40,6 +42,7 @@ export function PresetModelCard({
   const pauseModelDownload = useModelStore((s) => s.pauseModelDownload);
   const resumeModelDownload = useModelStore((s) => s.resumeModelDownload);
   const cancelModelDownload = useModelStore((s) => s.cancelModelDownload);
+  const dismissPreset = useModelStore((s) => s.dismissPreset);
 
   // Per-file states by exact spec id (one shared status smeared every row).
   const fileState = (file: PresetModelFile) => presetFileState(models, preset.id, file);
@@ -56,6 +59,19 @@ export function PresetModelCard({
   // five files must not ask the filesystem the same question five times.
   // Only while it is expanded — a collapsed card shows no rows to inform.
   const { freeBytes, checked } = useFreeSpacePoll(expanded);
+
+  // PocketParity: during a transfer the card offers only Cancel — the
+  // remove button hides so nothing can drop the list entry mid-download.
+  const transferring = preset.files.some((f) => {
+    const s = fileState(f).status;
+    return s === "downloading" || s === "paused";
+  });
+
+  /** PocketParity: remove asks first — the shared confirm, same wording
+   *  as the bookmark card's X and the HF file row. */
+  function confirmRemove(): void {
+    confirmRemoveModel(() => dismissPreset(preset.id));
+  }
 
   return (
     <View className="mb-4 bg-surface-1 border border-border rounded-lg overflow-hidden">
@@ -79,6 +95,21 @@ export function PresetModelCard({
             </View>
             <Text className="font-sans text-body-sm text-secondary-text">by {preset.author}</Text>
           </View>
+          {/* PocketParity: the card X (remove-model-button). Dismissal is
+              session-only list surgery — nothing on disk goes away — so
+              the glyph is X, not trash, on the shared destructive ground.
+              It sits INSIDE the header Pressable like this card's Cancel
+              buttons already do: a nested Pressable takes the tap itself. */}
+          {!transferring ? (
+            <Pressable
+              onPress={confirmRemove}
+              className={`${ICON_BUTTON} ${ICON_DESTRUCTIVE}`}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${preset.name}`}
+            >
+              <X size={16} color={colors.error} />
+            </Pressable>
+          ) : null}
           {expanded ? <ChevronUp size={20} color={colors.secondaryText} /> : <ChevronDown size={20} color={colors.secondaryText} />}
         </View>
 
@@ -106,9 +137,10 @@ export function PresetModelCard({
               started there gets its progress and Cancel below. */}
         </View>
 
-        {/* Outside the header Pressable on purpose: the Cancel button is
-            full-width now, and nested inside it a tap would also toggle the
-            card — cancelling a download and expanding it at once. */}
+        {/* This block is INSIDE the header Pressable: a nested Pressable
+            takes its own tap, so cancelling a download does not also
+            expand the card. (The comment that used to sit here claimed
+            the opposite while the code already nested it.) */}
         {(showCardProgress || downloadingSpecId) && (
           <View className="px-5 pb-4">
             {showCardProgress ? (

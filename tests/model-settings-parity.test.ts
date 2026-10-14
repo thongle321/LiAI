@@ -36,7 +36,7 @@ describe("the sheet never nests a scroller (the clip fix)", () => {
 });
 
 describe("PocketPal section order", () => {
-  it("runs Model Name → tokens → system prompt → template → stop words → multimodal → reasoning → footer", () => {
+  it("runs Model Name → tokens → system prompt → template → stop words → multimodal → reasoning", () => {
     const order = [
       "Model Name",
       // No "Token settings" heading — the reference has none; the token
@@ -53,7 +53,6 @@ describe("PocketPal section order", () => {
       // component, so both now live in the sheet.
       "<ModelMultimodalSection",
       "Reasoning model",
-      "Save Changes",
     ];
     let at = -1;
     for (const marker of order) {
@@ -64,6 +63,10 @@ describe("PocketPal section order", () => {
     // The reasoning title also exists in the effort module; the SHEET's
     // own title must be the one the order walked past.
     assert.ok(SHEET_CODE.indexOf("Model Name") < SHEET_CODE.indexOf("Reasoning model"));
+    // The commit actions are NOT the last section of the body any more:
+    // they ride the pinned bar, PocketPal's Sheet.Actions, which is the
+    // `actions` prop on the shared Sheet (tests/sheet.test.ts pins it).
+    assert.match(SHEET, /actions=\{/);
   });
 });
 

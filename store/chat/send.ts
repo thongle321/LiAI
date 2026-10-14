@@ -10,6 +10,7 @@ import type { ChatMessage } from "../../types/chat.ts";
 import { newId } from "../../lib/chat/messages.ts";
 import type { SessionStore } from "../../lib/chat/session-store.ts";
 import { canSeeImages, loadModelState } from "../../lib/inference/mmproj.ts";
+import { useVoice } from "../voice.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
 function llmError(message: string): ApiError {
@@ -142,6 +143,9 @@ export function createSendSlice(
     // place that has to know a turn started.
     ctx.keepAwake(true);
     set({ turnStartedAt: Date.now() });
+    // A rerun reuses the bubble id: forget any spoken mark from the
+    // previous run, or the new reply would be silenced by it (ticket 05).
+    useVoice.getState().clearSpoken(opts.assistantId);
     // Ticket 03: each turn's tool-call token count starts from zero.
     ctx.toolTokens.turnStart();
     set({ toolTokenCount: 0 });
@@ -242,6 +246,32 @@ export function createSendSlice(
         ...(outcome.outcome !== undefined ? { outcome: outcome.outcome } : {}),
       });
       adoptSession(outcome.sessionId);
+      // Auto-speak: the finished reply, read aloud (ticket 05 / spec
+      // Q3 + Q14) — spoken once per message, only when the user opted
+      // in and the device passes the availability gate. Stopping first
+      // is what keeps a still-playing previous reply from talking over
+      // this one.
+      // voiceSpeak is imported lazily (expo-speech pulls expo-modules-core,
+      // whose .ts sources node cannot load) and a failed load means no
+      // auto-speak — the same degradation speakReply already has when the
+      // native module is missing.
+      const voice = useVoice.getState();
+      if (
+        voice.autoSpeak &&
+        voice.isTTSAvailable() &&
+        outcome.reply.trim() !== "" &&
+        voice.lastSpokenMessageId !== opts.assistantId
+      ) {
+        voice.markSpoken(opts.assistantId);
+        void import("../../lib/voiceSpeak.ts")
+          .then((m) => {
+            m.stopSpeaking();
+            m.speakReply(outcome.reply);
+          })
+          .catch(() => {
+            // No speech this turn; the reply still renders.
+          });
+      }
       set({ sending: false, turnStartedAt: null, pendingToolName: null });
       // Released with the turn. The `gen` guard above means a superseded
       // run never reaches this, so a NEW turn's lock is never stomped.
@@ -339,6 +369,9 @@ export function createSendSlice(
       // The partial reply stays in its bubble as the turn's text.
       ctx.streamGen += 1;
       ctx.stopEngine();
+      // Aborting the run aborts its audio too (ticket 05 / spec Q14):
+      // a half-spoken reply must not keep talking over the stop.
+      void useVoice.getState().stop();
       // Drop the wake lock HERE, not when the aborted run unwinds: the
       // engine teardown is exactly when the screen must not sleep, and
       // the `gen` guard keeps the unwinding run from touching it again.

@@ -4,7 +4,7 @@
  * The whole config lives in the PARENT's temp state and this dialog edits
  * it there; nothing persists until the outer sheet's "Save Changes". That
  * is PocketPal's model exactly (its dialog "Close" commits to temp state,
- * and the footer does the writing).
+ * and the pinned action bar does the writing).
  *
  * Picking a base template REPLACES the whole config — tokens, template,
  * system prompt, add-generation-prompt — because a preset is a bundle, not
@@ -43,6 +43,18 @@ export function ChatTemplateDialog({
       onClose={onClose}
       title="Edit Chat Template"
       testID="chat-template-dialog"
+      actions={
+        <Pressable
+          onPress={onClose}
+          className="btn btn--primary min-h-12 self-end"
+          accessibilityRole="button"
+          accessibilityLabel="Close chat template editor"
+        >
+          <Text className="font-sans-semibold text-body-md text-on-primary">
+            Close
+          </Text>
+        </Pressable>
+      }
     >
       <View className="gap-4">
         <PickerMenu
@@ -79,16 +91,6 @@ export function ChatTemplateDialog({
           autoCorrect={false}
           className="rounded-lg border border-border bg-surface-2 px-4 py-3 font-mono text-body-sm text-primary-text"
         />
-        <Pressable
-          onPress={onClose}
-          className="btn btn--primary min-h-12"
-          accessibilityRole="button"
-          accessibilityLabel="Close chat template editor"
-        >
-          <Text className="font-sans-semibold text-body-md text-on-primary">
-            Close
-          </Text>
-        </Pressable>
       </View>
     </Sheet>
   );

@@ -1,13 +1,34 @@
-/** TrueSheet migration guards: what the node tests can pin about the swap.
+/** Sheet layout guards: what node can pin about the shared Sheet's chrome.
  *
- * The layout contract the community sheet needed (definite child heights,
- * no flex-1 bodies without one, no snap points) belonged to a library
- * whose Material3 surface only rests at half/full. TrueSheet clamps every
- * detent to `realScreenHeight - topInset` natively
- * (TrueSheetViewController.kt:319-320, TrueSheetDetentCalculator.kt:88),
- * so the JS side carries no height math at all — and these guards pin
- * exactly that absence, plus the two things that must stay true across
- * the adapter: one sheet implementation, and one scroll-body rule.
+ * THE REVERSAL, recorded once, here, where the old decision lived.
+ *
+ * This file previously required the OPPOSITE of what it requires now. It
+ * used to assert "keeps actions in the scroll body, never the native
+ * footer" and to require callers to pass `insets.bottom` nowhere at all,
+ * because TrueSheet's native footer is absolutely positioned
+ * (TrueSheet.tsx `styles.footer`) and is NOT part of the 'auto' detent
+ * (TrueSheetDetentCalculator.kt:61 — `contentHeight + headerHeight +
+ * contentBottomInset`; `footerHeight` never appears in that branch), so a
+ * row passed to it had to be measured and reserved as body padding, and
+ * its lift above the keyboard could not be bounded from JS (device
+ * observed, three fixes deep, hence the earlier decision).
+ *
+ * The current arrangement is PocketPal's and needs none of that.
+ * pocketpal-ai/src/components/Sheet/Sheet.tsx + Actions.tsx renders THREE
+ * PLAIN IN-FLOW CHILDREN — a header row, the scroller, then the action
+ * row — and its pinned bar is a plain View with no `position: absolute`
+ * anywhere in that directory. The bar is pinned by FLEX FLOW: the last
+ * child of a column whose scroller sits above it. TrueSheet's content
+ * view is a plain RN column when neither `style` nor `scrollable` reaches
+ * it (TrueSheet.tsx:569-573), and `contentHeight` — the base of the 'auto'
+ * detent — is the measured height of that whole column, so all three
+ * children size the sheet together.
+ *
+ * Consequences the guards below pin: no native `footer`/`header` prop, no
+ * absolute positioning, the bar AFTER the body in render order, both body
+ * branches carrying the same `bodyBound` (= the surface box minus the two
+ * measured siblings), and every sheet with commit actions passing the bar
+ * instead of ending its scroll body with buttons.
  *
  * Run: node --test tests/sheet.test.ts
  */
@@ -23,15 +44,42 @@ function read(rel: string): string {
   return readFileSync(path.join(ROOT, rel), "utf8");
 }
 
+/** The shared Sheet's source with comments stripped: the guards assert on
+ *  code, and this file's own comments legitimately name `footer`,
+ *  `header`, `scrollable` and `absolute` while explaining why they are
+ *  absent. */
+function sheetCode(): string {
+  return read("components/Sheet.tsx")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "");
+}
+
 // Every sheet the app renders. GenerationSettingsSheet rides the shared
 // Sheet; the rest call it directly; none may import a sheet library itself.
 const SHEET_CALLERS = [
   "components/models/HFModelSearch.tsx",
   "components/models/RemoteModelSheet.tsx",
   "components/models/ModelSettingsSheet.tsx",
+  "components/models/ChatTemplateDialog.tsx",
+  "components/models/VisionDownloadSheet.tsx",
   "components/SearchSettings.tsx",
   "components/HfTokenSettings.tsx",
   "components/chat/GenerationSettingsSheet.tsx",
+  "components/chat/ModelPickerSheet.tsx",
+  "components/models/ProjectorSelectorSheet.tsx",
+];
+
+// Sheets with a commit-action row: their buttons belong in the pinned bar
+// (PocketPal puts every one of these in Sheet.Actions). Pickers and
+// per-row-action sheets are absent on purpose.
+const PINNED_ACTION_SHEETS = [
+  "components/models/ModelSettingsSheet.tsx",
+  "components/models/ChatTemplateDialog.tsx",
+  "components/HfTokenSettings.tsx",
+  "components/SearchSettings.tsx",
+  "components/chat/GenerationSettingsSheet.tsx",
+  "components/models/VisionDownloadSheet.tsx",
+  "components/models/RemoteModelSheet.tsx",
 ];
 
 describe("sheet library", () => {
@@ -61,11 +109,11 @@ describe("sheet library", () => {
   });
 
   it("keeps TrueSheet's detents honest", () => {
-    // Q2-A: ONE auto detent for every sheet — short sheets wrap their
-    // content, tall sheets grow and clamp natively to realScreenHeight -
-    // topInset (TrueSheetDetentCalculator.kt:88). A fixed fraction is
-    // what made every sheet read as fullscreen; 1.0 would fill to the
-    // status bar. No fractions, no second detent.
+    // ONE auto detent for every sheet — short sheets wrap their content,
+    // tall sheets grow and clamp natively to realScreenHeight - topInset
+    // (TrueSheetDetentCalculator.kt:88). A fixed fraction is what made
+    // every sheet read as fullscreen; 1.0 would fill to the status bar.
+    // No fractions, no second detent.
     const source = read("components/Sheet.tsx");
     assert.match(
       source,
@@ -85,51 +133,55 @@ describe("sheet library", () => {
     // flexBasis 0% — and a zero basis inside a capped container measured
     // the scroll view to zero, rendering a WHITE sheet. That cause was
     // observed and confirmed by experiment on a device, not guessed.
-    const sheet = read("components/Sheet.tsx");
-    const body = sheet.match(/<(?:KeyboardAware)?ScrollView[\s\S]*?>/);
+    const body = sheetCode().match(/<(?:KeyboardAware)?ScrollView[\s\S]*?>/);
     assert.ok(body, "the sheet's body must be a scroll view");
     assert.match(body[0], /className="grow"/, "the body must grow, not flex its basis");
     assert.doesNotMatch(body[0], /\bflex-1\b/, "flex-1 is flexBasis 0% and collapses the sheet");
   });
 
-  it("pins footers through the footer prop, never caller-side insets", () => {
-    // REGRESSION WAITING TO HAPPEN. The shared Sheet owns the footer's
-    // bottom spacing — the adapter pads the safe-area inset itself
-    // (device-observed: TrueSheet's native footer container did NOT clear
-    // this phone's 3-button nav, parking the pinned action behind the
-    // system buttons). A caller that ALSO pads insets.bottom would double
-    // it, so no caller may pass it; the wrapper's own pad is the one.
-    const sheet = read("components/Sheet.tsx");
-    assert.match(
+  it("pins the action row in flow — no native footer, no absolute", () => {
+    // The pinned bar is PocketPal's arrangement: an in-flow View rendered
+    // as the LAST of the sheet's three children. A native `footer` prop is
+    // absolute (TrueSheet.tsx styles.footer) and sits outside the measured
+    // content, which is what forced the old footerHeight reserve; a native
+    // `header` slot would move the header out of the column for no gain,
+    // since `contentHeight` already includes it. Neither may come back.
+    const sheet = sheetCode();
+    assert.doesNotMatch(sheet, /\bfooter=/, "no native footer prop: it is absolute and unmeasured");
+    assert.doesNotMatch(sheet, /\bheader=/, "no native header slot: the in-flow header is measured as content");
+    assert.doesNotMatch(
       sheet,
-      /footer=\{\s*footer \? \(\s*<View[\s\S]*?onLayout[\s\S]*?\{footer\}\s*<\/View>\s*\) : undefined\s*\}/,
-      "the shared Sheet must wrap the footer at the boundary (measured, owning the bottom inset)",
+      /position:\s*["'`]absolute["'`]/,
+      "no absolute positioning: the bar is pinned by flex flow, as in PocketPal",
     );
-    for (const file of SHEET_CALLERS) {
-      assert.doesNotMatch(
-        read(file),
-        /paddingBottom:\s*\d*\s*\+?\s*insets\.bottom/,
-        `${file} must not pad the bottom inset itself; the footer prop owns it`,
+
+    // Render order is the pin: the header, then the body, then the bar.
+    // Anchor on the component's own return, not the first `return (` — the
+    // useSlotHeight helper above it legitimately has one.
+    const render = sheet.slice(sheet.indexOf("return (\n    <TrueSheet"));
+    assert.ok(render.startsWith("return ("), "the FakeSheet component's render must be findable");
+    let cursor = -1;
+    for (const marker of ["{header}", "{body}", "{actionsBar}"]) {
+      const at = render.indexOf(marker);
+      assert.ok(
+        at > cursor,
+        `the sheet's children must render in order ${["{header}", "{body}", "{actionsBar}"].join(", ")}`,
       );
+      cursor = at;
     }
   });
 
-  it("never dismisses a sheet it never presented", () => {
-    // REGRESSION, device-observed. The adapter called dismiss() for every
-    // hidden sheet on mount — including the sort/author sheets nested
-    // inside the HF search sheet — before their native views existed:
-    // "already dismissed" warnings plus "TrueSheetView with tag not
-    // found" crashes on the HF sheets. Dismiss may only fire after present.
-    const source = read("components/Sheet.tsx");
-    assert.match(
-      source,
-      /presentedRef\.current = true/,
-      "the adapter must record that it presented before it may dismiss",
-    );
-    assert.match(
-      source,
-      /else if \(presentedRef\.current && !dismissedRef\.current\)/,
-      "dismiss must be gated on a sheet this adapter presented and did not already dismiss",
+  it("keeps the header and the bar outside the scroller", () => {
+    // The header used to live INSIDE the ScrollView, which is why it
+    // scrolled away. Both chrome rows are siblings of the scroller now, so
+    // neither may appear within its opening tag's children.
+    const sheet = sheetCode();
+    const scroller = sheet.match(/<ScrollView[\s\S]*?>/);
+    assert.ok(scroller, "the sheet's body must be a scroll view");
+    assert.doesNotMatch(
+      scroller[0],
+      /\{header\}|\{actionsBar\}/,
+      "the header and the action bar must not render inside the scroller",
     );
   });
 
@@ -140,15 +192,11 @@ describe("sheet library", () => {
     // 'auto' detent — reports the screen and auto collapses to fullscreen.
     // The local `scrollable` prop only picks the body element; it must
     // never reach the TrueSheet component's props.
-    const source = read("components/Sheet.tsx");
+    const source = sheetCode();
     const start = source.indexOf("detents=");
-    const end = source.indexOf("footer=");
+    const end = source.indexOf("onDidDismiss=");
     assert.ok(start >= 0 && end > start, "the TrueSheet props block must exist");
-    // Strip line comments first: the inline note ABOUT the flag must not
-    // trip the guard against passing it.
-    const propsBlock = source
-      .slice(start, end)
-      .replace(/\/\/[^\n]*/g, "");
+    const propsBlock = source.slice(start, end);
     assert.doesNotMatch(
       propsBlock,
       /\bscrollable\b/,
@@ -164,12 +212,11 @@ describe("sheet library", () => {
     // (title/blurb/input gone) the moment the keyboard opened, and every
     // keystroke re-measured pad+scroll = stutter/flicker. Tall content
     // (HF) only scrolled within range, which is why it "worked". The
-    // dialog window already resizes above the keyboard natively; the body
-    // must be a plain ScrollView keeping tap-to-persist. Strip comments
-    // first: the regression story legitimately NAMES the old component.
-    const sheet = read("components/Sheet.tsx")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/\/\/[^\n]*/g, "");
+    // dialog window already resizes above the keyboard natively
+    // (MainActivity is adjustResize); the body must be a plain ScrollView
+    // keeping tap-to-persist. Strip comments first: the regression story
+    // legitimately NAMES the old component.
+    const sheet = sheetCode();
     assert.doesNotMatch(
       sheet,
       /keyboard-controller|KeyboardAwareScrollView/,
@@ -177,7 +224,7 @@ describe("sheet library", () => {
     );
     // Match the opening tag by its TERMINATOR (a '>' alone on its own line),
     // not by the first '>': a prop holding an arrow function -- onLayout
-    //={(e) => ...} -- supplies a '>' mid-tag and a lazy match would stop
+    // ={(e) => ...} -- supplies a '>' mid-tag and a lazy match would stop
     // there, silently truncating the props under test.
     const body = sheet.match(/<ScrollView[\s\S]*?^\s*>/m);
     assert.ok(body, "the sheet's body must be a plain ScrollView");
@@ -188,7 +235,7 @@ describe("sheet library", () => {
     );
   });
 
-  it("pads the bottom of BOTH bodies with the nav-bar inset", () => {
+  it("pads the bottom of BOTH bodies and the bar with the nav-bar inset", () => {
     // REGRESSION, twice over.
     //
     // 1. The scrollable={false} branch resolved its bottom pad to
@@ -204,62 +251,108 @@ describe("sheet library", () => {
     //    than their content and floated footers over their own fields.
     //    Neither the value nor the moment is trustworthy; insets.bottom
     //    reports the 3-button bar correctly on this device (47.87).
-    const sheet = read("components/Sheet.tsx")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/\/\/[^\n]*/g, "");
+    //
+    // The third pad is the pinned bar's, which now owns the bottom inset
+    // for every sheet that has one — the one place it is needed, since the
+    // bar IS the last thing on screen. Callers must not add their own.
+    //
+    // With a bar present the BODY pads nothing: two owners of one inset is
+    // how it gets doubled, and a body pad under the bar is dead space.
+    // Bar-less sheets still need the body pad, so it is a ternary, not a
+    // constant — which is exactly why both branches must carry it.
+    const sheet = sheetCode();
     assert.doesNotMatch(
       sheet,
       /onPositionChange/,
       "the bottom inset must not be derived from an animated sheet position",
     );
-    const pads = sheet.match(/paddingBottom: footer \? footerHeight : insets\.bottom/g) ?? [];
+    const barPads = sheet.match(/paddingBottom: 10 \+ insets\.bottom/g) ?? [];
+    assert.equal(barPads.length, 1, "only the pinned bar may pad the nav inset unconditionally");
+    const bodyPads = sheet.match(/paddingBottom: actions \? 0 : insets\.bottom/g) ?? [];
     assert.equal(
-      pads.length,
+      bodyPads.length,
       2,
-      "both the ScrollView body and the scrollable={false} body must pad with insets.bottom",
+      "both body branches must reserve the nav-bar inset for bar-less sheets only",
     );
-  });
-
-  it("keeps actions in the scroll body, never the native footer", () => {
-    // REGRESSION + grill decision Q1/Q2. TrueSheet lifts its absolute
-    // footer above the keyboard without shrinking the body, so an input
-    // sheet with a footer prop ends with actions floating over scrolled
-    // content (HF sheet: three blind fixes — no JS channel hears the
-    // dialog keyboard, so no bound can hold). Buttons therefore ride the
-    // scroll body — identical pixels when the keyboard is closed — in
-    // every sheet that hosts a text input.
-    for (const file of [
-      "components/HfTokenSettings.tsx",
-      "components/SearchSettings.tsx",
-      "components/chat/GenerationSettingsSheet.tsx",
-    ]) {
-      const source = read(file);
-      const tag = source.match(/<Sheet[\s\S]*?>/);
-      assert.ok(tag, `${file} must render through the shared Sheet`);
+    for (const file of [...SHEET_CALLERS, ...PINNED_ACTION_SHEETS]) {
       assert.doesNotMatch(
-        tag[0],
-        /footer=\{/,
-        `${file} must not pin actions in the native footer: it lifts without the body`,
+        read(file),
+        /paddingBottom:\s*\d*\s*\+?\s*insets\.bottom/,
+        `${file} must not pad the bottom inset itself; the shared Sheet owns it`,
       );
     }
   });
 
-  it("bounds every body so tall content scrolls instead of clipping", () => {
-    // With auto now measuring wrap-content (scrollable off), a body taller
+  it("bounds every body to the surface box minus the two siblings", () => {
+    // With auto measuring wrap-content (scrollable off), a body taller
     // than the surface would be clipped at the top with no way to reach it.
-    // Each body carries the same box the native surface clamps to —
-    // window - topInset - 16, at-most, so short content still wraps.
-    const source = read("components/Sheet.tsx");
-    const bodies = source.match(/maxHeight: bodyMaxHeight/g) ?? [];
+    // The bound is the surface box the native sheet clamps to — window -
+    // topInset - 16 — MINUS the header and the action bar, because both
+    // are in-flow children whose heights the 'auto' detent sums in
+    // (TrueSheetDetentCalculator.kt:61). Both body branches carry it.
+    const sheet = sheetCode();
+    // Both body branches carry it, and the clamp is part of the invariant:
+    // a negative bound is meaningless to Yoga, so the subtraction is floored
+    // at zero rather than handed on.
+    assert.match(
+      sheet,
+      /const bodyBound = Math\.max\(0, bodyMaxHeight - headerHeight - actionsHeight\)/,
+      "the bound must be the surface box minus the measured header and bar, floored at zero",
+    );
+    const bounds = sheet.match(/maxHeight: Math\.max\(0, bodyBound\)/g) ?? [];
     assert.equal(
-      bodies.length,
+      bounds.length,
       2,
-      "both body branches (scroll wrapper and plain View) must carry the maxHeight bound",
+      "both body branches (scroll wrapper and plain View) must carry the bodyBound",
+    );
+    assert.match(
+      sheet,
+      /const bodyMaxHeight = windowHeight - topInset - 16/,
+      "the surface box must stay window - status-bar inset - gap",
+    );
+    // Both chrome slots must be measured: an unmeasured one is a body bound
+    // that is too large by that slot's height, which pushes the last rows
+    // and the bar past what the surface clamps to.
+    assert.equal(
+      (sheet.match(/onLayout=\{on/g) ?? []).length,
+      2,
+      "the header and the action bar must both report their height via onLayout",
+    );
+  });
+
+  it("pins every commit action row in the bar, not the scroll body", () => {
+    // The inverse of the old guard, and the point of the change: PocketPal
+    // puts these sheets' commit buttons in Sheet.Actions. Per-row actions
+    // (a model card's Load/Unload, a file row's Download) stay in the
+    // body — they act on a row, not on the sheet.
+    for (const file of PINNED_ACTION_SHEETS) {
+      const source = read(file);
+      const tag = source.match(/<Sheet[\s\S]*?>/);
+      assert.ok(tag, `${file} must render through the shared Sheet`);
+      assert.match(
+        tag[0],
+        /actions=\{/,
+        `${file} must pin its commit actions in the bar: the scroll body's last children`,
+      );
+    }
+  });
+
+  it("never dismisses a sheet it never presented", () => {
+    // REGRESSION, device-observed. The adapter called dismiss() for every
+    // hidden sheet on mount — including the sort/author sheets nested
+    // inside the HF search sheet — before their native views existed:
+    // "already dismissed" warnings plus "TrueSheetView with tag not
+    // found" crashes on the HF sheets. Dismiss may only fire after present.
+    const source = sheetCode();
+    assert.match(
+      source,
+      /presentedRef\.current = true/,
+      "the adapter must record that it presented before it may dismiss",
     );
     assert.match(
       source,
-      /const bodyMaxHeight = windowHeight - topInset - 16/,
-      "the bound must be the surface box: window - status-bar inset - gap",
+      /else if \(presentedRef\.current \&\& !dismissedRef\.current\)/,
+      "dismiss must be gated on a sheet this adapter presented and did not already dismiss",
     );
   });
 });

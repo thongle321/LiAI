@@ -27,6 +27,14 @@
   /* Coolant cyan is reserved for machine-in-the-loop states (thinking, vision, streaming). */
   --color-info: #06b6d4;
   --color-success: #10b981;
+  /* The download button's green, in the same two-step shape as the signal
+     and the reds: `success-fill` the tonal ground, `success-mark` the 3:1
+     border step, `success-deep` the 4.5:1 label step. `success` above stays
+     the Jade icon colour and never carries text. Derivation lives in
+     DESIGN.md › Buttons (the download green); mirrored in themes/tokens.ts. */
+  --color-success-fill: #ecfdf5;
+  --color-success-mark: #059669;
+  --color-success-deep: #047857;
   --color-warning: #f59e0b;
   /* Same split as the signal: #ef4444 is a mark (3.76:1, clears the 3:1
      non-text floor on borders and dots); #b91c1c is the step that carries
@@ -151,6 +159,18 @@
   border-width: 1px;
   border-style: solid;
   /* Border is a mark: Signal Blue clears the 3:1 non-text floor at 3.69. */
+  border-color: #3882f6;
+  color: #2563eb;
+}
+/* Tonal — PocketPal's btnPrimary trio (#eff6ff ground / #bfdbff border /
+   #1447e6 label), carried by LiAI's own tokens: Surface Tint ground, Signal
+   Mark border, Signal label. The reference's Load/Offload button, and the
+   one place Surface Tint is used as a button ground rather than a selected
+   element's. */
+.btn--tonal {
+  background-color: #eff6ff;
+  border-width: 1px;
+  border-style: solid;
   border-color: #3882f6;
   color: #2563eb;
 }
@@ -317,4 +337,78 @@
 }
 .status-dot--offline {
   background-color: #64748b;
+}
+
+/* Voice screen (lib/tts). One expandable card per engine, plus the System
+   card that sits above the list. Colours come from the same slate/blue ramp
+   as the rest of this file — no engine-specific accents until an engine
+   actually ships audio. */
+
+/* The System card, and the frame every engine card sits in. */
+.voice-card {
+  background-color: #ffffff;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #e2e8f0;
+  border-radius: 16px;
+  overflow: hidden;
+}
+/* Modifier: the System card is tinted so it reads as "in use, no download
+   needed" against the plain engine cards below it. */
+.voice-card--active {
+  background-color: #eff6ff;
+  border-color: #bfdbff;
+}
+.voice-card__header {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding-left: 16px;
+  padding-right: 16px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.voice-card__body {
+  padding-left: 16px;
+  padding-right: 16px;
+  padding-bottom: 16px;
+}
+.voice-card__title {
+  font-family: var(--font-sans-semibold);
+  font-size: 16px;
+  line-height: 22px;
+  color: #0f172a;
+}
+.voice-card__spec {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 18px;
+  color: #64748b;
+}
+/* Tier chip (LIGHTWEIGHT / NATURAL / FAST START). */
+.voice-badge {
+  align-self: flex-start;
+  border-radius: 999px;
+  padding-left: 8px;
+  padding-right: 8px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  background-color: #dbeafe;
+}
+.voice-badge__text {
+  font-family: var(--font-sans-semibold);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.4px;
+  color: #2563eb;
+}
+/* Modifier: Kitten's tier chip carries the warm ramp, so the pack a
+   low-end device reaches for is the one that shouts. Kokoro and Supertonic
+   read in Signal Blue. */
+.voice-badge--warm {
+  background-color: #ffedd5;
+}
+.voice-badge--warm .voice-badge__text {
+  color: #c2410c;
 }

@@ -1,88 +1,197 @@
-/** Voice output settings: system voice, rate/pitch, auto-speak. Persisted.
+/** Voice output: engine-tagged current voice, auto-speak, availability.
  *
- * Factory takes storage so tests inject memory (see chat.ts pattern).
- * Defaults preserve current behavior: system voice, 1.0x, auto-speak on.
- * Engine interface left open: voiceId selects among expo-speech system
- * voices today; neural engines slot in later without shape changes.
+ * PocketPal's TTSStore shape on LiAI's stack (spec Q14): persisted
+ * `currentVoice` (engine-tagged), `autoSpeak` (default OFF — spec Q14),
+ * and a trististate `userTTSOverride` for the RAM gate. Runtime state:
+ * the playback state machine, a PER-ENGINE download map, and the cached
+ * memory check behind `isTTSAvailable`.
+ *
+ * Per-engine, not kokoro-only: the screen lists three downloadable engines
+ * (spec Q2 as reversed) and each needs its own install/progress/error.
+ * PocketPal keeps three separate field triples for exactly this reason; a
+ * map keyed by engine id is the same information without the switch
+ * statements, and it makes the fourth engine a data change.
+ *
+ * Migration: the pre-engine blob `{ voiceId, autoSpeak }` and the
+ * engine-era `{ currentVoice, autoSpeak }` both load here. Any OS voice id
+ * collapses to the device-default system row (spec Q9 — system voices are
+ * never enumerated or pinned); a neural voice survives only if it is still
+ * in its engine's curated list.
+ *
+ * The factory takes storage so tests inject memory (see chat.ts pattern).
+ * All native modules arrive through dynamic imports, so node --test can
+ * exercise this store with fakes.
  */
 
 import { create } from "zustand";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
-import type { KeyValueStorage } from "../lib/storage";
-import { clampWatchInterval, WATCH_INTERVAL_DEFAULT_MS } from "../lib/vision-watch.ts";
+import type { KeyValueStorage } from "../lib/storage.ts";
+import { DEVICE_DEFAULT_VOICE, type NeuralEngineId, type Voice } from "../lib/tts/types.ts";
+import { ENGINE_ORDER, NEURAL_ENGINE_META } from "../lib/tts/engineMeta.ts";
+import { getEngine } from "../lib/tts/engineRegistry.ts";
+import { ttsDownloads, type TtsModelStatus } from "../lib/tts/download.ts";
+import { ttsRuntime } from "../lib/tts/runtime.ts";
+import { readTotalMemory } from "../lib/models/device-tiers.ts";
 
-export const VOICE_KEY = "liai_voice_v1";
+export const VOICE_KEY = "liai_voice_v2";
 
-export const DEFAULT_RATE = 1.0;
-export const DEFAULT_PITCH = 1.0;
-export const MIN_RATE = 0.5;
-export const MAX_RATE = 2.0;
-export const MIN_PITCH = 0.5;
-export const MAX_PITCH = 2.0;
+/** The kokoro model id, kept as a named export because the spec pins it and
+ *  the tests assert it. The value's single home is the engine table. */
+export const KOKORO_MODEL_ID = NEURAL_ENGINE_META.kokoro.modelId;
+
+/** PocketPal's gate: neural TTS needs a 4 GiB device (spec Q14). */
+export const RAM_GATE_BYTES = 4 * 1024 * 1024 * 1024;
+
+export type PlaybackState = { mode: "idle" } | { mode: "playing"; messageId?: string };
+
+/** Every downloadable engine's download state. `null` per engine means
+ *  UNKNOWN (node, or an unreadable disk) — never "not installed"; the two
+ *  read differently in reconcileVoice and an unknown status must not
+ *  silently demote a selected voice. */
+export type EngineDownloads = Record<NeuralEngineId, TtsModelStatus | null>;
+
+export const EMPTY_DOWNLOADS: EngineDownloads = {
+  kitten: null,
+  kokoro: null,
+  supertonic: null,
+};
+
+/** A voice id stashed for an engine whose model was removed, restored the
+ *  next time that engine finishes downloading (PocketPal's pendingVoiceRestore,
+ *  in-memory, never persisted). */
+export type StashedVoices = Partial<Record<NeuralEngineId, string>>;
 
 export interface VoiceState {
-  voiceId: string | null;
-  rate: number;
-  pitch: number;
+  /** null ≡ the device-default system voice. */
+  currentVoice: Voice | null;
   autoSpeak: boolean;
-  /** Vision watch-mode capture interval (05): a USER setting — never a
-   *  profile field (the product decision keeps profiles chat-only). */
-  watchIntervalMs: number;
+  /** null = no user decision; true/false forces availability. */
+  userTTSOverride: boolean | null;
+  playbackState: PlaybackState;
+  /** Message id of the last auto-spoken reply, for once-per-turn playback. */
+  lastSpokenMessageId: string | null;
+  /** Per-engine voice stash, restored after a re-download. */
+  pendingVoiceRestore: StashedVoices;
+  /** Per-engine download states; null entries mean "not yet read". */
+  downloads: EngineDownloads;
+  deviceMeetsMemory: boolean;
   loaded: boolean;
   load: () => Promise<void>;
-  setVoice: (voiceId: string | null) => void;
-  setRate: (rate: number) => void;
-  setPitch: (pitch: number) => void;
+  /** override ?? deviceMeetsMemory — the single availability rule. */
+  isTTSAvailable: () => boolean;
+  setCurrentVoice: (voice: Voice | null) => void;
   setAutoSpeak: (autoSpeak: boolean) => void;
-  setWatchIntervalMs: (ms: number) => void;
+  setUserTTSOverride: (override: boolean | null) => void;
+  /** Record that `messageId` was spoken, so repeats do not re-speak it. */
+  markSpoken: (messageId: string) => void;
+  /** Forget a spoken mark when a new run starts for the same message
+   *  (retry/regenerate reuses the bubble id — a stale mark would silence
+   *  the new reply). */
+  clearSpoken: (messageId: string) => void;
+  /** Speak `text` through the selected engine (spec Q14 "one API"). */
+  play: (text: string, options?: { messageId?: string; voice?: Voice; speed?: number }) => Promise<void>;
+  stop: () => Promise<void>;
+  /** Download one engine's model, reporting state transitions. */
+  startEngineDownload: (engine: NeuralEngineId) => Promise<string>;
+  /** Cancel the in-flight download (no-op when idle). */
+  cancelEngineDownload: () => void;
+  /** Delete one engine's model from disk, reclaiming its bytes. */
+  removeEngineModel: (engine: NeuralEngineId) => Promise<void>;
 }
 
-function clamp(n: number, lo: number, hi: number, fallback: number): number {
-  return typeof n === "number" && Number.isFinite(n)
-    ? Math.min(hi, Math.max(lo, n))
-    : fallback;
+type PersistedVoiceState = Pick<VoiceState, "currentVoice" | "autoSpeak" | "userTTSOverride">;
+
+function isNeuralEngineId(value: unknown): value is NeuralEngineId {
+  return typeof value === "string" && value in NEURAL_ENGINE_META;
 }
 
-function parseVoiceState(raw: string | null): {
-  voiceId: string | null;
-  rate: number;
-  pitch: number;
-  autoSpeak: boolean;
-  watchIntervalMs: number;
-} {
-  const fallback = {
-    voiceId: null as string | null,
-    rate: DEFAULT_RATE,
-    pitch: DEFAULT_PITCH,
-    autoSpeak: true,
-    watchIntervalMs: WATCH_INTERVAL_DEFAULT_MS,
+function toVoice(value: unknown): Voice | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const v = value as { id?: unknown; name?: unknown; engine?: unknown };
+  if (typeof v.id !== "string" || v.id.length === 0) return null;
+  return {
+    id: v.id,
+    name: typeof v.name === "string" ? v.name : v.id,
+    engine: isNeuralEngineId(v.engine) ? v.engine : "system",
+  };
+}
+
+/** Migration rule (Q9): the system engine has exactly one row — any
+ *  persisted system voice (including a legacy OS voice id) collapses to
+ *  the device default, and a neural voice survives only while it is still
+ *  curated in its own engine's table. */
+function sanitizeVoice(voice: Voice | null): Voice {
+  if (voice === null) return DEVICE_DEFAULT_VOICE;
+  if (voice.engine === "system") return DEVICE_DEFAULT_VOICE;
+  return NEURAL_ENGINE_META[voice.engine].voices.some((v) => v.id === voice.id)
+    ? voice
+    : DEVICE_DEFAULT_VOICE;
+}
+
+function parseVoiceState(raw: string | null): PersistedVoiceState {
+  const fallback: PersistedVoiceState = {
+    currentVoice: null,
+    autoSpeak: false,
+    userTTSOverride: null,
   };
   if (!raw) return fallback;
   try {
     const v: unknown = JSON.parse(raw);
     if (!v || typeof v !== "object" || Array.isArray(v)) return fallback;
     const r = v as Record<string, unknown>;
+    // Explicit currentVoice wins; a legacy voiceId collapses to the
+    // device default (Q9 — OS voices are never pinned).
+    const currentVoice = sanitizeVoice(
+      r.currentVoice !== undefined
+        ? toVoice(r.currentVoice)
+        : typeof r.voiceId === "string" && r.voiceId.length > 0
+          ? DEVICE_DEFAULT_VOICE
+          : null,
+    );
     return {
-      voiceId: typeof r.voiceId === "string" ? r.voiceId : null,
-      rate: clamp(r.rate as number, MIN_RATE, MAX_RATE, DEFAULT_RATE),
-      pitch: clamp(r.pitch as number, MIN_PITCH, MAX_PITCH, DEFAULT_PITCH),
-      autoSpeak: typeof r.autoSpeak === "boolean" ? r.autoSpeak : true,
-      // Older payloads have no interval: clamp(NaN) lands on the default.
-      watchIntervalMs: clampWatchInterval(r.watchIntervalMs as number),
+      currentVoice,
+      autoSpeak: typeof r.autoSpeak === "boolean" ? r.autoSpeak : false,
+      userTTSOverride:
+        typeof r.userTTSOverride === "boolean" ? r.userTTSOverride : null,
     };
   } catch {
     return fallback;
   }
 }
 
+/** PocketPal's init-reconcile (spec Q14): clear-then-stash a persisted
+ *  voice whose model vanished. An unknown download state (node, or an
+ *  unreadable disk) leaves the voice alone — unknown is not vanished. */
+export function reconcileVoice(
+  currentVoice: Voice | null,
+  downloads: EngineDownloads,
+): { voice: Voice | null; stashed: StashedVoices } {
+  // null means never-chosen — the device default by convention, with
+  // nothing to stash. Only a selected voice can vanish.
+  if (currentVoice === null) return { voice: null, stashed: {} };
+  const voice = sanitizeVoice(currentVoice);
+  if (voice.engine === "system") return { voice, stashed: {} };
+  const status = downloads[voice.engine];
+  if (status?.state === "not_installed" || status?.state === "error") {
+    return { voice: DEVICE_DEFAULT_VOICE, stashed: { [voice.engine]: voice.id } };
+  }
+  return { voice, stashed: {} };
+}
+
+/** The other half of the reconcile: a stashed id becomes a voice again
+ *  only while still curated in ITS engine, or null when the list moved on. */
+export function restoreVoice(stashed: string, engine: NeuralEngineId): Voice | null {
+  return NEURAL_ENGINE_META[engine].voices.find((v) => v.id === stashed) ?? null;
+}
+
 export function createVoiceStore(storage: KeyValueStorage) {
   return create<VoiceState>()((set, get) => {
     async function persist(): Promise<void> {
-      const { voiceId, rate, pitch, autoSpeak, watchIntervalMs } = get();
+      const { currentVoice, autoSpeak, userTTSOverride } = get();
       try {
         await storage.setItem(
           VOICE_KEY,
-          JSON.stringify({ voiceId, rate, pitch, autoSpeak, watchIntervalMs }),
+          JSON.stringify({ currentVoice, autoSpeak, userTTSOverride }),
         );
       } catch {
         // Ignore persistence failures; voice settings are non-critical.
@@ -90,34 +199,140 @@ export function createVoiceStore(storage: KeyValueStorage) {
     }
 
     return {
-      voiceId: null,
-      rate: DEFAULT_RATE,
-      pitch: DEFAULT_PITCH,
-      autoSpeak: true,
-      watchIntervalMs: WATCH_INTERVAL_DEFAULT_MS,
+      currentVoice: null,
+      autoSpeak: false,
+      userTTSOverride: null,
+      playbackState: { mode: "idle" },
+      lastSpokenMessageId: null,
+      pendingVoiceRestore: {},
+      downloads: { ...EMPTY_DOWNLOADS },
+      deviceMeetsMemory: false,
       loaded: false,
+
       load: async () => {
-        set({ ...parseVoiceState(await storage.getItem(VOICE_KEY)), loaded: true });
+        const parsed = parseVoiceState(await storage.getItem(VOICE_KEY));
+        set({ ...parsed, loaded: true });
+        // Reconcile every engine's download state from disk (spec Q14).
+        // The native module is absent in node — a failed reconcile simply
+        // leaves that engine's entry null.
+        const downloads: EngineDownloads = { ...EMPTY_DOWNLOADS };
+        for (const id of ENGINE_ORDER) {
+          try {
+            downloads[id] = await ttsDownloads.status(NEURAL_ENGINE_META[id].modelId);
+          } catch {
+            downloads[id] = null;
+          }
+        }
+        const reconciled = reconcileVoice(parsed.currentVoice, downloads);
+        set({
+          downloads,
+          currentVoice: reconciled.voice,
+          pendingVoiceRestore: reconciled.stashed,
+        });
+        try {
+          const total = await readTotalMemory();
+          set({ deviceMeetsMemory: total !== null && total >= RAM_GATE_BYTES });
+        } catch {
+          set({ deviceMeetsMemory: false });
+        }
       },
-      setVoice: (voiceId) => {
-        set({ voiceId });
-        void persist();
+
+      isTTSAvailable: () => {
+        const { userTTSOverride, deviceMeetsMemory } = get();
+        return userTTSOverride ?? deviceMeetsMemory;
       },
-      setRate: (rate) => {
-        set({ rate: clamp(rate, MIN_RATE, MAX_RATE, DEFAULT_RATE) });
-        void persist();
-      },
-      setPitch: (pitch) => {
-        set({ pitch: clamp(pitch, MIN_PITCH, MAX_PITCH, DEFAULT_PITCH) });
+
+      setCurrentVoice: (voice) => {
+        set({ currentVoice: voice });
         void persist();
       },
       setAutoSpeak: (autoSpeak) => {
         set({ autoSpeak });
         void persist();
       },
-      setWatchIntervalMs: (ms) => {
-        set({ watchIntervalMs: clampWatchInterval(ms) });
+      setUserTTSOverride: (userTTSOverride) => {
+        set({ userTTSOverride });
         void persist();
+      },
+      markSpoken: (messageId) => {
+        set({ lastSpokenMessageId: messageId });
+      },
+      clearSpoken: (messageId) => {
+        if (get().lastSpokenMessageId === messageId) {
+          set({ lastSpokenMessageId: null });
+        }
+      },
+
+      play: async (text, options = {}) => {
+        const voice = options.voice ?? get().currentVoice ?? DEVICE_DEFAULT_VOICE;
+        const engine = getEngine(voice.engine);
+        const installed = await engine.isInstalled().catch(() => false);
+        if (!installed) {
+          // Nothing to say through this engine right now — stop cleanly so
+          // a previous utterance cannot keep talking over the silence.
+          await get().stop();
+          return;
+        }
+        set({ playbackState: { mode: "playing", messageId: options.messageId } });
+        try {
+          // No sid here: every neural engine derives it from its own curated
+          // table's order, which is the only place that mapping is correct.
+          await ttsRuntime.acquire(engine, () =>
+            engine.play(text, voice, {
+              ...(options.speed !== undefined ? { speed: options.speed } : {}),
+            }),
+          );
+        } catch {
+          // A failed play must not wedge the state machine.
+        } finally {
+          if (get().playbackState.mode === "playing") {
+            set({ playbackState: { mode: "idle" } });
+          }
+        }
+      },
+
+      stop: () => ttsRuntime.stop(),
+
+      startEngineDownload: async (engineId) => {
+        const { modelId } = NEURAL_ENGINE_META[engineId];
+        return ttsDownloads.download(modelId, (status) => {
+          set((s) => ({ downloads: { ...s.downloads, [engineId]: status } }));
+          // A finished download restores the voice stashed for THIS engine
+          // when its model was removed (PocketPal's restore-after-re-download).
+          if (status.state === "ready") {
+            const stashed = get().pendingVoiceRestore[engineId];
+            if (stashed !== undefined) {
+              set((s) => {
+                const next = { ...s.pendingVoiceRestore };
+                delete next[engineId];
+                return { pendingVoiceRestore: next };
+              });
+              const restored = restoreVoice(stashed, engineId);
+              if (restored !== null) set({ currentVoice: restored });
+            }
+          }
+        });
+      },
+
+      cancelEngineDownload: () => {
+        ttsDownloads.abort();
+      },
+
+      removeEngineModel: async (engineId) => {
+        const { modelId } = NEURAL_ENGINE_META[engineId];
+        await ttsDownloads.remove(modelId);
+        // A neural voice cannot survive its model, so stash it for the next
+        // successful download of THIS engine and fall back meanwhile.
+        const voice = get().currentVoice;
+        if (voice?.engine === engineId) {
+          set((s) => ({
+            currentVoice: DEVICE_DEFAULT_VOICE,
+            pendingVoiceRestore: { ...s.pendingVoiceRestore, [engineId]: voice.id },
+          }));
+        }
+        set((s) => ({
+          downloads: { ...s.downloads, [engineId]: { state: "not_installed", percent: 0 } },
+        }));
       },
     };
   });
@@ -125,10 +340,12 @@ export function createVoiceStore(storage: KeyValueStorage) {
 
 async function rnStorage(): Promise<AsyncStorageStatic> {
   const mod = await import("@react-native-async-storage/async-storage");
+  // SAFETY: the module's default export is the AsyncStorage instance; the
+  // interop wrapper returns the namespace on some bundlers.
   return (mod.default ?? mod) as unknown as AsyncStorageStatic;
 }
 
-/** App singleton backed by on-device AsyncStorage. */
+/** App singleton backed on-device AsyncStorage. */
 export const useVoice = createVoiceStore({
   getItem: async (key) => (await rnStorage()).getItem(key),
   setItem: async (key, value) => {

@@ -9,7 +9,7 @@ import {
   WATCH_INTERVAL_MAX_MS,
   WATCH_INTERVAL_DEFAULT_MS,
 } from "../lib/vision-watch.ts";
-import { createVoiceStore } from "../store/voice.ts";
+import { createWatchStore } from "../store/watch.ts";
 import { MAX_IMAGES } from "../lib/chat/attachments.ts";
 
 // vision-series 05: watch mode = continuous CAPTURE into a rolling buffer,
@@ -53,13 +53,13 @@ describe("clampWatchInterval", () => {
 });
 
 describe("the interval persists as a USER setting (never a profile)", () => {
-  it("voice store defaults, clamps, and round-trips it", async () => {
+  it("watch store defaults, clamps, and round-trips it", async () => {
     const storage = memoryStorage();
-    const store = createVoiceStore(storage);
+    const store = createWatchStore(storage);
     assert.equal(store.getState().watchIntervalMs, WATCH_INTERVAL_DEFAULT_MS);
     store.getState().setWatchIntervalMs(100);
     assert.equal(store.getState().watchIntervalMs, WATCH_INTERVAL_MIN_MS, "clamped");
-    const again = createVoiceStore(storage);
+    const again = createWatchStore(storage);
     await again.getState().load();
     assert.equal(again.getState().watchIntervalMs, WATCH_INTERVAL_MIN_MS, "round-trip");
   });

@@ -27,6 +27,7 @@ import { Check, Copy, Volume2, VolumeX } from "lucide-react-native";
 import { colors } from "../../themes/tokens.ts";
 import { useCopy } from "../../hooks/useCopy.ts";
 import { speakReply, stopSpeaking } from "../../lib/voiceSpeak.ts";
+import { useVoice } from "../../store/voice.ts";
 import type { TurnOutcomeFlags } from "../../types/chat.ts";
 
 /** A reported number, or absent. NOT `> 0`: a zero rate is a
@@ -50,6 +51,9 @@ export function MessageActions({
   contextBannerVisible?: boolean;
 }) {
   const { copied, copy } = useCopy();
+  // The speak button exists only while TTS is available (ticket 05 /
+  // spec Q14 — same rule as the store, read reactively).
+  const canSpeak = useVoice((s) => s.userTTSOverride ?? s.deviceMeetsMemory);
   // Per-message TTS over the system voice (settings UX owns voice/rate).
   const [speaking, setSpeaking] = useState(false);
   const speakingRef = useRef(false);
@@ -103,7 +107,8 @@ export function MessageActions({
 
   return (
     <View className="mt-2 flex-row flex-wrap items-center gap-x-1.5 gap-y-0.5 pb-3">
-      <Pressable
+      {canSpeak ? (
+        <Pressable
         onPress={toggleSpeak}
         // 16px icon, 44dp target. PocketPal uses hitSlop 8, which is a
         // 32dp target — under the platform minimum, and invisible either
@@ -112,12 +117,13 @@ export function MessageActions({
         accessibilityRole="button"
         accessibilityLabel={speaking ? "Stop speaking" : "Speak message"}
       >
-        {speaking ? (
-          <VolumeX size={16} color={colors.primary} />
-        ) : (
-          <Volume2 size={16} color={colors.secondaryText} />
-        )}
-      </Pressable>
+          {speaking ? (
+            <VolumeX size={16} color={colors.primary} />
+          ) : (
+            <Volume2 size={16} color={colors.secondaryText} />
+          )}
+        </Pressable>
+      ) : null}
       <Pressable
         onPress={() => copy(text)}
         hitSlop={14}

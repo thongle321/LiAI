@@ -5,6 +5,18 @@ import type { SessionStore } from "../../lib/chat/session-store.ts";
 import { parseImport } from "../../lib/chat/import.ts";
 import { readDraftFor } from "./draft.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
+import { useVoice } from "../voice.ts";
+
+/** Stop TTS playback, fire-and-forget: leaving a conversation leaves its
+ *  audio (ticket 05 / spec Q14). Store stop() itself serializes against
+ *  the engine runtime. */
+function voiceStop(): void {
+  try {
+    void useVoice.getState().stop();
+  } catch {
+    // voice store failures must never break session navigation
+  }
+}
 
 async function quiet(promise: Promise<unknown>): Promise<void> {
   try {
@@ -134,6 +146,9 @@ export function createSessionsSlice(
 
     newConversation: async () => {
       cancelActive();
+      // Leaving the conversation leaves its audio: a reply still
+      // speaking must not follow you into the next one (ticket 05).
+      voiceStop();
       await quiet(get().persistDraft());
       const store = await storeOf(ctx);
 if (store) await quiet(store.setActiveSessionId(null));
@@ -153,6 +168,8 @@ if (store) await quiet(store.setActiveSessionId(null));
     switchSession: async (id: string) => {
       if (get().sending || get().sessionId === id) return false;
       if (!get().sessions.some((s) => s.id === id)) return false;
+      // Same rule as newConversation: switching conversations stops audio.
+      voiceStop();
       await quiet(get().persistDraft());
       const store = await storeOf(ctx);
       if (!store) return false;
@@ -180,6 +197,9 @@ if (store) await quiet(store.setActiveSessionId(null));
       if (store) await quiet(store.deleteSession(id));
       set((s) => ({ sessions: s.sessions.filter((sess) => sess.id !== id) }));
       if (get().sessionId === id) {
+        // Deleting the session you are reading clears its audio too —
+        // the same no-haunting rule as switching (ticket 05).
+        voiceStop();
         // The deleted session's text must not haunt the fresh composer:
 // fall back to whatever is parked in the unsent slot.
         set({

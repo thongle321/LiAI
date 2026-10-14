@@ -58,6 +58,10 @@ export const createSettingsSlice: StateCreator<ModelStore, [], [], SettingsSlice
   resetModelSettings: async () => {
     set({ modelSettings: {} });
     await get().saveModelSettings();
+    // PocketPal's reset re-merges the catalog, so a preset dismissed this
+    // session comes back (ModelStore.ts:3078-3089).
+    set({ dismissedPresetIds: [] });
+    await get().loadPresets();
   },
 
   getModelSettings: (modelId) => parseModelSettings(get().modelSettings[modelId]),

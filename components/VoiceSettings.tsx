@@ -1,118 +1,169 @@
-/** Voice output settings: auto-speak, voice choice, rate, pitch.
+/** Voice screen: how LiAI speaks.
  *
- * The store's `voiceId` slot existed but nothing ever wrote it, so the
- * system voice was always used. It is now a real choice. The narrowing and
- * ordering rules live in lib/voices.ts (pure, node-tested); this is the UI.
+ * Built to the Voice settings design, with each engine card's expand /
+ * collapse and its state-driven body following PocketPal's
+ * VoicePickerView (components/voice/EngineCard.tsx). Colours are this
+ * project's tokens, not PocketPal's paper-and-orange: the warm tint is a
+ * decorative avatar/badge accent, and anything that carries text or is
+ * interactive is Signal Blue.
+ *
+ * Shape: the System voice card first (what the device can already do, zero
+ * install), then the three downloadable engines, then the offline note.
+ * Auto-speak sits above them all — PocketPal puts it at the top of the
+ * picker, where a user looking for "does it talk" finds it first.
  */
 
 import { useEffect, useState } from "react";
-import { View } from "react-native";
-import * as Speech from "expo-speech";
+import { Pressable, Text, View } from "react-native";
+import { AudioLines, CloudDownload, Database, Play, Square, Volume2 } from "lucide-react-native";
 
-import { MAX_PITCH, MAX_RATE, MIN_PITCH, MIN_RATE, useVoice } from "../store/voice.ts";
-import {
-  deviceLanguage,
-  filterVoices,
-  SYSTEM_VOICE,
-  voiceOptions,
-  type DeviceVoice,
-} from "../lib/voices.ts";
-import { PickerRow, SettingsSection, StepperRow, ToggleRow } from "./SettingsRows.tsx";
+import { colors } from "../themes/tokens.ts";
+import { formatBytes } from "../lib/models/progress.ts";
+import { useFreeSpacePoll } from "../hooks/useStorageDisclosure.ts";
+import { ENGINE_ORDER } from "../lib/tts/engineMeta.ts";
+import { DEVICE_DEFAULT_VOICE } from "../lib/tts/types.ts";
+import { VOICE_PREVIEW_SAMPLE } from "../constants/voice-strings.ts";
+import { speakReply, stopSpeaking } from "../lib/voiceSpeak.ts";
+import { EngineCard } from "./voice/EngineCard.tsx";
+import { SettingsSection, ToggleRow } from "./SettingsRows.tsx";
+import { useVoice } from "../store/voice.ts";
+
+/** The section's storage caption. A real reading, not the design's static
+ *  "1.2 GB available": the same poll the model cards use, so freeing space
+ *  on the device updates this line without a remount. */
+function FreeStorageLine() {
+  const { freeBytes, checked } = useFreeSpacePoll(true);
+  return (
+    <View className="flex-row items-center gap-1">
+      <Database size={14} color={colors.secondaryText} />
+      <Text className="font-sans text-body-sm text-secondary-text">
+        {checked && freeBytes !== null ? `${formatBytes(freeBytes, 1)} available` : "…"}
+      </Text>
+    </View>
+  );
+}
 
 export function VoiceSettings() {
-  const { rate, pitch, autoSpeak, voiceId, load, setRate, setPitch, setAutoSpeak, setVoice } =
-    useVoice();
-  const [voices, setVoices] = useState<DeviceVoice[]>([]);
-  // "loading" | "failed" | "ok". Kept because the failure is invisible
-  // otherwise: the picker falls back to a single System default option and
-  // the row still claims voices are installed, so a device that cannot
-  // enumerate looks identical to a device with one voice.
-  const [enumState, setEnumState] = useState<"loading" | "failed" | "ok">("loading");
+  const { currentVoice, autoSpeak, load, setCurrentVoice, setAutoSpeak } = useVoice();
+  const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {
     void load();
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    Speech.getAvailableVoicesAsync()
-      .then((all) => {
-        if (cancelled) return;
-        setVoices(filterVoices(all, deviceLanguage()));
-        setEnumState("ok");
-      })
-      .catch(() => {
-        // No enumeration available. Say so rather than leaving a one-option
-        // picker under a description that promises more.
-        if (cancelled) return;
-        setVoices([]);
-        setEnumState("failed");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // null ≡ never chosen, which IS the device default (spec Q9).
+  const systemSelected = currentVoice === null || currentVoice.engine === "system";
 
-  const byId = new Map(voices.map((v) => [v.identifier, v]));
+  function togglePreview(): void {
+    if (previewing) {
+      stopSpeaking();
+      setPreviewing(false);
+      return;
+    }
+    setPreviewing(true);
+    speakReply(VOICE_PREVIEW_SAMPLE, {
+      onDone: () => setPreviewing(false),
+      onStopped: () => setPreviewing(false),
+      onError: () => setPreviewing(false),
+    });
+  }
 
   return (
-    // No `title`: the route's own header already reads "Voice", and a second
-    // "Voice" stacked directly beneath it reads as one heading printed twice
-    // (compare Settings → "Memory Settings", whose section titles differ from
-    // the screen's). The description alone leads the card.
-    <SettingsSection
-      description="How replies are read aloud."
-    >
-      <View className="row">
-        <ToggleRow
-          label="Speak replies aloud"
-          description="Read each reply out as it finishes."
-          on={autoSpeak}
-          onPress={() => setAutoSpeak(!autoSpeak)}
-        />
+    <View>
+      {/* Screen lede. */}
+      <View className="mb-4 mt-2 flex-row items-center gap-3">
+        <View className="h-11 w-11 items-center justify-center rounded-full bg-surface-3">
+          <AudioLines size={22} color={colors.primary} />
+        </View>
+        <View className="flex-1">
+          <Text className="section-title">Voice output</Text>
+          <Text className="voice-card__spec">Choose how LiAI speaks</Text>
+        </View>
       </View>
-      <View className="row">
-        <PickerRow
-          label="Reading voice"
-          description={
-            enumState === "loading"
-              ? "Looking for voices installed for this device's language."
-              : enumState === "failed"
-                ? "This device would not report its voices, so only the system default is offered. Replies still read aloud."
-                : voices.length === 0
-                  ? "No voices are installed for this device's language. Replies will use the system default."
-                  : "Voices installed for this device's language."
-          }
-          options={voiceOptions(voices, voiceId)}
-          value={voiceId ?? SYSTEM_VOICE}
-          onChange={(id) => setVoice(id === SYSTEM_VOICE ? null : id)}
-          displayFor={(id) =>
-            id === SYSTEM_VOICE ? "System default" : (byId.get(id)?.name ?? id)
-          }
-        />
+
+      {/* Auto-speak first (PocketPal's order). It is a preference about
+          every voice on this screen, so it belongs above the list rather
+          than below it. */}
+      <SettingsSection>
+        <View className="row">
+          <ToggleRow
+            label="Auto-speak responses"
+            description="Read new replies aloud as they arrive."
+            on={autoSpeak}
+            onPress={() => setAutoSpeak(!autoSpeak)}
+          />
+        </View>
+      </SettingsSection>
+
+      {/* System voice — what the device can already do, zero install. One
+          row, the device default: OS voices are never enumerated (Q9), so
+          there is no picker here to get wrong. */}
+      <View className={systemSelected ? "voice-card voice-card--active mb-3" : "voice-card mb-3"}>
+        <Pressable
+          onPress={() => setCurrentVoice(DEVICE_DEFAULT_VOICE)}
+          accessibilityRole="radio"
+          accessibilityState={{ checked: systemSelected }}
+          accessibilityLabel="System voice — the device default voice"
+          className="voice-card__header"
+        >
+          <View className="h-9 w-9 items-center justify-center rounded-full bg-orange-100">
+            <Volume2 size={18} color="#c2410c" />
+          </View>
+          <View className="flex-1">
+            <View className="flex-row items-center gap-2">
+              <Text className="voice-card__title">System voice</Text>
+              <View className="voice-badge">
+                <Text className="voice-badge__text">Default</Text>
+              </View>
+            </View>
+            <Text className="voice-card__spec">Use your device&apos;s default voice</Text>
+          </View>
+          <View className="h-5 w-5 items-center justify-center rounded-full border-2 border-border">
+            {systemSelected ? (
+              <View className="h-2.5 w-2.5 rounded-full bg-primary" />
+            ) : null}
+          </View>
+        </Pressable>
+        <View className="voice-card__body">
+          <Pressable
+            onPress={togglePreview}
+            accessibilityRole="button"
+            accessibilityLabel={previewing ? "Stop preview" : "Preview the system voice"}
+            className="btn btn--tonal flex-row items-center gap-2 self-start px-4 py-2"
+          >
+            {previewing ? (
+              <Square size={14} color={colors.primary} />
+            ) : (
+              <Play size={14} color={colors.primary} />
+            )}
+            <Text className="font-sans-semibold text-body-md text-primary">
+              {previewing ? "Stop" : "Preview"}
+            </Text>
+          </Pressable>
+        </View>
       </View>
-      <View className="row">
-        <StepperRow
-          label="Rate"
-          description="How fast the voice reads."
-          display={`${rate.toFixed(2)}x`}
-          onMinus={() => setRate(rate - 0.25)}
-          onPlus={() => setRate(rate + 0.25)}
-          minusDisabled={rate <= MIN_RATE}
-          plusDisabled={rate >= MAX_RATE}
-        />
+
+      {/* The downloadable engines, lightest first. */}
+      <View className="mb-3 mt-6 flex-row items-end justify-between">
+        <View className="flex-1 pr-4">
+          <Text className="section-title">Downloadable engines</Text>
+          <Text className="mt-1 font-sans text-body-sm text-secondary-text">
+            Voice packs are stored on your device. Uses storage space.
+          </Text>
+        </View>
+        <FreeStorageLine />
       </View>
-      <View className="row">
-        <StepperRow
-          label="Pitch"
-          description="Voice pitch. Leave at 1.00 unless you have a reason."
-          display={`${pitch.toFixed(2)}x`}
-          onMinus={() => setPitch(pitch - 0.25)}
-          onPlus={() => setPitch(pitch + 0.25)}
-          minusDisabled={pitch <= MIN_PITCH}
-          plusDisabled={pitch >= MAX_PITCH}
-        />
+
+      {ENGINE_ORDER.map((id) => (
+        <EngineCard key={id} engineId={id} />
+      ))}
+
+      <View className="mt-1 flex-row items-center gap-2">
+        <CloudDownload size={14} color={colors.secondaryText} />
+        <Text className="font-sans text-body-sm text-secondary-text">
+          Downloaded voices work offline
+        </Text>
       </View>
-    </SettingsSection>
+    </View>
   );
 }

@@ -22,6 +22,14 @@ export const colors = {
   primaryPressed: "#1D4ED8",
   onPrimary: "#FFFFFF",
   success: "#10B981",
+  /** The download button's green, in the same two-step shape as the signal
+   *  and the reds: `successFill` the tonal ground, `successMark` the 3:1
+   *  border step, `successDeep` the 4.5:1 label step. `success` above stays
+   *  the Jade icon colour and never carries text. Derivation lives in
+   *  DESIGN.md › Buttons (the download green); mirrored in global.css. */
+  successFill: "#ECFDF5",
+  successMark: "#059669",
+  successDeep: "#047857",
   warning: "#F59E0B",
   /** Same split: `errorMark` is the 3.76:1 mark for borders and dots, `error`
    *  the step that carries text and fills (#b91c1c — #dc2626 failed on the

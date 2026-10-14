@@ -1,6 +1,6 @@
 /** Shared models bits: formats, chips, status, progress, download button. */
 
-import { Pressable, Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 import { CheckCircle2, Download, Eye, MessageSquare, Pause, Play, X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
@@ -136,6 +136,40 @@ export function CancelDownloadButton({ onPress }: { onPress: () => void }) {
   );
 }
 
+/** The one delete confirmation in the app. Two surfaces destroy a
+ *  downloaded file — the models-screen card and the HF file row — and both
+ *  must say the same thing, so the wording lives here rather than in each.
+ *
+ *  This is the CONFIRM only. It deliberately does not give DownloadButton a
+ *  delete mode: its completed branch is an inert state for the card, and
+ *  the HF row draws its own control instead. */
+export function confirmDeleteModel(onConfirm: () => void): void {
+  Alert.alert(
+    "Delete Model",
+    "Are you sure you want to delete this downloaded model?",
+    [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: onConfirm },
+    ],
+  );
+}
+
+/** The one remove-from-list confirmation in the app. Three surfaces drop
+ *  a model from the list without touching disk — the preset card's X, the
+ *  bookmark card's X and the HF file row — and all must say the same
+ *  thing, so the wording lives here (PocketParity: pocketpal shares its
+ *  removeTitle/removeMessage across its card and file row the same way). */
+export function confirmRemoveModel(onConfirm: () => void): void {
+  Alert.alert(
+    "Remove Model",
+    "Are you sure you want to remove this model from the list?",
+    [
+      { text: "Cancel", style: "cancel" },
+      { text: "Remove", style: "destructive", onPress: onConfirm },
+    ],
+  );
+}
+
 export function DownloadButton({
   status,
   progress,
@@ -166,7 +200,6 @@ export function DownloadButton({
     : isFailed
     ? "Retry"
     : "Download";
-
   // Completed is a state, not an action: Mist fill with a Jade check, and
   // the row is inert. Every other state is a real button — 48dp tall, 8px
   // radius, 1px Hairline, Ink label.
@@ -189,7 +222,11 @@ export function DownloadButton({
       className={
         disabled
           ? "min-h-12 items-center justify-center rounded-lg border border-border bg-surface-2 px-3 py-2"
-          : "min-h-12 items-center justify-center rounded-lg border border-border bg-surface-1 px-3 py-2"
+          : // PocketPal's btnDownload trio (#ecfdf5 ground / #bbf7d0 border /
+            // #047857 label), carried by LiAI's own three green tokens. Its
+            // border value is 1.21:1 and could never clear the non-text floor
+            // here, so the border takes the 3:1 mark step instead.
+            "min-h-12 items-center justify-center rounded-lg border border-success-mark bg-success-fill px-3 py-2"
       }
       accessibilityRole="button"
       accessibilityState={{ disabled }}
@@ -204,18 +241,21 @@ export function DownloadButton({
       }
     >
       <View className="flex-row items-center gap-2">
+        {/* The glyph takes the MARK step and the label the text step —
+            DESIGN.md's Two-Step Rule names icons as mark work. The label
+            alone carries the 4.5:1. */}
         {isDownloading ? (
-          <Pause size={16} color={disabled ? colors.secondaryText : colors.primary} />
+          <Pause size={16} color={disabled ? colors.secondaryText : colors.successMark} />
         ) : isPaused ? (
-          <Play size={16} color={disabled ? colors.secondaryText : colors.primary} />
+          <Play size={16} color={disabled ? colors.secondaryText : colors.successMark} />
         ) : (
-          <Download size={16} color={disabled ? colors.secondaryText : colors.primary} />
+          <Download size={16} color={disabled ? colors.secondaryText : colors.successMark} />
         )}
         <Text
           className={
             disabled
               ? "font-sans text-body-sm text-secondary-text"
-              : "font-sans text-body-sm text-primary-text"
+              : "font-sans text-body-sm text-success-deep"
           }
         >
           {label}

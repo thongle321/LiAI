@@ -121,10 +121,12 @@ describe("every download surface is covered", () => {
   });
 
   it("Hugging Face search file rows poll while the details sheet is open", () => {
-    const src = strip("components/models/HFModelSearch.tsx");
-    assert.match(src, /useFreeSpacePoll/);
-    assert.match(src, /storageDisclosure/);
-    assert.doesNotMatch(src, /Only \$\{formatBytes/, "the old one-off free-space line is gone");
+    // Split with the reference's shape: the sheet polls, the row decides.
+    const details = strip("components/models/HFDetailsView.tsx");
+    const row = strip("components/models/HFFileRow.tsx");
+    assert.match(details, /useFreeSpacePoll/);
+    assert.match(row, /storageDisclosure/);
+    assert.doesNotMatch(details + row, /Only \$\{formatBytes/, "the old one-off free-space line is gone");
   });
 
   it("the onboarding picker is covered by sharing the preset card", () => {

@@ -403,8 +403,9 @@
   letter-spacing: 0.4px;
   color: #2563eb;
 }
-/* Modifier: the two "heavier" packs are labelled in their own ramp so the
-   list scans by tier, not just by position. */
+/* Modifier: Kitten's tier chip carries the warm ramp, so the pack a
+   low-end device reaches for is the one that shouts. Kokoro and Supertonic
+   read in Signal Blue. */
 .voice-badge--warm {
   background-color: #ffedd5;
 }

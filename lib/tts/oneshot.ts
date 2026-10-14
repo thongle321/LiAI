@@ -20,11 +20,6 @@
 
 import type { TTSModelType } from "react-native-sherpa-onnx/tts";
 
-/** Registry id of the tracer model (GitHub release tag `tts-models`):
- *  98.5 MB int8 English kokoro. `kokoro-en-v0_19` is the 304.8 MB fp32
- *  sibling — same voices, heavier download. */
-export const KOKORO_EN_MODEL_ID = "kokoro-int8-en-v0_19";
-
 /** Minimal structural view of the streaming engine's playback surface —
  *  a subset of the real `StreamingTtsEngine`, so tests can fake it. */
 export interface PcmPlaybackEngine {
@@ -45,13 +40,10 @@ export interface PcmPlaybackEngine {
   destroy(): Promise<void>;
 }
 
-/** Inference threads for kokoro. sherpa defaults to 2; its kokoro pages
- *  measure RTF 3.87 (2 threads) vs 2.77 (4) on a RPi 4, and TTS bursts
- *  alongside a chat turn, so 4 is the better trade here. */
-const KOKORO_NUM_THREADS = 4;
-
 /** Engine-creation knobs the caller resolves; kept off `SpeakOnceOptions`
- *  because they are engine setup, not per-utterance intent. */
+ *  because they are engine setup, not per-utterance intent. Thread count
+ *  IS on SpeakOnceOptions (the engine table sets it per model), so this
+ *  one exists only for callers that bypass the table — tests, mostly. */
 export interface EngineTuning {
   numThreads?: number;
   /** Execution provider: 'cpu' | 'nnapi' | 'coreml' | ... */
@@ -71,8 +63,16 @@ export interface SherpaTtsApi {
 export interface SpeakOnceOptions {
   /** Local model directory from the download bridge. */
   modelPath: string;
+  /** sherpa model type to instantiate. `auto` lets sherpa detect it from
+   *  the files on disk; the engine table passes the explicit type because
+   *  detection is a fallback, not a plan. */
+  modelType?: TTSModelType;
   text: string;
-  /** Speaker id; kokoro-en-v0_19 has 11 (0..10). */
+  /** Inference threads for this model. The engine table sets it per engine
+   *  (the 15M kitten needs fewer than the diffusion model); omitted means
+   *  the shared default below. */
+  numThreads?: number;
+  /** Speaker id; each engine's curated table is in sid order. */
   sid?: number;
   speed?: number;
   /** Speaker count the caller's curated voice table assumes. When the model
@@ -91,12 +91,13 @@ export interface SpeakOnceOptions {
 async function assertSpeakerCount(
   engine: PcmPlaybackEngine,
   expected: number | undefined,
+  modelType: string,
 ): Promise<void> {
   if (expected === undefined) return;
   const actual = await engine.getNumSpeakers().catch(() => undefined);
   if (actual !== undefined && actual !== expected) {
     console.warn(
-      `[tts] kokoro model reports ${actual} speakers but ${expected} voices are curated; the sid→name table is stale`,
+      `[tts] ${modelType} model reports ${actual} speakers but ${expected} voices are curated; the sid→name table is stale`,
     );
   }
 }
@@ -111,14 +112,19 @@ export async function speakOnce(
 ): Promise<void> {
   if (options.signal?.aborted) return;
   const api = await load();
+  const modelType = options.modelType ?? "auto";
   const engine = await api.createStreamingTTS({
     modelPath: { type: "file", path: options.modelPath },
-    modelType: "kokoro",
-    ...(tuning.numThreads !== undefined ? { numThreads: tuning.numThreads } : {}),
+    modelType,
+    ...(tuning.numThreads !== undefined
+      ? { numThreads: tuning.numThreads }
+      : options.numThreads !== undefined
+        ? { numThreads: options.numThreads }
+        : {}),
     ...(tuning.provider !== undefined ? { provider: tuning.provider } : {}),
   });
   try {
-    await assertSpeakerCount(engine, options.expectedSpeakers);
+    await assertSpeakerCount(engine, options.expectedSpeakers, modelType);
     const sampleRate = await engine.getSampleRate();
     await engine.startPcmPlayer(sampleRate, 1);
     try {
@@ -212,15 +218,16 @@ async function detectProvider(): Promise<string> {
   return "cpu";
 }
 
-function kokoroProvider(): Promise<string> {
+function neuralProvider(): Promise<string> {
   providerProbe ??= detectProvider();
   return providerProbe;
 }
 
-/** The app's one-shot path over the real engine module. */
-export async function speakKokoroOnce(options: SpeakOnceOptions): Promise<void> {
+/** The app's one-shot path over the real engine module, for any neural
+ *  engine. The engine table carries each model's `modelType` and thread
+ *  count; everything else (provider probe) is shared and resolved once. */
+export async function speakNeuralOnce(options: SpeakOnceOptions): Promise<void> {
   await speakOnce(() => import("react-native-sherpa-onnx/tts"), options, {
-    numThreads: KOKORO_NUM_THREADS,
-    provider: await kokoroProvider(),
+    provider: await neuralProvider(),
   });
 }

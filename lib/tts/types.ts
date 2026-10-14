@@ -5,7 +5,12 @@
  * path (`playStreaming` + StreamingHandle) is phase 2 (spec Q3).
  */
 
-export type EngineId = "system" | "kokoro";
+/** The downloadable (neural) engines. `system` is the no-download default
+ *  and is never one of these — every card in the "Downloadable engines"
+ *  list is keyed by a `NeuralEngineId`. */
+export type NeuralEngineId = "kokoro" | "kitten" | "supertonic";
+
+export type EngineId = "system" | NeuralEngineId;
 
 export interface Voice {
   /** Stable identifier used to look up the voice on the engine. */
@@ -18,9 +23,10 @@ export interface Voice {
   language?: string;
 }
 
-/** Kokoro synthesis knobs; the system engine ignores both. */
+/** Synthesis knobs; the system engine ignores both. */
 export interface PlayOptions {
-  /** Speaker id override; kokoro-en-v0_19 has 11 (0..10). */
+  /** Speaker id override. Each neural engine's curated voice list is in sid
+   *  order, so the default is the voice's index in that list. */
   sid?: number;
   speed?: number;
 }

@@ -31,7 +31,7 @@ STT/voice-input anywhere.** Its shape:
 | # | Decision | Choice |
 | --- | --- | --- |
 | Q1 | Scope | **TTS output only.** No STT (`expo-speech-recognition` stays untouched) |
-| Q2 | Engines v1 | **System (expo-speech) + Kokoro (sherpa)** behind a PocketPal-shaped `Engine` interface. Kitten/Supertonic = phase 2 |
+| Q2 | Engines v1 | **System (expo-speech) + Kokoro (sherpa)** behind a PocketPal-shaped `Engine` interface. **REVERSED 2026-10-14: Kitten + Supertonic ship too** (see Q2 reversal below) |
 | Q3 | Playback timing | **Speak-on-completion.** Feed the finished text at `run_finished`; store API shaped so streaming drops in later |
 | Q4 | Model download | **sherpa's built-in download manager** (`react-native-sherpa-onnx/download`): GitHub registry, SHA-256, resume, progress, disk checks. Same code for Android + iOS |
 | Q5 | Audio playback | **sherpa's native PCM player** (`startPcmPlayer`/`writePcmChunk`/`stopPcmPlayer`). System engine plays inside expo-speech. **No `expo-audio`, no player dep** |
@@ -51,10 +51,53 @@ STT/voice-input anywhere.** Its shape:
 ### Deliberately deferred (phase 2, not dropped)
 
 - Streaming playback (`createStreamingTTS` + thinking-placeholder cue)
-- Kokoro speakers beyond the curated 20
-- Kitten / Supertonic engines
+- Kokoro speakers beyond the curated 11
+- Supertonic's language picker and diffusion-steps control, which PocketPal
+  exposes and we cannot: sherpa-onnx 0.4.4's `TtsSupertonicModelOptions` is
+  an empty interface, so there is no knob to turn. Revisit when the library
+  grows them.
 - STT (its own design: `expo-speech-recognition` vs sherpa's STT + native
   mic capture — that choice was never grilled and must not be assumed)
+
+### Q2 reversal (2026-10-14)
+
+The original deferral rested on a wrong premise, found during the build of
+the three-engine screen: **Kitten and Supertonic are NOT blocked on
+PocketPal's private speech fork.** They looked blocked because PocketPal
+implements them in `@pocketpalai/react-native-speech` — but that fork is
+PocketPal's, not a requirement. `react-native-sherpa-onnx` 0.4.4 supports
+both natively:
+
+```
+TTSModelType = 'vits' | 'matcha' | 'kokoro' | 'kitten' | 'pocket'
+             | 'zipvoice' | 'supertonic' | 'auto'
+```
+
+and publishes both models in the same `tts-models` release this app already
+downloads from. So the deferral was costing us two engines for no reason.
+
+What shipped: one `createNeuralEngine` factory over a per-engine table
+(`lib/tts/engineMeta.ts`), one `EngineId` union carrying three neural
+engines, and a per-engine download map in the store. Model ids and archive
+sizes are measured from the release, not taken from the reference design
+(see Q14 below).
+
+Debt carried forward:
+
+1. **Kitten/Supertonic voice tables are UNVERIFIED.** Kokoro's sid->name
+   order is pinned to sherpa's own `generate_voices_bin.py`; no equivalent
+   generator exists for the other two, so their orders are PocketPal's
+   carried over. `getNumSpeakers()` only catches a count change, never a
+   reorder. Correct both from a device reading before trusting them.
+2. **Nothing has run on a device.** No sherpa TTS API has ever been
+   exercised on hardware in this project; three engines triples the surface
+   that first-device-session debugging will hit.
+3. **Spec lines print our real numbers, not the design's.** The design says
+   "22 voices / 330 MB" because that is PocketPal's *different* kokoro model
+   (`onnx-community/Kokoro-82M-v1.0-ONNX`, fp32, per-voice .bin files).
+   Ours is the int8 `kokoro-int8-en-v0_19`: 11 voices, 103.2 MB. Peak-RAM
+   figures are absent entirely — the reference's were measured on its
+   authors' hardware, and ours would be a guess.
 
 ## Architecture
 

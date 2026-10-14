@@ -1,25 +1,47 @@
 /** Voice screen: how LiAI speaks.
  *
- * Structure from the Voice settings reference — the System voice card on
- * top, then the Kokoro engine group, then auto-speak. Colours are this
- * project's tokens, not PocketPal's paper-and-orange.
+ * Built to the Voice settings design, with each engine card's expand /
+ * collapse and its state-driven body following PocketPal's
+ * VoicePickerView (components/voice/EngineCard.tsx). Colours are this
+ * project's tokens, not PocketPal's paper-and-orange: the warm tint is a
+ * decorative avatar/badge accent, and anything that carries text or is
+ * interactive is Signal Blue.
  *
- * The Kokoro group (see components/voice/KokoroEngineCard.tsx) is live:
- * download button with progress, the 11 curated voices as radio rows,
- * tap-to-preview. Only engines in the v1 scope (system + kokoro, spec
- * Q2) appear; kitten/supertonic return in phase 2 with their own groups.
+ * Shape: the System voice card first (what the device can already do, zero
+ * install), then the three downloadable engines, then the offline note.
+ * Auto-speak sits above them all — PocketPal puts it at the top of the
+ * picker, where a user looking for "does it talk" finds it first.
  */
 
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
-import { AudioLines, Volume2 } from "lucide-react-native";
+import { Pressable, Text, View } from "react-native";
+import { AudioLines, CloudDownload, Database, Play, Square, Volume2 } from "lucide-react-native";
 
-import { KokoroEngineCard } from "./voice/KokoroEngineCard.tsx";
-import { ActionRow, PickerRow, SettingsSection, ToggleRow } from "./SettingsRows.tsx";
+import { colors } from "../themes/tokens.ts";
+import { formatBytes } from "../lib/models/progress.ts";
+import { useFreeSpacePoll } from "../hooks/useStorageDisclosure.ts";
+import { ENGINE_ORDER } from "../lib/tts/engineMeta.ts";
 import { DEVICE_DEFAULT_VOICE } from "../lib/tts/types.ts";
 import { VOICE_PREVIEW_SAMPLE } from "../constants/voice-strings.ts";
 import { speakReply, stopSpeaking } from "../lib/voiceSpeak.ts";
+import { EngineCard } from "./voice/EngineCard.tsx";
+import { SettingsSection, ToggleRow } from "./SettingsRows.tsx";
 import { useVoice } from "../store/voice.ts";
+
+/** The section's storage caption. A real reading, not the design's static
+ *  "1.2 GB available": the same poll the model cards use, so freeing space
+ *  on the device updates this line without a remount. */
+function FreeStorageLine() {
+  const { freeBytes, checked } = useFreeSpacePoll(true);
+  return (
+    <View className="flex-row items-center gap-1">
+      <Database size={14} color={colors.secondaryText} />
+      <Text className="font-sans text-body-sm text-secondary-text">
+        {checked && freeBytes !== null ? `${formatBytes(freeBytes, 1)} available` : "…"}
+      </Text>
+    </View>
+  );
+}
 
 export function VoiceSettings() {
   const { currentVoice, autoSpeak, load, setCurrentVoice, setAutoSpeak } = useVoice();
@@ -28,6 +50,9 @@ export function VoiceSettings() {
   useEffect(() => {
     void load();
   }, []);
+
+  // null ≡ never chosen, which IS the device default (spec Q9).
+  const systemSelected = currentVoice === null || currentVoice.engine === "system";
 
   function togglePreview(): void {
     if (previewing) {
@@ -47,8 +72,8 @@ export function VoiceSettings() {
     <View>
       {/* Screen lede. */}
       <View className="mb-4 mt-2 flex-row items-center gap-3">
-        <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
-          <AudioLines size={22} color="#2563eb" />
+        <View className="h-11 w-11 items-center justify-center rounded-full bg-surface-3">
+          <AudioLines size={22} color={colors.primary} />
         </View>
         <View className="flex-1">
           <Text className="section-title">Voice output</Text>
@@ -56,45 +81,10 @@ export function VoiceSettings() {
         </View>
       </View>
 
-      {/* System voice — what the device can already do. One row, the
-          device default: OS voices are never enumerated (spec Q9). */}
-      <View className="voice-card voice-card--active mb-3">
-        <View className="voice-card__header">
-          <View className="h-9 w-9 items-center justify-center rounded-full bg-orange-100">
-            <Volume2 size={18} color="#c2410c" />
-          </View>
-          <View className="flex-1">
-            <Text className="voice-card__title">System voice</Text>
-            <Text className="voice-card__spec">Use a voice installed on this device</Text>
-          </View>
-        </View>
-        <View className="voice-card__body">
-          <View className="row">
-            <PickerRow
-              label="Reading voice"
-              description="The voice your device provides. Voices for other languages come from your device settings."
-              options={[DEVICE_DEFAULT_VOICE.id]}
-              value={currentVoice?.id ?? DEVICE_DEFAULT_VOICE.id}
-              onChange={() => setCurrentVoice(DEVICE_DEFAULT_VOICE)}
-              displayFor={() => DEVICE_DEFAULT_VOICE.name}
-            />
-          </View>
-          <View className="row">
-            <ActionRow
-              label="Preview"
-              description="Hear a sample in the selected voice."
-              buttonLabel={previewing ? "Stop" : "Play"}
-              variant="secondary"
-              onPress={togglePreview}
-            />
-          </View>
-        </View>
-      </View>
-
-      <Text className="section-title mb-3 mt-6">Neural voice</Text>
-      <KokoroEngineCard />
-
-      <SettingsSection description="How replies are read aloud.">
+      {/* Auto-speak first (PocketPal's order). It is a preference about
+          every voice on this screen, so it belongs above the list rather
+          than below it. */}
+      <SettingsSection>
         <View className="row">
           <ToggleRow
             label="Auto-speak responses"
@@ -105,8 +95,75 @@ export function VoiceSettings() {
         </View>
       </SettingsSection>
 
-      {/* Historical dev smoke test lived here (issue 02 KokoroTracer) — the
-          Kokoro group above subsumes it, so the tracer is gone. */}
+      {/* System voice — what the device can already do, zero install. One
+          row, the device default: OS voices are never enumerated (Q9), so
+          there is no picker here to get wrong. */}
+      <View className={systemSelected ? "voice-card voice-card--active mb-3" : "voice-card mb-3"}>
+        <Pressable
+          onPress={() => setCurrentVoice(DEVICE_DEFAULT_VOICE)}
+          accessibilityRole="radio"
+          accessibilityState={{ checked: systemSelected }}
+          accessibilityLabel="System voice — the device default voice"
+          className="voice-card__header"
+        >
+          <View className="h-9 w-9 items-center justify-center rounded-full bg-orange-100">
+            <Volume2 size={18} color="#c2410c" />
+          </View>
+          <View className="flex-1">
+            <View className="flex-row items-center gap-2">
+              <Text className="voice-card__title">System voice</Text>
+              <View className="voice-badge">
+                <Text className="voice-badge__text">Default</Text>
+              </View>
+            </View>
+            <Text className="voice-card__spec">Use your device&apos;s default voice</Text>
+          </View>
+          <View className="h-5 w-5 items-center justify-center rounded-full border-2 border-border">
+            {systemSelected ? (
+              <View className="h-2.5 w-2.5 rounded-full bg-primary" />
+            ) : null}
+          </View>
+        </Pressable>
+        <View className="voice-card__body">
+          <Pressable
+            onPress={togglePreview}
+            accessibilityRole="button"
+            accessibilityLabel={previewing ? "Stop preview" : "Preview the system voice"}
+            className="btn btn--tonal flex-row items-center gap-2 self-start px-4 py-2"
+          >
+            {previewing ? (
+              <Square size={14} color={colors.primary} />
+            ) : (
+              <Play size={14} color={colors.primary} />
+            )}
+            <Text className="font-sans-semibold text-body-md text-primary">
+              {previewing ? "Stop" : "Preview"}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {/* The downloadable engines, lightest first. */}
+      <View className="mb-3 mt-6 flex-row items-end justify-between">
+        <View className="flex-1 pr-4">
+          <Text className="section-title">Downloadable engines</Text>
+          <Text className="mt-1 font-sans text-body-sm text-secondary-text">
+            Voice packs are stored on your device. Uses storage space.
+          </Text>
+        </View>
+        <FreeStorageLine />
+      </View>
+
+      {ENGINE_ORDER.map((id) => (
+        <EngineCard key={id} engineId={id} />
+      ))}
+
+      <View className="mt-1 flex-row items-center gap-2">
+        <CloudDownload size={14} color={colors.secondaryText} />
+        <Text className="font-sans text-body-sm text-secondary-text">
+          Downloaded voices work offline
+        </Text>
+      </View>
     </View>
   );
 }

@@ -13,12 +13,15 @@ import {
   createVoiceStore,
   VOICE_KEY,
   KOKORO_MODEL_ID,
+  EMPTY_DOWNLOADS,
   RAM_GATE_BYTES,
   reconcileVoice,
   restoreVoice,
 } from "../store/voice.ts";
 import { DEVICE_DEFAULT_VOICE } from "../lib/tts/types.ts";
 import { KOKORO_VOICES } from "../lib/tts/engines/kokoro.ts";
+import { KITTEN_VOICES } from "../lib/tts/engines/kitten.ts";
+import { SUPERTONIC_VOICES } from "../lib/tts/engines/supertonic.ts";
 import type { KeyValueStorage } from "../lib/storage.ts";
 
 function memoryStorage(seed: Record<string, string> = {}): KeyValueStorage & {
@@ -108,26 +111,37 @@ describe("voice store", () => {
     }
   });
 
-  it("keeps a curated kokoro voice across the migration", async () => {
-    const bella = KOKORO_VOICES[1];
-    const store = createVoiceStore(
-      memoryStorage({
-        [VOICE_KEY]: JSON.stringify({
-          // Built from the curated table so this test cannot drift from it.
-          currentVoice: bella,
-          autoSpeak: false,
+  it("keeps a curated neural voice across the migration, for every engine", async () => {
+    for (const voice of [KOKORO_VOICES[1], KITTEN_VOICES[0], SUPERTONIC_VOICES[0]]) {
+      const store = createVoiceStore(
+        memoryStorage({
+          [VOICE_KEY]: JSON.stringify({ currentVoice: voice, autoSpeak: false }),
         }),
-      }),
-    );
-    await store.getState().load();
-    assert.deepEqual(store.getState().currentVoice, bella);
+      );
+      await store.getState().load();
+      assert.deepEqual(store.getState().currentVoice, voice, voice.id);
+    }
   });
 
-  it("drops a kokoro voice that is no longer curated", async () => {
+  it("drops a neural voice that is no longer curated", async () => {
+    for (const engine of ["kokoro", "kitten", "supertonic"] as const) {
+      const store = createVoiceStore(
+        memoryStorage({
+          [VOICE_KEY]: JSON.stringify({
+            currentVoice: { id: "ghost_voice", name: "Ghost", engine },
+          }),
+        }),
+      );
+      await store.getState().load();
+      assert.deepEqual(store.getState().currentVoice, DEVICE_DEFAULT_VOICE, engine);
+    }
+  });
+
+  it("collapses an unknown engine id to the device default", async () => {
     const store = createVoiceStore(
       memoryStorage({
         [VOICE_KEY]: JSON.stringify({
-          currentVoice: { id: "af_ghost", name: "Ghost", engine: "kokoro" },
+          currentVoice: { id: "af", name: "Bella", engine: "mystery-engine" },
         }),
       }),
     );
@@ -164,29 +178,60 @@ describe("voice store", () => {
 
 describe("voice reconcile — a persisted voice whose model vanished", () => {
   const bella = KOKORO_VOICES[1];
+  const withState = (
+    state: "not_installed" | "error" | "ready",
+    engine: "kokoro" | "kitten" | "supertonic" = "kokoro",
+  ) => ({ ...EMPTY_DOWNLOADS, [engine]: { state, percent: state === "ready" ? 100 : 0 } });
 
-  it("stashes the id and falls back to the device default", () => {
+  it("stashes the id under ITS engine and falls back to the device default", () => {
     for (const state of ["not_installed", "error"] as const) {
-      const r = reconcileVoice(bella, { state, percent: 0 });
+      const r = reconcileVoice(bella, withState(state));
       assert.deepEqual(r.voice, DEVICE_DEFAULT_VOICE, state);
-      assert.equal(r.stashed, bella.id, state);
+      assert.deepEqual(r.stashed, { kokoro: bella.id }, state);
     }
   });
 
   it("keeps the voice when the model is ready", () => {
-    const r = reconcileVoice(bella, { state: "ready", percent: 100 });
+    const r = reconcileVoice(bella, withState("ready"));
     assert.deepEqual(r.voice, bella);
-    assert.equal(r.stashed, null);
+    assert.deepEqual(r.stashed, {});
   });
 
   it("keeps the voice when the download state is unknown — unknown is not vanished", () => {
-    const r = reconcileVoice(bella, null);
+    const r = reconcileVoice(bella, { ...EMPTY_DOWNLOADS });
     assert.deepEqual(r.voice, bella);
-    assert.equal(r.stashed, null);
+    assert.deepEqual(r.stashed, {});
+  });
+
+  it("applies per engine: a missing kokoro model says nothing about a kitten voice", () => {
+    const kittenVoice = KITTEN_VOICES[0];
+    const r = reconcileVoice(kittenVoice, {
+      ...EMPTY_DOWNLOADS,
+      kokoro: { state: "not_installed", percent: 0 },
+    });
+    assert.deepEqual(r.voice, kittenVoice, "kokoro's state is irrelevant here");
+    assert.deepEqual(r.stashed, {});
+  });
+
+  it("stashes a kitten voice under kitten, not kokoro", () => {
+    const kittenVoice = KITTEN_VOICES[0];
+    const r = reconcileVoice(kittenVoice, {
+      ...EMPTY_DOWNLOADS,
+      kitten: { state: "error", percent: 0 },
+    });
+    assert.deepEqual(r.voice, DEVICE_DEFAULT_VOICE);
+    assert.deepEqual(r.stashed, { kitten: kittenVoice.id });
   });
 
   it("restores a stashed id only while still curated", () => {
-    assert.deepEqual(restoreVoice(bella.id), bella);
-    assert.equal(restoreVoice("af_ghost"), null);
+    assert.deepEqual(restoreVoice(bella.id, "kokoro"), bella);
+    assert.deepEqual(restoreVoice("af_ghost", "kokoro"), null);
+    // The same id asked for by the wrong engine is still not a voice.
+    assert.deepEqual(restoreVoice(bella.id, "kitten"), null);
+    assert.deepEqual(restoreVoice(KITTEN_VOICES[0].id, "kitten"), KITTEN_VOICES[0]);
+    assert.deepEqual(
+      restoreVoice(SUPERTONIC_VOICES[1].id, "supertonic"),
+      SUPERTONIC_VOICES[1],
+    );
   });
 });

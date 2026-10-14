@@ -2,14 +2,15 @@
  * Run: node --test tests/voice-download.test.ts
  *
  * In node the sherpa download manager is absent, so starting a download
- * rejects and the triplet stays as-was — the adapter contract the Kokoro
- * group renders from (lib/tts/voiceUi.ts).
+ * rejects and that engine's entry stays as-was — the adapter contract the
+ * engine cards render from (lib/tts/voiceUi.ts).
  */
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { createVoiceStore } from "../store/voice.ts";
+import { createVoiceStore, EMPTY_DOWNLOADS } from "../store/voice.ts";
+import { ENGINE_ORDER } from "../lib/tts/engineMeta.ts";
 import type { KeyValueStorage } from "../lib/storage.ts";
 
 function memoryStorage(): KeyValueStorage {
@@ -26,18 +27,31 @@ function memoryStorage(): KeyValueStorage {
 }
 
 describe("voice store download actions", () => {
-  it("startKokoroDownload rejects without a native module and leaves the triplet", async () => {
+  it("starts UNKNOWN for every engine, not 'not installed'", async () => {
     const store = createVoiceStore(memoryStorage());
     await store.getState().load();
-    assert.equal(store.getState().download, null);
-    await assert.rejects(store.getState().startKokoroDownload());
-    assert.equal(store.getState().download, null);
+    // node has no native module, so nothing was read — and an unread state
+    // must not read as "vanished" to reconcileVoice.
+    assert.deepEqual(store.getState().downloads, EMPTY_DOWNLOADS);
   });
 
-  it("cancelKokoroDownload is a safe no-op when idle", async () => {
+  it("gives every downloadable engine a download entry", () => {
+    assert.deepEqual(Object.keys(EMPTY_DOWNLOADS).sort(), [...ENGINE_ORDER].sort());
+  });
+
+  it("startEngineDownload rejects without a native module and leaves the map", async () => {
     const store = createVoiceStore(memoryStorage());
     await store.getState().load();
-    store.getState().cancelKokoroDownload();
-    assert.equal(store.getState().download, null);
+    for (const engine of ENGINE_ORDER) {
+      await assert.rejects(store.getState().startEngineDownload(engine));
+    }
+    assert.deepEqual(store.getState().downloads, EMPTY_DOWNLOADS);
+  });
+
+  it("cancelEngineDownload is a safe no-op when idle", async () => {
+    const store = createVoiceStore(memoryStorage());
+    await store.getState().load();
+    store.getState().cancelEngineDownload();
+    assert.deepEqual(store.getState().downloads, EMPTY_DOWNLOADS);
   });
 });

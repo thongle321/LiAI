@@ -96,16 +96,31 @@ describe("speakOnce — engine tuning and self-checks", () => {
     const { engine } = fakeEngine(log);
     const api = fakeApi(log, engine);
 
-    await speakOnce(async () => api, { modelPath: "/m", text: "hi" }, {
+    await speakOnce(async () => api, { modelPath: "/m", text: "hi", modelType: "supertonic" }, {
       numThreads: 4,
       provider: "nnapi",
     });
 
     assert.deepEqual(api.lastOptions, {
       modelPath: { type: "file", path: "/m" },
-      modelType: "kokoro",
+      // Per-engine model type passes straight through — a supertonic voice
+      // must not be synthesized by the kokoro engine.
+      modelType: "supertonic",
       numThreads: 4,
       provider: "nnapi",
+    });
+  });
+
+  it("defaults the model type to auto-detect when the caller names none", async () => {
+    const log: string[] = [];
+    const { engine } = fakeEngine(log);
+    const api = fakeApi(log, engine);
+
+    await speakOnce(async () => api, { modelPath: "/m", text: "hi" });
+
+    assert.deepEqual(api.lastOptions, {
+      modelPath: { type: "file", path: "/m" },
+      modelType: "auto",
     });
   });
 
@@ -118,7 +133,7 @@ describe("speakOnce — engine tuning and self-checks", () => {
 
     assert.deepEqual(api.lastOptions, {
       modelPath: { type: "file", path: "/m" },
-      modelType: "kokoro",
+      modelType: "auto",
     });
   });
 

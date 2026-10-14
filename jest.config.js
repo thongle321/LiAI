@@ -1,0 +1,37 @@
+module.exports = {
+  preset: 'jest-expo',
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+  testMatch: [
+    '**/__tests__/**/*.test.[jt]s?(x)',
+    '**/?(*.)+(spec|test).[jt]s?(x)',
+  ],
+  testPathIgnorePatterns: ['/node_modules/', '/e2e/', '/pocketpal-ai/'],
+  modulePathIgnorePatterns: ['<rootDir>/pocketpal-ai'],
+  transformIgnorePatterns: [
+    'node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|expo-(.*)|@expo|@expo-(.*)|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation|uniwind|tailwindcss|react-native-vision-camera|react-native-reanimated|react-native-worklets|react-native-gesture-handler|@lodev09/react-native-true-sheet|llama\\.rn|@dr\\.pogodin/react-native-fs|react-native-keyboard-controller|react-native-marked|react-native-code-highlighter|react-native-sherpa-onnx|tinybase)/)',
+    'node_modules/react-native-reanimated/plugin/',
+    'node_modules/@react-native/babel-preset/',
+  ],
+  moduleNameMapper: {
+    '\\.css$': '<rootDir>/jest/styleMock.js',
+    'react-native/setup-env': '<rootDir>/jest/react-native-setup-env.js',
+    'llama.rn': '<rootDir>/__mocks__/external/llama.rn.ts',
+    'react-native-vision-camera':
+      '<rootDir>/__mocks__/external/react-native-vision-camera.ts',
+    '@lodev09/react-native-true-sheet':
+      '@lodev09/react-native-true-sheet/mock',
+    'react-native-reanimated':
+      '<rootDir>/jest/react-native-reanimated-mock.js',
+    '@dr.pogodin/react-native-fs':
+      '<rootDir>/__mocks__/external/@dr.pogodin/react-native-fs.js',
+    'react-native-marked':
+      '<rootDir>/__mocks__/external/react-native-marked.js',
+    'react-native-code-highlighter':
+      '<rootDir>/__mocks__/external/react-native-code-highlighter.js',
+    'react-native-sherpa-onnx':
+      '<rootDir>/__mocks__/external/react-native-sherpa-onnx.js',
+    '@kesha-antonov/react-native-background-downloader':
+      '<rootDir>/__mocks__/external/@kesha-antonov/react-native-background-downloader.js',
+  },
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+};

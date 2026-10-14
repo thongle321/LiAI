@@ -59,9 +59,16 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@react-native/jest-preset": "^0.87.1",
+    "@testing-library/react-native": "^13.3.3",
+    "@types/jest": "29.5.14",
     "@types/node": "^22.20.2",
     "@types/react": "~19.2.2",
+    "@types/react-test-renderer": "^19.3.0",
     "babel-preset-expo": "^57.0.11",
+    "jest": "~29.7.0",
+    "jest-expo": "~57.0.6",
+    "react-test-renderer": "^19.2.3",
     "typescript": "~6.0.3"
   },
   "overrides": {
@@ -73,7 +80,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tests/tsconfig.json",
-    "test": "node scripts/check-route-filenames.mjs && node --test tests/*.test.ts"
+    "test": "node scripts/check-route-filenames.mjs && jest"
   },
   "allowScripts": {
     "llama.rn@0.13.0-rc.7": true

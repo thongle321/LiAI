@@ -15,9 +15,5 @@ local.properties
 # generated inline modules
 app/src/main/java/inline/
 
-# Hexagon DSP libs, copied out of node_modules/llama.rn/bin by its
-# syncRNLlamaHtpAssets preBuild task on every build — build output, not source
-app/src/main/assets/ggml-hexagon/
-
 # Bundle artifacts
 *.jsbundle

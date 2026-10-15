@@ -1,13 +1,11 @@
-/** Message input: the composer — text field + dictation + vision/voice
- * shortcuts.
+/** Message input: the composer — text field + attach + thinking shortcut.
  *
  * Renamed from ChatInput.tsx (message-view refactor): same behavior, new
- * name. The composer mic dictates into the draft (you press Send); the
- * Voice tab opens the standalone /voice hands-free screen, and the Vision
- * entry opens the standalone /vision camera screen.
+ * name. The composer attach button opens the camera/gallery picker, and the
+ * thinking pill toggles the model's reasoning mode.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Image as RNImage,
   Pressable,
@@ -16,13 +14,7 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import { useIsFocused } from "expo-router";
-import { openSettings } from "expo-linking";
-import { Brain, Camera, Image as ImageIcon, Mic, Pencil, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
-import {
-  ExpoSpeechRecognitionModule,
-  useSpeechRecognitionEvent,
-} from "expo-speech-recognition";
+import { Brain, Camera, Image as ImageIcon, Pencil, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
 import Animated from "react-native-reanimated";
 import { KeyboardControllerNative } from "react-native-keyboard-controller";
 
@@ -36,10 +28,6 @@ import { useModelReady } from "../../hooks/useModelReady.ts";
 import { useMultimodalAvailable } from "../../hooks/useMultimodalAvailable.ts";
 import { useModelStore } from "../../store/modelStore";
 import { resolveThinking } from "../../lib/inference/thinking.ts";
-import { mergeDictation, VOICE_LISTEN_OPTS } from "../../lib/voiceListen.ts";
-import { VoiceChip } from "../voice/VoiceChip.tsx";
-import { ensureMicAccess } from "../../lib/micAccess.ts";
-import { isThrottlingError, isVoiceThrottled, setVoiceThrottled } from "../../lib/voiceStatus.ts";
 import {
   MAX_IMAGES,
   pickImages,
@@ -83,12 +71,12 @@ export function MessageInput({
   // KeyboardStickyView), minus the extra component.
   const lift = useKeyboardLift();
   // Composer text lives in the chat store (per-session drafts survive
-  // switches); dictation mechanics stay local below.
+  // switches).
   const draft = useChatStore((s) => s.draft);
   const setDraft = useChatStore((s) => s.setDraft);
-  // The engine-accurate gate (matches voice/vision). The mic and the attach
-  // button both start a turn that needs a live model, so they disable when
-  // no model can actually answer.
+  // The engine-accurate gate (matches vision). The attach button starts a
+  // turn that needs a live model, so it disables when no model can actually
+  // answer.
   const modelReady = useModelReady();
   // G6: the thinking toggle PocketPal keeps in the composer. Local only --
   // `enableThinking` is a llama.rn jinja flag (lib/inference/engine.ts),
@@ -151,115 +139,8 @@ export function MessageInput({
     const id = setTimeout(() => setBlockedNote(null), 2500);
     return () => clearTimeout(id);
   }, [blockedNote]);
-  // Dictation: mic fills the draft, the user presses Send. Interim
-  // updates replace the dictated tail (draftBase keeps typed text).
-  const [listening, setListening] = useState(false);
-  const [voiceIssue, setVoiceIssue] = useState<string | null>(null);
-  // Permanent denial never pops the OS dialog again — the issue
-  // line becomes a link into Settings instead of dead text.
-  const [voiceSettings, setVoiceSettings] = useState(false);
-  const draftBase = useRef("");
-  // The stack keeps chat mounted under /voice: ignore recognizer
-  // events while unfocused, or both screens process every event.
-  const focused = useIsFocused();
-  const focusedRef = useRef(focused);
-  focusedRef.current = focused;
-  // Fast double-taps would start() twice; the second errors busy.
-  const startingRef = useRef(false);
-
-  // ponytail: the native module is absent when the dev build predates
-  // the dep — stop() then throws, so never let it take down the caller.
-  function safeStopDictation(): void {
-    try {
-      ExpoSpeechRecognitionModule.stop();
-    } catch {
-      // nothing live to stop
-    }
-  }
-
-  async function toggleDictation(): Promise<void> {
-    // Shared lockout (voice tab sets it too): restarts extend the ban.
-    if (isVoiceThrottled()) {
-      setVoiceSettings(false);
-      setVoiceIssue("Too many voice requests — wait a bit and try again.");
-      return;
-    }
-    if (listening) {
-      safeStopDictation();
-      return;
-    }
-    if (startingRef.current) return;
-    startingRef.current = true;
-    try {
-      // Popup shows only when undetermined; a permanent denial must
-      // go through Settings, and a stale build has nothing to ask.
-      const access = await ensureMicAccess();
-      if (access === "unavailable") {
-        setVoiceSettings(false);
-        setVoiceIssue("Voice input isn't available in this build — rebuild the dev client.");
-        return;
-      }
-      if (access === "settings") {
-        setVoiceSettings(true);
-        setVoiceIssue("Microphone is blocked — tap here to open Settings and enable it.");
-        return;
-      }
-      setVoiceSettings(false);
-      draftBase.current = draft;
-      setVoiceIssue(null);
-      ExpoSpeechRecognitionModule.start({
-        ...VOICE_LISTEN_OPTS,
-      });
-    } catch {
-      setVoiceIssue("Voice input isn't available in this build — rebuild the dev client.");
-    } finally {
-      startingRef.current = false;
-    }
-  }
-
-  useSpeechRecognitionEvent("start", () => {
-    if (focusedRef.current) setListening(true);
-  });
-  useSpeechRecognitionEvent("end", () => {
-    if (focusedRef.current) setListening(false);
-  });
-  useSpeechRecognitionEvent("result", (event) => {
-    if (!focusedRef.current) return;
-    const text = event.results[0]?.transcript ?? "";
-    if (text === "") return;
-    setDraft(mergeDictation(draftBase.current, text));
-  });
-  useSpeechRecognitionEvent("nomatch", () => {
-    if (!focusedRef.current) return;
-    console.warn("[voice] dictation failure: nomatch");
-    setVoiceIssue("I didn't catch that — try again.");
-  });
-  useSpeechRecognitionEvent("error", (event) => {
-    if (event.error === "aborted") return; // our own stop()
-    if (!focusedRef.current) return;
-    // The raw code goes to the terminal; the user gets clean copy (Q3).
-    console.warn(`[voice] dictation failure: ${event.error} ${event.message ?? ""}`);
-    if (isThrottlingError(event.error)) {
-      setVoiceThrottled();
-      setVoiceIssue("Too many voice requests — wait a bit and try again.");
-      return;
-    }
-    setVoiceIssue(
-      event.error === "not-allowed"
-        ? "Microphone access is needed."
-        : "I didn't catch that — try again.",
-    );
-  });
-
   useEffect(() => {
     void useInference.getState().load();
-    return () => {
-      try {
-        ExpoSpeechRecognitionModule.stop();
-      } catch {
-        // shutting down anyway
-      }
-    };
   }, []);
 
   const canSend = ready && !sending && draft.trim() !== "";
@@ -289,7 +170,6 @@ export function MessageInput({
       : "Model not loaded.";
   const sendPress = usePressFeedback();
   const stopPress = usePressFeedback();
-  const micPress = usePressFeedback();
   const plusPress = usePressFeedback();
   // Capability-gated attach (vision-series 03, PocketPal's
   // isPlusButtonEnabled shape): always rendered, disabled-with-hint when
@@ -321,9 +201,6 @@ export function MessageInput({
   }
 
   async function handleSend(): Promise<void> {
-    // Spurious stop() with nothing live confuses the native session;
-    // only stop an active dictate before sending.
-    if (listening) safeStopDictation();
     // PocketPal parity (ChatView.tsx:447): sending dismisses the
     // keyboard. The message is committed; the keyboard's job is done,
     // and leaving it up strands the composer over the reply that is
@@ -345,286 +222,257 @@ export function MessageInput({
     // there is no second box that can disagree with this one about where the
     // bottom of the screen is.
     //
-    // Everything stacked above the control row is a row the FIELD owns — the
-    // issue lines and the attach preview — so this box's measured height is
-    // exactly what the message list reserves, and the newest message can never
-    // sit behind one. Chrome that is not part of the field (the sending
-    // indicator, the prompt chips, the usage line) is an overlay in ChatScreen
-    // instead, and needs no reservation because it is positioned over the list,
-    // not in this flow.
+    // PocketPal-derived structure: container > inputContainer > (issue lines,
+    // attach preview, edit bar, textInputArea, controlBar). The issue lines
+    // and attach preview are rows the FIELD owns — the measured composer
+    // height is exactly what the message list reserves, and the newest
+    // message can never sit behind one. Chrome that is not part of the field
+    // (the sending indicator, the prompt chips, the usage line) is an
+    // overlay in ChatScreen instead.
     <Animated.View
       className={`border-t border-border bg-surface-1${className ? ` ${className}` : ""}`}
       style={lift}
       onLayout={onHeightChange}
     >
-      {voiceIssue !== null &&
-        (voiceSettings ? (
-          // A whole row is the target, not the 16px of text: DESIGN.md's
-          // floor is 48×48dp, and the padding goes on the hit area, never on
-          // the text.
-          <Pressable
-            onPress={() => void openSettings()}
-            className="min-h-12 justify-center"
-            accessibilityRole="button"
-            accessibilityLabel="Open voice settings"
-          >
-            <Text className="px-4 font-sans text-xs text-primary">
-              {voiceIssue}
-            </Text>
-          </Pressable>
-        ) : (
+      <View className="flex-col">
+        {attachIssue !== null && (
           <Text className="px-4 pb-1 font-sans text-xs text-secondary-text">
-            {voiceIssue}
+            {attachIssue}
           </Text>
-        ))}
-          {attachIssue !== null && (
-        <Text className="px-4 pb-1 font-sans text-xs text-secondary-text">
-          {attachIssue}
-        </Text>
-      )}
-      {blockedNote !== null && (
-        // Same treatment as the other issue lines, so a blocked send
-        // does not shout louder than a failed attach.
-        <Text
-          className="px-4 pb-1 font-sans text-xs text-secondary-text"
-          accessibilityLiveRegion="polite"
-        >
-          {blockedNote}
-        </Text>
-      )}
-      {attached.length > 0 && (
-        // Mist, not Clean White: this row sits INSIDE the white field now, and
-        // the three-plane rule is "a track inside a card is mist on white". It
-        // was a white card on the Cool Paper bar before the collapse.
-        //
-        // Per-image remove, as pocketpal's preview row does. Wrapping rather
-        // than a horizontal ScrollView: five thumbs fit in a bounded box, and
-        // a nested scroll inside the composer is a fight with the keyboard
-        // lift for no gain.
-        <View className="mx-4 mb-2 rounded-lg bg-surface-2 p-2">
-          <View className="flex-row flex-wrap items-center gap-2">
-            {attached.map((uri, i) => (
-              <View key={`${i}-${uri.length}`} className="relative">
-                <RNImage source={{ uri }} className="h-14 w-14 rounded" />
-                <Pressable
-                  onPress={() => setAttached((c) => c.filter((_, j) => j !== i))}
-                  className="absolute -right-2 -top-2 h-12 w-12 items-center justify-center"
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove photo ${i + 1} of ${attached.length}`}
-                  hitSlop={4}
-                >
-                  <View className="h-5 w-5 items-center justify-center rounded-full bg-surface-1">
-                    <X size={12} color={colors.primaryText} />
-                  </View>
-                </Pressable>
-              </View>
-            ))}
-          </View>
-          <Text className="mt-1 font-sans text-xs text-secondary-text">
-            {attached.length === 1
-              ? "1 photo — sent with your message"
-              : `${attached.length} photos — sent with your message`}
-          </Text>
-        </View>
-      )}
-          {/* IN FLOW, on purpose. The edit bar belongs to the field's state and
-        nobody else could own it, so it sits above the control row where
-        the measured composer height already counts it — the newest
-        message can never be clipped behind it. Putting it in chat.tsx's
-        overlay row instead would reserve nothing, but an edit bar the
-        user dismisses at will is chrome, and chrome over the list is
-        what that row is for. Spec §5. */}
-      {editing === true && (
-        <View className="flex-row items-center gap-2 border-b border-border px-4 py-1">
-          <Pencil size={14} color={colors.secondaryText} />
-          <Text className="flex-1 font-sans text-body-sm text-secondary-text">
-            Editing message — sending replaces this turn and everything after it
-          </Text>
-          <Pressable
-            onPress={() => onCancelEdit?.()}
-            className="h-12 w-12 items-center justify-center"
-            hitSlop={4}
-            accessibilityRole="button"
-            accessibilityLabel="Cancel editing"
+        )}
+        {blockedNote !== null && (
+          // Same treatment as the other issue lines, so a blocked send
+          // does not shout louder than a failed attach.
+          <Text
+            className="px-4 pb-1 font-sans text-xs text-secondary-text"
+            accessibilityLiveRegion="polite"
           >
-            <X size={18} color={colors.secondaryText} />
-          </Pressable>
-        </View>
-      )}
-      {/* The control row. The field's own spec supplies the fill, the top
-    hairline and the square corners, so this row is padding and
-    controls only: no radius, no border, no background, and no bottom
-    margin — it is flush with the bottom of the screen. */}
-      <View className="flex-row items-end gap-2 px-4 py-3">
-        <View>
-          <Animated.View style={plusPress.animatedStyle}>
-            <Pressable
-              onPress={modelReady && canSee ? () => setPlusOpen((o) => !o) : undefined}
-              onPressIn={plusPress.onPressIn}
-              onPressOut={plusPress.onPressOut}
-              disabled={!modelReady || !canSee}
-              className="h-12 w-12 items-center justify-center rounded-full bg-surface-3"
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !modelReady || !canSee }}
-              accessibilityLabel={
-                modelReady && canSee
-                  ? "Attach a photo"
-                  : modelReady
-                    ? "This model can't see images"
-                    : "Load a model to attach a photo"
-              }
-            >
-              <Plus size={20} color={modelReady && canSee ? colors.primary : colors.secondaryText} />
-            </Pressable>
-          </Animated.View>
-          {plusOpen && (
-            // Anchored to the plus button's wrapper and extending right into
-            // the empty composer space — the plus is leftmost, so w-48 fits
-            // without clipping. (right-0 here would squash it to 48px.)
-            <View className="absolute bottom-12 left-0 w-48 rounded-lg border border-border bg-surface-1 py-1">
-              <PlusItem
-                Icon={Camera}
-                label="Take photo"
-                onPress={() => void handleAttach("camera")}
-              />
-              <PlusItem
-                Icon={ImageIcon}
-                label="Choose from gallery"
-                onPress={() => void handleAttach("gallery")}
-              />
+            {blockedNote}
+          </Text>
+        )}
+        {attached.length > 0 && (
+          // Mist, not Clean White: this row sits INSIDE the white field now, and
+          // the three-plane rule is "a track inside a card is mist on white". It
+          // was a white card on the Cool Paper bar before the collapse.
+          //
+          // Per-image remove, as pocketpal's preview row does. Wrapping rather
+          // than a horizontal ScrollView: five thumbs fit in a bounded box, and
+          // a nested scroll inside the composer is a fight with the keyboard
+          // lift for no gain.
+          <View className="mx-4 mb-2 rounded-lg bg-surface-2 p-2">
+            <View className="flex-row flex-wrap items-center gap-2">
+              {attached.map((uri, i) => (
+                <View key={`${i}-${uri.length}`} className="relative">
+                  <RNImage source={{ uri }} className="h-14 w-14 rounded" />
+                  <Pressable
+                    onPress={() => setAttached((c) => c.filter((_, j) => j !== i))}
+                    className="absolute -right-2 -top-2 h-12 w-12 items-center justify-center"
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove photo ${i + 1} of ${attached.length}`}
+                    hitSlop={4}
+                  >
+                    <View className="h-5 w-5 items-center justify-center rounded-full bg-surface-1">
+                      <X size={12} color={colors.primaryText} />
+                    </View>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+            <Text className="mt-1 font-sans text-xs text-secondary-text">
+              {attached.length === 1
+                ? "1 photo — sent with your message"
+                : `${attached.length} photos — sent with your message`}
+            </Text>
+          </View>
+        )}
+        <View className="flex-col">
+          {/* IN FLOW, on purpose. The edit bar belongs to the field's state and
+              nobody else could own it, so it sits above the control row where
+              the measured composer height already counts it — the newest
+              message can never be clipped behind it. Putting it in chat.tsx's
+              overlay row instead would reserve nothing, but an edit bar the
+              user dismisses at will is chrome, and chrome over the list is
+              what that row is for. Spec §5. */}
+          {editing === true && (
+            <View className="flex-row items-center gap-2 border-b border-border px-4 py-1">
+              <Pencil size={14} color={colors.secondaryText} />
+              <Text className="flex-1 font-sans text-body-sm text-secondary-text">
+                Editing message — sending replaces this turn and everything after it
+              </Text>
+              <Pressable
+                onPress={() => onCancelEdit?.()}
+                className="h-12 w-12 items-center justify-center"
+                hitSlop={4}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel editing"
+              >
+                <X size={18} color={colors.secondaryText} />
+              </Pressable>
             </View>
           )}
-        </View>
-        <TextInput
-          value={draft}
-          onChangeText={setDraft}
-          placeholder={composerPlaceholder}
-          placeholderTextColor={colors.secondaryText}
-          multiline
-          editable={!sending}
-          className="flex-1 pt-2 font-sans text-body-lg text-primary-text"
-          accessibilityLabel="Message"
-        // The no-model state must not be visual-only: the chip that routes to
-        // Models is focus-gated, and a screen reader announces a field's label
-        // rather than its placeholder, so a fixed "Message" label would hide
-        // the only always-present statement that the composer is blocked.
-        accessibilityHint={modelReady ? undefined : composerPlaceholder}
-        />
-        <View className="flex-row items-center gap-2">
-          <VoiceChip />
-          {thinkingSupported && (
-            // PocketPal's composer pill (ChatInput.tsx:588-640). State is
-            // carried by the fill AND the icon, per DESIGN.md's "pair every
-            // status colour with a glyph and a word" rule -- so it never
-            // depends on colour alone.
-            //
-            // NO effort cycle. PocketPal's pill double-taps through graded
-            // reasoning effort; LiAI has no effort concept anywhere, and
-            // inventing levels here would ship a control with nothing
-            // behind it.
-            <Pressable
-              onPress={
-                modelReady && activeModelId !== null
-                  ? () => {
-                      // A press is a PER-MODEL decision, both directions.
-                      // There is no global fallback any more: an
-                      // unclassified model sends no flag at all, so the
-                      // template decides (lib/inference/thinking.ts).
-                      setThinkingOverride(activeModelId, !resolved.enabled);
+          {/* Text input area: the field's own spec supplies the fill, the top
+              hairline and the square corners, so this row is padding and the
+              input only. */}
+          <View className="flex-1 px-5 py-2">
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              placeholder={composerPlaceholder}
+              placeholderTextColor={colors.secondaryText}
+              multiline
+              editable={!sending}
+              className="flex-1 pt-2 font-sans text-body-lg text-primary-text"
+              accessibilityLabel="Message"
+              // The no-model state must not be visual-only: the chip that routes to
+              // Models is focus-gated, and a screen reader announces a field's label
+              // rather than its placeholder, so a fixed "Message" label would hide
+              // the only always-present statement that the composer is blocked.
+              accessibilityHint={modelReady ? undefined : composerPlaceholder}
+            />
+          </View>
+          {/* Control bar: left controls (attach) and right controls (thinking,
+              send/stop). No voice controls — voice settings live on the Voice
+              settings screen. */}
+          <View className="flex-row items-center justify-between px-4 py-2 min-h-9">
+            <View className="flex-row items-center gap-2 flex-1">
+              <Animated.View style={plusPress.animatedStyle}>
+                <Pressable
+                  onPress={modelReady && canSee ? () => setPlusOpen((o) => !o) : undefined}
+                  onPressIn={plusPress.onPressIn}
+                  onPressOut={plusPress.onPressOut}
+                  disabled={!modelReady || !canSee}
+                  className="h-12 w-12 items-center justify-center rounded-full bg-surface-3"
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: !modelReady || !canSee }}
+                  accessibilityLabel={
+                    modelReady && canSee
+                      ? "Attach a photo"
+                      : modelReady
+                        ? "This model can't see images"
+                        : "Load a model to attach a photo"
+                  }
+                >
+                  <Plus size={20} color={modelReady && canSee ? colors.primary : colors.secondaryText} />
+                </Pressable>
+              </Animated.View>
+              {plusOpen && (
+                // Anchored to the plus button's wrapper and extending right into
+                // the empty composer space — the plus is leftmost, so w-48 fits
+                // without clipping. (right-0 here would squash it to 48px.)
+                <View className="absolute bottom-12 left-0 w-48 rounded-lg border border-border bg-surface-1 py-1">
+                  <PlusItem
+                    Icon={Camera}
+                    label="Take photo"
+                    onPress={() => void handleAttach("camera")}
+                  />
+                  <PlusItem
+                    Icon={ImageIcon}
+                    label="Choose from gallery"
+                    onPress={() => void handleAttach("gallery")}
+                  />
+                </View>
+              )}
+            </View>
+            <View className="flex-row items-center gap-2">
+              {thinkingSupported && (
+                // PocketPal's composer pill (ChatInput.tsx:588-640). State is
+                // carried by the fill AND the icon, per DESIGN.md's "pair every
+                // status colour with a glyph and a word" rule -- so it never
+                // depends on colour alone.
+                //
+                // NO effort cycle. PocketPal's pill double-taps through graded
+                // reasoning effort; LiAI has no effort concept anywhere, and
+                // inventing levels here would ship a control with nothing
+                // behind it.
+                <Pressable
+                  onPress={
+                    modelReady && activeModelId !== null
+                      ? () => {
+                          // A press is a PER-MODEL decision, both directions.
+                          // There is no global fallback any more: an
+                          // unclassified model sends no flag at all, so the
+                          // template decides (lib/inference/thinking.ts).
+                          setThinkingOverride(activeModelId, !resolved.enabled);
+                        }
+                      : undefined
+                  }
+                  disabled={!modelReady}
+                  className={
+                    thinkingEnabled
+                      ? "h-12 flex-row items-center gap-1.5 rounded-full bg-surface-2 pl-3.5 pr-3.5"
+                      : "h-12 flex-row items-center gap-1.5 rounded-full bg-surface-3 pl-3.5 pr-3.5"
+                  }
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: thinkingEnabled, disabled: !modelReady }}
+                  accessibilityLabel="Thinking"
+                  accessibilityHint={thinkingHint}
+                >
+                  <Brain
+                    size={16}
+                    color={thinkingEnabled ? colors.primary : colors.secondaryText}
+                  />
+                  <Text
+                    className={
+                      thinkingEnabled
+                        ? "font-sans text-caption text-primary-text"
+                        : "font-sans text-caption text-secondary-text"
                     }
-                  : undefined
-              }
-              disabled={!modelReady}
-              className={
-                thinkingEnabled
-                  ? "h-12 flex-row items-center gap-1.5 rounded-full bg-surface-2 pl-3.5 pr-3.5"
-                  : "h-12 flex-row items-center gap-1.5 rounded-full bg-surface-3 pl-3.5 pr-3.5"
-              }
-              accessibilityRole="switch"
-              accessibilityState={{ checked: thinkingEnabled, disabled: !modelReady }}
-              accessibilityLabel="Thinking"
-              accessibilityHint={thinkingHint}
-            >
-              <Brain
-                size={16}
-                color={thinkingEnabled ? colors.primary : colors.secondaryText}
-              />
-              <Text
-                className={
-                  thinkingEnabled
-                    ? "font-sans text-caption text-primary-text"
-                    : "font-sans text-caption text-secondary-text"
-                }
-              >
-                Think
-              </Text>
-            </Pressable>
-          )}
-          <Animated.View style={micPress.animatedStyle}>
-            <Pressable
-              onPress={modelReady ? () => void toggleDictation() : undefined}
-              onPressIn={micPress.onPressIn}
-              onPressOut={micPress.onPressOut}
-              disabled={!modelReady}
-              className="h-12 w-12 items-center justify-center rounded-full bg-surface-2"
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !modelReady }}
-              accessibilityLabel={
-                !modelReady ? "Load a model to dictate" : listening ? "Stop dictation" : "Dictate a message"
-              }
-            >
-              <Mic size={20} color={modelReady ? (listening ? colors.primary : colors.secondaryText) : colors.secondaryText} />
-            </Pressable>
-          </Animated.View>
+                  >
+                    Think
+                  </Text>
+                </Pressable>
+              )}
+              {/* Send and Stop are siblings, never nested: two nested pressables
+                  would be two hit targets and two a11y roles on one control.
+                  Send: Primary (Signal Blue fill) when armed, Disabled (Mist) when
+                  not — a disabled send is a fill change, not an opacity drop. */}
+              {sending ? (
+                <Animated.View style={stopPress.animatedStyle}>
+                  <Pressable
+                    onPress={stop}
+                    onPressIn={stopPress.onPressIn}
+                    onPressOut={stopPress.onPressOut}
+                    className="h-12 w-12 items-center justify-center rounded-full bg-primary"
+                    accessibilityRole="button"
+                    accessibilityLabel="Stop generating"
+                  >
+                    <Square size={18} color={colors.onPrimary} />
+                  </Pressable>
+                </Animated.View>
+              ) : (
+                <Animated.View style={sendPress.animatedStyle}>
+                  <Pressable
+                    // Only an EMPTY draft is truly inert. A non-empty draft with
+                    // no model must still answer the press -- that answer is the
+                    // whole point of G9.
+                    disabled={draft.trim() === ""}
+                    onPress={() => {
+                      if (!modelReady) {
+                        void Haptics.notificationAsync(
+                          Haptics.NotificationFeedbackType.Warning,
+                        );
+                        setBlockedNote("Load a model to send this message.");
+                        return;
+                      }
+                      void handleSend();
+                    }}
+                    onPressIn={sendPress.onPressIn}
+                    onPressOut={sendPress.onPressOut}
+                    className={`h-12 w-12 items-center justify-center rounded-full ${
+                      canSend ? "bg-primary" : "bg-surface-2"
+                    }`}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      modelReady ? "Send message" : "Load a model to send this message"
+                    }
+                  >
+                    <Send size={20} color={canSend ? colors.onPrimary : colors.secondaryText} />
+                  </Pressable>
+                </Animated.View>
+              )}
+            </View>
+          </View>
         </View>
-        {/* Send and Stop are siblings, never nested: two nested pressables
-            would be two hit targets and two a11y roles on one control.
-            Send: Primary (Signal Blue fill) when armed, Disabled (Mist) when
-            not — a disabled send is a fill change, not an opacity drop. */}
-        {sending ? (
-          <Animated.View style={stopPress.animatedStyle}>
-            <Pressable
-              onPress={stop}
-              onPressIn={stopPress.onPressIn}
-              onPressOut={stopPress.onPressOut}
-              className="h-12 w-12 items-center justify-center rounded-full bg-primary"
-              accessibilityRole="button"
-              accessibilityLabel="Stop generating"
-            >
-              <Square size={18} color={colors.onPrimary} />
-            </Pressable>
-          </Animated.View>
-        ) : (
-          <Animated.View style={sendPress.animatedStyle}>
-            <Pressable
-              // Only an EMPTY draft is truly inert. A non-empty draft with
-              // no model must still answer the press -- that answer is the
-              // whole point of G9.
-              disabled={draft.trim() === ""}
-              onPress={() => {
-                if (!modelReady) {
-                  void Haptics.notificationAsync(
-                    Haptics.NotificationFeedbackType.Warning,
-                  );
-                  setBlockedNote("Load a model to send this message.");
-                  return;
-                }
-                void handleSend();
-              }}
-              onPressIn={sendPress.onPressIn}
-              onPressOut={sendPress.onPressOut}
-              className={`h-12 w-12 items-center justify-center rounded-full ${
-                canSend ? "bg-primary" : "bg-surface-2"
-              }`}
-              accessibilityRole="button"
-              accessibilityLabel={
-                modelReady ? "Send message" : "Load a model to send this message"
-              }
-            >
-              <Send size={20} color={canSend ? colors.onPrimary : colors.secondaryText} />
-            </Pressable>
-          </Animated.View>
-        )}
       </View>
     </Animated.View>
   );

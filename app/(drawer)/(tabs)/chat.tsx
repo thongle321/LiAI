@@ -24,7 +24,7 @@ import {
   useRouter,
 } from "expo-router";
 import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
-import { ChevronDown, Menu, SquarePen } from "lucide-react-native";
+import { ChevronDown } from "lucide-react-native";
 
 import { colors } from "../../../themes/tokens.ts";
 import { filterMessages } from "../../../lib/chat/filter.ts";
@@ -33,9 +33,7 @@ import {
   MOTION_DURATION_MS,
   fadeEntering,
   fadeExiting,
-  usePressFeedback,
 } from "../../../lib/motion.ts";
-import { APP_NAME } from "../../../constants/app.ts";
 import { useChatStore } from "../../../store/chat.ts";
 import { useKeyboardStore } from "../../../store/keyboard.ts";
 import { useModelStore } from "../../../store/modelStore";
@@ -65,7 +63,7 @@ import { pickableModels } from "../../../lib/chat/models.ts";
 import { useModelReady } from "../../../hooks/useModelReady.ts";
 import { GenerationSettingsSheet } from "../../../components/chat/GenerationSettingsSheet.tsx";
 import { ChatWarningSnackbar } from "../../../components/chat/ChatWarningSnackbar.tsx";
-import { ChatMenu } from "../../../components/chat/ChatMenu.tsx";
+import { ChatHeader } from "../../../components/chat/ChatHeader.tsx";
 import { ModelPickerSheet } from "../../../components/chat/ModelPickerSheet.tsx";
 
 export default function ChatRoute() {
@@ -489,8 +487,6 @@ export default function ChatRoute() {
       duration: motionDuration,
     });
   }, [streaming, listHeight, blankSpace, motionDuration]);
-  const menuPress = usePressFeedback();
-  const penPress = usePressFeedback();
   const [generationOpen, setGenerationOpen] = useState(false);
   // PocketPal's in-chat model picker: opened from the empty thread's CTA so
   // activating a model no longer means leaving the conversation. There is
@@ -515,89 +511,24 @@ export default function ChatRoute() {
       edges={["top", "left", "right"]}
       style={{ flex: 1, backgroundColor: colors.base }}
     >
-      {/* 56px header on Clean White with a 1px Hairline bottom. Both slots
-          are w-36 (144px): the trailing group is three 48px targets, so
-          equal slots must be sized to the WIDER group or its overflow eats
-          the wordmark's flex space and shifts it off-centre. */}
-      <View className="h-14 flex-row items-center border-b border-border bg-surface-1 px-5">
-        <View className="w-36 flex-row items-center">
-          <Animated.View style={menuPress.animatedStyle}>
-            <Pressable
-              onPress={() => navigation.openDrawer()}
-              onPressIn={menuPress.onPressIn}
-              onPressOut={menuPress.onPressOut}
-              className="h-12 w-12 items-center justify-center"
-              accessibilityRole="button"
-              accessibilityLabel="Open menu"
-              hitSlop={4}
-            >
-              <Menu size={20} color={colors.primaryText} />
-            </Pressable>
-          </Animated.View>
-        </View>
-        <Pressable
-          onPress={() => router.navigate("/models")}
-          className="flex-1 items-center"
-          accessibilityRole="button"
-          accessibilityLabel={
-            activeModelLabel === null ? "Open models" : `Open models — ${activeModelLabel}`
-          }
-        >
-          {/* Two lines, like PocketPal's ChatHeaderTitle: the conversation,
-              then the model answering it. Without the second line, a model
-              switched from the menu was invisible until the answer came
-              back wrong. The wordmark only stands in until a session
-              exists, so an unsent chat still reads as the app's own. */}
-          <Text
-            numberOfLines={1}
-            // Capped like ScreenHeader's title: DESIGN pins the
-            // header at 56px (Fluid Type Rule caps geometry).
-            maxFontSizeMultiplier={1.5}
-            className="text-center font-sans-semibold text-title text-primary-text"
-          >
-            {activeSessionTitle ?? APP_NAME}
-          </Text>
-          {activeModelLabel !== null && (
-            <Text
-              numberOfLines={1}
-              maxFontSizeMultiplier={1.5}
-              className="text-center font-sans text-caption text-secondary-text"
-            >
-              {activeModelLabel}
-            </Text>
-          )}
-        </Pressable>
-        <View className="w-36 flex-row items-center justify-end">
-          {/* Pen (pocketpal's reset-button) leads, the kebab trails —
-              their HeaderRight order. The slot stays w-36. */}
-          <Animated.View style={penPress.animatedStyle}>
-            <Pressable
-              onPress={() => {
-                // The pen starts a fresh chat; a stale search bar must
-                // not outlive the conversation it was filtering.
-                setSearchOpen(false);
-                setQuery("");
-                void newConversation();
-              }}
-              onPressIn={penPress.onPressIn}
-              onPressOut={penPress.onPressOut}
-              className="h-12 w-12 items-center justify-center"
-              hitSlop={4}
-              accessibilityRole="button"
-              accessibilityLabel="New conversation"
-            >
-              <SquarePen size={20} color={colors.primaryText} />
-            </Pressable>
-          </Animated.View>
-          <ChatMenu
-            onOpenGeneration={() => setGenerationOpen(true)}
-            onOpenSearch={() => {
-              setSearchOpen(true);
-              setQuery("");
-            }}
-          />
-        </View>
-      </View>
+      <ChatHeader
+        title={activeSessionTitle}
+        modelLabel={activeModelLabel}
+        onOpenModels={() => router.navigate("/models")}
+        onOpenDrawer={() => navigation.openDrawer()}
+        onNewConversation={() => {
+          // The pen starts a fresh chat; a stale search bar must
+          // not outlive the conversation it was filtering.
+          setSearchOpen(false);
+          setQuery("");
+          void newConversation();
+        }}
+        onOpenGeneration={() => setGenerationOpen(true)}
+        onOpenSearch={() => {
+          setSearchOpen(true);
+          setQuery("");
+        }}
+      />
       {searchOpen && (
         <Animated.View
           entering={searchBarEntering}

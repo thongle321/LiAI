@@ -101,11 +101,11 @@ export function RemoteModelSheet({
 
   return (
     <>
-    // Short sheet on the shared Sheet: TrueSheet's auto detent sizes to
-    // the content, and keyboard avoidance comes from the wrapper. This
-    // also resolves the accepted iOS risk above: TrueSheet owns the
-    // keyboard natively instead of relying on window resize.
-    <Sheet
+      {/* Short sheet on the shared Sheet: TrueSheet's auto detent sizes to
+          the content, and keyboard avoidance comes from the wrapper. This
+          also resolves the accepted iOS risk above: TrueSheet owns the
+          keyboard natively instead of relying on window resize. */}
+      <Sheet
       visible={visible}
       onClose={onClose}
       title="Add API Provider"

@@ -455,20 +455,28 @@ export default function ChatRoute() {
   const handleComposerHeight = useCallback(
     (event: LayoutChangeEvent) => {
       const height = event.nativeEvent.layout.height;
+      // Reserve the composer's height directly rather than easing into it:
+      // easing here only lagged the layout by ~MOTION_DURATION_MS, which
+      // left the newest message briefly overlapping (or gapped from) the
+      // composer during the spring. PocketPal holds a single measured
+      // height with no animation, so we match that. See docs/research/...
+      // (keyboard/composer revert) for the scroll-follow follow-up.
       setComposerHeight(height);
-      extraContentPadding.value = withTiming(height, { duration: motionDuration });
+      extraContentPadding.value = height;
     },
-    [extraContentPadding, motionDuration],
+    [extraContentPadding],
   );
 
   // Derived from the message itself rather than toggled on send, so it
   // cannot get stuck if a turn is cancelled or the screen is left mid-reply.
   const streaming = messages[messages.length - 1]?.streaming === true;
+  // Reserve scroll room for a streaming reply directly, instead of easing
+  // into it. The eased version ran one duration behind the token stream and
+  // fought the follow-scroll; a hard reserve keeps blankSpace coincident
+  // with the streaming flag (PocketPal: no timing on the equivalent value).
   useEffect(() => {
-    blankSpace.value = withTiming(streaming ? listHeight : 0, {
-      duration: motionDuration,
-    });
-  }, [streaming, listHeight, blankSpace, motionDuration]);
+    blankSpace.value = streaming ? listHeight : 0;
+  }, [streaming, listHeight, blankSpace]);
   const [generationOpen, setGenerationOpen] = useState(false);
   // PocketPal's in-chat model picker: opened from the empty thread's CTA so
   // activating a model no longer means leaving the conversation. There is

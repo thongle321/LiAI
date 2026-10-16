@@ -17,8 +17,8 @@ import {
   type ReactNode,
 } from "react";
 
-import { SnackbarOverlay, type SnackbarOverlayHandle } from "./SnackbarOverlay";
-import type { SnackbarAction, SnackbarOptions } from "./SnackbarOverlay";
+import { SnackbarOverlay, type SnackbarOverlayHandle } from "./snackbar-overlay";
+import type { SnackbarAction, SnackbarOptions } from "./snackbar-overlay";
 
 export type { SnackbarAction, SnackbarOptions };
 

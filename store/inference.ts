@@ -1,20 +1,20 @@
 /** On-device inference init params: persisted, applied at context load.
  *
  * Factory takes storage so tests inject memory (see modelsUi pattern).
- * Only params the llama.rn bridge in lib/inference/local-engine.ts forwards
+ * Only params the llama.rn bridge in services/inference//local-engine.ts forwards
  * are stored here — no dead knobs. Changing params busts the engine cache
  * because the manager folds them into its slot key.
  */
 
 import { create } from "zustand";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
-import type { KeyValueStorage } from "../lib/storage";
+import type { KeyValueStorage } from "../services/storage/storage";
 import {
   DEFAULT_SAMPLER,
   parseSampler,
   type SamplerParams,
-} from "../lib/inference/sampler.ts";
-import { isEffortLevel, type EffortLevel } from "../lib/reasoning-capability.ts";
+} from "../services/inference/sampler.ts";
+import { isEffortLevel, type EffortLevel } from "../utils/reasoning-capability.ts";
 
 export const INFERENCE_KEY = "liai_inference_v1";
 

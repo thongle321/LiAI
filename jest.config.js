@@ -1,12 +1,27 @@
 module.exports = {
   preset: 'jest-expo',
-  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+  setupFiles: ['<rootDir>/jest/setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/jest/setupFilesAfterEnv.ts'],
   testMatch: [
     '**/__tests__/**/*.test.[jt]s?(x)',
     '**/?(*.)+(spec|test).[jt]s?(x)',
   ],
   testPathIgnorePatterns: ['/node_modules/', '/e2e/', '/pocketpal-ai/'],
   modulePathIgnorePatterns: ['<rootDir>/pocketpal-ai'],
+  // Coverage collection is on so the baseline is measurable while the
+  // jest-test-migration coverage tickets (09-17) land. NO threshold yet:
+  // gates stay off until there is a real number to gate on, which is the
+  // decision recorded in .scratch/jest-test-migration/spec.md. Barrels,
+  // style and type files carry no behaviour worth counting, same exclusions
+  // the reference app uses.
+  collectCoverage: true,
+  collectCoverageFrom: [
+    '{app,components,services,utils,store,hooks}/**/*.{ts,tsx}',
+    '!**/index.{ts,tsx}',
+    '!**/__tests__/**',
+    '!**/*.d.ts',
+  ],
+  coverageReporters: ['text-summary'],
   transformIgnorePatterns: [
     'node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|expo-(.*)|@expo|@expo-(.*)|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation|uniwind|tailwindcss|react-native-vision-camera|react-native-reanimated|react-native-worklets|react-native-gesture-handler|@lodev09/react-native-true-sheet|llama\\.rn|@dr\\.pogodin/react-native-fs|react-native-keyboard-controller|react-native-marked|react-native-code-highlighter|react-native-sherpa-onnx|tinybase)/)',
     'node_modules/react-native-reanimated/plugin/',

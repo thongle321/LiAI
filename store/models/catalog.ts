@@ -8,15 +8,15 @@ import type {
   HFSearchFilters,
   ModelStore,
 } from "./types";
-import { buildLocalModelSpec } from "../../lib/local-model.ts";
-import { modelsUsingProjector } from "../../lib/models/vision-pairing.ts";
+import { buildLocalModelSpec } from "../../services/inference/local-model.ts";
+import { modelsUsingProjector } from "../../services/models/vision-pairing.ts";
 import {
   buildHfModelSpec,
   getModelFiles as hfGetModelFiles,
   getPresets as hfGetPresets,
   HfError,
   searchModels as hfSearchModels,
-} from "../../lib/models/huggingface.ts";
+} from "../../services/models/huggingface.ts";
 import {
   asyncStorage,
   HF_SEARCH_FILTERS_KEY,

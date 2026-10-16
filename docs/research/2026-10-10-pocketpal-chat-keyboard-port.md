@@ -2,6 +2,9 @@
 
 Date: 2026-10-10
 Status: implemented (commits `4ac35e6`, `d39b3f1` on `dev-mobile`); device verification outstanding.
+Updated: 2026-10-16 — the empty-state flash was still reproducible (reported with NO model
+loaded, which §2 ranked as the covered case). Root cause and fix in §5. Still unverified on
+device.
 Scope: the two reported symptoms and the port they were fixed by. Companion documents:
 - `docs/research/2026-10-08-pocketpal-chat-empty-view-keyboard.md` (the symptom analysis this work
   concludes — its §7 open questions are closed or reclassified here).
@@ -54,6 +57,46 @@ For symptom 2, ranked by evidence:
   id-taking handlers + already-memoised rows.
 - **contentInset snap.** `KeyboardChatScrollView` writes its padding unanimated at keyboard open;
   a secondary suspect, addressed only if symptoms survive commit 1 (see protocol).
+
+## 4a. §5 — the empty-state flash, root cause and fix (2026-10-16)
+
+**Symptom.** With no model loaded, the composer area flashes when the keyboard opens, then settles.
+This is the *opposite* of how §2 ranked symptom 2: the placeholder card is the thing that moves here,
+not the strip.
+
+**Root cause (first attempt — WRONG, reverted).** `tabBarCompensation` was React state
+(`keyboardVisible ? keyboardOffset : 0`), flipping to a full bar slot in one commit. The first
+theory was that this was a clock mismatch with the composer's UI-thread lift, and it was changed
+to a `useDerivedValue` ramp off `useReanimatedKeyboardAnimation().height`, on PocketPal's
+"everything derives from the same value" rule (`ChatView.tsx:434-442`). That made the symptom
+WORSE and was reverted the same day: the empty chat view began moving.
+
+**Why that theory was wrong.** The thing being compensated for is a **step, not a ramp**.
+`keyboardVisible` comes from `useKeyboardState` — a JS-thread store flag that flips ONCE — and
+`(tabs)/_layout.tsx:51` returns `null` in that commit, so the column grows by the whole bar slot
+at once. Matching that step with a ramp meant the overlay stayed a bar slot too tall for the
+entire rise until the keyboard had travelled ~110 of its ~300dp, so the centred card sat up to
+half a slot low and then snapped up. A step matched to a ramp is a worse version of the flash it
+was meant to remove.
+
+**What PocketPal actually does.** They never hit this because **nothing unmounts**: their
+navigation is a drawer, not a tab bar (`App.tsx:130`), so the chat column never changes size on
+keyboard open. Their centring box is invariant *by construction* — `styles.chatContainer` is
+`flex:1, position:'relative'` (`styles.ts:70-75`), the list is `height:'100%'` with `flex:1`
+commented out (`styles.ts:9-12`), the input is `position:'absolute'` and only `translateY`-ed
+(`ChatView.tsx:452-455`), and the empty state lives INSIDE the list, centred by
+`flatListContentContainer`'s `flexGrow:1` (`styles.ts:13-15`), with an animated
+`ListHeaderComponent` spacer for the occlusion (`ChatView.tsx:1005-1007`). There is no
+compensation because there is no change to compensate.
+
+**Current state.** `tabBarCompensation` is React state again, committed with the bar's unmount —
+a step matching a step, which is §2's "commit together, no frame can mix the two" invariant. The
+`keyboardSlotProgress` worklet and its hook were deleted; the dead `__DEV__` probe stays deleted.
+**Still unverified on device**, and the originally-reported flash has no confirmed cause yet: the
+§2 suspects that survive are `KeyboardChatScrollView`'s unanimated padding (ranked secondary) and
+`windowSoftInputMode="adjustResize"` shrinking the window (unverifiable statically). If the card
+still moves after this revert, the §4 protocol's distinction applies — a whole-screen move means
+window resize, not compensation — and it needs the probe or the pixel loop to tell them apart.
 
 ## 3. Decisions taken
 

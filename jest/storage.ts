@@ -6,7 +6,7 @@
  * byte-identical; one typed fake keeps them from drifting.
  */
 
-import type { KeyValueStorage } from "../lib/storage.ts";
+import type { KeyValueStorage } from "../services/storage/storage.ts";
 
 export type MemoryStorage = KeyValueStorage & {
   /** The live contents, for asserting what was persisted. */

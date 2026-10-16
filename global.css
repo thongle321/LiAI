@@ -386,6 +386,45 @@
   line-height: 18px;
   color: #64748b;
 }
+/* The recessed ground the Voice screen's cards sit on. Mist, so the white
+   cards below it read as raised without a second tint. */
+.voice-panel {
+  background-color: #f1f5f9;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #e2e8f0;
+  /* 16, not 20: DESIGN.md's shape scale has five steps (2/4/8/12/16) and this
+     panel is a rounded rectangle, not a full-bleed one. */
+  border-radius: 16px;
+  padding: 16px;
+}
+/* The full-width action inside an expanded engine card: Install, Retry,
+   Resume, Pause. One shape for all four, so the body has exactly two looks
+   — actionable, or not. --disabled is a fill change, never opacity. */
+.voice-action {
+  width: 100%;
+  min-height: 48px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 12px;
+}
+.voice-action--primary {
+  background-color: #2563eb;
+}
+.voice-action--secondary {
+  background-color: #ffffff;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #3882f6;
+}
+.voice-action--disabled {
+  background-color: #f1f5f9;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #e2e8f0;
+}
 /* Tier chip (LIGHTWEIGHT / NATURAL / FAST START). */
 .voice-badge {
   align-self: flex-start;

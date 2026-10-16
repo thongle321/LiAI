@@ -27,44 +27,44 @@ import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
 import { ChevronDown } from "lucide-react-native";
 
 import { colors } from "../../../themes/tokens.ts";
-import { filterMessages } from "../../../lib/chat/filter.ts";
-import { buildRows, type ChatRow } from "../../../lib/chat/rows.ts";
+import { filterMessages } from "../../../services/chat/filter.ts";
+import { buildRows, type ChatRow } from "../../../services/chat/rows.ts";
 import {
   MOTION_DURATION_MS,
   fadeEntering,
   fadeExiting,
-} from "../../../lib/motion.ts";
+} from "../../../utils/motion.ts";
 import { useChatStore } from "../../../store/chat.ts";
 import { useKeyboardStore } from "../../../store/keyboard.ts";
 import { useModelStore } from "../../../store/modelStore";
 import { useInference } from "../../../store/inference.ts";
 import { useKeyboardLift } from "../../../hooks/useKeyboardLift.ts";
-import { MessageListItem } from "../../../components/chat/MessageListItem.tsx";
-import { ChatEmptyPlaceholder } from "../../../components/chat/ChatEmptyPlaceholder.tsx";
-import { PendingIndicator } from "../../../components/chat/PendingIndicator.tsx";
-import { MessageInput } from "../../../components/chat/MessageInput.tsx";
-import { SuggestedPrompts } from "../../../components/chat/SuggestedPrompts.tsx";
-import { MessageList } from "../../../components/chat/MessageList.tsx";
+import { MessageListItem } from "../../../components/chat/message-list-item.tsx";
+import { ChatEmptyPlaceholder } from "../../../components/chat/chat-empty-placeholder.tsx";
+import { PendingIndicator } from "../../../components/chat/pending-indicator.tsx";
+import { MessageInput } from "../../../components/chat/message-input.tsx";
+import { SuggestedPrompts } from "../../../components/chat/suggested-prompts.tsx";
+import { MessageList } from "../../../components/chat/message-list.tsx";
 import {
   ContextFullBanner,
   ContextLadderSheet,
-} from "../../../components/chat/ContextFullBanner.tsx";
-import { effectiveNCtx, fillPercent } from "../../../lib/chat/context-fill.ts";
-import { labelTokens } from "../../../lib/chat/context-ladder.ts";
+} from "../../../components/chat/context-full-banner.tsx";
+import { effectiveNCtx, fillPercent } from "../../../services/chat/context-fill.ts";
+import { labelTokens } from "../../../services/chat/context-ladder.ts";
 import { useContextLadder } from "../../../hooks/useContextLadder.ts";
 import {
   type BannerVariant,
   consecutiveFullFailures,
   dismissBanner,
   resolveBannerVariant,
-} from "../../../lib/chat/banner-variant.ts";
-import { talentDefinitions } from "../../../lib/agent/registry.ts";
-import { pickableModels } from "../../../lib/chat/models.ts";
+} from "../../../services/chat/banner-variant.ts";
+import { talentDefinitions } from "../../../services/agent/registry.ts";
+import { pickableModels } from "../../../services/chat/models.ts";
 import { useModelReady } from "../../../hooks/useModelReady.ts";
-import { GenerationSettingsSheet } from "../../../components/chat/GenerationSettingsSheet.tsx";
-import { ChatWarningSnackbar } from "../../../components/chat/ChatWarningSnackbar.tsx";
-import { ChatHeader } from "../../../components/chat/ChatHeader.tsx";
-import { ModelPickerSheet } from "../../../components/chat/ModelPickerSheet.tsx";
+import { GenerationSettingsSheet } from "../../../components/chat/generation-settings-sheet.tsx";
+import { ChatWarningSnackbar } from "../../../components/chat/chat-warning-snackbar.tsx";
+import { ChatHeader } from "../../../components/chat/chat-header.tsx";
+import { ModelPickerSheet } from "../../../components/chat/model-picker-sheet.tsx";
 
 export default function ChatRoute() {
   const messages = useChatStore((s) => s.messages);
@@ -211,7 +211,7 @@ export default function ChatRoute() {
   const visible = searchOpen ? filterMessages(messages, query) : messages;
   // Adapter rows for the list: group/avatar/status flags. No day dividers
   // — PocketPal's date-header prop defaults false and their screen never
-  // passes it, so their chat has none either (lib/chat/rows.ts).
+  // passes it, so their chat has none either (services/chat//rows.ts).
   // Memoized so the list's row-count follow effect can't retrigger on
   // identity churn — a re-render alone must never move the list.
   const rows = useMemo(
@@ -268,7 +268,7 @@ export default function ChatRoute() {
   // It speaks for the NEWEST assistant turn and nothing else. Scoping it
   // that way makes it self-clearing: keep chatting, answer successfully,
   // and the banner goes away on its own without a reset rule. Which of
-  // the five variants renders is lib/chat/banner-variant.ts's decision —
+  // the five variants renders is services/chat//banner-variant.ts's decision —
   // the screen only collects the state and draws the answer.
   const newestAssistant = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -408,40 +408,23 @@ export default function ChatRoute() {
   // two column-anchored overlays the same bottom back so their centring box is
   // identical in both states. The screen-anchored ones need nothing.
   //
-  // BOTH this flag and the bar's unmount come from one store
-  // (store/keyboard.ts), written in one place (KeyboardVisibilitySync in
-  // app/_layout.tsx), so they commit together — two independent
-  // useKeyboardState subscribers could land a frame apart, shifting the
-  // column-anchored overlays for a frame even though the static geometry
-  // is exact.
+  // PocketPal solves this by NOT HAVING the moving part: their navigation is
+  // a drawer, so nothing unmounts on keyboard open and their centring box is
+  // invariant by construction rather than by compensation
+  // (pocketpal-ai/src/components/ChatView/ChatView.tsx:1175, styles.ts:70-75).
+  // We keep the tab bar, so the column grows by one bar slot — and that
+  // growth is a STEP, not a ramp: `keyboardVisible` is a JS-thread store flag
+  // that flips once, and `(tabs)/_layout.tsx` returns null in that commit.
+  //
+  // So the compensation MUST be a step in that same commit. An earlier
+  // attempt animated it off `keyboard.height` to "match the composer's
+  // curve" and that was wrong in a way this comment exists to prevent: for
+  // the whole rise the overlay was a bar slot too tall, so the centred card
+  // sat low and then snapped up. A step matched to a ramp is a worse version
+  // of the flash it was meant to remove.
   const keyboardVisible = useKeyboardStore((s) => s.isVisible);
   const tabBarCompensation = keyboardVisible ? keyboardOffset : 0;
-  // TEMPORARY __DEV__ PROBE — the empty card was reported moving on a
-  // 2026-10-07 Android build (post-fix, see docs/research/2026-10-08-
-  // pocketpal-chat-empty-view-keyboard.md) while every static input says
-  // its box is invariant. Printing both boxes on each keyboard toggle turns
-  // "I don't know if the whole screen moves" into numbers. Strip with its
-  // two onLayout hooks before committing any fix.
-  const probeColumn = useRef(0);
-  const probeOverlay = useRef(0);
-  useEffect(() => {
-    if (!__DEV__) return;
-    console.log(
-      "[empty-view probe]",
-      JSON.stringify({
-        keyboard: keyboardVisible,
-        column: probeColumn.current,
-        overlay: probeOverlay.current,
-        list: listHeight,
-        composer: composerHeight,
-        compensation: tabBarCompensation,
-        offset: keyboardOffset,
-      }),
-    );
-    // Probe deliberately keyed on the toggle alone: the numbers are only
-    // interesting at the two keyboard states, not on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keyboardVisible]);
+  const [composerHeight, setComposerHeight] = useState(0);
   // Height of the field, which IS the composer. NOT a delta from a baseline,
   // unlike the library's example: the field is out of flow, so nothing else
   // accounts for it and the newest message would sit behind it. The banners
@@ -450,7 +433,6 @@ export default function ChatRoute() {
   // appeared. One measurement, three consumers: this padding, the empty
   // state's lift, and the jump-to-latest anchor.
   const extraContentPadding = useSharedValue(0);
-  const [composerHeight, setComposerHeight] = useState(0);
   // Minimum bottom inset while a reply streams, so the sent message is
   // pushed up and the response has somewhere to appear.
   const blankSpace = useSharedValue(0);
@@ -572,12 +554,7 @@ export default function ChatRoute() {
           keyboard opens. The library's guide is also explicit that
           KeyboardAvoidingView is the wrong tool for chat, so there is no KAV
           on this screen. */}
-      <View
-        className="flex-1"
-        onLayout={(e) => {
-          probeColumn.current = e.nativeEvent.layout.height;
-        }}
-      >
+      <View className="flex-1">
         <View
           className="flex-1"
           onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
@@ -617,18 +594,15 @@ export default function ChatRoute() {
             composer, from the measured height rather than pocketpal's
             hard-coded bottomComponentHeight + 100. */}
         {showPlaceholder && (
-          <View
+          <Animated.View
             className="absolute inset-x-0 top-0"
             style={{ bottom: composerHeight + tabBarCompensation }}
-            onLayout={(e) => {
-              probeOverlay.current = e.nativeEvent.layout.height;
-            }}
             pointerEvents="box-none"
           >
             <ChatEmptyPlaceholder
               onSelectModel={() => setPickerOpen(true)}
             />
-          </View>
+          </Animated.View>
         )}
         {/* Jump to latest: an overlay pinned to the content column's
             bottom-right, above the floating composer — pocketpal's FAB

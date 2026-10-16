@@ -1,10 +1,10 @@
 /** A stable, assertable `expo-router` mock for Jest.
  *
- * jest.setup.ts wires `useRouter()` to the ONE object exported here, so a
+ * jest/setup.ts wires `useRouter()` to the ONE object exported here, so a
  * test can `import { routerMock }` and assert navigation:
  *
  * ```ts
- * import { routerMock } from "../../../jest/router-mock";
+ * import { routerMock } from "../../jest/router-mock";
  * fireEvent.press(button);
  * expect(routerMock.push).toHaveBeenCalledWith("/onboarding/model");
  * ```
@@ -36,7 +36,7 @@ export const routerMock: RouterMock = {
   canGoBack: jest.fn(() => false),
 };
 
-/** Clear every recorded navigation. Called from jest.setup.ts. */
+/** Clear every recorded navigation. Called from jest/setupFilesAfterEnv.ts. */
 export function resetRouterMock(): void {
   for (const fn of Object.values(routerMock)) {
     fn.mockReset();

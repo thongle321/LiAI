@@ -3,11 +3,11 @@
 import type { StoreApi } from "zustand";
 
 import type { SearchAuth } from "../../types/api.ts";
-import type { EngineSource } from "../../lib/inference/engine.ts";
-import type { SessionStore } from "../../lib/chat/session-store.ts";
-import type { ImportResult } from "../../lib/chat/import.ts";
+import type { EngineSource } from "../../services/inference/engine.ts";
+import type { SessionStore } from "../../services/chat/session-store.ts";
+import type { ImportResult } from "../../services/chat/import.ts";
 import type { AgentStep, ChatMessage, ChatSession, TurnBlock, TurnOutcomeFlags } from "../../types/chat.ts";
-import type { ToolTokenCounter } from "../../lib/chat/tool-token-count.ts";
+import type { ToolTokenCounter } from "../../services/chat/tool-token-count.ts";
 
 export type Connection = "unknown" | "up" | "down";
 
@@ -81,7 +81,7 @@ export interface ChatCtx {
   getEngineSource: () => Promise<EngineSource | null>;
   runTurn: TurnRunner;
   /** Can the active engine see images this turn? Defaults to the real
-   *  pair-probe (lib/inference/mmproj.ts); tests inject it. */
+   *  pair-probe (services/inference//mmproj.ts); tests inject it. */
   multimodalAvailable: () => Promise<boolean>;
   /** Stop the live generation; the loaded model stays cached. */
   stopEngine: () => void;

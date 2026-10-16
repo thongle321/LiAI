@@ -14,7 +14,7 @@ import { ScopedVariables, Uniwind } from "uniwind";
 
 import { useEffect, useRef } from "react";
 import { colors } from "../themes/tokens.ts";
-import { SnackbarProvider } from "../components/Snackbar.tsx";
+import { SnackbarProvider } from "../components/snackbar.tsx";
 import { useKeyboardStore } from "../store/keyboard.ts";
 import { useEngineOffload } from "../hooks/useEngineOffload.ts";
 import { useVoiceOffload } from "../hooks/useVoiceOffload.ts";
@@ -34,7 +34,7 @@ void SplashScreen.preventAutoHideAsync().catch(() => {});
 // This used to be `app/+error.tsx`, which is TanStack Router's syntax --
 // expo-router's route scanner throws on any route node starting with '+',
 // so the app died before rendering anything.
-export { RootErrorBoundary as ErrorBoundary } from "../components/RouteErrorBoundaries.tsx";
+export { RootErrorBoundary as ErrorBoundary } from "../components/route-error-boundaries.tsx";
 
 /** Bridges react-native-keyboard-controller's events into the store the
  * whole app reads (store/keyboard.ts explains why one writer matters).

@@ -10,7 +10,7 @@
 
 
 import { createInferenceStore, INFERENCE_KEY } from "../inference";
-import type { KeyValueStorage } from "../../lib/storage";
+import type { KeyValueStorage } from "../../services/storage/storage";
 
 interface CountingStorage extends KeyValueStorage {
   data: Record<string, string>;

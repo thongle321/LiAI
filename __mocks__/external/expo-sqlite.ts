@@ -1,11 +1,11 @@
-/** Jest mock for `expo-sqlite` (lib/tinybase.ts, the SQLite persister wiring).
+/** Jest mock for `expo-sqlite` (services/chat/tinybase.ts, the SQLite persister wiring).
  *
  * The app is careful never to import this statically from anything a test
- * reaches (see lib/tinybase.ts's dynamic import), so this mock exists for a
+ * reaches (see services/chat/tinybase.ts's dynamic import), so this mock exists for a
  * test that DOES reach it: opening a database rejects with a plain Error
  * rather than resolving to a half-working fake and hanging the suite.
  *
- * That rejection is what makes `lib/tinybase.ts` degrade the documented way:
+ * That rejection is what makes `services/chat/tinybase.ts` degrade the documented way:
  * `open()` catches, clears its memo, and `getSessionStore()` resolves to
  * null — chat runs with no persistence instead of throwing.
  */

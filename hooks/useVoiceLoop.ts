@@ -12,12 +12,12 @@ import {
 } from "expo-speech-recognition";
 import * as Haptics from "expo-haptics";
 
-import type { VoicePhase } from "../lib/voiceStatus.ts";
-import { bargeActionFor, isThrottlingError, isVoiceThrottled, setVoiceThrottled, voiceErrorAction } from "../lib/voiceStatus.ts";
-import { ensureMicAccess } from "../lib/micAccess.ts";
-import { speakReply, stopSpeaking } from "../lib/voiceSpeak.ts";
+import type { VoicePhase } from "../services/voice/voice-status.ts";
+import { bargeActionFor, isThrottlingError, isVoiceThrottled, setVoiceThrottled, voiceErrorAction } from "../services/voice/voice-status.ts";
+import { ensureMicAccess } from "../services/voice/mic-access.ts";
+import { speakReply, stopSpeaking } from "../services/voice/voice-speak.ts";
 import { useVoice } from "../store/voice.ts";
-import { VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
+import { VOICE_LISTEN_OPTS } from "../services/voice/voice-listen.ts";
 import { useChatStore } from "../store/chat.ts";
 
 const NOTHING_HEARD = "Didn't hear anything — tap the mic to try again.";

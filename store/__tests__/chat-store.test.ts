@@ -6,7 +6,7 @@ import {
   fakeRunTurn,
   fakeSessionStore,
   gatedRunTurn,
-} from "../../tests/fakes.ts";
+} from "../../jest/fixtures/fake-session-store.ts";
 
 /** A runner that never answers: the session tests never send. */
 const idleRunTurn = fakeRunTurn([]).runTurn;

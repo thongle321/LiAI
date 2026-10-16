@@ -6,7 +6,7 @@
  * session, with a fixed slot for a conversation not yet sent.
  */
 
-import type { SessionStore } from "../../lib/chat/session-store.ts";
+import type { SessionStore } from "../../services/chat/session-store.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
 /** Store for the given session ("" when absent). A store that cannot be

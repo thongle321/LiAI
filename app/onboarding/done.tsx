@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
 import { colors } from "../../themes/tokens.ts";
-import { setOnboarded } from "../../lib/onboarding.ts";
+import { setOnboarded } from "../../services/onboarding.ts";
 
 export default function DoneStep() {
   async function finish(to: "/chat" | "/models"): Promise<void> {

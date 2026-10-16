@@ -1,11 +1,11 @@
-/** Jest mock for `expo-speech` (lib/voiceSpeak.ts, lib/tts/engines/system.ts).
+/** Jest mock for `expo-speech` (services/voice/voice-speak.ts, services/tts/engines/system.ts).
  *
  * `expo-speech` reaches for the OS speech synthesizer, which does not exist
  * under Jest. This mock records calls instead: a test drives a caller and
  * asserts what was asked of the OS, and can install its own implementation
  * with `jest.mocked(Speech.speak).mockImplementation(...)` to simulate the
- * utterance finishing, stopping or failing. `jest.resetAllMocks()` in
- * jest.setup.ts clears recorded calls between tests.
+ * utterance finishing, stopping or failing. `jest.clearAllMocks()` in
+ * jest/setupFilesAfterEnv.ts clears recorded calls between tests.
  */
 
 export interface MockSpeechOptions {

@@ -19,19 +19,19 @@
  * in its engine's curated list.
  *
  * The factory takes storage so tests inject memory (see chat.ts pattern).
- * All native modules arrive through dynamic imports, so node --test can
+ * All native modules arrive through dynamic imports, so jest can
  * exercise this store with fakes.
  */
 
 import { create } from "zustand";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
-import type { KeyValueStorage } from "../lib/storage.ts";
-import { DEVICE_DEFAULT_VOICE, type NeuralEngineId, type Voice } from "../lib/tts/types.ts";
-import { ENGINE_ORDER, NEURAL_ENGINE_META } from "../lib/tts/engineMeta.ts";
-import { getEngine } from "../lib/tts/engineRegistry.ts";
-import { ttsDownloads, type TtsModelStatus } from "../lib/tts/download.ts";
-import { ttsRuntime } from "../lib/tts/runtime.ts";
-import { readTotalMemory } from "../lib/models/device-tiers.ts";
+import type { KeyValueStorage } from "../services/storage/storage.ts";
+import { DEVICE_DEFAULT_VOICE, type NeuralEngineId, type Voice } from "../services/tts/types.ts";
+import { ENGINE_ORDER, NEURAL_ENGINE_META } from "../services/tts/engineMeta.ts";
+import { getEngine } from "../services/tts/engineRegistry.ts";
+import { ttsDownloads, type TtsModelStatus } from "../services/tts/download.ts";
+import { ttsRuntime } from "../services/tts/runtime.ts";
+import { readTotalMemory } from "../services/models/device-tiers.ts";
 
 export const VOICE_KEY = "liai_voice_v2";
 
@@ -74,6 +74,9 @@ export interface VoiceState {
   pendingVoiceRestore: StashedVoices;
   /** Per-engine download states; null entries mean "not yet read". */
   downloads: EngineDownloads;
+  /** The engine holding the single download slot, or null. The manager's
+   *  runtime is one-slot, so other cards must not start a transfer. */
+  activeEngineId: NeuralEngineId | null;
   deviceMeetsMemory: boolean;
   loaded: boolean;
   load: () => Promise<void>;
@@ -91,10 +94,13 @@ export interface VoiceState {
   /** Speak `text` through the selected engine (spec Q14 "one API"). */
   play: (text: string, options?: { messageId?: string; voice?: Voice; speed?: number }) => Promise<void>;
   stop: () => Promise<void>;
-  /** Download one engine's model, reporting state transitions. */
-  startEngineDownload: (engine: NeuralEngineId) => Promise<string>;
-  /** Cancel the in-flight download (no-op when idle). */
-  cancelEngineDownload: () => void;
+  /** Download one engine's model, reporting state transitions. Resolves
+   *  with the local path, or null when the user paused it. */
+  startEngineDownload: (engine: NeuralEngineId) => Promise<string | null>;
+  /** Pause this engine's transfer; the manager keeps the partial bytes. */
+  pauseEngineDownload: (engine: NeuralEngineId) => Promise<void>;
+  /** Continue a paused transfer from the bytes already fetched. */
+  resumeEngineDownload: (engine: NeuralEngineId) => Promise<string | null>;
   /** Delete one engine's model from disk, reclaiming its bytes. */
   removeEngineModel: (engine: NeuralEngineId) => Promise<void>;
 }
@@ -186,6 +192,22 @@ export function restoreVoice(stashed: string, engine: NeuralEngineId): Voice | n
 
 export function createVoiceStore(storage: KeyValueStorage) {
   return create<VoiceState>()((set, get) => {
+    /** Record one engine's status, and restore the voice stashed for it
+     *  when its model finishes downloading (PocketPal's
+     *  restore-after-re-download). Shared by download and resume. */
+    function applyEngineStatus(engineId: NeuralEngineId, status: TtsModelStatus): void {
+      set((s) => ({ downloads: { ...s.downloads, [engineId]: status } }));
+      if (status.state !== "ready") return;
+      const stashed = get().pendingVoiceRestore[engineId];
+      if (stashed === undefined) return;
+      set((s) => {
+        const next = { ...s.pendingVoiceRestore };
+        delete next[engineId];
+        return { pendingVoiceRestore: next };
+      });
+      const restored = restoreVoice(stashed, engineId);
+      if (restored !== null) set({ currentVoice: restored });
+    }
     async function persist(): Promise<void> {
       const { currentVoice, autoSpeak, userTTSOverride } = get();
       try {
@@ -206,6 +228,7 @@ export function createVoiceStore(storage: KeyValueStorage) {
       lastSpokenMessageId: null,
       pendingVoiceRestore: {},
       downloads: { ...EMPTY_DOWNLOADS },
+      activeEngineId: null,
       deviceMeetsMemory: false,
       loaded: false,
 
@@ -229,6 +252,23 @@ export function createVoiceStore(storage: KeyValueStorage) {
           currentVoice: reconciled.voice,
           pendingVoiceRestore: reconciled.stashed,
         });
+        // A transfer the manager still holds from a previous session (paused,
+        // or interrupted by a kill) reads as paused, so the card offers
+        // Resume instead of starting a second transfer over the same path.
+        try {
+          const pending = await ttsDownloads.incomplete();
+          const resumed: EngineDownloads = { ...get().downloads };
+          for (const id of ENGINE_ORDER) {
+            const modelId = NEURAL_ENGINE_META[id].modelId;
+            const percent = pending[modelId];
+            if (percent !== undefined && resumed[id]?.state === "not_installed") {
+              resumed[id] = { state: "paused", percent };
+            }
+          }
+          set({ downloads: resumed });
+        } catch {
+          // No native module (node) — the disk states above stand.
+        }
         try {
           const total = await readTotalMemory();
           set({ deviceMeetsMemory: total !== null && total >= RAM_GATE_BYTES });
@@ -295,27 +335,33 @@ export function createVoiceStore(storage: KeyValueStorage) {
 
       startEngineDownload: async (engineId) => {
         const { modelId } = NEURAL_ENGINE_META[engineId];
-        return ttsDownloads.download(modelId, (status) => {
-          set((s) => ({ downloads: { ...s.downloads, [engineId]: status } }));
-          // A finished download restores the voice stashed for THIS engine
-          // when its model was removed (PocketPal's restore-after-re-download).
-          if (status.state === "ready") {
-            const stashed = get().pendingVoiceRestore[engineId];
-            if (stashed !== undefined) {
-              set((s) => {
-                const next = { ...s.pendingVoiceRestore };
-                delete next[engineId];
-                return { pendingVoiceRestore: next };
-              });
-              const restored = restoreVoice(stashed, engineId);
-              if (restored !== null) set({ currentVoice: restored });
-            }
-          }
-        });
+        set({ activeEngineId: engineId });
+        try {
+          return await ttsDownloads.download(modelId, (status) =>
+            applyEngineStatus(engineId, status),
+          );
+        } finally {
+          if (get().activeEngineId === engineId) set({ activeEngineId: null });
+        }
       },
 
-      cancelEngineDownload: () => {
-        ttsDownloads.abort();
+      pauseEngineDownload: async (engineId) => {
+        const { modelId } = NEURAL_ENGINE_META[engineId];
+        // Pause, never abort: the manager's abort path deletes the partial
+        // archive. `download` settles with a paused status on PauseError.
+        await ttsDownloads.pause(modelId);
+      },
+
+      resumeEngineDownload: async (engineId) => {
+        const { modelId } = NEURAL_ENGINE_META[engineId];
+        set({ activeEngineId: engineId });
+        try {
+          return await ttsDownloads.resume(modelId, (status) =>
+            applyEngineStatus(engineId, status),
+          );
+        } finally {
+          if (get().activeEngineId === engineId) set({ activeEngineId: null });
+        }
       },
 
       removeEngineModel: async (engineId) => {

@@ -1,5 +1,5 @@
 /** Jest mock for `expo-speech-recognition`
- * (lib/micAccess.ts, hooks/useVoiceLoop.ts, hooks/useVisionTurn.ts).
+ * (services/voice/mic-access.ts, hooks/useVoiceLoop.ts, hooks/useVisionTurn.ts).
  *
  * The recognizer is a native module with a live audio session; under Jest it
  * can only be modelled. `ExpoSpeechRecognitionModule` exposes `jest.fn()`

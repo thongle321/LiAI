@@ -1,7 +1,7 @@
 /** The context ladder for the ACTIVE local model, on THIS device.
  *
  * The stops, their memory cost and their fit are pure
- * (lib/chat/context-ladder.ts); what needs the device is the three inputs:
+ * (services/chat//context-ladder.ts); what needs the device is the three inputs:
  * the active model's GGUF metadata for its trained maximum, the inference
  * settings the estimator is wired to, and the device's RAM.
  *
@@ -19,16 +19,16 @@ import {
   buildContextLadder,
   CONTEXT_LADDER,
   type ContextLadder,
-} from "../lib/chat/context-ladder.ts";
-import { maxContextLength, type GgufHeader } from "../lib/models/gguf-metadata.ts";
-import { toMemoryMetadata } from "../lib/models/memoryEstimator.ts";
+} from "../services/chat/context-ladder.ts";
+import { maxContextLength, type GgufHeader } from "../services/models/gguf-metadata.ts";
+import { toMemoryMetadata } from "../services/models/memoryEstimator.ts";
 import {
   makeFitStatusFor,
   makeMemoryBytesFor,
   safeCeiling,
   type FitStatus,
-} from "../lib/models/context-fit.ts";
-import { readTotalMemory } from "../lib/models/device-tiers.ts";
+} from "../services/models/context-fit.ts";
+import { readTotalMemory } from "../services/models/device-tiers.ts";
 
 const EMPTY: ContextLadder = { stops: [], anyFits: false, defaultIndex: 0 };
 

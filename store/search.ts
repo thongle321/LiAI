@@ -7,7 +7,7 @@
 
 import { create } from "zustand";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
-import type { KeyValueStorage } from "../lib/storage";
+import type { KeyValueStorage } from "../services/storage/storage";
 import {
   DEFAULT_PROVIDER,
   DEFAULT_RESULT_COUNT,
@@ -15,7 +15,7 @@ import {
   parseResultCount,
   searchKeySS,
   type SearchProviderId,
-} from "../lib/search-providers.ts";
+} from "../services/search/search-providers.ts";
 
 export const SEARCH_KEY = "liai_search_v1";
 

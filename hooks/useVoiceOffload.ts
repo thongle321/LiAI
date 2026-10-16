@@ -8,7 +8,7 @@
 import { useEffect } from "react";
 import { AppState } from "react-native";
 
-import { watchBackgroundRelease } from "../lib/inference/offload.ts";
+import { watchBackgroundRelease } from "../services/inference/offload.ts";
 import { useVoice } from "../store/voice.ts";
 
 export function useVoiceOffload(): void {

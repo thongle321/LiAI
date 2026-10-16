@@ -4,13 +4,13 @@
  *
  * The picker is restricted to JSON and the file is read as TEXT, never
  * executed. Everything about the contents is untrusted and is validated by
- * `lib/chat/import.ts` before the store writes a single row.
+ * `services/chat//import.ts` before the store writes a single row.
  */
 
 import * as DocumentPicker from "expo-document-picker";
 import * as LegacyFileSystem from "expo-file-system/legacy";
 
-import { useSnackbar } from "../components/Snackbar.tsx";
+import { useSnackbar } from "../components/snackbar.tsx";
 import { useChatStore } from "../store/chat.ts";
 
 function plural(n: number, one: string): string {

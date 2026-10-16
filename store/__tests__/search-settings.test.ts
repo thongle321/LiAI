@@ -6,7 +6,7 @@ import {
   isSearchProviderId,
   parseResultCount,
   searchKeySS,
-} from "../../lib/search-providers";
+} from "../../services/search/search-providers";
 import { createSearchStore, SEARCH_KEY } from "../search";
 import { memorySecure, memoryStorage } from "../../jest/storage";
 

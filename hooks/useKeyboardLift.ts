@@ -13,7 +13,7 @@
  * `translateY: height.value + offset`), which is why there is more than one
  * of them and why they can drift.
  *
- * The geometry itself lives in lib/keyboard.ts, deliberately: that module
+ * The geometry itself lives in utils/keyboard.ts, deliberately: that module
  * imports nothing, so node can load it and its behaviour is unit-tested. This
  * one cannot be, because node cannot load react-native-reanimated.
  */
@@ -21,14 +21,14 @@
 import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { useAnimatedStyle, useDerivedValue } from "react-native-reanimated";
 
-import { keyboardOcclusion } from "../lib/keyboard.ts";
+import { keyboardOcclusion } from "../utils/keyboard.ts";
 
 /** Animated style that translates a bottom-anchored view up by the keyboard.
  *
  * `insetsBottom` MUST be the view's own bottom anchor, and 0 for anything
  * anchored at the physical screen bottom. Passing insets.bottom for such a
  * view is the bug that kept the chat composer under the keyboard: it is
- * anchored at 0, so it has to rise by the keyboard's full height. lib/keyboard.ts
+ * anchored at 0, so it has to rise by the keyboard's full height. utils/keyboard.ts
  * explains the arithmetic; the short version is that the keyboard height
  * already spans the navigation bar.
  */

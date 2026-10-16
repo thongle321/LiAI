@@ -23,15 +23,15 @@ import { ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { colors } from "../../themes/tokens.ts";
-import { ScreenHeader } from "../../components/ScreenHeader.tsx";
-import { ContentColumn } from "../../components/ContentColumn.tsx";
+import { ScreenHeader } from "../../components/screen-header.tsx";
+import { ContentColumn } from "../../components/content-column.tsx";
 import {
   MemorySettings,
   ModelInitializationSettings,
   ModelLoadingSettings,
-} from "../../components/InferenceSettings.tsx";
-import { SearchSettings } from "../../components/SearchSettings.tsx";
-import { HfTokenSettings } from "../../components/HfTokenSettings.tsx";
+} from "../../components/settings/inference-settings.tsx";
+import { SearchSettings } from "../../components/settings/search-settings.tsx";
+import { HfTokenSettings } from "../../components/settings/hf-token-settings.tsx";
 
 export default function SettingsScreen() {
   return (

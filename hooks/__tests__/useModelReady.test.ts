@@ -11,7 +11,7 @@ import { act, renderHook } from "@testing-library/react-native";
 
 import { useModelReady } from "../useModelReady.ts";
 import { useModelStore, type ModelStore } from "../../store/modelStore.ts";
-import { buildRemoteModelSpec } from "../../lib/models/remote-api.ts";
+import { buildRemoteModelSpec } from "../../services/models/remote-api.ts";
 import type { ModelSpec, RemoteApiProvider } from "../../types/models.ts";
 
 function completedModel(over: Partial<ModelSpec> = {}): ModelSpec {

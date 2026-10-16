@@ -3,7 +3,7 @@
  * header filter menu and the add FAB.
  *
  * PocketParity: ModelsScreen.tsx:386-478. The grouping itself is
- * lib/models/model-groups.ts; the expansion state is keyed by group key,
+ * services/models//model-groups.ts; the expansion state is keyed by group key,
  * exactly as the reference keys it (UIStore.ts:28-30). Empty groups are
  * never rendered (:378-384).
  *
@@ -17,31 +17,31 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
 import { colors } from "../../themes/tokens.ts";
-import { ScreenHeader } from "../../components/ScreenHeader.tsx";
-import { ContentColumn } from "../../components/ContentColumn.tsx";
+import { ScreenHeader } from "../../components/screen-header.tsx";
+import { ContentColumn } from "../../components/content-column.tsx";
 import { useLocalModelImport } from "../../hooks/useLocalModelImport.ts";
 import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
 import { useShallow } from "zustand/shallow";
 import { useModelStore } from "../../store/modelStore.ts";
 import { useChatStore } from "../../store/chat.ts";
 import { useModelsUi } from "../../store/modelsUi.ts";
-import { isProviderActive } from "../../lib/model-providers.ts";
+import { isProviderActive } from "../../services/search/model-providers.ts";
 import {
   buildModelGroups,
   flattenModelGroups,
   type ModelGroup,
   type ModelRow,
-} from "../../lib/models/model-groups.ts";
-import { DownloadErrorDialog } from "../../components/models/DownloadErrorDialog.tsx";
-import { ModelsHeaderRight } from "../../components/models/ModelsHeaderRight.tsx";
-import { FABGroup, FAB_STACK_HEIGHT } from "../../components/models/FABGroup.tsx";
-import { ModelAccordion } from "../../components/models/ModelAccordion.tsx";
-import { PresetModelCard } from "../../components/models/AvailableModels.tsx";
-import { ModelCard, RemoteProviderCard } from "../../components/models/ModelCard.tsx";
-import { HFModelSearch } from "../../components/models/HFModelSearch.tsx";
-import { RemoteModelSheet } from "../../components/models/RemoteModelSheet.tsx";
-import { ModelSettingsSheet } from "../../components/models/ModelSettingsSheet.tsx";
-import { ModelsResetDialog } from "../../components/models/ModelsResetDialog.tsx";
+} from "../../services/models/model-groups.ts";
+import { DownloadErrorDialog } from "../../components/models/download-error-dialog.tsx";
+import { ModelsHeaderRight } from "../../components/models/models-header-right.tsx";
+import { FABGroup, FAB_STACK_HEIGHT } from "../../components/models/fab-group.tsx";
+import { ModelAccordion } from "../../components/models/model-accordion.tsx";
+import { PresetModelCard } from "../../components/models/available-models.tsx";
+import { ModelCard, RemoteProviderCard } from "../../components/models/model-card.tsx";
+import { HFModelSearch } from "../../components/models/hf-model-search.tsx";
+import { RemoteModelSheet } from "../../components/models/remote-model-sheet.tsx";
+import { ModelSettingsSheet } from "../../components/models/model-settings-sheet.tsx";
+import { ModelsResetDialog } from "../../components/models/models-reset-dialog.tsx";
 import type { PresetModelFile } from "../../types/models";
 
 export default function ModelsRoute() {

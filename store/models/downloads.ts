@@ -18,13 +18,13 @@ import {
   hfRefFromId,
   hfRefFromSearch,
   isHuggingFaceUrl,
-} from "../../lib/models/huggingface";
-import { platformDownloadService, failureCode } from "../../lib/download-service";
-import { latestJobForModel } from "../../lib/models/download-jobs.ts";
-import { resumeDataForPartial, classifyFileOnDisk } from "../../lib/models/resume-state.ts";
-import { findProjectorFile, pairDownloadStep } from "../../lib/models/vision-pairing.ts";
-import { readGgufMetadata } from "../../lib/models/gguf-header.ts";
-import { modelFitsOnDevice } from "../../lib/storage-fit.ts";
+} from "../../services/models/huggingface";
+import { platformDownloadService, failureCode } from "../../services/downloads/download-service";
+import { latestJobForModel } from "../../services/models/download-jobs.ts";
+import { resumeDataForPartial, classifyFileOnDisk } from "../../services/models/resume-state.ts";
+import { findProjectorFile, pairDownloadStep } from "../../services/models/vision-pairing.ts";
+import { readGgufMetadata } from "../../services/models/gguf-header.ts";
+import { modelFitsOnDevice } from "../../utils/storage-fit.ts";
 import { asyncStorage, MEMORY_GUARD_KEY, generateId } from "./storage";
 
 function hfRefFor(modelId: string, results: HFModelSearchResult[]) {

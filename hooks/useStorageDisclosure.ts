@@ -5,14 +5,14 @@
  * reading is polled while the card is on screen instead, so freeing space
  * re-enables the Download button with no remount and no app restart.
  *
- * The decision itself is `storageDisclosure` (lib/models), which consumes the
+ * The decision itself is `storageDisclosure` (services/models), which consumes the
  * storage-fit rule; this hook owns the I/O and the interval only.
  */
 
 import { useEffect, useState } from "react";
 import { getFreeDiskStorageAsync } from "expo-file-system/legacy";
 
-import { storageDisclosure, type StorageDisclosure } from "../lib/models/storage-disclosure.ts";
+import { storageDisclosure, type StorageDisclosure } from "../services/models/storage-disclosure.ts";
 
 /** Fast enough that freeing space shows up while the user is still looking
  *  at the card, slow enough not to ask the filesystem the same question

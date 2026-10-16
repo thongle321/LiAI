@@ -16,19 +16,19 @@ import {
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
 
-import type { VoicePhase } from "../lib/voiceStatus.ts";
+import type { VoicePhase } from "../services/voice/voice-status.ts";
 import {
   bargeActionFor,
   isThrottlingError,
   isVoiceThrottled,
   setVoiceThrottled,
   voiceErrorAction,
-} from "../lib/voiceStatus.ts";
-import { ensureMicAccess } from "../lib/micAccess.ts";
-import { speakReply, stopSpeaking } from "../lib/voiceSpeak.ts";
+} from "../services/voice/voice-status.ts";
+import { ensureMicAccess } from "../services/voice/mic-access.ts";
+import { speakReply, stopSpeaking } from "../services/voice/voice-speak.ts";
 import { useVoice } from "../store/voice.ts";
-import { VOICE_LISTEN_OPTS } from "../lib/voiceListen.ts";
-import { snapshotToBase64 } from "../lib/snapshot.ts";
+import { VOICE_LISTEN_OPTS } from "../services/voice/voice-listen.ts";
+import { snapshotToBase64 } from "../services/storage/snapshot.ts";
 import { useChatStore } from "../store/chat.ts";
 import { multimodalAvailable, MULTIMODAL_WARNING } from "../store/chat/send.ts";
 

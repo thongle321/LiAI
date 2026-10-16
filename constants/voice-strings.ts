@@ -12,4 +12,4 @@ export const VOICE_PREVIEW_SAMPLE =
   "Oh, hello there! I've been waiting for you to test me. I sound pretty good!";
 
 /** Engine titles, tier chips and spec lines are NOT here: they live beside
- *  the model ids and voice tables they describe, in lib/tts/engineMeta.ts. */
+ *  the model ids and voice tables they describe, in services/tts//engineMeta.ts. */

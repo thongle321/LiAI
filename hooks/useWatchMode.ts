@@ -1,7 +1,7 @@
 /** Watch mode (vision-series 05): continuous CAPTURE, answer only on ask.
  *
  * While on, a timer snapshots the live preview into a rolling buffer
- * (lib/vision-watch.ts pushFrame, capped at the per-turn image limit).
+ * (services/vision/vision-watch.ts pushFrame, capped at the per-turn image limit).
  * The loop contains NO inference: no send, no completion, no chat store —
  * frames are only read by the ask path when the user asks a question
  * (recorded product decision; the reference app's auto-send loop is
@@ -13,9 +13,9 @@ import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { Camera as VisionCameraView } from "react-native-vision-camera";
 
-import { MAX_IMAGES } from "../lib/chat/attachments.ts";
-import { pushFrame } from "../lib/vision-watch.ts";
-import { snapshotToBase64 } from "../lib/snapshot.ts";
+import { MAX_IMAGES } from "../services/chat/attachments.ts";
+import { pushFrame } from "../services/vision/vision-watch.ts";
+import { snapshotToBase64 } from "../services/storage/snapshot.ts";
 import { useWatch } from "../store/watch.ts";
 
 export function useWatchMode(

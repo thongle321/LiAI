@@ -14,7 +14,7 @@
  */
 
 import { useModelStore } from "../store/modelStore.ts";
-import { selectEngineSource } from "../lib/inference/engine.ts";
+import { selectEngineSource } from "../services/inference/engine.ts";
 
 export function useModelReady(): boolean {
   return useModelStore(

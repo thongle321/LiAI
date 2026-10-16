@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Redirect } from "expo-router";
 
-import { isOnboarded } from "../lib/onboarding.ts";
+import { isOnboarded } from "../services/onboarding.ts";
 
 export default function IndexGate() {
   const [onboarded, setOnboarded] = useState<boolean | null>(null);

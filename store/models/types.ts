@@ -15,7 +15,7 @@ import type {
   RemoteApiProvider,
   RemoteCaps,
 } from "../../types/models";
-import type { HFSortBy } from "../../lib/models/hf-format.ts";
+import type { HFSortBy } from "../../services/models/hf-format.ts";
 
 /** A Hub failure the UI can branch on: `authentication` is what offers
  * the Disable-Token-&-Retry escape hatch. */

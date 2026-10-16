@@ -74,7 +74,7 @@ export interface TurnOutcomeFlags {
   contextFull?: boolean;
   /** The engine declared a length stop. A remote reply that stopped for
    *  any OTHER reason, mid-sentence and long, is the cut-off notice's
-   *  subject (lib/chat/banner-variant.ts). */
+   *  subject (services/chat//banner-variant.ts). */
   stoppedEarly?: boolean;
   /** The user pressed Stop, so this reply is a deliberate stopping point
    *  rather than a finished answer. */

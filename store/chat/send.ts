@@ -7,9 +7,9 @@
 
 import type { ApiError } from "../../types/api.ts";
 import type { ChatMessage } from "../../types/chat.ts";
-import { newId } from "../../lib/chat/messages.ts";
-import type { SessionStore } from "../../lib/chat/session-store.ts";
-import { canSeeImages, loadModelState } from "../../lib/inference/mmproj.ts";
+import { newId } from "../../services/chat/messages.ts";
+import type { SessionStore } from "../../services/chat/session-store.ts";
+import { canSeeImages, loadModelState } from "../../services/inference/mmproj.ts";
 import { useVoice } from "../voice.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
@@ -24,7 +24,7 @@ function llmError(message: string): ApiError {
  * send time), so this answers the equivalent question predictively: the
  * ACTIVE local model's spec is completed AND records its paired
  * projector (ticket 01), which is exactly the path ensureEngine will
- * attach (lib/inference/mmproj.ts). A declaration alone never flips it.
+ * attach (services/inference//mmproj.ts). A declaration alone never flips it.
  * Remote stays cannot-see until ticket 04.
  *
  * EXPORTED: the vision screen reads this same gate to show the can't-see
@@ -263,7 +263,7 @@ export function createSendSlice(
         voice.lastSpokenMessageId !== opts.assistantId
       ) {
         voice.markSpoken(opts.assistantId);
-        void import("../../lib/voiceSpeak.ts")
+        void import("../../services/voice/voice-speak.ts")
           .then((m) => {
             m.stopSpeaking();
             m.speakReply(outcome.reply);

@@ -38,6 +38,13 @@ export const colors = {
   errorMark: "#EF4444",
   /** Coolant cyan — machine-in-the-loop states only. */
   info: "#06B6D4",
+  /** The warm ramp — Kitten's tier chip and the voice avatars, and nothing
+   *  else. It is the one non-signal accent in the app, and it is deliberately
+   *  rationed: the Voice screen's engine cards, so a low-end device's voice
+   *  pack is the one chip that shouts. Mirrored in global.css as
+   *  .voice-badge--warm and as the bg-orange-100 avatar ground. */
+  warmSurface: "#FFEDD5",
+  warmAccent: "#C2410C",
   /** Cool Paper: the page. Clean White: raised. Mist: recessed. */
   base: "#F8FAFC",
   surface1: "#FFFFFF",

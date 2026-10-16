@@ -3,9 +3,9 @@
 import type { StateCreator } from "zustand";
 
 import type { ModelStore, SettingsSlice } from "./types";
-import { parseModelSettings } from "../../lib/model-settings";
-import { activeHfToken } from "../../lib/hf-token";
-import { HF_TOKEN_SS_KEY } from "../../lib/secrets";
+import { parseModelSettings } from "../../utils/model-settings";
+import { activeHfToken } from "../../services/auth/hf-token";
+import { HF_TOKEN_SS_KEY } from "../../services/auth/secrets";
 import { asyncStorage, HF_TOKEN_USE_KEY, MODEL_SETTINGS_KEY, deleteSecret, writeSecret } from "./storage";
 
 export const createSettingsSlice: StateCreator<ModelStore, [], [], SettingsSlice> = (

@@ -8,8 +8,8 @@
 
 import { create } from "zustand";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
-import type { KeyValueStorage } from "../lib/storage.ts";
-import { clampWatchInterval, WATCH_INTERVAL_DEFAULT_MS } from "../lib/vision-watch.ts";
+import type { KeyValueStorage } from "../services/storage/storage.ts";
+import { clampWatchInterval, WATCH_INTERVAL_DEFAULT_MS } from "../services/vision/vision-watch.ts";
 
 export const WATCH_KEY = "liai_watch_v1";
 

@@ -5,7 +5,7 @@
 
 import { Alert } from "react-native";
 
-import { exceedsLearnedCeiling } from "../lib/load-guard.ts";
+import { exceedsLearnedCeiling } from "../utils/load-guard.ts";
 import { useModelStore } from "../store/modelStore";
 
 export function useLoadGuard(): (

@@ -1,13 +1,13 @@
 /** Release the loaded model when the app is backgrounded.
  *
  * Mounted once, at the app root. The decision itself lives in
- * lib/inference/offload.ts so it is testable without a native module.
+ * services/inference//offload.ts so it is testable without a native module.
  */
 
 import { useEffect } from "react";
 import { AppState } from "react-native";
 
-import { watchBackgroundRelease } from "../lib/inference/offload.ts";
+import { watchBackgroundRelease } from "../services/inference/offload.ts";
 import { useChatStore } from "../store/chat";
 // The deep path is deliberate: store/chat.ts SHADOWS the store/chat/
 // directory, so the bare specifier resolves to the barrel (which re-exports

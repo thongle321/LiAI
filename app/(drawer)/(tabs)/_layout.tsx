@@ -9,11 +9,11 @@ import { View } from "react-native";
 import { router, Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { BottomNav, type ChatTab } from "../../../components/BottomNav.tsx";
+import { BottomNav, type ChatTab } from "../../../components/bottom-nav.tsx";
 import { useKeyboardStore } from "../../../store/keyboard.ts";
 
 // Same story as the root boundary: this was `app/(drawer)/(tabs)/+error.tsx`.
-export { TabsErrorBoundary as ErrorBoundary } from "../../../components/RouteErrorBoundaries.tsx";
+export { TabsErrorBoundary as ErrorBoundary } from "../../../components/route-error-boundaries.tsx";
 
 export default function TabLayout() {
   return (

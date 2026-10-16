@@ -41,6 +41,7 @@
           "enableFrameProcessors": true
         }
       ],
+      "./plugins/withCameraUsesFeature.js",
       "expo-font",
       [
         "expo-speech-recognition",

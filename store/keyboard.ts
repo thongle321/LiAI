@@ -17,14 +17,14 @@
  * `tabBarHeight` is seeded from BottomNav's class-sum constant (TAB_BAR_HEIGHT
  * — its VALUE is device-verified, not test-verified) and replaced by the
  * bar's own onLayout measurement, so the compensation can no longer drift
- * when the bar's classes change. The guard lives in lib/keyboard.ts
+ * when the bar's classes change. The guard lives in utils/keyboard.ts
  * (resolveTabBarHeight), node-testable there because this file must stay
  * free of React Native imports (see TAB_BAR_HEIGHT_SEED there).
  */
 
 import { create } from "zustand";
 
-import { TAB_BAR_HEIGHT_SEED, resolveTabBarHeight } from "../lib/keyboard.ts";
+import { TAB_BAR_HEIGHT_SEED, resolveTabBarHeight } from "../utils/keyboard.ts";
 
 export interface KeyboardUIState {
   /** The keyboard is showing, for the whole app — not per screen. */

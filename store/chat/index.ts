@@ -17,26 +17,26 @@ import { createSendSlice, multimodalAvailable } from "./send.ts";
 import { createSessionsSlice } from "./sessions.ts";
 import { createDraftSlice } from "./draft.ts";
 import type { ChatCtx, ChatDeps, ChatState, TurnRunner } from "./types.ts";
-import { createToolTokenCounter } from "../../lib/chat/tool-token-count.ts";
-import { selectEngineSource, type EngineSource } from "../../lib/inference/engine.ts";
-import { EngineManager } from "../../lib/inference/manager.ts";
-import type { LlamaInitParams } from "../../lib/inference/local-engine.ts";
-import { projectorPathForFileName } from "../../lib/inference/mmproj.ts";
-import { resolveSampler, type SamplerParams } from "../../lib/inference/sampler.ts";
-import { resolveThinking } from "../../lib/inference/thinking.ts";
+import { createToolTokenCounter } from "../../services/chat/tool-token-count.ts";
+import { selectEngineSource, type EngineSource } from "../../services/inference/engine.ts";
+import { EngineManager } from "../../services/inference/manager.ts";
+import type { LlamaInitParams } from "../../services/inference/local-engine.ts";
+import { projectorPathForFileName } from "../../services/inference/mmproj.ts";
+import { resolveSampler, type SamplerParams } from "../../services/inference/sampler.ts";
+import { resolveThinking } from "../../services/inference/thinking.ts";
 import {
   resolveEffort,
   type EffortLevel,
-} from "../../lib/reasoning-capability.ts";
-import type { ThinkingChatProbe } from "../../lib/inference/thinking-detection.ts";
+} from "../../utils/reasoning-capability.ts";
+import type { ThinkingChatProbe } from "../../services/inference/thinking-detection.ts";
 import {
   getAvailableDevices,
   resolveComputeDevices,
-} from "../../lib/inference/deviceSelection.ts";
-import { createRemoteEngine } from "../../lib/inference/remote-engine.ts";
-import { createTurnRunner } from "../../lib/chat/turn.ts";
-import { holdScreen, releaseScreen } from "../../lib/chat/keep-awake.ts";
-import type { SessionStore } from "../../lib/chat/session-store.ts";
+} from "../../services/inference/deviceSelection.ts";
+import { createRemoteEngine } from "../../services/inference/remote-engine.ts";
+import { createTurnRunner } from "../../services/chat/turn.ts";
+import { holdScreen, releaseScreen } from "../../services/chat/keep-awake.ts";
+import type { SessionStore } from "../../services/chat/session-store.ts";
 
 /** Default BYOK resolver: consent-gated key from SecureStore, never KV.
  * Short-circuits before touching SecureStore when consent is absent. */
@@ -72,7 +72,7 @@ async function defaultEngineSource(): Promise<EngineSource | null> {
  * component needs one field, not the whole store. */
 export async function defaultGetStore(): Promise<SessionStore | null> {
   try {
-    const { getSessionStore } = await import("../../lib/tinybase.ts");
+    const { getSessionStore } = await import("../../services/chat/tinybase.ts");
     return await getSessionStore();
   } catch {
     return null;
@@ -120,7 +120,7 @@ export async function reloadLocalEngine(): Promise<void> {
 async function resolveInit(): Promise<LlamaInitParams> {
   const [fs, engine, inference] = await Promise.all([
     import("expo-file-system/legacy"),
-    import("../../lib/inference/engine.ts"),
+    import("../../services/inference/engine.ts"),
     import("../inference.ts"),
   ]);
   const params = inference.useInference.getState();
@@ -191,8 +191,8 @@ function getManager(): EngineManager {
         loadLocal: async (fileName, mmprojPath) => {
           const [fs, engine, local] = await Promise.all([
             import("expo-file-system/legacy"),
-            import("../../lib/inference/engine.ts"),
-            import("../../lib/inference/local-engine.ts"),
+            import("../../services/inference/engine.ts"),
+            import("../../services/inference/local-engine.ts"),
           ]);
           // The SAME resolveInit() that feeds ensure()'s slot key: what
           // the key claims is what actually loads, always.
@@ -217,7 +217,7 @@ function getManager(): EngineManager {
         try {
           const { useModelStore } = await import("../modelStore.ts");
           const { readSecret } = await import("../models/storage.ts");
-          const { providerKeySS } = await import("../../lib/secrets.ts");
+          const { providerKeySS } = await import("../../services/auth/secrets.ts");
           const m = useModelStore.getState();
           const provider = m.remoteApis.find((p) => p.id === providerId);
           if (!provider) return null;
@@ -249,7 +249,7 @@ async function recordThinkingCapability(
   try {
     const [{ detectThinkingCapability }, { useModelStore }, { useInference }] =
       await Promise.all([
-        import("../../lib/inference/thinking-detection.ts"),
+        import("../../services/inference/thinking-detection.ts"),
         import("../modelStore.ts"),
         import("../inference.ts"),
       ]);
@@ -446,7 +446,7 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
     const runTurn = createTurnRunner({
       ensureEngine: async (source: EngineSource) =>
         // The projector rides the same resolution the image gate uses
-        // (lib/inference/mmproj.ts): the slot key includes it, so a model
+        // (services/inference//mmproj.ts): the slot key includes it, so a model
         // whose pair arrived mid-session cannot reuse the blind context.
         getManager().ensure(
           source,

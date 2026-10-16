@@ -341,23 +341,25 @@
 
 /* Voice screen (lib/tts). One expandable card per engine, plus the System
    card that sits above the list. Colours come from the same slate/blue ramp
-   as the rest of this file — no engine-specific accents until an engine
-   actually ships audio. */
-
+   as the rest of this file — no engine-specific accents outside the
+   sanctioned warm tier chip (DESIGN.md). */
+/* Voice surface normalised to the Models/app idiom (Q5=2): standard 8px
+   card radius, hairline borders, two-step tokens instead of baked colours. */
 /* The System card, and the frame every engine card sits in. */
 .voice-card {
   background-color: #ffffff;
   border-width: 1px;
   border-style: solid;
   border-color: #e2e8f0;
-  border-radius: 16px;
+  border-radius: 8px;
   overflow: hidden;
 }
 /* Modifier: the System card is tinted so it reads as "in use, no download
-   needed" against the plain engine cards below it. */
+   needed" against the plain engine cards below it. Aligned to DESIGN.md's
+   Selection ground: surface-tint fill + primary-mark border. */
 .voice-card--active {
   background-color: #eff6ff;
-  border-color: #bfdbff;
+  border-color: #3882f6;
 }
 .voice-card__header {
   flex-direction: row;
@@ -377,30 +379,28 @@
 .voice-card__title {
   font-family: var(--font-sans-semibold);
   font-size: 16px;
-  line-height: 22px;
+  line-height: 24px;
   color: #0f172a;
 }
 .voice-card__spec {
   font-family: var(--font-sans);
-  font-size: 13px;
-  line-height: 18px;
-  color: #64748b;
+  font-size: 12px;
+  line-height: 16px;
+  color: #475569;
 }
-/* The recessed ground the Voice screen's cards sit on. Mist, so the white
-   cards below it read as raised without a second tint. */
+/* Shell retained for reference, currently unused: the Voice screen no longer
+   wraps its content in a panel (Q7), matching the app's flat surface model. */
 .voice-panel {
   background-color: #f1f5f9;
   border-width: 1px;
   border-style: solid;
   border-color: #e2e8f0;
-  /* 16, not 20: DESIGN.md's shape scale has five steps (2/4/8/12/16) and this
-     panel is a rounded rectangle, not a full-bleed one. */
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 16px;
 }
 /* The full-width action inside an expanded engine card: Install, Retry,
    Resume, Pause. One shape for all four, so the body has exactly two looks
-   — actionable, or not. --disabled is a fill change, never opacity. */
+   -- actionable, or not. --disabled is a fill change, never opacity. */
 .voice-action {
   width: 100%;
   min-height: 48px;
@@ -408,7 +408,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border-radius: 12px;
+  border-radius: 8px;
 }
 .voice-action--primary {
   background-color: #2563eb;
@@ -433,7 +433,7 @@
   padding-right: 8px;
   padding-top: 2px;
   padding-bottom: 2px;
-  background-color: #dbeafe;
+  background-color: #eff6ff;
 }
 .voice-badge__text {
   font-family: var(--font-sans-semibold);

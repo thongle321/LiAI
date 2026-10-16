@@ -290,6 +290,7 @@ increase-context sheet. None of those are in scope for an animation refactor.
 - [x] Implement recommendation #3: defer reasoning auto-collapse through
       `InteractionManager.runAfterInteractions`
       (`components/chat/reasoning-block.tsx`).
-- [ ] Run typecheck + tests and `/code-review` on the resulting diff.
+- [x] Run typecheck + tests on the resulting diff (`npm run typecheck`, `npm test`: 30 suites / 355 tests green; commit `e046117`).
+- [x] Manual two-axis code review of the diff (standards + spec); no hard violations noted.
 - [ ] If expand/collapse changes ship, verify on Android before release,
       mirroring the open-questions in the tab-jank spec.

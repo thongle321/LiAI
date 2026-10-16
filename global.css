@@ -340,11 +340,12 @@
 }
 
 /* Voice screen (lib/tts). One expandable card per engine, plus the System
-   card that sits above the list. Colours come from the same slate/blue ramp
-   as the rest of this file — no engine-specific accents outside the
-   sanctioned warm tier chip (DESIGN.md). */
-/* Voice surface normalised to the Models/app idiom (Q5=2): standard 8px
-   card radius, hairline borders, two-step tokens instead of baked colours. */
+   card that sits above the list. House styling rules apply (AGENTS.md,
+   DESIGN.md): standard 8px radii, hairline borders, Slate text, Signal
+   Blue confined to signal-bearing elements and the sanctioned warm accent. */
+/* Active System card: Surface-Tint fill + Signal-Mark border, as confirmed
+   during grilling (Selection ground Q2), recorded as an accepted exception
+   to the Tint Rule — see DESIGN.md § Colors. */
 /* The System card, and the frame every engine card sits in. */
 .voice-card {
   background-color: #ffffff;
@@ -384,20 +385,12 @@
 }
 .voice-card__spec {
   font-family: var(--font-sans);
-  font-size: 12px;
-  line-height: 16px;
+  /* Body-Small floor: DESIGN.md bars text below 14px for anything read. */
+  font-size: 14px;
+  line-height: 20px;
   color: #475569;
 }
-/* Shell retained for reference, currently unused: the Voice screen no longer
-   wraps its content in a panel (Q7), matching the app's flat surface model. */
-.voice-panel {
-  background-color: #f1f5f9;
-  border-width: 1px;
-  border-style: solid;
-  border-color: #e2e8f0;
-  border-radius: 8px;
-  padding: 16px;
-}
+
 /* The full-width action inside an expanded engine card: Install, Retry,
    Resume, Pause. One shape for all four, so the body has exactly two looks
    -- actionable, or not. --disabled is a fill change, never opacity. */

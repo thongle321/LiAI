@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { InteractionManager, Pressable, Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -22,6 +22,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { ChevronDown, ChevronRight } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
+import { MOTION_DURATION_MS } from "../../utils/motion.ts";
 import { MarkdownView } from "./markdown-view.tsx";
 
 type BubbleState = "collapsed" | "partial" | "expanded";
@@ -52,14 +53,20 @@ export function ReasoningBlock({
   const rotation = useSharedValue(90);
 
   // Rising edge only: once the answer starts, snap to the compact row —
-  // but never over a choice the user already made.
+  // but never over a choice the user already made. Defer the state flip
+  // past the in-flight interaction so a streaming tail doesn't fight the
+  // layout settle (PocketPal's InteractionManager.runAfterInteractions).
   useEffect(() => {
-    if (autoCollapse && !userToggledRef.current) setState("collapsed");
+    if (autoCollapse && !userToggledRef.current) {
+      InteractionManager.runAfterInteractions(() => {
+        if (!userToggledRef.current) setState("collapsed");
+      });
+    }
   }, [autoCollapse]);
 
   useEffect(() => {
     rotation.value = withTiming(state === "expanded" ? 180 : 90, {
-      duration: 200,
+      duration: MOTION_DURATION_MS,
     });
   }, [state, rotation]);
 

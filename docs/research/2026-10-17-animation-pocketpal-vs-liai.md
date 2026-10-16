@@ -281,9 +281,15 @@ increase-context sheet. None of those are in scope for an animation refactor.
 
 ## 7. Suggested next steps
 
-- [ ] Decide whether to write this as the canonical note (already placed at
+- [x] Decide whether to write this as the canonical note (placed at
       `docs/research/2026-10-17-animation-pocketpal-vs-liai.md`).
-- [ ] Pick recommendation #1 or #2 above to implement first via `/tdd`,
-      then run `/code-review` on the diff.
-- [ ] If expand/collapse is touched, add a regression check on Android before
-      shipping, mirroring the open-questions in the tab-jank spec.
+- [x] Implement recommendation #1: gate `bubbleEntering` while a turn streams
+      (`components/chat/message-list-item.tsx`).
+- [x] Implement recommendation #2: centralize expand/collapse layout transition
+      via `motionLayout()` (`utils/motion.ts`, `components/voice/engine-card.tsx`).
+- [x] Implement recommendation #3: defer reasoning auto-collapse through
+      `InteractionManager.runAfterInteractions`
+      (`components/chat/reasoning-block.tsx`).
+- [ ] Run typecheck + tests and `/code-review` on the resulting diff.
+- [ ] If expand/collapse changes ship, verify on Android before release,
+      mirroring the open-questions in the tab-jank spec.

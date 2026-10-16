@@ -25,7 +25,7 @@
 
 import { useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
-import Animated, { Layout } from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import {
   AudioLines,
   Cat,
@@ -41,10 +41,7 @@ import {
 } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
-import {
-  MOTION_DURATION_MS,
-  motionEasing,
-} from "../../utils/motion.ts";
+import { motionLayout } from "../../utils/motion.ts";
 import { formatBytes } from "../../services/models/progress.ts";
 import { NEURAL_ENGINE_META } from "../../services/tts/engineMeta.ts";
 import {
@@ -299,7 +296,7 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
       </Pressable>
 
       <Animated.View
-        layout={Layout.duration(MOTION_DURATION_MS).easing(motionEasing)}
+        layout={motionLayout()}
       >
         <View className="voice-card__body">
           {group.kind === "ready" ? (

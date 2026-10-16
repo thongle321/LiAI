@@ -11,6 +11,7 @@ import {
   FadeIn,
   FadeInDown,
   FadeOut,
+  Layout,
   ZoomIn,
   useAnimatedStyle,
   useSharedValue,
@@ -90,6 +91,12 @@ export function fabActionExiting(durationMs: number): BaseAnimationBuilder {
 /** New chat bubbles slide up once on mount (keyed by message id). */
 export function bubbleEntering(durationMs: number): BaseAnimationBuilder {
   return FadeInDown.duration(durationMs).easing(motionEasing);
+}
+
+/** Expand/collapse layout transition for disclosure bodies (engine card etc).
+ *  One duration + easing for every height/opacity change, on the UI thread. */
+export function motionLayout() {
+  return Layout.duration(MOTION_DURATION_MS).easing(motionEasing);
 }
 
 /** Transient rows: typing indicator, voice status, issue lines. */

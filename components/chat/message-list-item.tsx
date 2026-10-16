@@ -125,7 +125,12 @@ export const MessageListItem = memo(function MessageListItem({
 }) {
   const { message, grouped, status } = row;
   const duration = MOTION_DURATION_MS;
-  const entering = bubbleEntering(duration);
+  // Suppress the per-bubble enter animation while a turn is streaming: the
+  // repeated 200ms FadeInDown on every mount is the same full-screen
+  // offscreen-compositing cost that broke tab switching, and a streaming
+  // turn already moves the eye to its tail. Settled turns still fade in once.
+  const entering =
+    message.streaming === true ? undefined : bubbleEntering(duration);
   const exiting = fadeExiting(duration);
   // Previews and actions target settled turns: a half-streamed URL would
   // trigger a garbage preview fetch, and actions need final text.

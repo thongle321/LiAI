@@ -14,9 +14,12 @@
  * component.
  *
  * Motion: Reanimated's `Layout` animation at the app's one
- * duration/easing (utils/motion.ts). The expanded height and opacity
- * animate on the UI thread with no manual measurement — the body
- * simply renders at natural height and `Layout` animates the change.
+ * duration/easing (utils/motion.ts). The body renders at natural
+ * height and the mount/unmount animates the height on the UI thread,
+ * with no manual measurement — `Layout` animates a child being ADDED
+ * or REMOVED, which is why the body is mounted behind an `expanded`
+ * guard. Rendered unconditionally it stays at natural height forever:
+ * the chevron swaps and the card never closes.
  *
  * The chevron is a glyph swap (ChevronRight/ChevronDown), NOT a rotation:
  * SettingsRows' AdvancedGroup records that a style-rotated lucide icon
@@ -295,82 +298,86 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
         )}
       </Pressable>
 
-      <Animated.View
-        layout={motionLayout()}
-      >
-        <View className="voice-card__body">
-          {group.kind === "ready" ? (
-            <View>
-              {engineId === "kokoro" ? (
-                <Text className="text-quiet">
-                  Some voices may not work on all devices.
+      {/* Collapsed means gone: the card is a disclosure, and the body's
+          height is what `Layout` animates on the way in and out. */}
+      {expanded ? (
+        <Animated.View
+          layout={motionLayout()}
+        >
+          <View className="voice-card__body">
+            {group.kind === "ready" ? (
+              <View>
+                {engineId === "kokoro" ? (
+                  <Text className="text-quiet">
+                    Some voices may not work on all devices.
+                  </Text>
+                ) : null}
+                {meta.voices.map((voice) => {
+                  const selected = currentVoice?.id === voice.id;
+                  const previewing = previewingId === voice.id;
+                  return (
+                    <Pressable
+                      key={voice.id}
+                      onPress={() => onTapVoice(voice)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: selected }}
+                      accessibilityLabel={
+                        previewing
+                          ? `Stop previewing ${voice.name}`
+                          : `Speak with ${voice.name} and preview`
+                      }
+                      className="flex-row items-center gap-3 py-2"
+                    >
+                      <RadioDot checked={selected} />
+                      <Text className="flex-1 font-sans text-body-md text-primary-text">
+                        {voice.name}
+                      </Text>
+                      {previewing ? <Square size={14} color={colors.primary} /> : null}
+                    </Pressable>
+                  );
+                })}
+                <Text className="mt-1 text-quiet">
+                  Tap a voice to select it and hear a sample.
                 </Text>
-              ) : null}
-              {meta.voices.map((voice) => {
-                const selected = currentVoice?.id === voice.id;
-                const previewing = previewingId === voice.id;
-                return (
-                  <Pressable
-                    key={voice.id}
-                    onPress={() => onTapVoice(voice)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: selected }}
-                    accessibilityLabel={
-                      previewing
-                        ? `Stop previewing ${voice.name}`
-                        : `Speak with ${voice.name} and preview`
-                    }
-                    className="flex-row items-center gap-3 py-2"
-                  >
-                    <RadioDot checked={selected} />
-                    <Text className="flex-1 font-sans text-body-md text-primary-text">
-                      {voice.name}
-                    </Text>
-                    {previewing ? <Square size={14} color={colors.primary} /> : null}
-                  </Pressable>
-                );
-              })}
-              <Text className="mt-1 text-quiet">
-                Tap a voice to select it and hear a sample.
-              </Text>
-              <Pressable
-                onPress={onRemove}
-                accessibilityRole="button"
-                accessibilityLabel={`Remove the ${meta.title} voice model and free its storage`}
-                className="btn btn--ghost active:opacity-80 mt-3 flex-row items-center gap-2 px-5 py-2"
-              >
-                <Trash2 size={14} color={colors.secondaryText} />
-                <Text className="font-sans-semibold text-body-md text-secondary-text">
-                  Remove
-                </Text>
-              </Pressable>
-            </View>
-          ) : (
-            <View>
-              {group.kind === "error" ? (
-                <Text className="font-sans text-body-sm text-error">
-                  {group.message ?? "The download failed."}
-                </Text>
-              ) : (
-                <Text className="text-quiet">
-                  {downloadLine(group, meta.modelBytes) ?? meta.tagline}
-                </Text>
-              )}
-              {lowDisk && group.kind === "install" ? (
-                <Text className="storage-warning mt-2">
-                  {`Not enough space — free up ${Math.round(
-                    (meta.modelBytes * DISK_HEADROOM) / 1_000_000,
-                  )} MB to install this engine (${Math.floor((freeBytes ?? 0) / 1_000_000)} MB available).`}
-                </Text>
-              ) : null}
-              {renderAction()}
-            </View>
-          )}
-          {errorNote !== null ? (
-            <Text className="mt-2 font-sans text-body-sm text-primary-text">{errorNote}</Text>
-          ) : null}
-        </View>
-      </Animated.View>
+                <Pressable
+                  onPress={onRemove}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove the ${meta.title} voice model and free its storage`}
+                  className="btn btn--ghost active:opacity-80 mt-3 flex-row items-center gap-2 px-5 py-2"
+                >
+                  <Trash2 size={14} color={colors.secondaryText} />
+                  <Text className="font-sans-semibold text-body-md text-secondary-text">
+                    Remove
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View>
+                {group.kind === "error" ? (
+                  <Text className="font-sans text-body-sm text-error">
+                    {group.message ?? "The download failed."}
+                  </Text>
+                ) : (
+                  <Text className="text-quiet">
+                    {downloadLine(group, meta.modelBytes) ?? meta.tagline}
+                  </Text>
+                )}
+                {lowDisk && group.kind === "install" ? (
+                  <Text className="storage-warning mt-2">
+                    {`Not enough space — free up ${Math.round(
+                      (meta.modelBytes * DISK_HEADROOM) / 1_000_000,
+                    )} MB to install this engine (${Math.floor((freeBytes ?? 0) / 1_000_000)} MB available).`}
+                  </Text>
+                ) : null}
+                {renderAction()}
+              </View>
+            )}
+            {errorNote !== null ? (
+              <Text className="mt-2 font-sans text-body-sm text-primary-text">{errorNote}</Text>
+            ) : null}
+          </View>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }

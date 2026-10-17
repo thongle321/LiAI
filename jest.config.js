@@ -40,6 +40,9 @@ module.exports = {
       '@lodev09/react-native-true-sheet/mock',
     'react-native-reanimated':
       '<rootDir>/jest/react-native-reanimated-mock.js',
+    // lucide is ESM-only under jest-expo's resolver, and the preset never
+    // transforms `.mjs`. Same icons, loadable form — see the shim.
+    '^lucide-react-native$': '<rootDir>/jest/lucide-react-native.js',
     // Loads the native worklets unpacker at import time, so any test that
     // reaches a scheduleOnRN call dies before its first assertion. Reanimated's
     // mock above does not cover this package's surface.

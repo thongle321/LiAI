@@ -26,50 +26,56 @@ export function ImageViewer({
   uri: string | null;
   onClose: () => void;
 }) {
-  if (uri === null) return null;
+  // The Modal stays mounted so its fade-out animation plays on close;
+  // `visible` drives show/hide, and the contents render null when
+  // there is no photo to show (D4-9).
   return (
     <Modal
-      visible
+      visible={uri !== null}
       transparent
       animationType="fade"
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <StatusBar style="light" />
-      {/* accessibilityViewIsModal: without it, a transparent Modal still
-          lets VoiceOver reach and activate the chat behind this one, so
-          the focus trap people expect from a fullscreen overlay is
-          simply absent. */}
-      <View className="flex-1" accessibilityViewIsModal>
-        {/* `accessible={false}` and NO role: tap-anywhere is a redundant
-            convenience, and making the whole backdrop a button put a
-            button inside a button, which TalkBack announces twice. The X
-            is the real control. */}
-        <Pressable onPress={onClose} className="flex-1 bg-black" accessible={false}>
-          <Image
-            source={{ uri }}
-            className="flex-1"
-            resizeMode="contain"
-            // Without this the image reads as decoration, and a screen
-            // reader offers no way to inspect what was photographed.
-            accessibilityLabel="Attached photo, enlarged"
-          />
-        </Pressable>
-        {/* A sibling of the backdrop, not a child: the photo can be any
-            colour, and a control drawn over it would sit on an unknown
-            background. */}
-        <View className="absolute left-0 top-0">
-          <Pressable
-            onPress={onClose}
-            className="icon-btn"
-            accessibilityRole="button"
-            accessibilityLabel="Close image"
-            hitSlop={8}
-          >
-            <X size={24} color={colors.inverseText} />
-          </Pressable>
-        </View>
-      </View>
+      {uri !== null && (
+        <>
+          <StatusBar style="light" />
+          {/* accessibilityViewIsModal: without it, a transparent Modal still
+              lets VoiceOver reach and activate the chat behind this one, so
+              the focus trap people expect from a fullscreen overlay is
+              simply absent. */}
+          <View className="flex-1" accessibilityViewIsModal>
+            {/* `accessible={false}` and NO role: tap-anywhere is a redundant
+                convenience, and making the whole backdrop a button put a
+                button inside a button, which TalkBack announces twice. The X
+                is the real control. */}
+            <Pressable onPress={onClose} className="flex-1 bg-black" accessible={false}>
+              <Image
+                source={{ uri }}
+                className="flex-1"
+                resizeMode="contain"
+                // Without this the image reads as decoration, and a screen
+                // reader offers no way to inspect what was photographed.
+                accessibilityLabel="Attached photo, enlarged"
+              />
+            </Pressable>
+            {/* A sibling of the backdrop, not a child: the photo can be any
+                colour, and a control drawn over it would sit on an unknown
+                background. */}
+            <View className="absolute left-0 top-0">
+              <Pressable
+                onPress={onClose}
+                className="icon-btn"
+                accessibilityRole="button"
+                accessibilityLabel="Close image"
+                hitSlop={8}
+              >
+                <X size={24} color={colors.inverseText} />
+              </Pressable>
+            </View>
+          </View>
+        </>
+      )}
     </Modal>
   );
 }

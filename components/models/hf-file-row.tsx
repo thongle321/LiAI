@@ -295,15 +295,15 @@ export function HFFileRow({
         </>
       ) : null}
 
-      {visionSheetFile !== null ? (
-        <VisionDownloadSheet
-          visible={visionSheetFile !== null}
-          file={visionSheetFile}
-          siblings={siblings}
-          onClose={() => setVisionSheetFile(null)}
-          onConfirm={(chosen, opts) => onDownload(chosen, opts)}
-        />
-      ) : null}
+      {/* Always mounted so the dismiss animation plays on close;
+          `visible` drives show/hide (D4-1). */}
+      <VisionDownloadSheet
+        visible={visionSheetFile !== null}
+        file={visionSheetFile}
+        siblings={siblings}
+        onClose={() => setVisionSheetFile(null)}
+        onConfirm={(chosen, opts) => onDownload(chosen, opts)}
+      />
     </View>
   );
 }

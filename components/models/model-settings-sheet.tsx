@@ -265,8 +265,9 @@ export function ModelSettingsSheet({
   const effortLevel = modelId === null ? null : (effortOverrides[modelId] ?? null);
   const effortArmed = effortLevel !== null;
 
-  if (modelId === null) return null;
-
+  // The Sheet stays mounted so its dismiss animation plays on close;
+  // `visible` drives show/hide, and the contents render null when
+  // there is no model to configure (D4-1).
   const templatePreview = chatTemplate.trim().slice(0, 30);
 
   return (
@@ -320,6 +321,8 @@ export function ModelSettingsSheet({
         </View>
       }
     >
+      {modelId !== null && (
+        <>
       {/* Local models only (PocketPal's !isRemote guards). A remote
           endpoint has no GGUF to name, prompt or template — only its
           reasoning posture is ours to configure. */}
@@ -554,6 +557,8 @@ export function ModelSettingsSheet({
         config={templateConfig()}
         onChange={applyTemplateConfig}
       />
+        </>
+      )}
     </Sheet>
   );
 }

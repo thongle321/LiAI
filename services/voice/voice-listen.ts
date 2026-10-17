@@ -1,12 +1,18 @@
 /** Shared speech-recognition start options (dictation + voice mode). */
 
-import { deviceLanguage } from "./voices.ts";
-
-const deviceLang = deviceLanguage();
+// Full BCP-47 locale tag (e.g. "en-US"), not just the primary subtag, so
+// the recognizer gets a complete language tag (D5-8).
+function deviceLocaleTag(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().locale || "en-US";
+  } catch {
+    return "en-US";
+  }
+}
 
 export const VOICE_LISTEN_OPTS = {
   // Derive from the device locale instead of hardcoding en-US (D5-8).
-  lang: deviceLang ? deviceLang : "en-US",
+  lang: deviceLocaleTag(),
   interimResults: true,
   continuous: false,
   // On-device: Google's server was answering ERROR_SERVER ("network"

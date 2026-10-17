@@ -150,7 +150,7 @@ export function confirmDeleteModel(onConfirm: () => void): void {
     "Are you sure you want to delete this downloaded model?",
     [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); onConfirm(); } },
+      { text: "Delete", style: "destructive", onPress: () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onConfirm(); } },
     ],
   );
 }
@@ -166,7 +166,7 @@ export function confirmRemoveModel(onConfirm: () => void): void {
     "Are you sure you want to remove this model from the list?",
     [
       { text: "Cancel", style: "cancel" },
-      { text: "Remove", style: "destructive", onPress: () => { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); onConfirm(); } },
+      { text: "Remove", style: "destructive", onPress: () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onConfirm(); } },
     ],
   );
 }

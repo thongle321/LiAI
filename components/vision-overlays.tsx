@@ -15,6 +15,7 @@ import {
 } from "react-native-vision-camera";
 
 import { colors } from "../themes/tokens.ts";
+import * as Haptics from "expo-haptics";
 import { useKeyboardLift } from "../hooks/useKeyboardLift.ts";
 import { usePressFeedback } from "../utils/motion.ts";
 import type { VoicePhase } from "../services/voice/voice-status.ts";
@@ -402,7 +403,7 @@ export function VisionBottomPanel({
         </Animated.View>
         <Animated.View style={talkPress.animatedStyle}>
           <Pressable
-            onPress={modelReady ? onTalk : undefined}
+            onPress={modelReady ? () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onTalk(); } : undefined}
             onPressIn={talkPress.onPressIn}
             onPressOut={talkPress.onPressOut}
             disabled={!modelReady}

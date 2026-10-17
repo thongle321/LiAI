@@ -34,9 +34,8 @@ export function ModelsResetDialog({
     >
       {/* A plain scrim, not a button: a full-screen labelled control is the
           first thing a screen reader lands on and announces as a giant
-          "Dismiss, button". The inline backgroundColor is the documented
-          Modal exception — same shape as DownloadErrorDialog's scrim, and
-          `scrim` is a token value no class can carry. */}
+          "Dismiss, button". Scrim is now expressed via the bg-scrim class
+          (D2-11). */}
       <Pressable
         className="flex-1 items-center justify-center bg-scrim px-6"
         onPress={onCancel}

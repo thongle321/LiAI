@@ -19,6 +19,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Modal, Pressable, SectionList, Text, TextInput, View } from "react-native";
+import * as Haptics from "expo-haptics";
 import {
   CheckCircle2,
   Circle,
@@ -195,6 +196,7 @@ export function SessionList({
           text: "Delete",
           style: "destructive",
           onPress: () => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             const ids = [...selected];
             exitSelection();
             void runBulkDelete(ids);

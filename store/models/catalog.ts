@@ -150,6 +150,10 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
 
     lastLoadMoreAt = Date.now();
     set({ searchLoadingMore: true });
+    // Supersede guard: if the active query changed while this page was on
+    // the wire, drop the result instead of appending it to a different list
+    // (D3-7).
+    const queryAtStart = get().searchQuery;
     try {
       const { author, sortBy } = get().searchFilters;
       const page = await hfSearchModels(
@@ -158,6 +162,10 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
         undefined,
         { author, sortBy, pageUrl: nextPageLink },
       );
+      if (get().searchQuery !== queryAtStart) {
+        set({ searchLoadingMore: false });
+        return;
+      }
       consecutiveSmallResults =
         page.results.length < SMALL_PAGE ? consecutiveSmallResults + 1 : 0;
       set((state) => ({
@@ -166,6 +174,10 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
         searchLoadingMore: false,
       }));
     } catch (error) {
+      if (get().searchQuery !== queryAtStart) {
+        set({ searchLoadingMore: false });
+        return;
+      }
       set({ searchError: toSearchError(error), searchLoadingMore: false });
     }
   },

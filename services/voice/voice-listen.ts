@@ -1,7 +1,12 @@
 /** Shared speech-recognition start options (dictation + voice mode). */
 
+import { deviceLanguage } from "./voices.ts";
+
+const deviceLang = deviceLanguage();
+
 export const VOICE_LISTEN_OPTS = {
-  lang: "en-US",
+  // Derive from the device locale instead of hardcoding en-US (D5-8).
+  lang: deviceLang ? deviceLang : "en-US",
   interimResults: true,
   continuous: false,
   // On-device: Google's server was answering ERROR_SERVER ("network"

@@ -13,16 +13,21 @@ import {
 export async function snapshotToBase64(
   take: () => Promise<{ path: string }>,
 ): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error("snapshot timed out")), 5000);
+    timer = setTimeout(() => reject(new Error("snapshot timed out")), 5000);
   });
-  const snapshot = await Promise.race([take(), timeout]);
-  const uri = snapshot.path.startsWith("file://")
-    ? snapshot.path
-    : `file://${snapshot.path}`;
   try {
-    return await readAsStringAsync(uri, { encoding: EncodingType.Base64 });
+    const snapshot = await Promise.race([take(), timeout]);
+    const uri = snapshot.path.startsWith("file://")
+      ? snapshot.path
+      : `file://${snapshot.path}`;
+    try {
+      return await readAsStringAsync(uri, { encoding: EncodingType.Base64 });
+    } finally {
+      await deleteAsync(uri, { idempotent: true }).catch(() => undefined);
+    }
   } finally {
-    await deleteAsync(uri, { idempotent: true }).catch(() => undefined);
+    if (timer) clearTimeout(timer);
   }
 }

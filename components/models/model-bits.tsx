@@ -1,6 +1,7 @@
 /** Shared models bits: formats, chips, status, progress, download button. */
 
 import { Alert, Pressable, Text, View } from "react-native";
+import * as Haptics from "expo-haptics";
 import { CheckCircle2, Download, Eye, MessageSquare, Pause, Play, X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
@@ -149,7 +150,7 @@ export function confirmDeleteModel(onConfirm: () => void): void {
     "Are you sure you want to delete this downloaded model?",
     [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: onConfirm },
+      { text: "Delete", style: "destructive", onPress: () => { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); onConfirm(); } },
     ],
   );
 }
@@ -165,7 +166,7 @@ export function confirmRemoveModel(onConfirm: () => void): void {
     "Are you sure you want to remove this model from the list?",
     [
       { text: "Cancel", style: "cancel" },
-      { text: "Remove", style: "destructive", onPress: onConfirm },
+      { text: "Remove", style: "destructive", onPress: () => { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); onConfirm(); } },
     ],
   );
 }

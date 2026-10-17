@@ -29,6 +29,11 @@ export function useWatchMode(
   const framesRef = useRef<string[]>([]);
   const inFlightRef = useRef(false);
 
+  // Hydrate the persisted capture interval once per mount (D3-9).
+  useEffect(() => {
+    void useWatch.getState().load();
+  }, []);
+
   useEffect(() => {
     if (!watchOn || !active) return;
     let stopped = false;

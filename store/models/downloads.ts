@@ -118,7 +118,7 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
     const onDiskBytes = async (name: string): Promise<number> => {
       try {
         const info = await LegacyFileSystem.getInfoAsync(
-          `${LegacyFileSystem.documentDirectory}models/${name}`,
+          `${LegacyFileSystem.documentDirectory ?? ""}models/${name}`,
         );
         return info.exists && "size" in info && typeof info.size === "number"
           ? info.size

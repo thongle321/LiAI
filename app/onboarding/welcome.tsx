@@ -44,7 +44,7 @@ export default function WelcomeStep() {
           ))}
         </View>
         <Pressable
-          onPress={() => router.push("/onboarding/model")}
+          onPress={() => router.replace("/onboarding/model")}
           className="btn btn--primary mt-8"
           accessibilityRole="button"
           accessibilityLabel="Continue to model setup"

@@ -100,7 +100,7 @@ export default function VisionScreen() {
     12 + (keyboardVisible ? tabBarHeight + insets.bottom : 0);
   // Two dead ends land on the same system screen: a denied camera and a
   // blocked mic. One handler for both.
-  const goToSettings = () => void openSettings();
+  const goToSettings = () => void openSettings().catch(() => {});
 
   const {
     phase,

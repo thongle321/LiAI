@@ -12,12 +12,12 @@ import {
   makeDirectoryAsync,
   deleteAsync,
   getInfoAsync,
-  getFreeDiskStorageAsync,
   documentDirectory,
   FileSystemSessionType,
   type DownloadResumable,
   type DownloadProgressData,
 } from "expo-file-system/legacy";
+import { Paths } from "expo-file-system";
 import type { DownloadErrorCode, DownloadJob } from "../../types/models.ts";
 import {
   describeHttpFailure,
@@ -153,7 +153,7 @@ class ResumableDownloadService {
     }
     let free: number;
     try {
-      free = await getFreeDiskStorageAsync();
+      free = Paths.availableDiskSpace;
     } catch {
       // Unknown free space: the transfer reports the truth, as pre-flight does.
       return;

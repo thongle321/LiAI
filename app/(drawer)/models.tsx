@@ -34,7 +34,7 @@ import {
 } from "../../services/models/model-groups.ts";
 import { DownloadErrorDialog } from "../../components/models/download-error-dialog.tsx";
 import { ModelsHeaderRight } from "../../components/models/models-header-right.tsx";
-import { FABGroup, FAB_STACK_HEIGHT } from "../../components/models/fab-group.tsx";
+import { FABGroup } from "../../components/models/fab-group.tsx";
 import { ModelAccordion } from "../../components/models/model-accordion.tsx";
 import { PresetModelCard } from "../../components/models/available-models.tsx";
 import { ModelCard, RemoteProviderCard } from "../../components/models/model-card.tsx";
@@ -304,8 +304,7 @@ export default function ModelsRoute() {
             // the group header above, the runtime FAB reserve below (set
             // inline on the next line, which overrides any class `pb`).
             // A list `pt` would stack a second top inset.
-            contentContainerClassName="px-5"
-            contentContainerStyle={{ paddingBottom: FAB_STACK_HEIGHT }}
+            contentContainerClassName="px-5 pb-[256px]"
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           />

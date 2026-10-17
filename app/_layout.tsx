@@ -8,6 +8,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { Host } from "@expo/ui";
+import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider, useKeyboardState } from "react-native-keyboard-controller";
 import { ScopedVariables, Uniwind } from "uniwind";
@@ -49,7 +50,7 @@ function KeyboardVisibilitySync() {
 }
 
 export default function RootLayout() {
-  const [loaded] = useFonts({
+  const [loaded, error] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
@@ -68,20 +69,28 @@ export default function RootLayout() {
   // render that first returns UI. The ref fires it exactly once — repeat
   // renders must not re-hide (unawaited native call per render).
   const splashHidden = useRef(false);
-  if (loaded && !splashHidden.current) {
+  if ((loaded || error) && !splashHidden.current) {
     splashHidden.current = true;
+    if (error) {
+      // Font load rejected (corrupt asset / bad OTA update): log it, then
+      // release the splash so the app renders with the system fallback
+      // instead of hanging on the native splash forever.
+      console.error("[LiAI] Inter font load failed", error);
+    }
     void SplashScreen.hideAsync().catch(() => {});
   }
 
   // Gate first paint on the font resolving so nothing flashes in the
-  // system typeface (DESIGN.md, Single Family Rule).
-  if (!loaded) return null;
+  // system typeface (DESIGN.md, Single Family Rule). On a load failure,
+  // fall through and render with the system font rather than hanging.
+  if (!loaded && !error) return null;
 
   return (
     // One Host for the whole app: it seeds every @expo/ui subtree with
     // Signal Blue and forces the light scheme, so native switches, sheets
     // and pickers land in LiAI's world instead of the platform's default.
     <Host colorScheme="light" seedColor={colors.primary} style={{ flex: 1 }}>
+      <StatusBar style="dark" />
       {/* Fluid Type (DESIGN.md): scoped --text-* overrides so every
           text-* class re-resolves at this device's width (375dp base,
           factor 0.5, clamp [0.9, 1.1]). One wrap, zero call sites. */}

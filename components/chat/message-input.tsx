@@ -454,6 +454,7 @@ export function MessageInput({
                         setBlockedNote("Load a model to send this message.");
                         return;
                       }
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       void handleSend();
                     }}
                     onPressIn={sendPress.onPressIn}

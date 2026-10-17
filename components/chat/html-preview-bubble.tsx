@@ -52,7 +52,7 @@ export function HtmlPreviewBubble({
   const copyHtml = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     // The RAW html, not the wrapper: the wrapper is ours, not the author's.
-    void Clipboard.setStringAsync(html);
+    void Clipboard.setStringAsync(html).catch(() => {});
   }, [html]);
 
   const toggleCode = useCallback(() => {

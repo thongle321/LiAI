@@ -52,6 +52,8 @@
   /* Surface tint — a ground for selected elements only, never a border. */
   --color-surface-3: #eff6ff;
   --color-border: #e2e8f0;
+  /* Scrim for modal/sheet backdrops (ticket 024 / D2-11). */
+  --color-scrim: rgb(15 23 42 / 0.6);
 
   /* Slate for anything merely counted. One step darker than the board's
      #64748b, which passed on white (4.76) but failed on the two recessed
@@ -107,31 +109,9 @@
 }
 
 /* Light-locked app: one theme, and it is the light one. Device dark mode
-   must not invent a second world. */
-@layer theme {
-  :root {
-    @variant light {
-      --color-background: #f8fafc;
-      --color-foreground: #0f172a;
-      --color-card: #ffffff;
-      --color-border: #e2e8f0;
-      --color-muted: #475569;
-      --color-primary: #2563eb;
-      --color-danger: #ef4444;
-      --color-success: #10b981;
-    }
-    @variant dark {
-      --color-background: #f8fafc;
-      --color-foreground: #0f172a;
-      --color-card: #ffffff;
-      --color-border: #e2e8f0;
-      --color-muted: #475569;
-      --color-primary: #2563eb;
-      --color-danger: #ef4444;
-      --color-success: #10b981;
-    }
-  }
-}
+   must not invent a second world. (The previous @layer theme block was a
+   latent trap: it redeclared `--color-danger: #ef4444`, the non-AA red
+   that global.css documents as illegal for text. Removed per D2-9.) */
 
 /* BEM bundles — multi-property patterns reused across screens.
  * Flat selectors only. For property conflicts with Tailwind
@@ -174,20 +154,9 @@
   border-color: #3882f6;
   color: #2563eb;
 }
-.btn--destructive {
-  background-color: #b91c1c;
-  color: #ffffff;
-}
 .btn--ghost {
   background-color: transparent;
   color: #2563eb;
-}
-.btn--circle {
-  width: 48px;
-  height: 48px;
-  border-radius: 999px;
-  align-items: center;
-  justify-content: center;
 }
 
 /* Inputs: .input + optional .input--error (focused border is signal blue) */
@@ -203,9 +172,7 @@
   padding-bottom: 12px;
   color: #0f172a;
 }
-.input--error {
-  border-color: #ef4444;
-}
+/* .input--error removed per D2-10: no call site in app/ or components/. */
 
 /* Cards. Never a shadow. */
 .card {
@@ -317,27 +284,7 @@
   color: #2563eb;
 }
 
-/* Status dots: .status-dot + .status-dot--online | --warning | --error | --info | --offline */
-.status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-}
-.status-dot--online {
-  background-color: #10b981;
-}
-.status-dot--warning {
-  background-color: #f59e0b;
-}
-.status-dot--error {
-  background-color: #ef4444;
-}
-.status-dot--info {
-  background-color: #06b6d4;
-}
-.status-dot--offline {
-  background-color: #64748b;
-}
+/* Status dots removed per D2-10: no call site in app/ or components/. */
 
 /* Voice screen (lib/tts). One expandable card per engine, plus the System
    card that sits above the list. House styling rules apply (AGENTS.md,

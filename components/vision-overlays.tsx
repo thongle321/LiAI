@@ -14,7 +14,7 @@ import {
   type Camera as VisionCameraView,
 } from "react-native-vision-camera";
 
-import { colors, scrim } from "../themes/tokens.ts";
+import { colors } from "../themes/tokens.ts";
 import { useKeyboardLift } from "../hooks/useKeyboardLift.ts";
 import { usePressFeedback } from "../utils/motion.ts";
 import type { VoicePhase } from "../services/voice/voice-status.ts";
@@ -195,7 +195,7 @@ export function VisionTopFloat({
             <SwitchCamera size={22} color={colors.inverseText} />
           </Pressable>
         </Animated.View>
-        <Text className="ml-1 font-sans-semibold text-caption tracking-widest text-white">
+        <Text className="ml-1 font-sans-semibold text-caption tracking-widest text-inverse-text">
           VISION
         </Text>
       </View>
@@ -209,7 +209,7 @@ export function VisionTopFloat({
           >
             <Minus size={16} color={colors.inverseText} />
           </Pressable>
-          <Text className="font-sans text-caption text-white">{intervalMs}ms</Text>
+          <Text className="font-sans text-caption text-inverse-text">{intervalMs}ms</Text>
           <Pressable
             onPress={() => onIntervalStep(500)}
             className="h-8 w-8 items-center justify-center"
@@ -292,7 +292,7 @@ export function VisionBottomPanel({
       className="absolute left-0 right-0 px-5"
       style={[{ bottom }, liftStyle]}
     >
-      <View className="rounded-lg px-5 py-3" style={{ backgroundColor: scrim }}>
+      <View className="rounded-lg bg-scrim px-5 py-3">
         {issue !== null ? (
           needsSettings ? (
             <Animated.View style={settingsPress.animatedStyle}>
@@ -313,7 +313,7 @@ export function VisionBottomPanel({
             </Animated.View>
           ) : (
             <View className="items-center">
-              <Text className="text-center font-sans text-body-md text-white">
+              <Text className="text-center font-sans text-body-md text-inverse-text">
                 {issue}
               </Text>
               {/* A labelled text action is a button, not a circular control:
@@ -335,29 +335,29 @@ export function VisionBottomPanel({
             </View>
           )
         ) : phase === "thinking" ? (
-          <Text className="text-center font-sans text-body-md text-white">
+          <Text className="text-center font-sans text-body-md text-inverse-text">
             LiAI…
           </Text>
         ) : answer !== "" ? (
           <ScrollView className="max-h-[120px]">
-            <Text className="text-center font-sans text-body-md text-white">
+            <Text className="text-center font-sans text-body-md text-inverse-text">
               {answer}
             </Text>
           </ScrollView>
         ) : (
-          <Text className="text-center font-sans text-body-md text-white/80">
+          <Text className="text-center font-sans text-body-md text-inverse-text/80">
             {phase === "idle" ? "Tap the mic and ask about what you see" : statusLabel}
           </Text>
         )}
         {camProblem !== null && (
-          <Text className="mt-1 text-center font-sans text-body-sm text-white/70">
+          <Text className="mt-1 text-center font-sans text-body-sm text-inverse-text/70">
             {camProblem}
           </Text>
         )}
       </View>
 
       {inputOpen && (
-        <View className="mt-2 flex-row items-center rounded-lg px-2 py-1" style={{ backgroundColor: scrim }}>
+        <View className="mt-2 flex-row items-center rounded-lg bg-scrim px-2 py-1">
           <TextInput
             value={draft}
             onChangeText={modelReady ? onDraftChange : () => undefined}
@@ -366,7 +366,7 @@ export function VisionBottomPanel({
             placeholderTextColor={colors.secondaryText}
             multiline
             autoFocus={modelReady}
-            className="flex-1 px-3 font-sans text-body-md text-white"
+            className="flex-1 px-3 font-sans text-body-md text-inverse-text"
           />
           <Animated.View style={sendPress.animatedStyle}>
             <Pressable
@@ -392,8 +392,7 @@ export function VisionBottomPanel({
             onPressIn={toggleInputPress.onPressIn}
             onPressOut={toggleInputPress.onPressOut}
             disabled={!modelReady}
-            className="h-12 w-12 items-center justify-center rounded-full"
-            style={{ backgroundColor: scrim }}
+            className="h-12 w-12 items-center justify-center rounded-full bg-scrim"
             accessibilityRole="button"
             accessibilityState={{ disabled: !modelReady }}
             accessibilityLabel="Type a question"
@@ -418,11 +417,9 @@ export function VisionBottomPanel({
               and only the muted icon remains. */}
           <View
             className={`h-20 w-20 items-center justify-center rounded-full ${
-              !modelReady ? "" : phase === "idle" ? "border border-primary" : "bg-surface-3"
+              !modelReady ? "bg-scrim" : phase === "idle" ? "border border-primary bg-scrim" : "bg-surface-3"
             }`}
-            {...(phase === "idle" || !modelReady
-              ? { style: { backgroundColor: scrim } }
-              : {})}
+
           >
             {phase !== "idle" && modelReady && <VisionActiveFrame side={22} />}
             <Mic size={30} color={modelReady ? colors.primary : colors.secondaryText} />

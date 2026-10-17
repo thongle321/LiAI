@@ -89,7 +89,7 @@ export function ChatTemplateDialog({
           textAlignVertical="top"
           autoCapitalize="none"
           autoCorrect={false}
-          className="rounded-lg border border-border bg-surface-2 px-4 py-3 font-mono text-body-sm text-primary-text"
+          className="rounded-lg border border-border bg-surface-2 px-4 py-3 font-sans text-body-sm text-primary-text"
         />
       </View>
     </Sheet>

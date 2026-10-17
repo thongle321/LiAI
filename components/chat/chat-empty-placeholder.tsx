@@ -83,7 +83,7 @@ export function ChatEmptyPlaceholder({
         <Pressable
           onPress={() =>
             cta === "download" || onSelectModel === undefined
-              ? router.push("/models")
+              ? router.navigate("/models")
               : onSelectModel()
           }
           className="btn btn--primary mt-6 min-w-48"

@@ -149,7 +149,7 @@ className={
         ))}
         <Pressable
           onPress={() =>
-            void Linking.openURL("https://huggingface.co/settings/tokens")
+            void Linking.openURL("https://huggingface.co/settings/tokens").catch(() => {})
           }
           className="mt-1 self-start flex-row items-center gap-1"
           accessibilityRole="link"

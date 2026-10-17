@@ -13,6 +13,7 @@
  */
 
 import { Image, Modal, Pressable, View } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import { X } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
@@ -34,6 +35,7 @@ export function ImageViewer({
       onRequestClose={onClose}
       statusBarTranslucent
     >
+      <StatusBar style="light" />
       {/* accessibilityViewIsModal: without it, a transparent Modal still
           lets VoiceOver reach and activate the chat behind this one, so
           the focus trap people expect from a fullscreen overlay is

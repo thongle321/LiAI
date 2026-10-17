@@ -19,11 +19,17 @@ export function useLocalModelImport(): () => Promise<void> {
 
   return async function importLocalModel(): Promise<void> {
     const res = await DocumentPicker.getDocumentAsync({
-      type: "*/*",
+      type: ["application/octet-stream", "*/*"],
       copyToCacheDirectory: true,
     });
     if (res.canceled || !res.assets?.[0]) return;
     const asset = res.assets[0];
+    // Reject anything that isn't a GGUF model before we copy multi-GB
+    // files into the app cache (D5-7).
+    if (!asset.name.toLowerCase().endsWith(".gguf")) {
+      showSnackbar("Only .gguf model files can be imported", { type: "error" });
+      return;
+    }
 
     let fileName = asset.name;
     const base = LegacyFileSystem.documentDirectory ?? "";

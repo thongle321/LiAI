@@ -115,7 +115,7 @@ export const createRemoteSlice: StateCreator<ModelStore, [], [], RemoteSlice> = 
       get().setActiveModel(modelSpec.id, "remote");
     } else {
       set({ activeModelId: null, activeProviderType: null });
-      asyncStorage.removeItem(ACTIVE_MODEL_KEY);
+      void asyncStorage.removeItem(ACTIVE_MODEL_KEY).catch(() => {});
     }
   },
 

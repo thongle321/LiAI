@@ -209,7 +209,7 @@ export function ModelInitializationSettings() {
             {/* Slate + underline, not blue: DESIGN's Ink-and-Slate Rule
                 holds for links too — the underline marks it tappable. */}
             <Pressable
-              onPress={() => void Linking.openURL(OPENCL_DOCS_URL)}
+              onPress={() => void Linking.openURL(OPENCL_DOCS_URL).catch(() => {})}
               accessibilityRole="link"
               accessibilityLabel="llama.cpp OpenCL docs"
               className="mt-1 flex-row items-center gap-1"

@@ -159,7 +159,7 @@ export default function VoiceScreen() {
           <View className="mt-4 items-center">
             {needsSettings ? (
               <Pressable
-                onPress={() => void openSettings()}
+                onPress={() => void openSettings().catch(() => {})}
                 accessibilityRole="button"
                 accessibilityLabel={issue}
               >

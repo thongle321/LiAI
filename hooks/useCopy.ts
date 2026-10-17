@@ -23,7 +23,11 @@ export function useCopy(): {
   );
 
   async function copy(text: string): Promise<void> {
-    await Clipboard.setStringAsync(text);
+    try {
+      await Clipboard.setStringAsync(text);
+    } catch {
+      return;
+    }
     setCopied(true);
     if (timer.current !== null) clearTimeout(timer.current);
     timer.current = setTimeout(() => setCopied(false), FEEDBACK_MS);

@@ -31,7 +31,7 @@ import {
   Trash,
 } from "lucide-react-native";
 
-import { colors, scrim } from "../../themes/tokens.ts";
+import { colors } from "../../themes/tokens.ts";
 import { formatTime } from "../../utils/format.ts";
 import { groupSessions, type SessionSection } from "../../services/chat/session-groups.ts";
 import type { ChatSession } from "../../types/chat.ts";
@@ -462,7 +462,7 @@ export function SessionList({
         animationType="fade"
         onRequestClose={() => setRenaming(null)}
       >
-        <View className="flex-1 items-center justify-center p-5" style={{ backgroundColor: scrim }}>
+        <View className="flex-1 items-center justify-center bg-scrim p-5">
           <View className="w-full rounded-2xl border border-border bg-surface-1 p-5">
             <Text className="mb-4 font-sans-semibold text-body-lg text-primary-text">
               Rename conversation

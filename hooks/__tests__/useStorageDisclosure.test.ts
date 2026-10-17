@@ -10,32 +10,33 @@ import { renderHook, waitFor } from "@testing-library/react-native";
 
 import { useStorageDisclosure } from "../useStorageDisclosure.ts";
 
-jest.mock("expo-file-system/legacy", () => ({
-  getFreeDiskStorageAsync: jest.fn(),
-}));
+let mockFreeSpace: number | null = 1 * 1024 * 1024 * 1024;
+let mockThrows = false;
 
-const { getFreeDiskStorageAsync } = jest.requireMock(
-  "expo-file-system/legacy",
-) as {
-  getFreeDiskStorageAsync: jest.MockedFunction<() => Promise<number>>;
-};
+jest.mock("expo-file-system", () => ({
+  Paths: {
+    get availableDiskSpace() {
+      if (mockThrows) throw new Error("no fs");
+      return mockFreeSpace as number;
+    },
+  },
+}));
 
 const GB = 1024 * 1024 * 1024;
 
 afterEach(() => {
-  getFreeDiskStorageAsync.mockReset();
+  mockFreeSpace = 1 * GB;
+  mockThrows = false;
 });
 
 describe("useStorageDisclosure", () => {
   it("checks nothing for a model with no Download button", () => {
-    getFreeDiskStorageAsync.mockResolvedValue(1 * GB);
     const { result } = renderHook(() => useStorageDisclosure(null));
     expect(result.current).toEqual({ fits: true, message: null });
-    expect(getFreeDiskStorageAsync).not.toHaveBeenCalled();
   });
 
   it("allows a model that fits, with no reason line", async () => {
-    getFreeDiskStorageAsync.mockResolvedValue(10 * GB);
+    mockFreeSpace = 10 * GB;
     const { result } = renderHook(() => useStorageDisclosure(1 * GB));
     await waitFor(() => {
       expect(result.current).toEqual({ fits: true, message: null });
@@ -43,7 +44,7 @@ describe("useStorageDisclosure", () => {
   });
 
   it("blocks and explains when the model cannot fit", async () => {
-    getFreeDiskStorageAsync.mockResolvedValue(512 * 1024 * 1024);
+    mockFreeSpace = 512 * 1024 * 1024;
     const { result } = renderHook(() => useStorageDisclosure(1 * GB));
     await waitFor(() => {
       expect(result.current.fits).toBe(false);
@@ -53,7 +54,7 @@ describe("useStorageDisclosure", () => {
   });
 
   it("blocks when free space cannot be read, because unknown is not a yes", async () => {
-    getFreeDiskStorageAsync.mockRejectedValue(new Error("no fs"));
+    mockThrows = true;
     const { result } = renderHook(() => useStorageDisclosure(1 * GB));
     await waitFor(() => {
       expect(result.current.fits).toBe(false);

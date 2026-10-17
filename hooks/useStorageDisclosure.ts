@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { getFreeDiskStorageAsync } from "expo-file-system/legacy";
+import { Paths } from "expo-file-system";
 
 import { storageDisclosure, type StorageDisclosure } from "../services/models/storage-disclosure.ts";
 
@@ -38,13 +38,12 @@ export function useFreeSpacePoll(active: boolean): FreeSpaceReading {
     if (!active) return;
     let alive = true;
     const read = () => {
-      void getFreeDiskStorageAsync()
-        .then((free) => {
-          if (alive) setReading({ freeBytes: free, checked: true });
-        })
-        .catch(() => {
-          if (alive) setReading({ freeBytes: null, checked: true });
-        });
+      try {
+        const free = Paths.availableDiskSpace;
+        if (alive) setReading({ freeBytes: free, checked: true });
+      } catch {
+        if (alive) setReading({ freeBytes: null, checked: true });
+      }
     };
     read();
     const timer = setInterval(read, POLL_MS);

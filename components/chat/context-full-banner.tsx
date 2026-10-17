@@ -244,7 +244,7 @@ export function ContextLadderSheet({
   if (!visible) return null;
   const chosen = stops[Math.min(pick, stops.length - 1)];
   return (
-    <View className="absolute inset-0 z-50 justify-end bg-black/30">
+    <View className="absolute inset-0 z-50 justify-end bg-scrim">
       <Pressable
         className="flex-1"
         onPress={onClose}

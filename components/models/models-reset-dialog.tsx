@@ -14,7 +14,7 @@
 
 import { Modal, Pressable, Text, View } from "react-native";
 
-import { scrim } from "../../themes/tokens.ts";
+
 
 export function ModelsResetDialog({
   visible,
@@ -38,8 +38,7 @@ export function ModelsResetDialog({
           Modal exception — same shape as DownloadErrorDialog's scrim, and
           `scrim` is a token value no class can carry. */}
       <Pressable
-        className="flex-1 items-center justify-center px-6"
-        style={{ backgroundColor: scrim }}
+        className="flex-1 items-center justify-center bg-scrim px-6"
         onPress={onCancel}
       >
         {/* The empty handler claims the responder so a tap on the card does

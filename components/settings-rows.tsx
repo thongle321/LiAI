@@ -26,6 +26,7 @@ import {
   type ReactNode,
 } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
+import * as Haptics from "expo-haptics";
 import { Host, Switch } from "@expo/ui";
 import Slider from "@expo/ui/community/slider";
 import { ChevronDown, ChevronRight, Minus, Plus } from "lucide-react-native";
@@ -358,7 +359,7 @@ export function Segmented<T extends string | number>({
         {options.map((o) => (
           <Pressable
             key={String(o)}
-            onPress={() => onPick(o)}
+            onPress={() => { void Haptics.selectionAsync(); onPick(o); }}
             className={o === value ? "seg seg--active" : "seg"}
             accessibilityRole="radio"
             accessibilityLabel={show(o)}

@@ -19,6 +19,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
+import * as Haptics from "expo-haptics";
 import { CheckCircle2 } from "lucide-react-native";
 
 import { Sheet } from "../sheet.tsx";
@@ -67,6 +68,7 @@ function SortSheet({
         <Pressable
           key={option.value}
           onPress={() => {
+            void Haptics.selectionAsync();
             onPick(option.value);
             onClose();
           }}

@@ -199,7 +199,9 @@ export default function ModelsRoute() {
           isActive={activeModelId === spec.id}
           onActivate={() => {
             setActiveModel(spec.id, "local");
-            if (autoNavigateToChat) router.push("/chat");
+            // navigate, not push: repeated activations would stack duplicate
+            // /chat entries and make back behave inconsistently.
+            if (autoNavigateToChat) router.navigate("/chat");
           }}
           onDeactivate={() => {
             setActiveModel(null);

@@ -187,7 +187,7 @@ export function StepperRow({
       <RowLabel label={label} description={description} />
       <View className="flex-row items-center gap-2">
         <Pressable
-          onPress={onMinus}
+          onPress={() => { void Haptics.selectionAsync(); onMinus(); }}
           disabled={minusDisabled}
           className="h-12 w-12 items-center justify-center rounded-full border border-border bg-surface-1"
           accessibilityRole="button"
@@ -197,7 +197,7 @@ export function StepperRow({
         </Pressable>
         <Text className="w-14 text-center font-sans text-body-md text-primary-text">{display}</Text>
         <Pressable
-          onPress={onPlus}
+          onPress={() => { void Haptics.selectionAsync(); onPlus(); }}
           disabled={plusDisabled}
           className="h-12 w-12 items-center justify-center rounded-full border border-border bg-surface-1"
           accessibilityRole="button"

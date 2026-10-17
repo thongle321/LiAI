@@ -3,6 +3,10 @@
  * A soft glyph on Mist, a Title naming the situation, one Body Small Slate
  * line naming the next move, and one primary button. Shown only while no
  * model is active — it unmounts the moment one loads.
+ *
+ * Rendered as the message list's ListEmptyComponent (PocketParity:
+ * ChatView.tsx:990), which is what makes the empty view scrollable rather
+ * than a fixed overlay the keyboard could bury.
  */
 
 import { Image, Pressable, Text, View } from "react-native";
@@ -12,8 +16,17 @@ import { images } from "@/constants/images.ts";
 import { useModelStore } from "@/store/modelStore";
 
 export function ChatEmptyPlaceholder({
+  bottomInset,
   onSelectModel,
 }: {
+  /** Room to leave for the floating composer, so the card sits above it
+   *  instead of behind it. PocketParity: pocketpal-ai's placeholder takes
+   *  the same value as `bottomComponentHeight` and spends it on a
+   *  `marginBottom` (ChatEmptyPlaceholder.tsx:86) rather than on a keyboard
+   *  inset. That distinction is the point — the list below still rides
+   *  KeyboardChatScrollView's dynamic inset, but this card's placement no
+   *  longer depends on it, so the keyboard can't drag it around. */
+  bottomInset: number;
   /** Opens the in-chat model picker (PocketPal's ChatPalModelPickerSheet).
    *  Absent falls back to the /models route. */
   onSelectModel?: () => void;
@@ -61,7 +74,11 @@ export function ChatEmptyPlaceholder({
   }
 
   return (
-    <View className="flex-1 items-center justify-center px-8">
+    // Centring belongs to the list's content container now (flex-grow +
+    // justify-content while empty), so this is a plain block that grows to
+    // its content and overflows into a scroll when it outgrows the
+    // viewport — that overflow is what makes the empty view scrollable.
+    <View className="items-center px-8" style={{ marginBottom: bottomInset }}>
       <View className="h-24 w-24 items-center justify-center rounded-full bg-surface-2">
         {/* The adaptive-icon FOREGROUND (arrow on transparent), not images.icon:
             the full icon carries its own light-blue SQUARE background, and a

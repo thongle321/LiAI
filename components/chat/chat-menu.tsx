@@ -261,7 +261,7 @@ export function ChatMenu({
               width: 264,
               transformOrigin: "right top",
             }}
-            className="surface overflow-hidden"
+            className="surface bg-surface-1 overflow-hidden"
           >
             {panel === "menu" ? (
               <>

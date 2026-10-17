@@ -100,20 +100,22 @@ describe("surface shape", () => {
     expect(bodyOf(".rows")).not.toMatch(/border-(width|style|color|radius)/);
   });
 
-  it("has no call site re-stating the shape as raw utilities", () => {
+  it("pairs every .surface call site with a plane", () => {
     const offenders: string[] = [];
     for (const dir of ["app", "components"]) {
       for (const file of walk(join(ROOT, dir)).filter((f) => /\.tsx?$/.test(f))) {
         readFileSync(file, "utf8")
           .split("\n")
           .forEach((line, i) => {
-            // One line = one className. A line carrying the ground, the
-            // hairline and the 8px radius together is a call site that
-            // re-expresses what `.surface` now owns.
+            const trimmed = line.trim();
+            if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*") || trimmed.startsWith("{/*")) return;
+            // `.surface` carries the shape only; the plane is a separate
+            // utility at the call site. A line that names the `surface`
+            // class but no `bg-surface-1/2/3` plane is a card with no
+            // background.
             if (
-              /\bbg-surface-1\b/.test(line) &&
-              /\bborder-border\b/.test(line) &&
-              /\brounded-(lg|card)\b/.test(line)
+              /(^|[\s"'{])surface([\s"'}])/.test(line) &&
+              !/\bbg-surface-[123]\b/.test(line)
             ) {
               offenders.push(`${file.slice(ROOT.length + 1)}:${i + 1}`);
             }

@@ -112,7 +112,7 @@ function AuthorSheet({
         autoCorrect={false}
         placeholderTextColor={colors.secondaryText}
         accessibilityLabel="Author name"
-        className="surface font-sans text-body-lg text-primary-text px-5 py-3"
+        className="surface bg-surface-1 font-sans text-body-lg text-primary-text px-5 py-3"
       />
       <View className="flex-row gap-2 pt-4">
         <Pressable

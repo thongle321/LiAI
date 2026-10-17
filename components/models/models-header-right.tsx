@@ -179,7 +179,7 @@ export function ModelsHeaderRight({
               right: anchor?.right ?? 16,
               width: 264,
             }}
-            className="surface overflow-hidden"
+            className="surface bg-surface-1 overflow-hidden"
           >
             {/* Scale half of the reveal, pinned to the opening corner. No
                 exiting: paper never reverses the scale, only the fade. */}

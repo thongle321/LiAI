@@ -129,7 +129,7 @@ export default function VoiceScreen() {
           pointerEvents={replyVisible ? "auto" : "none"}
           className="mt-6 w-full"
         >
-          <View className="surface w-full p-5">
+          <View className="surface bg-surface-1 w-full p-5">
             <View className="flex-row items-center">
               <View className="h-10 w-10 items-center justify-center rounded-full bg-surface-3">
                 <ActivityIndicator size="small" color={colors.primary} />

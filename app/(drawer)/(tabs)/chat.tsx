@@ -43,7 +43,6 @@ import { MessageListItem } from "@/components/chat/message-list-item.tsx";
 import { ChatEmptyPlaceholder } from "@/components/chat/chat-empty-placeholder.tsx";
 import { PendingIndicator } from "@/components/chat/pending-indicator.tsx";
 import { MessageInput } from "@/components/chat/message-input.tsx";
-import { SuggestedPrompts } from "@/components/chat/suggested-prompts.tsx";
 import { MessageList } from "@/components/chat/message-list.tsx";
 import {
   ContextFullBanner,
@@ -238,14 +237,12 @@ export default function ChatRoute() {
   // when editing either side.
   const ready = connection === "up";
   // The empty placeholder ("Activate Model To Get Started" / "No Models
-  // Available") is NOT scroll content, despite pocketpal-ai putting it in
-  // ListEmptyComponent (ChatView.tsx:990). KeyboardChatScrollView adds the
-  // keyboard height to the scroll viewport as a contentInset, and a centred
-  // child inside a shrinking box re-centres — which is exactly the "no models
-  // available section moves when the keyboard shows up" symptom. So it is an
-  // overlay beside the list, where the keyboard simply covers it. It renders
-  // only with no model and no conversation; the empty thread with a model is
-  // SuggestedPrompts' job.
+  // Available") is list content (PocketParity, ChatView.tsx:990), so the
+  // empty view scrolls instead of being pinned as an overlay. The composer
+  // clearance is a marginBottom on the placeholder (PocketPal's
+  // bottomComponentHeight), not a keyboard inset — that is what keeps it
+  // from re-centring as the keyboard rises. It renders only with no model
+  // and no conversation.
   const emptyState = messages.length === 0 && query.trim() === "";
   // PocketPal's single-source gate: the placeholder asks whether a MODEL is
   // active, not whether the transport is healthy. Gating it on `connection`
@@ -475,6 +472,14 @@ export default function ChatRoute() {
             freeze={freeze}
             extraContentPadding={extraContentPadding}
             blankSpace={blankSpace}
+            listEmpty={
+              showPlaceholder ? (
+                <ChatEmptyPlaceholder
+                  bottomInset={composerHeight + tabBarCompensation}
+                  onSelectModel={() => setPickerOpen(true)}
+                />
+              ) : null
+            }
             onEndVisibleChange={setAtEnd}
             streaming={streaming}
             renderRow={(row, widths) =>
@@ -497,23 +502,6 @@ export default function ChatRoute() {
             }
           />
         </View>
-        {/* The no-model empty state, as an overlay rather than scroll content.
-            MessageList's header explains why: a ListEmptyComponent would sit
-            inside the keyboard's contentInset and visibly re-centre as the
-            keyboard rose. The bottom padding lifts it clear of the floating
-            composer, from the measured height rather than pocketpal's
-            hard-coded bottomComponentHeight + 100. */}
-        {showPlaceholder && (
-          <Animated.View
-            className="absolute inset-x-0 top-0"
-            style={{ bottom: composerHeight + tabBarCompensation }}
-            pointerEvents="box-none"
-          >
-            <ChatEmptyPlaceholder
-              onSelectModel={() => setPickerOpen(true)}
-            />
-          </Animated.View>
-        )}
         {/* Jump to latest: an overlay pinned to the content column's
             bottom-right, above the floating composer — pocketpal's FAB
             placement. It lifts on the same hook as the composer so the two
@@ -628,9 +616,6 @@ export default function ChatRoute() {
       onDismiss={dismissBanner}
     />
   )}
-        {ready && emptyState && (
-          <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
-        )}
       </Animated.View>
       {/* The ladder lives OUTSIDE the overlay row: it is a modal sheet
           with its own scrim, so it must not inherit the composer's lift

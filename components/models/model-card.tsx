@@ -63,7 +63,7 @@ import { ModelCardDetails } from "./model-card-details.tsx";
  *  system's - retired 2026-10-10, see docs/research's card parity record.
  *  The shape now lives once in `.surface` (global.css); the list owns the
  *  gutter and this card owns only its own `mb-3`. */
-const CARD = "surface mb-3 overflow-hidden";
+const CARD = "surface bg-surface-1 mb-3 overflow-hidden";
 /** The 16px leading icon inside a 48px target. DESIGN.md l.377: "the visual
  *  circle is 40px; the touch target is 48×48dp minimum. Pad the hit area, not
  *  the circle" — so the icon sits directly in the pressable and there is no
@@ -379,7 +379,7 @@ export function RemoteProviderCard({
   // "Default radius… buttons, inputs, cards"); the 24px this carried was
   // PocketPal's value, retired 2026-10-10.
   return (
-    <View className="surface mb-3 overflow-hidden">
+    <View className="surface bg-surface-1 mb-3 overflow-hidden">
       <View className="p-5 flex-row items-center justify-between">
         <View className="flex-1">
           <View className="flex-row items-center gap-2">

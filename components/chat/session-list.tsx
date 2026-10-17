@@ -406,7 +406,7 @@ export function SessionList({
               // Anchored at the finger, clamped so the panel cannot open
               // past the drawer's right edge.
               style={{ position: "absolute", left: Math.max(8, Math.min(menu!.x, 168)), top: menu!.y }}
-              className="surface w-56 overflow-hidden"
+              className="surface bg-surface-1 w-56 overflow-hidden"
             >
               <MenuItem
                 label={menuSession.pinned ? "Unpin" : "Pin"}

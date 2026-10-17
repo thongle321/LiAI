@@ -14,7 +14,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider, useKeyboardState } from "react-native-keyboard-controller";
 import { ScopedVariables, Uniwind } from "uniwind";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { isOnboarded } from "../services/onboarding.ts";
 import { colors } from "../themes/tokens.ts";
 import { SnackbarProvider } from "../components/snackbar.tsx";
 import { useKeyboardStore } from "../store/keyboard.ts";
@@ -56,6 +57,16 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
   });
+  // First-run gate, held here so the navigator itself enforces it (D1-1).
+  // A deep link to /models or /chat resolves WITHOUT mounting index.tsx,
+  // so a Redirect there cannot stop it — only removing the screens from the
+  // navigator can. Optimistically true (most launches are returning users);
+  // a false flip hides the drawer and the router falls back to index, which
+  // redirects to onboarding.
+  const [onboarded, setOnboarded] = useState(true);
+  useEffect(() => {
+    void isOnboarded().then(setOnboarded);
+  }, []);
   // Release the loaded model when the app is backgrounded, so a multi-GB
   // GGUF is not held resident (Settings > Model Loading).
   useEngineOffload();
@@ -122,8 +133,15 @@ export default function RootLayout() {
             <Stack.Screen name="index" />
             {/* Drawer group owns EVERY destination: (tabs) plus
                 models/settings/voice-settings/about. Tab switches never
-                animate, so the shared bar stays static. */}
-            <Stack.Screen name="(drawer)" options={{ animation: "none" }} />
+                animate, so the shared bar stays static.
+
+                Wrapped in Stack.Protected so a deep link cannot reach these
+                screens before onboarding completes (D1-1): with guard=false
+                the navigator has no drawer to resolve to, so it falls back to
+                the initial route (index), which redirects to onboarding. */}
+            <Stack.Protected guard={onboarded}>
+              <Stack.Screen name="(drawer)" options={{ animation: "none" }} />
+            </Stack.Protected>
             <Stack.Screen name="onboarding" />
           </Stack>
           </ThemeProvider>

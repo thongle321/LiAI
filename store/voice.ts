@@ -191,6 +191,10 @@ export function restoreVoice(stashed: string, engine: NeuralEngineId): Voice | n
 }
 
 export function createVoiceStore(storage: KeyValueStorage) {
+  /** In-flight hydration, so concurrent `load()` callers share one read
+   *  (the startup gate and the voice settings screen both call it). */
+  let hydrating: Promise<void> | null = null;
+
   return create<VoiceState>()((set, get) => {
     /** Record one engine's status, and restore the voice stashed for it
      *  when its model finishes downloading (PocketPal's
@@ -209,6 +213,14 @@ export function createVoiceStore(storage: KeyValueStorage) {
       if (restored !== null) set({ currentVoice: restored });
     }
     async function persist(): Promise<void> {
+      // Refuse to write before hydration. `persist` serialises the CURRENT
+      // state, and an unhydrated store still holds the defaults
+      // `{currentVoice: null, autoSpeak: false, userTTSOverride: null}` —
+      // so a setter fired on a cold start (the voice chip toggling auto-speak
+      // before voice-settings has mounted) overwrote the user's saved voice
+      // with nulls. `load()` is called by the startup gate before any screen
+      // mounts, so this is a backstop, not the primary guard (D3-4).
+      if (!get().loaded) return;
       const { currentVoice, autoSpeak, userTTSOverride } = get();
       try {
         await storage.setItem(
@@ -220,21 +232,19 @@ export function createVoiceStore(storage: KeyValueStorage) {
       }
     }
 
-    return {
-      currentVoice: null,
-      autoSpeak: false,
-      userTTSOverride: null,
-      playbackState: { mode: "idle" },
-      lastSpokenMessageId: null,
-      pendingVoiceRestore: {},
-      downloads: { ...EMPTY_DOWNLOADS },
-      activeEngineId: null,
-      deviceMeetsMemory: false,
-      loaded: false,
-
-      load: async () => {
+    /** Reads persisted voice prefs, then reconciles what the disk says
+     *  against what the TTS engines actually have installed.
+     *
+     *  `loaded` flips in a `finally`, so a storage read that rejects still
+     *  releases the startup gate instead of holding the splash forever —
+     *  the same contract the model store's hydrate has (D3-4). */
+    async function hydrate(
+      set: (partial: Partial<VoiceState>) => void,
+      get: () => VoiceState,
+    ): Promise<void> {
+      try {
         const parsed = parseVoiceState(await storage.getItem(VOICE_KEY));
-        set({ ...parsed, loaded: true });
+        set({ ...parsed });
         // Reconcile every engine's download state from disk (spec Q14).
         // The native module is absent in node — a failed reconcile simply
         // leaves that engine's entry null.
@@ -275,6 +285,34 @@ export function createVoiceStore(storage: KeyValueStorage) {
         } catch {
           set({ deviceMeetsMemory: false });
         }
+      } finally {
+        set({ loaded: true });
+      }
+    }
+
+    return {
+      currentVoice: null,
+      autoSpeak: false,
+      userTTSOverride: null,
+      playbackState: { mode: "idle" },
+      lastSpokenMessageId: null,
+      pendingVoiceRestore: {},
+      downloads: { ...EMPTY_DOWNLOADS },
+      activeEngineId: null,
+      deviceMeetsMemory: false,
+      loaded: false,
+
+      load: async () => {
+        // Single-flight, like the model and search stores' loads: the startup
+        // gate and the voice settings screen both call this, and two
+        // concurrent reconciles would race each other's `downloads` set.
+        if (get().loaded) return;
+        hydrating ??= (async () => {
+          await hydrate(set, get);
+        })().finally(() => {
+          hydrating = null;
+        });
+        await hydrating;
       },
 
       isTTSAvailable: () => {

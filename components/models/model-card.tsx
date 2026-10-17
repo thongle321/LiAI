@@ -60,10 +60,10 @@ import { ModelCardDetails } from "./model-card-details.tsx";
 /** PocketPal's card geometry: 8px radius (DESIGN.md's Default step),
  *  1px outline, no elevation (styles.ts:7-14). The 24px radius this card
  *  used to carry was PocketPal's value, taken wholesale over the design
- *  system's — retired 2026-10-10, see docs/research's card parity record.
- *  The list owns the gutter; the card owns only its own `mb-3`. */
-const CARD =
-  "mb-3 overflow-hidden rounded-lg border border-border bg-surface-1";
+ *  system's - retired 2026-10-10, see docs/research's card parity record.
+ *  The shape now lives once in `.surface` (global.css); the list owns the
+ *  gutter and this card owns only its own `mb-3`. */
+const CARD = "surface mb-3 overflow-hidden";
 /** The 16px leading icon inside a 48px target. DESIGN.md l.377: "the visual
  *  circle is 40px; the touch target is 48×48dp minimum. Pad the hit area, not
  *  the circle" — so the icon sits directly in the pressable and there is no
@@ -366,7 +366,7 @@ export function RemoteProviderCard({
   // "Default radius… buttons, inputs, cards"); the 24px this carried was
   // PocketPal's value, retired 2026-10-10.
   return (
-    <View className="mb-3 overflow-hidden rounded-lg border border-border bg-surface-1">
+    <View className="surface mb-3 overflow-hidden">
       <View className="p-5 flex-row items-center justify-between">
         <View className="flex-1">
           <View className="flex-row items-center gap-2">

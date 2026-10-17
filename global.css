@@ -175,7 +175,10 @@
   justify-content: center;
 }
 
-/* Inputs: .input + optional .input--error (focused border is signal blue) */
+/* Inputs: .input + optional .input--error (focused border is signal blue).
+   The field box is a surface too, but it needs its own padding, its own ink
+   and a focus border, so it states the shape rather than joining `.surface`
+   below (D2-12). */
 .input {
   background-color: #ffffff;
   border-width: 1px;
@@ -190,13 +193,33 @@
 }
 /* .input--error removed per D2-10: no call site in app/ or components/. */
 
-/* Cards. Never a shadow. */
-.card {
-  background-color: #ffffff;
+/* Surfaces. The raised-plane shape — 1px hairline, 8px radius — is the app's
+   most repeated visual fact, so it is stated ONCE, here, and every card is a
+   member of this group. Never a shadow.
+
+   Only the SHAPE lives here. Two things deliberately stay at the call site,
+   because the design system keeps them apart:
+     · the PLANE — `bg-surface-1` raised (the default), `bg-surface-2`
+       recessed, `bg-surface-3` selected. The three-plane depth model;
+     · the PADDING — a menu has none, `.card` has 20px, `.rows` runs its
+       dividers edge to edge.
+
+   A call site whose border is CONDITIONAL (`border-primary`, `border-error`)
+   keeps its own `border-*` utility and does not join the group: two
+   unlayered-vs-layered declarations for one property is not worth the
+   shorthand. Radius mirrors `--radius-card` and the TS mirror in
+   themes/tokens.ts. */
+.surface,
+.card,
+.rows {
   border-width: 1px;
   border-style: solid;
   border-color: #e2e8f0;
   border-radius: 8px;
+}
+
+.card {
+  background-color: #ffffff;
   padding: 20px;
 }
 
@@ -211,13 +234,10 @@
 }
 
 /* Grouped rows: .rows is a row card (0 internal padding so the dividers run
-   edge to edge); .row is one row inside it. */
+   edge to edge — the shape comes from the group above); .row is one row
+   inside it. */
 .rows {
   background-color: #ffffff;
-  border-width: 1px;
-  border-style: solid;
-  border-color: #e2e8f0;
-  border-radius: 8px;
   overflow: hidden;
 }
 /* Modifier: parameter cards (pocketpal's CompletionSettings shape) carry

@@ -359,7 +359,7 @@ export function MessageInput({
                 // Anchored to the plus button's wrapper and extending right into
                 // the empty composer space — the plus is leftmost, so w-48 fits
                 // without clipping. (right-0 here would squash it to 48px.)
-                <View className="absolute bottom-12 left-0 w-48 rounded-lg border border-border bg-surface-1 py-1">
+                <View className="surface absolute bottom-12 left-0 w-48 py-1">
                   <PlusItem
                     Icon={Camera}
                     label="Take photo"

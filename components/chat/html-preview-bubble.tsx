@@ -138,7 +138,7 @@ export function HtmlPreviewBubble({
 
   return (
     <>
-      <View className="mt-2 self-stretch overflow-hidden rounded-card border border-border bg-surface-1">
+      <View className="surface mt-2 self-stretch overflow-hidden bg-surface-1">
         {header(false)}
         {showCode || !liveAllowed ? (
           <ScrollView className="max-h-[250px]">

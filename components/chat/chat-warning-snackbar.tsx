@@ -56,7 +56,7 @@ export function ChatWarningSnackbar({
     <Animated.View
       entering={FadeInDown.duration(MOTION_DURATION_MS)}
       exiting={FadeOutDown.duration(MOTION_DURATION_MS)}
-      className="mb-2 flex-row items-center gap-2 rounded-lg border border-border bg-surface-1 px-3 py-2"
+      className="surface mb-2 flex-row items-center gap-2 px-3 py-2"
       // assertive: the turn already went through, so this is not blocking
       // anything -- it just must not be missed.
       accessibilityLiveRegion="assertive"

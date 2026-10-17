@@ -24,7 +24,7 @@ export function CodeBlock({
   const { copied, copy } = useCopy();
 
   return (
-    <View className="mt-2 overflow-hidden rounded-card border border-border bg-surface-2">
+    <View className="surface mt-2 overflow-hidden bg-surface-2">
       <View className="flex-row items-center justify-between border-b border-border px-3 py-2">
         <Text className="font-sans text-caption text-secondary-text">{language}</Text>
         <Pressable

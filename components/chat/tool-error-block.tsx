@@ -31,7 +31,7 @@ export function ToolErrorBlock({
     // `basis-full` so it takes its own line: the sibling chips stay in a
     // wrapping row, and an error must not sit squeezed beside them.
     <View
-      className="basis-full flex-row items-start gap-2 rounded-lg border border-border bg-surface-1 px-3 py-2"
+      className="surface basis-full flex-row items-start gap-2 px-3 py-2"
       // polite, not assertive: the turn still completed, so this informs
       // rather than interrupts -- same reasoning as the chat warning.
       accessibilityLiveRegion="polite"

@@ -74,7 +74,7 @@ export function PresetModelCard({
   }
 
   return (
-    <View className="mb-4 bg-surface-1 border border-border rounded-lg overflow-hidden">
+    <View className="surface mb-4 overflow-hidden">
       <Pressable
         onPress={() => setExpanded(!expanded)}
         className="p-5"

@@ -1,11 +1,16 @@
 /** One downloadable voice engine.
  *
  * PocketPal's engine-group card, rebuilt on this app's stack: a collapsed
- * header that is purely a disclosure (logo, title, tier chip, specs,
- * chevron) and an expanded body that carries every action — install,
- * pause/resume, retry, or the curated voice rows — because that is where
- * the reference design puts them and where PocketPal's VoicePickerView
- * puts them.
+ * header that is a disclosure (logo, title, tier chip, specs, chevron) and
+ * an expanded body that carries every action — install, pause/resume,
+ * retry, or the curated voice rows — because that is where the reference
+ * design puts them and where PocketPal's VoicePickerView puts them.
+ *
+ * The header keeps exactly one piece of state, the download arc: the
+ * progress copy it would otherwise report lives in the body the guard
+ * unmounts (see Motion). PocketPal makes the same trade on the same card —
+ * VoicePickerView passes `ringProgress` to EngineLogo, which draws the arc
+ * from that.
  *
  * Everything it renders comes from services/tts//engineMeta.ts (title, chip,
  * spec line, model id, size, voices) and services/tts//voiceUi.ts (which body the
@@ -51,6 +56,7 @@ import {
   canStartInstall,
   downloadLine,
   engineGroupState,
+  ringFraction,
   voiceTap,
   type EngineGroupState,
 } from "@/services/tts/voiceUi.ts";
@@ -58,11 +64,18 @@ import { useFreeSpacePoll } from "@/hooks/useStorageDisclosure.ts";
 import type { NeuralEngineId, Voice } from "@/services/tts/types.ts";
 import { VOICE_PREVIEW_SAMPLE } from "@/constants/voice-strings.ts";
 import { useVoice } from "@/store/voice.ts";
+import { ProgressRing } from "./progress-ring.tsx";
 import { RadioDot } from "./radio-dot.tsx";
 
 /** The engine's glyph. Lucide only — no bundled logo PNGs, which is what
  *  lets one card serve every engine. */
 const ENGINE_ICON = { kitten: Cat, kokoro: AudioLines, supertonic: Gauge } as const;
+
+/** Ring diameter. The glyph pill is 40, and the ring's own stroke eats 3 of
+ *  that radius, so it needs 48 for the arc to clear the pill rather than sit
+ *  on top of it (the reference gets its clearance from `ringPad` on the logo
+ *  surface instead). */
+const RING_SIZE = 48;
 
 /** PocketPal's disk preflight: the model must fit with 20% headroom. */
 const DISK_HEADROOM = 1.2;
@@ -145,6 +158,17 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
   // this card waits rather than fighting it for the same controller.
   const slotBusy = activeEngineId !== null && activeEngineId !== engineId;
   const installable = canStartInstall(group, slotBusy) && !lowDisk;
+
+  // Live progress only, and the rule (including why extraction is excluded)
+  // belongs to voiceUi with the rest of the card's state mapping.
+  const ringProgress = ringFraction(group);
+  // The glyph block's two marks, kept as one const each so the pill, its icon
+  // and the arc cannot drift apart. The arc is a non-text mark, so it takes
+  // the mark step rather than the signal step the icon beside it uses
+  // (DESIGN.md, The Two-Step Rule) — deliberately a shade apart. Kitten's
+  // warm ramp has no mark step of its own, so its arc reuses the accent.
+  const glyphColor = meta.warmBadge ? colors.warmAccent : colors.primary;
+  const ringColor = meta.warmBadge ? colors.warmAccent : colors.primaryMark;
 
   // Every failure the bridge already reported (network, disk, checksum) is
   // a status the body renders; this only covers a rejection it never saw.
@@ -275,14 +299,27 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
         accessibilityLabel={`${meta.title} — ${meta.spec}`}
         className="voice-card__header"
       >
-        <View
-          className={
-            meta.warmBadge
-              ? "h-10 w-10 items-center justify-center rounded-full bg-orange-100"
-              : "h-10 w-10 items-center justify-center rounded-full bg-surface-3"
-          }
-        >
-          <Icon size={20} color={meta.warmBadge ? colors.warmAccent : colors.primary} />
+        <View className="h-12 w-12 items-center justify-center">
+          <View
+            className={
+              meta.warmBadge
+                ? "h-10 w-10 items-center justify-center rounded-full bg-orange-100"
+                : "h-10 w-10 items-center justify-center rounded-full bg-surface-3"
+            }
+          >
+            <Icon size={20} color={glyphColor} />
+          </View>
+          {/* The body owns the progress copy and the body is gone while the
+              card is closed, so the header carries the arc — as PocketPal's
+              EngineLogo does. `ringFraction` says when. */}
+          {ringProgress !== null ? (
+            <ProgressRing
+              size={RING_SIZE}
+              progress={ringProgress}
+              color={ringColor}
+              testID="engine-card-ring"
+            />
+          ) : null}
         </View>
         <View className="flex-1">
           <Text className="voice-card__title">{meta.title}</Text>

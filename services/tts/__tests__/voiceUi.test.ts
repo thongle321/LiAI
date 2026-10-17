@@ -7,6 +7,7 @@ import {
   canStartInstall,
   downloadLine,
   engineGroupState,
+  ringFraction,
   type EngineGroupState,
 } from "../voiceUi";
 import type { TtsModelStatus } from "../download";
@@ -75,6 +76,27 @@ describe("downloadLine", () => {
     expect(state({ kind: "paused", percent: 55 })).toBe("Paused · 55%");
     expect(state({ kind: "install" })).toBeNull();
     expect(state({ kind: "ready" })).toBeNull();
+  });
+});
+
+describe("ringFraction", () => {
+  it("fills the header arc from the live transfer's own percent", () => {
+    expect(ringFraction({ kind: "downloading", percent: 42, extracting: false })).toBe(0.42);
+    expect(ringFraction({ kind: "downloading", percent: 0, extracting: false })).toBe(0);
+    expect(ringFraction({ kind: "downloading", percent: 100, extracting: false })).toBe(1);
+  });
+
+  /** The archive reports over uncompressed bytes once unpacking starts, so
+   *  percent restarts near 0. An arc that rewinds says less than none. */
+  it("refuses to draw an arc that would rewind mid-extraction", () => {
+    expect(ringFraction({ kind: "downloading", percent: 40, extracting: true })).toBeNull();
+  });
+
+  it("leaves the arc to the states with nothing in flight", () => {
+    expect(ringFraction({ kind: "install" })).toBeNull();
+    expect(ringFraction({ kind: "paused", percent: 55 })).toBeNull();
+    expect(ringFraction({ kind: "error", message: null })).toBeNull();
+    expect(ringFraction({ kind: "ready" })).toBeNull();
   });
 });
 

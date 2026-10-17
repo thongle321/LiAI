@@ -73,6 +73,23 @@ export function downloadLine(state: EngineGroupState, modelBytes: number): strin
   return null;
 }
 
+/** The header arc's fill, 0..1, or null when the header draws no arc.
+ *
+ * Live downloads only — the reference picker reads the same way
+ * (`state === 'downloading' ? neuralProgressFor(...) : null`), and a
+ * collapsed card gets its progress from here because the body, which owns
+ * the progress copy, is not mounted while the card is closed.
+ *
+ * NOT while extracting, and that is the one place this diverges from the
+ * reference: its store hands the ring a single monotone fraction, while
+ * our bridge reports percent over UNCOMPRESSED bytes during extraction, so
+ * it restarts near 0. An arc that rewinds 100 -> 0 says less than no arc
+ * at all — the same reason downloadLine refuses to draw a bar. */
+export function ringFraction(state: EngineGroupState): number | null {
+  if (state.kind !== "downloading" || state.extracting) return null;
+  return state.percent / 100;
+}
+
 /** Install is offered only on a card that has nothing installed and is not
  *  waiting behind another engine: the download runtime is single-slot, so a
  *  second start would fight the first for the same controller. */

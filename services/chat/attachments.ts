@@ -10,8 +10,10 @@ export type ImageSource = "camera" | "gallery";
 
 /** Structural slice of expo-image-picker the seam touches (fakes satisfy it). */
 export interface ImageLauncher {
-  requestCameraPermissionsAsync(): Promise<{ status: string }>;
-  requestMediaLibraryPermissionsAsync(): Promise<{ status: string }>;
+  getCameraPermissionsAsync(): Promise<{ granted: boolean; canAskAgain: boolean }>;
+  getMediaLibraryPermissionsAsync(): Promise<{ granted: boolean; canAskAgain: boolean }>;
+  requestCameraPermissionsAsync(): Promise<{ granted: boolean; canAskAgain: boolean }>;
+  requestMediaLibraryPermissionsAsync(): Promise<{ granted: boolean; canAskAgain: boolean }>;
   launchCameraAsync(options: Record<string, unknown>): Promise<ImagePickResult>;
   launchImageLibraryAsync(options: Record<string, unknown>): Promise<ImagePickResult>;
 }
@@ -32,16 +34,28 @@ export function toDataUri(base64: string, mime: string | undefined): string {
   return `data:${mime ?? "image/jpeg"};base64,${base64}`;
 }
 
-/** True when the OS grants photo access (mirrors ensureMicAccess). */
+/** Photo permission gate (mirrors ensureMicAccess): a permanent denial
+ *  never pops up again, so route to Settings instead of silently no-oping. */
+export type PhotoAccess = "granted" | "settings" | "unavailable";
 export async function ensurePhotoAccess(
   source: ImageSource,
   launcher: ImageLauncher,
-): Promise<boolean> {
-  const { status } =
-    source === "camera"
-      ? await launcher.requestCameraPermissionsAsync()
-      : await launcher.requestMediaLibraryPermissionsAsync();
-  return status === "granted";
+): Promise<PhotoAccess> {
+  try {
+    const current =
+      source === "camera"
+        ? await launcher.getCameraPermissionsAsync()
+        : await launcher.getMediaLibraryPermissionsAsync();
+    if (current.granted) return "granted";
+    if (!current.canAskAgain) return "settings";
+    const res =
+      source === "camera"
+        ? await launcher.requestCameraPermissionsAsync()
+        : await launcher.requestMediaLibraryPermissionsAsync();
+    return res.granted ? "granted" : "settings";
+  } catch {
+    return "unavailable";
+  }
 }
 
 // ponytail: quality 0.7 keeps a 12MP shot in the low single-digit MBs;
@@ -65,7 +79,14 @@ export async function pickImages(
   launcher?: ImageLauncher,
 ): Promise<string[]> {
   const mod = launcher ?? (await defaultLauncher());
-  if (!(await ensurePhotoAccess(source, mod))) return [];
+  const access = await ensurePhotoAccess(source, mod);
+  if (access === "settings") {
+    // Permanent denial: the OS won't prompt again, so take the user to
+    // the only place that can unblock them (D5-9).
+    void (await import("expo-linking")).openSettings().catch(() => {});
+    return [];
+  }
+  if (access !== "granted") return [];
   const result =
     source === "camera"
       ? await mod.launchCameraAsync({ ...PICKER_OPTS })

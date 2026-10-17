@@ -17,6 +17,7 @@ import { Sheet } from "../sheet.tsx";
 import {
   useCameraPermission,
 } from "react-native-vision-camera";
+import { openSettings } from "expo-linking";
 import { ServerQRScanner } from "./server-qr-scanner.tsx";
 import { ScanLine } from "lucide-react-native";
 import { normalizeTimeoutMs } from "../../services/inference/remote-engine.ts";
@@ -227,6 +228,10 @@ export function RemoteModelSheet({
                       Alert.alert(
                         "Camera access denied",
                         "Enable camera permission to scan a server QR code.",
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          { text: "Open Settings", onPress: () => void openSettings().catch(() => {}) },
+                        ],
                       );
                       return;
                     }

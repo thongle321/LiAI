@@ -25,7 +25,7 @@
  * surface deliberately retired.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import * as Clipboard from "expo-clipboard";
@@ -37,6 +37,11 @@ import { colors } from "../../themes/tokens.ts";
 import { wrapDocument } from "../../utils/preview-document.ts";
 import { CodeBlock } from "./code-block.tsx";
 
+// Soft cap on concurrently live WebViews to avoid memory pressure on
+// budget devices (D6-13). Past the cap, fall back to the CodeBlock branch.
+const MAX_LIVE_WEBVIEWS = 4;
+let liveWebViewCount = 0;
+
 export function HtmlPreviewBubble({
   html,
   title,
@@ -46,6 +51,26 @@ export function HtmlPreviewBubble({
 }) {
   const [showCode, setShowCode] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  // Whether this bubble got a slot in the live-WebView cap. Claimed on
+  // mount, released on unmount; past the cap we render the source view.
+  const slotClaimed = useRef(false);
+  const [liveAllowed, setLiveAllowed] = useState(true);
+  useEffect(() => {
+    if (liveWebViewCount < MAX_LIVE_WEBVIEWS) {
+      liveWebViewCount += 1;
+      slotClaimed.current = true;
+      setLiveAllowed(true);
+    } else {
+      slotClaimed.current = false;
+      setLiveAllowed(false);
+    }
+    return () => {
+      if (slotClaimed.current) {
+        liveWebViewCount = Math.max(0, liveWebViewCount - 1);
+        slotClaimed.current = false;
+      }
+    };
+  }, []);
   const displayTitle = title !== undefined && title !== "" ? title : "Preview";
   const wrappedHtml = useMemo(() => wrapDocument(html), [html]);
 
@@ -115,7 +140,7 @@ export function HtmlPreviewBubble({
     <>
       <View className="mt-2 self-stretch overflow-hidden rounded-card border border-border bg-surface-1">
         {header(false)}
-        {showCode ? (
+        {showCode || !liveAllowed ? (
           <ScrollView className="max-h-[250px]">
             <CodeBlock language="html" text={html} />
           </ScrollView>

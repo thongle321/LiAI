@@ -68,15 +68,14 @@ export default function RootLayout() {
   // effect would flash one font-less frame, so it runs on the same
   // render that first returns UI. The ref fires it exactly once — repeat
   // renders must not re-hide (unawaited native call per render).
+  // Font load failure must still release the splash (otherwise the app
+  // hangs on the native splash). On the success path the splash stays up
+  // until the first-run gate in app/index.tsx resolves, so cold start has
+  // no blank frame between splash and first screen (D4-19).
   const splashHidden = useRef(false);
-  if ((loaded || error) && !splashHidden.current) {
+  if (error && !splashHidden.current) {
     splashHidden.current = true;
-    if (error) {
-      // Font load rejected (corrupt asset / bad OTA update): log it, then
-      // release the splash so the app renders with the system fallback
-      // instead of hanging on the native splash forever.
-      console.error("[LiAI] Inter font load failed", error);
-    }
+    console.error("[LiAI] Inter font load failed", error);
     void SplashScreen.hideAsync().catch(() => {});
   }
 

@@ -12,6 +12,7 @@ import {
   Camera,
   type CameraDevice,
   type Camera as VisionCameraView,
+  useCameraFormat,
 } from "react-native-vision-camera";
 
 import { colors } from "../themes/tokens.ts";
@@ -38,6 +39,11 @@ export function VisionPreview({
   /** Denied camera: the only route left is the system settings screen. */
   onOpenSettings: () => void;
 }) {
+  // Pin a ~1920px-wide format so snapshots encode at preview resolution
+  // instead of the sensor default (12 MP) in watch mode's hot loop (D5-12).
+  const format = useCameraFormat(device, [
+    { videoResolution: { width: 1920, height: 1080 } },
+  ]);
   if (hasPermission && device !== undefined) {
     return (
       <View className="flex-1">
@@ -45,6 +51,7 @@ export function VisionPreview({
           ref={cameraRef}
           style={{ flex: 1 }}
           device={device}
+          format={format}
           isActive={focused}
           photo
           onInitialized={onReady}

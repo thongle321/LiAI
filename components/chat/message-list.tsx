@@ -29,6 +29,8 @@ import {
   KeyboardChatScrollView,
 } from "react-native-keyboard-controller";
 import type { SharedValue } from "react-native-reanimated";
+import Animated from "react-native-reanimated";
+import { motionLayout } from "../../utils/motion.ts";
 
 
 import type { ChatRow } from "../../services/chat/rows.ts";
@@ -51,6 +53,7 @@ export function MessageList({
    *  safe-area inset). Without it the content overshoots by that much
    *  every time the keyboard appears. */
   offset,
+  freeze,
   /** Tracks the growing multiline composer so the newest message is never
    *  clipped behind it. */
   extraContentPadding,
@@ -64,6 +67,10 @@ export function MessageList({
   rows: ChatRow[];
   renderRow: (row: ChatRow, widths: MessageWidths) => ReactElement | null;
   offset: number;
+  /** Hold the keyboard-driven inset (and with it the scroll position) frozen
+   *  while a sheet is open, so dismissing the keyboard to reveal the sheet
+   *  does not snap the chat layout (PocketPal parity: freeze, 1.21.9). */
+  freeze?: SharedValue<boolean> | boolean;
   extraContentPadding: SharedValue<number>;
   blankSpace: SharedValue<number>;
   /** Fires in BOTH directions (unlike FlatList's onEndReached, which only
@@ -134,6 +141,7 @@ export function MessageList({
         automaticallyAdjustContentInsets={false}
         contentInsetAdjustmentBehavior="never"
         offset={offset}
+        freeze={freeze}
         extraContentPadding={extraContentPadding}
         blankSpace={blankSpace}
         // Lift only when the reader is already at the conversation. Scrolling
@@ -146,7 +154,7 @@ export function MessageList({
         keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "none"}
       />
     ),
-    [offset, extraContentPadding, blankSpace],
+    [offset, freeze, extraContentPadding, blankSpace],
   );
 
   // Follow the conversation, but only from the end: a background token
@@ -160,7 +168,7 @@ export function MessageList({
   }, [rowCount, listRef]);
 
   return (
-    <FlatList
+    <Animated.FlatList
       ref={listRef}
       data={rows}
       keyExtractor={(row) => (row.kind === "message" ? row.message.id : row.id)}
@@ -184,6 +192,11 @@ export function MessageList({
       maxToRenderPerBatch={6}
       contentContainerClassName="p-5"
       className="flex-1"
+      // Reflow, not entrance. Per-row entering/exiting on a virtualized list
+      // replays every time the render window recycles a row, so scrolling back
+      // through history re-animates every bubble (D4-2). Animated.FlatList
+      // (not RN's FlatList) is what carries itemLayoutAnimation.
+      itemLayoutAnimation={motionLayout()}
     />
   );
 }

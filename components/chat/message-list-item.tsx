@@ -21,11 +21,6 @@ import { CheckCheck, CircleAlert, Wrench } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
 import { formatTime, formatToolMetrics } from "../../utils/format.ts";
-import {
-  MOTION_DURATION_MS,
-  bubbleEntering,
-  fadeExiting,
-} from "../../utils/motion.ts";
 import type { MessageRow } from "../../services/chat/rows.ts";
 import { blocksOf, turnText } from "../../services/chat/blocks.ts";
 import type { AgentStep } from "../../types/chat.ts";
@@ -124,14 +119,11 @@ export const MessageListItem = memo(function MessageListItem({
   contextBannerVisible?: boolean;
 }) {
   const { message, grouped, status } = row;
-  const duration = MOTION_DURATION_MS;
-  // Suppress the per-bubble enter animation while a turn is streaming: the
-  // repeated 200ms FadeInDown on every mount is the same full-screen
-  // offscreen-compositing cost that broke tab switching, and a streaming
-  // turn already moves the eye to its tail. Settled turns still fade in once.
-  const entering =
-    message.streaming === true ? undefined : bubbleEntering(duration);
-  const exiting = fadeExiting(duration);
+  // No per-row entering/exiting here. Rows unmount as the render window
+  // moves, so a per-row entrance replays every time the reader scrolls back
+  // through history — offscreen-compositing work on the row they are reading.
+  // The list animates reflow once via FlatList's itemLayoutAnimation
+  // (see message-list.tsx), which is what this replaced (D4-2).
   // Previews and actions target settled turns: a half-streamed URL would
   // trigger a garbage preview fetch, and actions need final text.
   const settled = message.streaming !== true;
@@ -178,8 +170,6 @@ export const MessageListItem = memo(function MessageListItem({
     return (
       <>
         <Animated.View
-          entering={entering}
-          exiting={exiting}
           className={grouped ? "mb-1 self-end items-end" : "mb-4 self-end items-end"}
           style={{ maxWidth: widths.user }}
         >
@@ -249,8 +239,6 @@ export const MessageListItem = memo(function MessageListItem({
     // see services/chat//message-width.ts. Vertical rhythm is PocketPal's
     // (styles.ts:24-32): 4px within a group, 16px between groups.
     <Animated.View
-      entering={entering}
-      exiting={exiting}
       className={grouped ? "mb-1" : "mb-4"}
       style={{ maxWidth: widths.assistant }}
     >

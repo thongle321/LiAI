@@ -67,6 +67,22 @@ module.exports = {
   },
   useSharedValue: (initial) => ({ value: initial }),
   useAnimatedStyle: (styleFn) => styleFn(),
+  // Run the worklet body against a plain event so the component still
+  // exercises it. Shared values are mutable objects in this mock, so the
+  // bookkeeping a scroll handler does survives the call.
+  useAnimatedScrollHandler:
+    (handler) =>
+    (event) =>
+      handler(event),
+  // `prepare` runs once on mount and `react` sees `previous === undefined`,
+  // matching the real hook's first pass (null there, undefined here — both
+  // are "no previous value" and both are guarded). Later passes never fire
+  // because nothing re-runs it; that is the mock's one honest limitation and
+  // is why the hysteresis is not unit-tested through this seam.
+  useAnimatedReaction: (prepare, react) => {
+    react(prepare(), undefined);
+    return () => undefined;
+  },
   withTiming: (value) => value,
   withDelay: (_delay, value) => value,
   withSpring: (value) => value,

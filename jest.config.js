@@ -40,6 +40,10 @@ module.exports = {
       '@lodev09/react-native-true-sheet/mock',
     'react-native-reanimated':
       '<rootDir>/jest/react-native-reanimated-mock.js',
+    // Loads the native worklets unpacker at import time, so any test that
+    // reaches a scheduleOnRN call dies before its first assertion. Reanimated's
+    // mock above does not cover this package's surface.
+    '^react-native-worklets$': '<rootDir>/jest/react-native-worklets-mock.js',
     '@dr.pogodin/react-native-fs':
       '<rootDir>/__mocks__/external/@dr.pogodin/react-native-fs.js',
     'react-native-marked':

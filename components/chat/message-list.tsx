@@ -29,7 +29,12 @@ import {
   KeyboardChatScrollView,
 } from "react-native-keyboard-controller";
 import type { SharedValue } from "react-native-reanimated";
-import Animated from "react-native-reanimated";
+import Animated, {
+  useAnimatedReaction,
+  useAnimatedScrollHandler,
+  useSharedValue,
+} from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 import { motionLayout } from "@/utils/motion.ts";
 
 
@@ -98,38 +103,55 @@ export function MessageList({
   // the library signal is NOT consumed and this is the single source for
   // the pill and the follow flag. Distance from the viewport's bottom edge
   // to the content's end; transitions call out, steady state stays silent.
-  const metricsRef = useRef({ offsetY: 0, layoutHeight: 0, contentHeight: 0 });
-  const updateAtEnd = useCallback(() => {
-    const m = metricsRef.current;
-    const distance = m.contentHeight - (m.offsetY + m.layoutHeight);
-    const next = atEndRef.current
-      ? distance <= LEAVE_DISTANCE
-      : distance <= STICK_DISTANCE;
-    if (next !== atEndRef.current) {
-      atEndRef.current = next;
-      onEndVisibleChange(next);
-    }
-  }, [onEndVisibleChange]);
-  const handleScroll = useCallback(
-    (event: { nativeEvent: { contentOffset: { y: number } } }) => {
-      metricsRef.current.offsetY = event.nativeEvent.contentOffset.y;
-      updateAtEnd();
+  //
+  // The three measurements live as shared values and the hysteresis runs in
+  // a reaction, i.e. on the UI thread. A scroll handler that reaches JS
+  // fires once per frame, which is precisely when the JS thread is busiest
+  // laying out a streaming reply (D4-16). JS is woken only on a flip, via
+  // scheduleOnRN.
+  const offsetY = useSharedValue(0);
+  const contentHeight = useSharedValue(0);
+  const layoutHeight = useSharedValue(0);
+  const atEnd = useSharedValue(true);
+
+  /** The one JS-thread landing pad: record the flip for the follow effect,
+   *  then tell the parent. Nothing else writes atEndRef. */
+  const reportAtEnd = useCallback(
+    (visible: boolean) => {
+      atEndRef.current = visible;
+      onEndVisibleChange(visible);
     },
-    [updateAtEnd],
+    [onEndVisibleChange],
   );
-  const handleContentSizeChange = useCallback(
-    (_width: number, height: number) => {
-      metricsRef.current.contentHeight = height;
-      updateAtEnd();
+
+  useAnimatedReaction(
+    () => {
+      const distance = contentHeight.value - (offsetY.value + layoutHeight.value);
+      return atEnd.value
+        ? distance <= LEAVE_DISTANCE
+        : distance <= STICK_DISTANCE;
     },
-    [updateAtEnd],
+    (next, previous) => {
+      // `previous` is null on the first pass. atEnd already starts true and
+      // the list mounts at offset 0, so reporting then would only repeat the
+      // state the parent already has.
+      if (previous === null || next === previous) return;
+      atEnd.value = next;
+      scheduleOnRN(reportAtEnd, next);
+    },
   );
+
+  const handleScroll = useAnimatedScrollHandler((event) => {
+    offsetY.value = event.contentOffset.y;
+  });
+  const handleContentSizeChange = useCallback((_width: number, height: number) => {
+    contentHeight.value = height;
+  }, []);
   const handleLayout = useCallback(
     (event: { nativeEvent: { layout: { height: number } } }) => {
-      metricsRef.current.layoutHeight = event.nativeEvent.layout.height;
-      updateAtEnd();
+      layoutHeight.value = event.nativeEvent.layout.height;
     },
-    [updateAtEnd],
+    [],
   );
 
   const renderScrollComponent = useCallback(

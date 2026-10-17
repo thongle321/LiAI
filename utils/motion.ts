@@ -44,7 +44,7 @@ const menuEasing = Easing.bezier(0.4, 0, 0.2, 1);
 
 /** Paper's FAB group specifies no easing, so RN's timing default applies. */
 export const ACTION_DURATION_MS = 150;
-const actionEasing = Easing.inOut(Easing.ease);
+const actionEasing = Easing.bezier(0.23, 1, 0.32, 1);
 
 /** Filter menu: grows out of the control that opened it — pinned to the
  * top-right, where that icon sits (the caller sets
@@ -60,7 +60,7 @@ export function menuEnteringFade(durationMs: number): BaseAnimationBuilder {
  * the fade above and pins `transformOrigin: "right top"` on this view so
  * the menu grows out of the control that opened it. */
 export function menuEnteringZoom(durationMs: number): BaseAnimationBuilder {
-  return ZoomIn.duration(durationMs).easing(menuEasing);
+  return ZoomIn.duration(durationMs).easing(menuEasing).withInitialValues({ transform: [{ scale: 0.92 }] });
 }
 
 export function menuExiting(durationMs: number): BaseAnimationBuilder {

@@ -22,7 +22,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { ChevronDown, ChevronRight } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
-import { MOTION_DURATION_MS } from "../../utils/motion.ts";
+import { MOTION_DURATION_MS, motionLayout } from "../../utils/motion.ts";
 import { MarkdownView } from "./markdown-view.tsx";
 
 type BubbleState = "collapsed" | "partial" | "expanded";
@@ -110,7 +110,8 @@ export function ReasoningBlock({
           <AnimatedChevron size={18} color={colors.secondaryText} style={chevronStyle} />
         </View>
       </View>
-      <View
+      <Animated.View
+        layout={motionLayout()}
         className={
           state === "partial" ? "h-[150px] overflow-hidden px-4 pb-4" : "px-4 pb-4"
         }
@@ -132,7 +133,7 @@ export function ReasoningBlock({
             <Rect x="0" y="0" width="100%" height="40" fill="url(#reasoningFade)" />
           </Svg>
         ) : null}
-      </View>
+      </Animated.View>
     </Pressable>
   );
 }

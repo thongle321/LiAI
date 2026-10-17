@@ -73,7 +73,9 @@ export function ServerQRScanner({
           </Text>
         )}
         {showCamera && device && (
-          <View style={{ height: 280, width: "100%", overflow: "hidden" }}>
+          <View className="h-[280px] w-full overflow-hidden">
+            {/* Camera takes no className (third-party native view), so its
+                fill stays inline; the frame around it is Uniwind. */}
             <Camera
               device={device}
               isActive={visible}

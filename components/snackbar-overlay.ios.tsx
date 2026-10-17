@@ -87,13 +87,9 @@ export function SnackbarOverlay({ ref }: { ref?: Ref<SnackbarOverlayHandle> }) {
       key={current.id}
       entering={Entering.duration(200)}
       exiting={Exiting.duration(200)}
-      className={`absolute left-4 right-4 ${current.position === "top" ? "top-4" : "bottom-4"}`}
-      style={{ zIndex: 9999 }}
+      className={`absolute left-4 right-4 z-[9999] ${current.position === "top" ? "top-4" : "bottom-4"}`}
     >
-      <View
-        className="flex-row items-center gap-3 rounded-lg border border-border px-4 py-3"
-        style={{ backgroundColor: colors.surface1 }}
-      >
+      <View className="flex-row items-center gap-3 rounded-lg border border-border bg-surface-1 px-4 py-3">
         <View
           className="h-2 w-2 rounded-full"
           style={{ backgroundColor: typeColor }}

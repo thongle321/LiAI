@@ -115,17 +115,16 @@ export function FABGroup({
     <View className="absolute inset-0" pointerEvents="box-none">
       {/* PocketPal parity: FAB.Group's backdropColor is theme surface
           (#F9FAFB) — the open group whites the screen out instead of dimming
-          it. colors.base is our matching near-white. Mounts with `open`, so
-          the fade-in starts with the mount; the fade-out plays on unmount. */}
+          it, which is our `bg-base`. Mounts with `open`, so the fade-in starts
+          with the mount; the fade-out plays on unmount. */}
       {open && (
         <AnimatedPressable
           onPress={() => setOpen(false)}
           accessibilityRole="button"
           accessibilityLabel="Dismiss add model menu"
-          className="absolute inset-0"
+          className="absolute inset-0 bg-base"
           entering={fadeEntering(backdropInMs)}
           exiting={fadeExiting(backdropOutMs)}
-          style={{ backgroundColor: colors.base }}
         />
       )}
       {/* SAFETY: runtime-anchored position, unchanged from before the reveal.

@@ -209,16 +209,15 @@ export function RemoteModelSheet({
           <Text className="font-sans text-body-sm text-secondary-text mb-1">Base URL</Text>
           <View className="flex-row items-center gap-2">
             <TextInput
-              style={{ flex: 1 }}
-            value={baseUrl}
-            onChangeText={setBaseUrl}
-            placeholder={
-              providerType === "openrouter"
-                ? "https://openrouter.ai/api"
-                : "http://localhost:11434"
-            }
-            className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
-          />
+              value={baseUrl}
+              onChangeText={setBaseUrl}
+              placeholder={
+                providerType === "openrouter"
+                  ? "https://openrouter.ai/api"
+                  : "http://localhost:11434"
+              }
+              className="flex-1 font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
+            />
             <Pressable
               onPress={() => {
                 (async () => {

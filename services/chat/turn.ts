@@ -19,6 +19,7 @@ import type { SamplerParams } from "../inference/sampler.ts";
 import type { EffortLevel } from "@/utils/reasoning-capability.ts";
 import { runLocalAgent } from "../agent/runner.ts";
 import { talentDefinitions, type TalentSearchAuth } from "../agent/registry.ts";
+import { toDataUris } from "../storage/images.ts";
 
 /** First user message becomes the session title, truncated here. */
 export const SESSION_TITLE_LEN = 48;
@@ -75,28 +76,33 @@ export interface TurnDeps {
   getChatTemplate?: () => Promise<string>;
   /** Per-model generation-prompt override; undefined keeps default. */
   getAddGenerationPrompt?: () => Promise<boolean | undefined>;
-  /** Data-uri → temp file path for multimodal turns; null = text-only. */
-  saveImage(dataUri: string): Promise<string | null>;
-  /** Remove the temp media files once the engine is done with them.
-   *  Optional so existing test deps stay valid; the default is the real
-   *  file deletion (see removeSavedImages). */
+  /** Resolve a stored attachment into a file the engine can read.
+   *  null = unusable, so the turn goes out as text only. */
+  resolveImage(value: string): Promise<{ path: string; owned: boolean } | null>;
+  /** Encode attachments as data URIs for a REMOTE provider, which
+   *  cannot see our files. Optional so existing test deps stay valid;
+   *  the default is the real read (services/storage/images.ts). */
+  toDataUris?(images: string[]): Promise<string[]>;
+  /** Remove the files THIS TURN created once the engine is done with
+   *  them. Optional so existing test deps stay valid; the default is the
+   *  real file deletion (see removeOwnedImages). */
   removeImages?(paths: string[]): Promise<void>;
 }
 
-/** Best-effort deletion of this turn's temp media files.
+/** Best-effort deletion of the files this turn wrote.
  *
- *  WHY: `saveImage` writes one JPEG per attachment into
- *  `documentDirectory/chat-images/` and NOTHING else in the app ever
- *  cleans that directory — every photo a user sends otherwise stays on
- *  disk for the life of the install, on a device that is already
- *  holding multi-GB GGUFs (audit finding 2). The engine only reads the
- *  path during its completion, so the file is dead weight the moment
- *  runLocalAgent settles.
+ *  WHY: an attachment arrives either as a path - the picker's cache file
+ *  or a camera frame, which the message history still renders and must
+ *  therefore KEEP - or as a legacy data-uri, whose only copy on disk is
+ *  the file we just decoded it into. Only the second kind is ours to
+ *  delete; removing the first would blank a photo the user can see. The
+ *  engine only reads the path during its completion, so an owned file is
+ *  dead weight the moment runLocalAgent settles.
  *
  *  Dynamic import, like every other native touch in this graph: plain
  *  Node tests import this module, and a failure to load or delete must
  *  never take down a turn whose answer is already in. */
-async function removeSavedImages(paths: string[]): Promise<void> {
+async function removeOwnedImages(paths: string[]): Promise<void> {
   if (paths.length === 0) return;
   try {
     const FS = await import("expo-file-system/legacy");
@@ -171,18 +177,30 @@ export function createTurnRunner(deps: TurnDeps) {
     const addGenerationPrompt = await deps
       .getAddGenerationPrompt?.()
       .catch(() => undefined);
-// G8: every attached photo becomes a media path. One that fails to
-    // save is dropped rather than failing the turn -- the text still went,
-    // and losing a photo is better than losing the message.
+// G8: every attached photo becomes a media path. One that cannot be
+    // resolved is dropped rather than failing the turn -- the text still
+    // went, and losing a photo is better than losing the message.
     let imagePaths: string[] | undefined;
+    const ownedPaths: string[] = [];
     if (paths.images !== undefined && paths.images.length > 0) {
       const saved: string[] = [];
-      for (const dataUri of paths.images) {
-            const path = await deps.saveImage(dataUri).catch(() => null);
-            if (path !== null) saved.push(path);
+      for (const image of paths.images) {
+        const resolved = await deps.resolveImage(image).catch(() => null);
+        if (resolved === null) continue;
+        saved.push(resolved.path);
+        if (resolved.owned) ownedPaths.push(resolved.path);
       }
       if (saved.length > 0) imagePaths = saved;
     }
+    // A local engine reads the paths as they stand (llama media_paths).
+    // A remote server cannot see our cache directory, so THAT is the one
+    // boundary where an attachment has to be encoded (D5-4) - and doing
+    // it here rather than at pick time is what keeps the encoded copy
+    // off every local turn.
+    const remoteDataUris =
+      source.kind === "remote" && paths.images !== undefined && paths.images.length > 0
+        ? await (deps.toDataUris ?? toDataUris)(paths.images).catch(() => undefined)
+        : undefined;
 
     let result: Awaited<ReturnType<typeof runLocalAgent>>;
     try {
@@ -199,9 +217,7 @@ export function createTurnRunner(deps: TurnDeps) {
       // Local reads imagePaths (llama media_paths); remote reads the
       // data URIs (OpenAI content arrays — a server can't read our files).
       ...(imagePaths ? { imagePaths } : {}),
-      ...(paths.images && paths.images.length > 0
-        ? { imageDataUris: paths.images }
-        : {}),
+      ...(remoteDataUris !== undefined ? { imageDataUris: remoteDataUris } : {}),
       ...(thinking !== undefined ? { enableThinking: thinking } : {}),
       ...(effort !== undefined ? { reasoningEffort: effort } : {}),
       ...(jinja !== undefined ? { jinja } : {}),
@@ -224,9 +240,11 @@ export function createTurnRunner(deps: TurnDeps) {
       },
       });
     } finally {
-      // The engine is done with the media files the moment the run settles
-      // (success or failure): drop them before persisting the turn.
-      await (deps.removeImages ?? removeSavedImages)(imagePaths ?? []);
+      // The engine is done with the files the moment the run settles
+      // (success or failure). Only the ones this turn wrote go; a
+      // picked photo or camera frame outlives the turn because the
+      // message history still shows it.
+      await (deps.removeImages ?? removeOwnedImages)(ownedPaths);
     }
     // Backend parity: an empty reply with no tool provenance is a failed
     // turn (error bubble), never a persisted empty assistant message.

@@ -19,7 +19,7 @@ function launcher(over: Partial<ImageLauncher> = {}): ImageLauncher {
   };
 }
 
-const asset = { base64: "AAA", mimeType: "image/jpeg" };
+const asset = { uri: "file:///cache/img.jpg" };
 
 describe("ensurePhotoAccess (D5-2)", () => {
   it("never asks for a media-library permission: the system picker needs none", async () => {
@@ -74,7 +74,7 @@ describe("pickImages (D5-2)", () => {
       launchImageLibraryAsync: async () => ({ canceled: false, assets: [asset] }),
     });
     await expect(pickImages("gallery", mod)).resolves.toEqual([
-      "data:image/jpeg;base64,AAA",
+      "file:///cache/img.jpg",
     ]);
   });
 

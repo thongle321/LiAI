@@ -34,6 +34,7 @@ import {
   resolveComputeDevices,
 } from "@/services/inference/deviceSelection.ts";
 import { createRemoteEngine } from "@/services/inference/remote-engine.ts";
+import { resolveImage } from "@/services/storage/images.ts";
 import { createTurnRunner } from "@/services/chat/turn.ts";
 import { holdScreen, releaseScreen } from "@/services/chat/keep-awake.ts";
 import type { SessionStore } from "@/services/chat/session-store.ts";
@@ -270,27 +271,6 @@ async function recordThinkingCapability(
   }
 }
 
-/** Data-uri JPEG → temp file for multimodal turns; null = text-only. */
-async function defaultSaveImage(dataUri: string): Promise<string | null> {
-  try {
-    const match = /^data:image\/\w+;base64,(.*)$/.exec(dataUri);
-    if (!match) return null;
-    const FS = await import("expo-file-system/legacy");
-    const dir = `${FS.documentDirectory ?? ""}chat-images/`;
-    await FS.makeDirectoryAsync(dir, { intermediates: true });
-    const path = `${dir}${Date.now()}.jpg`;
-    type WriteOptions = Parameters<typeof FS.writeAsStringAsync>[2];
-    // SAFETY: "base64" is the legacy EncodingType.Base64 literal; the
-    // options bag is structural so the literal needs only this bridge.
-    await FS.writeAsStringAsync(path, match[1], {
-      encoding: "base64",
-    } as WriteOptions);
-    return path;
-  } catch {
-    return null;
-  }
-}
-
 /** Resolved thinking state for the ACTIVE model (C6): a user
  *  override, then the spec's detected capability, then the global
  *  preference. An unclassified model gets the global flag, exactly as
@@ -477,7 +457,10 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
       getEffort: () => defaultEffort(),
       getJinja: () => defaultJinja(),
       getSampler: (sid) => defaultSampler(sid),
-      saveImage: (uri: string) => defaultSaveImage(uri),
+      // Attachment → file for the engine. Lives in services/storage/images
+      // so the borrowed-path pass-through and the legacy data-uri decode
+      // have one owner (D5-4).
+      resolveImage,
     });
     return runTurn(text, paths, onToken, onReasoning, onToolStart, onToolDelta);
   };

@@ -15,7 +15,7 @@ import type { Camera as VisionCameraView } from "react-native-vision-camera";
 
 import { MAX_IMAGES } from "../services/chat/attachments.ts";
 import { pushFrame } from "../services/vision/vision-watch.ts";
-import { snapshotToBase64 } from "../services/storage/snapshot.ts";
+import { snapshotToUri } from "../services/storage/snapshot.ts";
 import { useWatch } from "../store/watch.ts";
 
 export function useWatchMode(
@@ -53,15 +53,11 @@ export function useWatchMode(
       inFlightRef.current = true;
       void (async () => {
         try {
-          const jpeg = await snapshotToBase64(() =>
+          const frameUri = await snapshotToUri(() =>
             cam.takeSnapshot({ quality: 50 }),
           );
           if (!stopped) {
-            framesRef.current = pushFrame(
-              framesRef.current,
-              `data:image/jpeg;base64,${jpeg}`,
-              MAX_IMAGES,
-            );
+            framesRef.current = pushFrame(framesRef.current, frameUri, MAX_IMAGES);
           }
         } catch {
           // A dropped frame is not an error; the buffer just holds less.

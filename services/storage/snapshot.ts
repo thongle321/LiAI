@@ -1,16 +1,16 @@
-import {
-  deleteAsync,
-  EncodingType,
-  readAsStringAsync,
-} from "expo-file-system/legacy";
-
-/** One camera snapshot as raw base64 (no data-uri prefix).
+/** One camera snapshot as a `file://` URI to a cached JPEG.
  *
  * Shared by the vision tick (hook) and Capture (panel). Times out so a
- * wedged capture can't hang, and always deletes the temp file.
- * VisionCamera returns a bare path; expo-file-system needs a URI.
+ * wedged capture can't hang. VisionCamera returns a bare path;
+ * expo-file-system - and llama's `media_paths` - want a URI.
+ *
+ * The file stays where the camera put it. It IS the attachment now, not a
+ * staging copy of one: the turn hands this URI to the engine and the
+ * message history renders it as the turn's thumbnail, so deleting it here
+ * would blank a photo the user can still see (D5-4). The cache directory
+ * is the OS's to reclaim, exactly as it is for the reference app.
  */
-export async function snapshotToBase64(
+export async function snapshotToUri(
   take: () => Promise<{ path: string }>,
 ): Promise<string> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -19,14 +19,9 @@ export async function snapshotToBase64(
   });
   try {
     const snapshot = await Promise.race([take(), timeout]);
-    const uri = snapshot.path.startsWith("file://")
+    return snapshot.path.startsWith("file://")
       ? snapshot.path
       : `file://${snapshot.path}`;
-    try {
-      return await readAsStringAsync(uri, { encoding: EncodingType.Base64 });
-    } finally {
-      await deleteAsync(uri, { idempotent: true }).catch(() => undefined);
-    }
   } finally {
     if (timer) clearTimeout(timer);
   }

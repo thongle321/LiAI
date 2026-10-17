@@ -28,7 +28,7 @@ import { ensureMicAccess } from "../services/voice/mic-access.ts";
 import { speakReply, stopSpeaking } from "../services/voice/voice-speak.ts";
 import { useVoice } from "../store/voice.ts";
 import { VOICE_LISTEN_OPTS } from "../services/voice/voice-listen.ts";
-import { snapshotToBase64 } from "../services/storage/snapshot.ts";
+import { snapshotToUri } from "../services/storage/snapshot.ts";
 import { useChatStore } from "../store/chat.ts";
 import { multimodalAvailable, MULTIMODAL_WARNING } from "../store/chat/send.ts";
 
@@ -144,28 +144,28 @@ export function useVisionTurn(
     setIssue(null);
 
     const buffered = getBufferedFrames?.() ?? [];
-    let dataUris: string[];
+    let frameUris: string[];
     if (buffered.length > 0) {
       // Watch mode: the question rides the recent-frames window, so
       // "what just moved?" has the frames to answer with.
-      dataUris = buffered;
+      frameUris = buffered;
     } else {
-      let rawJpeg: string | null = null;
+      let frameUri: string | null = null;
       try {
         const cam = camera.current;
         if (cam !== null && cameraReadyRef.current()) {
-          rawJpeg = await snapshotToBase64(() => cam.takeSnapshot({ quality: 50 }));
+          frameUri = await snapshotToUri(() => cam.takeSnapshot({ quality: 50 }));
         }
       } catch {
-        rawJpeg = null;
+        frameUri = null;
       }
       if (!aliveRef.current) return;
-      if (rawJpeg === null) {
+      if (frameUri === null) {
         setIssue(NO_FRAME);
         setBoth("idle");
         return;
       }
-      dataUris = [`data:image/jpeg;base64,${rawJpeg}`];
+      frameUris = [frameUri];
     }
 
     // A chat send may still be in flight (store.send refuses while busy):
@@ -176,7 +176,7 @@ export function useVisionTurn(
       waited += 1;
     }
     const before = useChatStore.getState().messages.length;
-    const ok = await send(said, dataUris);
+    const ok = await send(said, frameUris);
     if (!aliveRef.current) return;
     if (!ok) {
       setIssue("Couldn't send that. Try again.");

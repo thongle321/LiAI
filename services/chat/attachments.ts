@@ -21,18 +21,13 @@ export interface ImageLauncher {
 
 export interface ImagePickResult {
   canceled: boolean;
-  assets?: Array<{ base64?: string; mimeType?: string }>;
+  assets?: Array<{ uri?: string }>;
 }
 
 async function defaultLauncher(): Promise<ImageLauncher> {
   // SAFETY: expo-image-picker's real module shape is a superset of the
   // structural ImageLauncher slice (same method names/signatures).
   return (await import("expo-image-picker")) as unknown as ImageLauncher;
-}
-
-/** Attached photos travel as `data:<mime>;base64,<payload>`. */
-export function toDataUri(base64: string, mime: string | undefined): string {
-  return `data:${mime ?? "image/jpeg"};base64,${base64}`;
 }
 
 /** Photo permission gate (mirrors ensureMicAccess): a permanent denial
@@ -62,22 +57,25 @@ export async function ensurePhotoAccess(
   }
 }
 
-// ponytail: quality 0.7 keeps a 12MP shot in the low single-digit MBs;
-// full-resolution base64 would balloon the JSON chat body.
-const PICKER_OPTS = { mediaTypes: ["images"], base64: true, quality: 0.7 } as const;
+// quality 0.7 keeps a 12MP shot in the low single-digit MBs: it re-encodes
+// the captured file down, so the file we keep is the small one. No
+// `base64` - the platform's cache URI is the attachment from here to the
+// engine and the history bubble, and nothing needs an encoded copy of it
+// (D5-4; PocketParity: pocketpal-ai never asks for base64 either).
+const PICKER_OPTS = { mediaTypes: ["images"], quality: 0.7 } as const;
 
 /** How many photos one turn may carry. PocketPal's gallery
  *  `selectionLimit` (ChatInput.tsx:320). */
 export const MAX_IMAGES = 5;
 
-/** Data-uris for the picked photos; EMPTY (not null) on cancel, denial, or
+/** File URIs for the picked photos; EMPTY (not null) on cancel, denial, or
  *  an empty payload.
  *
- *  The camera yields exactly one shot; the gallery asks for up to
- *  MAX_IMAGES. The list is also truncated HERE rather than trusting the
- *  platform to honour `selectionLimit` -- it is advisory, and an
- *  unbounded attach is a multi-megabyte base64 body the model never
- *  wanted. */
+ *  Each URI is the platform's own cached file, passed through verbatim:
+ *  llama's `media_paths` takes the `file://` form as it stands, and the
+ *  history bubble renders it as-is. The list is truncated HERE rather than
+ *  trusting the platform to honour `selectionLimit` -- it is advisory,
+ *  and an unbounded attach is a body the model never wanted. */
 export async function pickImages(
   source: ImageSource,
   launcher?: ImageLauncher,
@@ -102,8 +100,8 @@ export async function pickImages(
   const uris: string[] = [];
   for (const asset of result.assets ?? []) {
     if (uris.length >= MAX_IMAGES) break;
-    if (asset.base64 === undefined || asset.base64 === "") continue;
-    uris.push(toDataUri(asset.base64, asset.mimeType));
+    if (asset.uri === undefined || asset.uri === "") continue;
+    uris.push(asset.uri);
   }
   return uris;
 }

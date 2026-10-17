@@ -857,7 +857,7 @@ describe("multimodal warning (G12)", () => {
       multimodalAvailable: async () => false,
     });
     await useStore.getState().send("what is this?", [
-      "data:image/jpeg;base64,AAAA",
+      "file:///cache/a.jpg",
     ]);
 
     expect(calls.texts[0]).toBe("what is this?");
@@ -886,9 +886,9 @@ describe("multimodal warning (G12)", () => {
       multimodalAvailable: async () => true,
     });
     await useStore.getState().send("what is this?", [
-      "data:image/jpeg;base64,AAAA",
+      "file:///cache/a.jpg",
     ]);
-    expect(calls.images[0]).toEqual(["data:image/jpeg;base64,AAAA"]);
+    expect(calls.images[0]).toEqual(["file:///cache/a.jpg"]);
     expect(useStore.getState().chatWarning).toBe(null);
   });
 
@@ -897,7 +897,7 @@ describe("multimodal warning (G12)", () => {
     // one) between a turn and its rerun, so the rerun asks the capability
     // question again rather than trusting what the first send was allowed
     // through with.
-    const image = "data:image/jpeg;base64,AAAA";
+    const image = "file:///cache/a.jpg";
     let canSee = true;
     const { runTurn, calls } = fakeRunTurn([{ reply: "a cat" }, { reply: "again" }]);
     const useStore = createChatStore({
@@ -919,7 +919,7 @@ describe("multimodal warning (G12)", () => {
     // retry re-answers a stored question with the user turn's own images.
     // A guard written per-caller would let exactly this path hand a
     // text-only model the photo the original send was denied.
-    const image = "data:image/jpeg;base64,AAAA";
+    const image = "file:///cache/a.jpg";
     const { runTurn, calls } = fakeRunTurn([
       { fail: "boom" },
       { reply: "recovered" },
@@ -943,7 +943,7 @@ describe("multimodal warning (G12)", () => {
     // Edit commits by calling send, so it inherits the one guard. What
     // must not regress is a rewritten turn that re-attaches an image the
     // gate has since started refusing.
-    const image = "data:image/jpeg;base64,AAAA";
+    const image = "file:///cache/a.jpg";
     const fake = fakeSessionStore(
       [{ id: "s1", title: "T", turns: [{ role: "user", content: "typo here" }] }],
       "s1",

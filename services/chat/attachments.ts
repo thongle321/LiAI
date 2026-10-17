@@ -8,12 +8,13 @@
 
 export type ImageSource = "camera" | "gallery";
 
-/** Structural slice of expo-image-picker the seam touches (fakes satisfy it). */
+/** Structural slice of expo-image-picker the seam touches (fakes satisfy it).
+ *
+ * No media-library permission methods: the gallery uses the system photo
+ * picker, which needs no permission (D5-2). */
 export interface ImageLauncher {
   getCameraPermissionsAsync(): Promise<{ granted: boolean; canAskAgain: boolean }>;
-  getMediaLibraryPermissionsAsync(): Promise<{ granted: boolean; canAskAgain: boolean }>;
   requestCameraPermissionsAsync(): Promise<{ granted: boolean; canAskAgain: boolean }>;
-  requestMediaLibraryPermissionsAsync(): Promise<{ granted: boolean; canAskAgain: boolean }>;
   launchCameraAsync(options: Record<string, unknown>): Promise<ImagePickResult>;
   launchImageLibraryAsync(options: Record<string, unknown>): Promise<ImagePickResult>;
 }
@@ -35,23 +36,26 @@ export function toDataUri(base64: string, mime: string | undefined): string {
 }
 
 /** Photo permission gate (mirrors ensureMicAccess): a permanent denial
- *  never pops up again, so route to Settings instead of silently no-oping. */
+ *  never pops up again, so route to Settings instead of silently no-oping.
+ *
+ *  CAMERA ONLY. The gallery never asks: `launchImageLibraryAsync` opens the
+ *  system photo picker on Android 13+ and iOS 14+, which grants scoped
+ *  access to just the chosen photos. Pre-flighting the media-library
+ *  permission asked the OS for `READ_MEDIA_IMAGES`, which this app does
+ *  not declare (the manifest carries only `READ_EXTERNAL_STORAGE
+ *  maxSdkVersion=32`), so on the most common devices the request resolved
+ *  denied with no prompt and attach silently returned nothing (D5-2). */
 export type PhotoAccess = "granted" | "settings" | "unavailable";
 export async function ensurePhotoAccess(
   source: ImageSource,
   launcher: ImageLauncher,
 ): Promise<PhotoAccess> {
+  if (source === "gallery") return "granted";
   try {
-    const current =
-      source === "camera"
-        ? await launcher.getCameraPermissionsAsync()
-        : await launcher.getMediaLibraryPermissionsAsync();
+    const current = await launcher.getCameraPermissionsAsync();
     if (current.granted) return "granted";
     if (!current.canAskAgain) return "settings";
-    const res =
-      source === "camera"
-        ? await launcher.requestCameraPermissionsAsync()
-        : await launcher.requestMediaLibraryPermissionsAsync();
+    const res = await launcher.requestCameraPermissionsAsync();
     return res.granted ? "granted" : "settings";
   } catch {
     return "unavailable";

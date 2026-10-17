@@ -319,6 +319,8 @@ export default function ChatRoute() {
   const keyboardVisible = useKeyboardStore((s) => s.isVisible);
   const tabBarCompensation = keyboardVisible ? keyboardOffset : 0;
   const [composerHeight, setComposerHeight] = useState(0);
+  // Hold the list's keyboard inset steady while a sheet is open.
+  const freeze = useSharedValue(false);
   // Height of the field, which IS the composer. NOT a delta from a baseline,
   // unlike the library's example: the field is out of flow, so nothing else
   // accounts for it and the newest message would sit behind it. The banners
@@ -378,6 +380,11 @@ export default function ChatRoute() {
   // header title routes to /models, and each message offers "Regenerate
   // with…"); the picker is the no-model path only.
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Sync the freeze flag with the sheet-open state (declared above because the
+  // pickers are defined late in this component).
+  useEffect(() => {
+    freeze.value = pickerOpen || generationOpen;
+  }, [pickerOpen, generationOpen, freeze]);
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
 
@@ -465,6 +472,7 @@ export default function ChatRoute() {
             listRef={listRef}
             rows={rows}
             offset={keyboardOffset}
+            freeze={freeze}
             extraContentPadding={extraContentPadding}
             blankSpace={blankSpace}
             onEndVisibleChange={setAtEnd}

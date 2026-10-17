@@ -380,6 +380,17 @@ Confident and flat. Buttons never lift, never glow, and never animate their own 
 - **Recorded exception — bare icon actions inside a card.** The model card's settings and expand controls put the glyph bare in the 48px target: no 40px well, no fill. This reads *Touch target* literally rather than contradicting it, and it is the reference app's own shape (`styles.iconButton` is a bare 40px touchable). A row of three actions each wearing a Surface Tint well reads as three controls competing for state when only one is live — DESIGN.md's "cards are open white rectangles, not boxes" argues the same way from the other side. Circles and wells stay for standalone controls (the FAB, the send button, avatars), and destructive keeps both its ground and its circle.
 - **Every icon-only button carries an accessibility label.** No exceptions, including destructive and decorative-adjacent controls.
 
+### Chips / Badges
+
+Small categorical labels that carry a short token word (engine tier, default, status). They are not controls and never accept a tap.
+
+- **Shape:** Pill (999px), `2px` vertical / `8px` horizontal padding.
+- **Typography:** Label (11/16) Semibold, `0.4px` tracking. Label rung, never smaller.
+- **Signal tier:** Surface Tint (`#EFF6FF`) fill with Signal (`#2563EB`) label. Default badge language - see `.voice-badge`.
+- **Warm tier:** `#ffedd5` fill with warm deep (`#c2410c`) label, only where Warm means "local/on-device" (a category, not a status). Warm carries a character, and exactly one word if it is used - see *Colors*.
+- **One tier per chip.** A chip reads at most one meaning; never weight a single chip with two statuses.
+- **Saturation cap:** chips repeat across model and voice lists, so even repeated Signal badges on a single screen count inside the One-Signal rule as *one selected categorical slot*, not N competing actions. Use them sparingly and pair with an icon only inside the badge where density proves necessary.
+
 ### Inputs / Fields
 
 - **Style:** Clean White fill, 1px Hairline border, Default radius (8px), 12px/16px (`3`/`4`) padding, Body (16/24) value in Ink. Placeholder text is Slate.

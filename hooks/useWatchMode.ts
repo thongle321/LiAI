@@ -28,6 +28,14 @@ export function useWatchMode(
   const setWatchIntervalMs = useWatch((s) => s.setWatchIntervalMs);
   const framesRef = useRef<string[]>([]);
   const inFlightRef = useRef(false);
+  // The caller's readiness predicate is an inline closure, so it is a NEW
+  // reference on every render of the vision screen. Left in the effect's
+  // dependency array it re-runs the effect on every keystroke in the draft
+  // — and the cleanup wipes the buffer, so watch mode loses exactly the
+  // frames the user was asking about. Same ref treatment `useVisionTurn`
+  // gives it (D5-3).
+  const cameraReadyRef = useRef(cameraReady);
+  cameraReadyRef.current = cameraReady;
 
   // Hydrate the persisted capture interval once per mount (D3-9).
   useEffect(() => {
@@ -41,7 +49,7 @@ export function useWatchMode(
       // A slow frame never queues captures: one snapshot in flight at most.
       if (inFlightRef.current) return;
       const cam = camera.current;
-      if (cam === null || !cameraReady()) return;
+      if (cam === null || !cameraReadyRef.current()) return;
       inFlightRef.current = true;
       void (async () => {
         try {
@@ -68,7 +76,7 @@ export function useWatchMode(
       // Fresh on resume: frames captured before losing focus are stale.
       framesRef.current = [];
     };
-  }, [watchOn, active, intervalMs, camera, cameraReady]);
+  }, [watchOn, active, intervalMs, camera]);
 
   function stopWatch(): void {
     setWatchOn(false);

@@ -159,6 +159,19 @@ export function MessageList({
 
   const handleScroll = useAnimatedScrollHandler((event) => {
     offsetY.value = event.contentOffset.y;
+    // Underflow guard (PocketPal ChatView.tsx:478-483): when the content is
+    // shorter than the viewport it cannot scroll, so the reader is by
+    // definition at the end. Force atEnd true here rather than relying on
+    // the hysteresis below to converge, so a thread that lands just under
+    // the fold can never flicker between followed and not-followed.
+    const contentHeight = event.contentSize?.height ?? 0;
+    const viewportHeight = event.layoutMeasurement?.height ?? 0;
+    if (contentHeight <= viewportHeight + 1) {
+      if (!atEnd.value) {
+        atEnd.value = true;
+        scheduleOnRN(reportAtEnd, true);
+      }
+    }
   });
   const handleContentSizeChange = useCallback((_width: number, height: number) => {
     contentHeight.value = height;

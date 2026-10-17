@@ -97,7 +97,7 @@ export function ServerQRScanner({
         ) : null}
         <Pressable
           onPress={onClose}
-          className="btn btn--secondary w-full"
+          className="btn btn--secondary active:opacity-80 w-full"
           accessibilityRole="button"
           accessibilityLabel="Close scanner"
         >

@@ -107,7 +107,7 @@ export function VoiceSettings() {
             onPress={togglePreview}
             accessibilityRole="button"
             accessibilityLabel={previewing ? "Stop preview" : "Preview the system voice"}
-            className={cn("btn btn--tonal flex-row items-center gap-2 self-start", "px-4 py-2")}
+            className={cn("btn btn--tonal active:opacity-80 flex-row items-center gap-2 self-start", "px-4 py-2")}
           >
             {previewing ? (
               <Square size={14} color={colors.primary} />

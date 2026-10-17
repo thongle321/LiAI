@@ -86,7 +86,7 @@ export function ChatEmptyPlaceholder({
               ? router.navigate("/models")
               : onSelectModel()
           }
-          className="btn btn--primary mt-6 min-w-48"
+          className="btn btn--primary active:opacity-80 mt-6 min-w-48"
           accessibilityRole="button"
           accessibilityLabel={buttonText}
         >

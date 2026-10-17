@@ -77,7 +77,7 @@ const SessionRow = memo(function SessionRow({
         selecting ? undefined : (e) => onLongPress(item, e as never)
       }
       delayLongPress={350}
-      className={`menu-row ${active ? "bg-surface-2" : ""}`}
+      className={`menu-row active:bg-surface-3 ${active ? "bg-surface-2" : ""}`}
       accessibilityRole="button"
       accessibilityLabel={item.title}
       accessibilityState={{ selected: active }}
@@ -481,7 +481,7 @@ export function SessionList({
             <View className="flex-row gap-2 pt-4">
               <Pressable
                 onPress={() => setRenaming(null)}
-                className="btn btn--secondary flex-1"
+                className="btn btn--secondary active:opacity-80 flex-1"
                 accessibilityRole="button"
                 accessibilityLabel="Cancel rename"
               >
@@ -490,7 +490,7 @@ export function SessionList({
               <Pressable
                 onPress={() => void saveRename()}
                 disabled={draft.trim() === ""}
-                className="btn btn--primary flex-1"
+                className="btn btn--primary active:opacity-80 flex-1"
                 accessibilityRole="button"
                 accessibilityLabel="Save name"
               >
@@ -519,7 +519,7 @@ function MenuItem({
   return (
     <Pressable
       onPress={onPress}
-      className="menu-row"
+      className="menu-row active:bg-surface-3"
       accessibilityRole="menuitem"
       accessibilityLabel={label}
     >

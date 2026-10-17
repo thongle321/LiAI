@@ -100,7 +100,7 @@ function HfTokenSheet({ open, onClose }: { open: boolean; onClose: () => void })
               onPress={() => void reset()}
               disabled={busy !== null}
               className={
-                busy !== null ? "btn btn--ghost btn--disabled flex-1" : "btn btn--ghost flex-1"
+                busy !== null ? "btn btn--ghost active:opacity-80 btn--disabled flex-1" : "btn btn--ghost active:opacity-80 flex-1"
               }
               accessibilityRole="button"
               accessibilityLabel="Reset Token"
@@ -117,8 +117,8 @@ function HfTokenSheet({ open, onClose }: { open: boolean; onClose: () => void })
             disabled={!draft.trim() || busy !== null}
 className={
               !draft.trim() || busy !== null
-                ? "btn btn--primary btn--disabled flex-1"
-                : "btn btn--primary flex-1"
+                ? "btn btn--primary active:opacity-80 btn--disabled flex-1"
+                : "btn btn--primary active:opacity-80 flex-1"
             }
             accessibilityRole="button"
             accessibilityLabel="Save Token"

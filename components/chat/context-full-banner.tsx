@@ -272,7 +272,7 @@ export function ContextLadderSheet({
               }}
               onPressIn={press.onPressIn}
               onPressOut={press.onPressOut}
-              className="btn btn--primary mt-4 min-h-12 items-center justify-center"
+              className="btn btn--primary active:opacity-80 mt-4 min-h-12 items-center justify-center"
               accessibilityRole="button"
               accessibilityLabel="Start a new chat"
             >
@@ -332,7 +332,7 @@ export function ContextLadderSheet({
             <Pressable
               onPress={() => void confirm()}
               disabled={reloading || chosen?.fit === "wont_fit"}
-              className="btn btn--primary mt-4 min-h-12 items-center justify-center"
+              className="btn btn--primary active:opacity-80 mt-4 min-h-12 items-center justify-center"
               accessibilityRole="button"
               accessibilityLabel={`Reload at ${chosen?.label ?? ""} context`}
             >
@@ -347,7 +347,7 @@ export function ContextLadderSheet({
         <Pressable
           onPress={onClose}
           disabled={reloading}
-          className="btn btn--secondary mt-3 min-h-12 items-center justify-center"
+          className="btn btn--secondary active:opacity-80 mt-3 min-h-12 items-center justify-center"
           accessibilityRole="button"
           accessibilityLabel="Close"
         >

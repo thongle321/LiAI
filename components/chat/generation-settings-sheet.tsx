@@ -274,7 +274,7 @@ export function GenerationSettingsSheet({
             {isSession ? (
               <Pressable
                 onPress={handleSaveAsPreset}
-                className="btn btn--secondary"
+                className="btn btn--secondary active:opacity-80"
                 accessibilityRole="button"
                 accessibilityLabel="Save as preset"
               >
@@ -283,7 +283,7 @@ export function GenerationSettingsSheet({
             ) : null}
             <Pressable
               onPress={handleSave}
-              className="btn btn--primary"
+              className="btn btn--primary active:opacity-80"
               accessibilityRole="button"
               accessibilityLabel="Save"
             >

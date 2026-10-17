@@ -125,7 +125,7 @@ export function RemoteModelSheet({
         <View className="flex-row gap-2">
           <Pressable
             onPress={onClose}
-            className="btn btn--secondary flex-1"
+            className="btn btn--secondary active:opacity-80 flex-1"
             accessibilityRole="button"
             accessibilityLabel="Cancel"
           >
@@ -134,7 +134,7 @@ export function RemoteModelSheet({
           <Pressable
             onPress={handleSubmit}
             disabled={validating}
-            className="btn btn--primary flex-1"
+            className="btn btn--primary active:opacity-80 flex-1"
             accessibilityRole="button"
             accessibilityLabel="Add provider"
           >
@@ -246,7 +246,7 @@ export function RemoteModelSheet({
                   setScannerOpen(true);
                 })();
               }}
-              className="btn btn--secondary"
+              className="btn btn--secondary active:opacity-80"
               accessibilityRole="button"
               accessibilityLabel="Scan QR code"
               testID="remote-url-scan"

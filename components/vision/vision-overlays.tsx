@@ -74,7 +74,7 @@ export function VisionPreview({
           <Text className="text-center font-sans text-body-md text-primary-text">
             Camera access is needed to see.
           </Text>
-          <Pressable onPress={onOpenSettings} className="btn btn--primary mt-4"
+          <Pressable onPress={onOpenSettings} className="btn btn--primary active:opacity-80 mt-4"
             accessibilityRole="button"
             accessibilityLabel="Open settings"
           >
@@ -331,7 +331,7 @@ export function VisionBottomPanel({
                   onPress={issueAction ? issueAction.onPress : onRetry}
                   onPressIn={retryPress.onPressIn}
                   onPressOut={retryPress.onPressOut}
-                  className="btn btn--ghost mt-2 min-h-12 min-w-24"
+                  className="btn btn--ghost active:opacity-80 mt-2 min-h-12 min-w-24"
                   accessibilityRole="button"
                   accessibilityLabel={issueAction ? issueAction.label : "Try again"}
                 >

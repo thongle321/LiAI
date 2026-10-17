@@ -95,7 +95,7 @@ export default function ModelStep() {
         ))}
         <Pressable
           onPress={() => router.replace("/onboarding/done")}
-          className="btn btn--primary mt-4"
+          className="btn btn--primary active:opacity-80 mt-4"
           accessibilityRole="button"
           accessibilityLabel="Continue"
         >

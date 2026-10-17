@@ -337,7 +337,7 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
                 onPress={onRemove}
                 accessibilityRole="button"
                 accessibilityLabel={`Remove the ${meta.title} voice model and free its storage`}
-                className="btn btn--ghost mt-3 flex-row items-center gap-2 px-5 py-2"
+                className="btn btn--ghost active:opacity-80 mt-3 flex-row items-center gap-2 px-5 py-2"
               >
                 <Trash2 size={14} color={colors.secondaryText} />
                 <Text className="font-sans-semibold text-body-md text-secondary-text">

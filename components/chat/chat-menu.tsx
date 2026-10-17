@@ -407,7 +407,7 @@ onPress={() => setPanel("export")}
                     }
                     disabled={title.trim() === ""}
                     className={
-                      title.trim() === "" ? "btn btn--primary btn--disabled" : "btn btn--primary"
+                      title.trim() === "" ? "btn btn--primary active:opacity-80 btn--disabled" : "btn btn--primary active:opacity-80"
                     }
                     accessibilityRole="button"
                     accessibilityLabel="Save title"

@@ -308,7 +308,7 @@ export function ModelSettingsSheet({
           {!isRemote ? (
             <Pressable
               onPress={handleSave}
-              className="btn btn--primary"
+              className="btn btn--primary active:opacity-80"
               accessibilityRole="button"
               accessibilityLabel="Save Changes"
             >

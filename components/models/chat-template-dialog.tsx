@@ -46,7 +46,7 @@ export function ChatTemplateDialog({
       actions={
         <Pressable
           onPress={onClose}
-          className="btn btn--primary min-h-12 self-end"
+          className="btn btn--primary active:opacity-80 min-h-12 self-end"
           accessibilityRole="button"
           accessibilityLabel="Close chat template editor"
         >

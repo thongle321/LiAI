@@ -72,7 +72,7 @@ export function VisionDownloadSheet({
         <View className="flex-row gap-2">
           <Pressable
             onPress={onClose}
-            className="btn btn--secondary flex-1"
+            className="btn btn--secondary active:opacity-80 flex-1"
             accessibilityRole="button"
             accessibilityLabel="Cancel download"
           >
@@ -87,7 +87,7 @@ export function VisionDownloadSheet({
               });
               onClose();
             }}
-            className="btn btn--primary flex-1"
+            className="btn btn--primary active:opacity-80 flex-1"
             accessibilityRole="button"
             accessibilityLabel={
               visionEnabled ? "Download with vision" : "Download text only"

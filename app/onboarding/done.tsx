@@ -24,7 +24,7 @@ export default function DoneStep() {
         </Text>
         <Pressable
           onPress={() => void finish("/chat")}
-          className="btn btn--primary mt-8"
+          className="btn btn--primary active:opacity-80 mt-8"
           accessibilityRole="button"
           accessibilityLabel="Start chatting"
         >
@@ -34,7 +34,7 @@ export default function DoneStep() {
         </Pressable>
         <Pressable
           onPress={() => void finish("/models")}
-          className="btn btn--ghost mt-3"
+          className="btn btn--ghost active:opacity-80 mt-3"
           accessibilityRole="button"
           accessibilityLabel="Browse all models"
         >

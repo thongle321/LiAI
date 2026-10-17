@@ -86,7 +86,7 @@ export function DownloadErrorDialog({
           {showTokenRecovery && (
             <Pressable
               onPress={onRetryWithoutToken}
-              className="btn btn--secondary mb-2 w-full"
+              className="btn btn--secondary active:opacity-80 mb-2 w-full"
               accessibilityRole="button"
               accessibilityLabel="Download again without your Hugging Face token"
             >
@@ -98,7 +98,7 @@ export function DownloadErrorDialog({
           <View className="flex-row gap-2">
             <Pressable
               onPress={onDismiss}
-              className="btn btn--secondary flex-1"
+              className="btn btn--secondary active:opacity-80 flex-1"
               accessibilityRole="button"
               accessibilityLabel="Dismiss download error"
             >
@@ -106,7 +106,7 @@ export function DownloadErrorDialog({
             </Pressable>
             <Pressable
               onPress={onRetry}
-              className="btn btn--primary flex-1"
+              className="btn btn--primary active:opacity-80 flex-1"
               accessibilityRole="button"
               accessibilityLabel="Try the download again"
             >

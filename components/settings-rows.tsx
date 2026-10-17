@@ -498,10 +498,10 @@ export function ActionRow({
         accessibilityState={{ disabled }}
         className={`${
           variant === "primary"
-            ? "btn btn--primary"
+            ? "btn btn--primary active:opacity-80"
             : variant === "ghost"
-              ? "btn btn--ghost"
-              : "btn btn--secondary"
+              ? "btn btn--ghost active:opacity-80"
+              : "btn btn--secondary active:opacity-80"
         } mt-2 self-start${disabled ? " opacity-40" : ""}`}
         accessibilityRole="button"
         accessibilityLabel={buttonLabel}
@@ -536,7 +536,7 @@ export function AdvancedGroup({
     <View>
       <Pressable
         onPress={() => setOpen((v) => !v)}
-        className="flex-row items-center justify-between py-2"
+        className="flex-row items-center justify-between py-2 active:opacity-70"
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         accessibilityLabel={label}

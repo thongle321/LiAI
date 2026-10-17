@@ -64,7 +64,7 @@ export function ModelsResetDialog({
           <View className="mt-5 flex-row items-center justify-end gap-2">
             <Pressable
               onPress={onCancel}
-              className="btn btn--secondary"
+              className="btn btn--secondary active:opacity-80"
               accessibilityRole="button"
               accessibilityLabel="Cancel"
             >
@@ -72,7 +72,7 @@ export function ModelsResetDialog({
             </Pressable>
             <Pressable
               onPress={onConfirm}
-              className="btn btn--primary"
+              className="btn btn--primary active:opacity-80"
               accessibilityRole="button"
               accessibilityLabel="Proceed with Reset"
             >

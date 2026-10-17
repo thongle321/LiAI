@@ -253,7 +253,7 @@ export function ModelCard({
             {actions.includes("load") || actions.includes("offload") ? (
               <Pressable
                 onPress={isActive ? onDeactivate : onActivate}
-                className="btn btn--tonal flex-1"
+                className="btn btn--tonal active:opacity-80 flex-1"
                 accessibilityRole="button"
                 accessibilityLabel={isActive ? `Offload ${title}` : `Load ${title}`}
               >
@@ -396,7 +396,7 @@ export function RemoteProviderCard({
         {!isActive && (
           <Pressable
             onPress={onActivate}
-            className="btn btn--primary min-h-12 px-5 py-2"
+            className="btn btn--primary active:opacity-80 min-h-12 px-5 py-2"
             accessibilityRole="button"
             accessibilityLabel={`Activate ${item.name}`}
           >

@@ -509,8 +509,8 @@ export function ActionRow({
         <Text
           className={
             variant === "primary"
-              ? "font-sans-semibold text-body-md text-on-primary"
-              : "font-sans text-body-md text-primary"
+              ? "text-action"
+              : "text-body"
           }
         >
           {buttonLabel}

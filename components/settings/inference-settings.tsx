@@ -406,7 +406,7 @@ export function MemorySettings() {
         </View>
       ) : null}
       <View className="row">
-        <Text className="font-sans text-body-sm text-secondary-text">
+        <Text className="text-quiet">
           Model reload needed for changes to take effect.
         </Text>
       </View>

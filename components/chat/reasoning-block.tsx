@@ -90,7 +90,7 @@ export function ReasoningBlock({
         className="mt-1.5 flex-row items-center gap-1.5 self-start px-1 py-1"
       >
         <ChevronRight size={12} color={colors.secondaryText} />
-        <Text className="font-sans text-caption text-secondary-text">Reasoning</Text>
+        <Text className="text-quiet">Reasoning</Text>
       </Pressable>
     );
   }

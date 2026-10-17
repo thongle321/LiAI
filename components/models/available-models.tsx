@@ -93,7 +93,7 @@ export function PresetModelCard({
                 </View>
               )}
             </View>
-            <Text className="font-sans text-body-sm text-secondary-text">by {preset.author}</Text>
+            <Text className="text-quiet">by {preset.author}</Text>
           </View>
           {/* PocketParity: the card X (remove-model-button). Dismissal is
               session-only list surgery — nothing on disk goes away — so
@@ -122,12 +122,12 @@ export function PresetModelCard({
                 (751 MB) are different facts, and showing both unlabelled
                 read as two competing sizes for one model. */}
             <View className="rounded bg-surface-2 px-2 py-0.5">
-              <Text className="font-sans text-caption text-secondary-text">
+              <Text className="text-quiet">
                 {formatBytes(preset.files.reduce((sum, f) => sum + f.size, 0))}
               </Text>
             </View>
             <View className="rounded bg-surface-2 px-2 py-0.5">
-              <Text className="font-sans text-caption text-secondary-text">
+              <Text className="text-quiet">
                 {preset.files.length} file{preset.files.length === 1 ? "" : "s"}
               </Text>
             </View>
@@ -162,7 +162,7 @@ export function PresetModelCard({
 
       {expanded && (
         <View className="border-t border-border px-5 pb-4">
-          <Text className="font-sans text-body-sm text-secondary-text mt-3 mb-1">{preset.description}</Text>
+          <Text className="text-quiet mt-3 mb-1">{preset.description}</Text>
           <View className="mb-3">
             <Text className="font-sans-semibold text-body-sm text-secondary-text mb-2">Available Quantizations</Text>
           </View>
@@ -184,9 +184,9 @@ export function PresetModelCard({
                     <Text className="font-sans text-body-md text-primary-text">{item.name}</Text>
                     <View className="flex-row items-center gap-2 mt-2">
                   <View className="rounded bg-surface-2 px-2 py-0.5">
-                        <Text className="font-sans text-caption text-secondary-text">{item.quantization}</Text>
+                        <Text className="text-quiet">{item.quantization}</Text>
                       </View>
-                      <Text className="font-sans text-body-sm text-secondary-text">{formatBytes(item.size)}</Text>
+                      <Text className="text-quiet">{formatBytes(item.size)}</Text>
                     </View>
                   </View>
                   <View className="flex-row items-center gap-2">

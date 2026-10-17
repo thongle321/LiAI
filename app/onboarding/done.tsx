@@ -38,7 +38,7 @@ export default function DoneStep() {
           accessibilityRole="button"
           accessibilityLabel="Browse all models"
         >
-          <Text className="text-center font-sans text-body-md text-primary">
+          <Text className="text-center text-body">
             Browse all models
           </Text>
         </Pressable>

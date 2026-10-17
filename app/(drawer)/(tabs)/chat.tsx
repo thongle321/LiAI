@@ -428,7 +428,7 @@ export default function ChatRoute() {
             className="flex-1 font-sans text-body-md text-primary-text"
           />
           {matchLabel !== null && (
-            <Text className="font-sans text-caption text-secondary-text">
+            <Text className="text-quiet">
               {matchLabel}
             </Text>
           )}

@@ -32,7 +32,7 @@ function FreeStorageLine() {
   return (
     <View className="flex-row items-center gap-1">
       <Database size={14} color={colors.secondaryText} />
-      <Text className="font-sans text-body-sm text-secondary-text">
+      <Text className="text-quiet">
         {checked && freeBytes !== null ? `${formatBytes(freeBytes, 1)} available` : "…"}
       </Text>
     </View>
@@ -125,7 +125,7 @@ export function VoiceSettings() {
       <View className="mb-3 mt-6 flex-row items-end justify-between">
         <View className="flex-1 pr-4">
           <Text className="section-title">Downloadable engines</Text>
-          <Text className="mt-1 font-sans text-body-sm text-secondary-text">
+          <Text className="mt-1 text-quiet">
             Voice packs are stored on your device. Uses storage space.
           </Text>
         </View>
@@ -138,7 +138,7 @@ export function VoiceSettings() {
 
       <View className="mt-1 flex-row items-center gap-2">
         <CloudDownload size={14} color={colors.secondaryText} />
-        <Text className="font-sans text-body-sm text-secondary-text">
+        <Text className="text-quiet">
           Downloaded voices work offline
         </Text>
       </View>

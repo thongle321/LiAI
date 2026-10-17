@@ -16,7 +16,7 @@ export default function NotFound() {
         This link doesn't point anywhere in LiAI.
       </Text>
       <Link href="/" className="btn btn--primary active:opacity-80">
-        <Text className="font-sans-semibold text-body-md text-on-primary">
+        <Text className="text-action">
           Go home
         </Text>
       </Link>

@@ -83,12 +83,12 @@ export function ModelMultimodalSection({ model }: { model: ModelSpec }) {
       {/* The candidate header shows only when there is a choice to make
           (PocketPal parity: the section header hides for a single fit). */}
       {candidates.length > 1 ? (
-        <Text className="font-sans text-body-sm text-secondary-text">
+        <Text className="text-quiet">
           Projection Models
         </Text>
       ) : null}
       {candidates.length === 0 ? (
-        <Text className="py-2 text-center font-sans text-body-sm text-secondary-text">
+        <Text className="py-2 text-center text-quiet">
           No compatible projection models found
         </Text>
       ) : (
@@ -115,7 +115,7 @@ export function ModelMultimodalSection({ model }: { model: ModelSpec }) {
                 >
                   {file.name}
                 </Text>
-                <Text className="font-sans text-body-sm text-secondary-text">
+                <Text className="text-quiet">
                   {inFlight
                     ? progressCaption(
                         model.downloadedBytes,

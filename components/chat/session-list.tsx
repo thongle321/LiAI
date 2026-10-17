@@ -105,7 +105,7 @@ const SessionRow = memo(function SessionRow({
         >
           {item.title === "" ? "New conversation" : item.title}
         </Text>
-        <Text className="font-sans text-body-sm text-secondary-text">
+        <Text className="text-quiet">
           {formatTime(item.at)}
         </Text>
       </View>
@@ -294,7 +294,7 @@ export function SessionList({
                 Cancel
               </Text>
             </Pressable>
-            <Text className="flex-1 text-center font-sans text-body-sm text-secondary-text">
+            <Text className="flex-1 text-center text-quiet">
               {selected.size} selected
             </Text>
             <View className="flex-row items-center">
@@ -346,14 +346,14 @@ export function SessionList({
       ) : (
         <View className="flex-row items-center px-5 pb-1 pt-3">
           <History size={20} color={colors.secondaryText} />
-          <Text className="ml-3 font-sans text-body-sm text-secondary-text">
+          <Text className="ml-3 text-quiet">
             History
           </Text>
         </View>
       )}
 
       {notice !== null && (
-        <Text className="px-5 py-1 font-sans text-body-sm text-secondary-text">
+        <Text className="px-5 py-1 text-quiet">
           {notice}
         </Text>
       )}
@@ -375,7 +375,7 @@ export function SessionList({
           </Text>
         )}
         ListEmptyComponent={
-          <Text className="px-5 py-2 font-sans text-body-sm text-secondary-text">
+          <Text className="px-5 py-2 text-quiet">
             No conversations yet.
           </Text>
         }
@@ -494,7 +494,7 @@ export function SessionList({
                 accessibilityRole="button"
                 accessibilityLabel="Cancel rename"
               >
-                <Text className="font-sans text-body-md text-primary">Cancel</Text>
+                <Text className="text-body">Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={() => void saveRename()}
@@ -503,7 +503,7 @@ export function SessionList({
                 accessibilityRole="button"
                 accessibilityLabel="Save name"
               >
-                <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
+                <Text className="text-action">Save</Text>
               </Pressable>
             </View>
           </View>

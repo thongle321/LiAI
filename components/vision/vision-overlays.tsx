@@ -314,7 +314,7 @@ export function VisionBottomPanel({
                 // must announce what's on screen, not a paraphrase.
                 accessibilityLabel={issue}
               >
-                <Text className="text-center font-sans text-body-md text-primary">
+                <Text className="text-center text-body">
                   {issue}
                 </Text>
               </Pressable>
@@ -335,7 +335,7 @@ export function VisionBottomPanel({
                   accessibilityRole="button"
                   accessibilityLabel={issueAction ? issueAction.label : "Try again"}
                 >
-                  <Text className="font-sans text-body-md text-primary">
+                  <Text className="text-body">
                     {issueAction ? issueAction.label : "Try again"}
                   </Text>
                 </Pressable>

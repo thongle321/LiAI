@@ -69,12 +69,12 @@ export default function ModelStep() {
         </Text>
         {/* On-device is the product's core claim (ADR-0008) — the old copy
             said models "run on LiAI's server", which is simply not true. */}
-        <Text className="mt-2 font-sans text-body-sm text-secondary-text">
+        <Text className="mt-2 text-quiet">
           Your model runs entirely on this phone. Bigger is smarter and slower —
           start with the highlighted tier.
         </Text>
         {ramUnknown && (
-          <Text className="mt-2 font-sans text-body-sm text-secondary-text">
+          <Text className="mt-2 text-quiet">
             Couldn't read this phone's memory — showing the lightest tier.
           </Text>
         )}
@@ -102,7 +102,7 @@ export default function ModelStep() {
           accessibilityRole="button"
           accessibilityLabel="Continue"
         >
-          <Text className="text-center font-sans-semibold text-body-md text-on-primary">
+          <Text className="text-center text-action">
             Continue
           </Text>
         </Pressable>

@@ -265,7 +265,7 @@ export function GenerationSettingsSheet({
               accessibilityRole="button"
               accessibilityLabel="Reset to System Defaults"
             >
-              <Text className="font-sans text-body-md text-primary">
+              <Text className="text-body">
                 Reset to System Defaults
               </Text>
             </Pressable>
@@ -278,7 +278,7 @@ export function GenerationSettingsSheet({
                 accessibilityRole="button"
                 accessibilityLabel="Save as preset"
               >
-                <Text className="font-sans text-body-md text-primary">Save as preset</Text>
+                <Text className="text-body">Save as preset</Text>
               </Pressable>
             ) : null}
             <Pressable
@@ -287,7 +287,7 @@ export function GenerationSettingsSheet({
               accessibilityRole="button"
               accessibilityLabel="Save"
             >
-              <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
+              <Text className="text-action">Save</Text>
             </Pressable>
           </View>
         </View>
@@ -314,7 +314,7 @@ export function GenerationSettingsSheet({
         </RowSizeProvider>
       </View>
       {serverDefaultsNote !== null ? (
-        <Text className="px-1 pb-2 font-sans text-caption text-secondary-text">
+        <Text className="px-1 pb-2 text-quiet">
           {serverDefaultsNote}
         </Text>
       ) : null}

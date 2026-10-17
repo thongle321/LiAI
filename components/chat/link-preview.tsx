@@ -54,7 +54,7 @@ export function LinkPreviewCard({ text }: { text: string }) {
           {preview.title ?? preview.url}
         </Text>
         {preview.description !== undefined && (
-          <Text numberOfLines={2} className="font-sans text-body-sm text-secondary-text">
+          <Text numberOfLines={2} className="text-quiet">
             {preview.description}
           </Text>
         )}

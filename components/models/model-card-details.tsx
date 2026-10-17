@@ -43,7 +43,7 @@ import { ProjectorSelectorSheet } from "./projector-selector-sheet.tsx";
 function DetailCell({ label, value }: { label: string; value: string }) {
   return (
     <View className="min-w-[45%] flex-1 rounded-lg bg-surface-2 p-3">
-      <Text className="font-sans text-body-sm text-secondary-text">{label}</Text>
+      <Text className="text-quiet">{label}</Text>
       <Text className="font-sans-semibold text-body-md text-primary-text">
         {value}
       </Text>
@@ -188,7 +188,7 @@ export function ModelCardDetails({
 
   return (
     <View>
-      <Text className="font-sans text-body-sm text-secondary-text">
+      <Text className="text-quiet">
         Model name
       </Text>
       <Text
@@ -201,7 +201,7 @@ export function ModelCardDetails({
       <Text className="mt-3 font-sans text-body-md text-primary-text">
         Estimated memory: ~{formatBytes(estimate)}
       </Text>
-      <Text className="font-sans text-body-sm text-secondary-text">
+      <Text className="text-quiet">
         Weights + context cache at your current settings.
       </Text>
       {totalMemory !== null && estimate > totalMemory * 0.9 ? (
@@ -232,7 +232,7 @@ export function ModelCardDetails({
             onPress={() => toggleVision(!visionOn)}
           />
           {!visionOn ? (
-            <Text className="font-sans text-body-sm text-secondary-text">
+            <Text className="text-quiet">
               Vision is off — this model answers text only.
             </Text>
           ) : null}
@@ -266,7 +266,7 @@ export function ModelCardDetails({
                       ? `Projection model: ${item.projector.name}`
                       : "Choose a projection model"}
                   </Text>
-                  <Text className="font-sans text-body-sm text-secondary-text">
+                  <Text className="text-quiet">
                     {visionReady ? "Ready" : "Not set"}
                   </Text>
                 </Pressable>
@@ -309,7 +309,7 @@ export function ModelCardDetails({
           accessibilityLabel="Open on Hugging Face"
         >
           <ExternalLink size={14} color={colors.primary} />
-          <Text className="font-sans text-body-md text-primary">
+          <Text className="text-body">
             View on Hugging Face
           </Text>
         </Pressable>

@@ -129,7 +129,7 @@ export function ContextFullBanner({
           {spec.title}
         </Text>
         {spec.meter === true ? (
-          <Text className="font-sans text-caption text-secondary-text">{fill}%</Text>
+          <Text className="text-quiet">{fill}%</Text>
         ) : null}
       </View>
       {/* The fill meter: the one thing that tells the user this is about
@@ -145,7 +145,7 @@ export function ContextFullBanner({
           />
         </View>
       ) : null}
-      <Text className="mt-2 font-sans text-caption text-secondary-text">
+      <Text className="mt-2 text-quiet">
         {variant === "context-full" ? fullBody(copy ?? "default", heavyToolName) : spec.body}
       </Text>
       <View className="mt-2 flex-row items-center gap-2">
@@ -169,7 +169,7 @@ export function ContextFullBanner({
           accessibilityRole="button"
           accessibilityLabel="Dismiss context warning"
         >
-          <Text className="font-sans text-body-sm text-secondary-text">
+          <Text className="text-quiet">
             Dismiss
           </Text>
         </Pressable>
@@ -255,7 +255,7 @@ export function ContextLadderSheet({
         <Text className="font-sans-semibold text-title text-primary-text">
           More room
         </Text>
-        <Text className="mt-1 font-sans text-body-sm text-secondary-text">
+        <Text className="mt-1 text-quiet">
           Reloading takes a few seconds and nothing in this chat is lost — the
           model just gets more room to work in.
         </Text>
@@ -311,7 +311,7 @@ export function ContextLadderSheet({
                       >
                         {stop.label}
                       </Text>
-                      <Text className="font-sans text-caption text-secondary-text">
+                      <Text className="text-quiet">
                         {`~${stop.words.toLocaleString()} words · ${formatBytes(stop.memBytes)}`}
                       </Text>
                     </View>
@@ -326,7 +326,7 @@ export function ContextLadderSheet({
                 );
               })}
             </View>
-            <Text className="mt-2 font-sans text-caption text-secondary-text">
+            <Text className="mt-2 text-quiet">
               {`This model was trained for up to ${labelTokens(modelMaxNCtx)} tokens.`}
             </Text>
             <Pressable

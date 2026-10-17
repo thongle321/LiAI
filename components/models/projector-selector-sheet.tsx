@@ -126,7 +126,7 @@ export function ProjectorSelectorSheet({
                   >
                     {file.name}
                   </Text>
-                  <Text className="font-sans text-body-sm text-secondary-text">
+                  <Text className="text-quiet">
                     {inFlight
                       ? progressCaption(
                           model.downloadedBytes,

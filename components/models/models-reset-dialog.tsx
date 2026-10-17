@@ -68,7 +68,7 @@ export function ModelsResetDialog({
               accessibilityRole="button"
               accessibilityLabel="Cancel"
             >
-              <Text className="font-sans text-body-md text-primary">Cancel</Text>
+              <Text className="text-body">Cancel</Text>
             </Pressable>
             <Pressable
               onPress={onConfirm}

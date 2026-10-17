@@ -61,7 +61,7 @@ export function ToolMetricsLine({
   const text = formatToolMetrics(metrics);
   if (text === null) return null;
   return (
-    <Text className="pb-1 pl-7 font-sans text-caption text-secondary-text">
+    <Text className="pb-1 pl-7 text-quiet">
       {text}
     </Text>
   );
@@ -95,11 +95,11 @@ function TriggerRow({
       >
         <Search size={14} color={colors.secondaryText} />
         {/* Split so a long query truncates but the count never does. */}
-        <Text numberOfLines={1} className="flex-1 font-sans text-caption text-secondary-text">
+        <Text numberOfLines={1} className="flex-1 text-quiet">
           {label}
         </Text>
         {count !== undefined && (
-          <Text numberOfLines={1} className="font-sans text-caption text-secondary-text">
+          <Text numberOfLines={1} className="text-quiet">
             {count}
           </Text>
         )}
@@ -123,7 +123,7 @@ function StaticRow({
     <View className="w-full">
       <View className="min-h-12 w-full flex-row items-center gap-2 rounded-lg px-2 py-1">
         <Wrench size={14} color={colors.secondaryText} />
-        <Text numberOfLines={1} className="flex-1 font-sans text-caption text-secondary-text">
+        <Text numberOfLines={1} className="flex-1 text-quiet">
           {label}
         </Text>
       </View>
@@ -271,7 +271,7 @@ function ReadUrlSurface({ step }: ToolSurfaceProps) {
             Truncated — this is only the start of the page.
           </Text>
         )}
-        <Text className="font-sans text-caption text-secondary-text">{text}</Text>
+        <Text className="text-quiet">{text}</Text>
       </Sheet>
     </>
   );

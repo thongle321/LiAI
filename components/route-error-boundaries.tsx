@@ -44,7 +44,7 @@ function Retry({
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Text className="font-sans-semibold text-body-md text-on-primary">{label}</Text>
+      <Text className="text-action">{label}</Text>
     </Pressable>
   );
 }
@@ -66,7 +66,7 @@ export function RootErrorBoundary({ error, reset }: BoundaryProps) {
           accessibilityRole="button"
           accessibilityLabel="Back to chat"
         >
-          <Text className="font-sans text-body-md text-primary">Back to chat</Text>
+          <Text className="text-body">Back to chat</Text>
         </Pressable>
       </View>
     </Shell>

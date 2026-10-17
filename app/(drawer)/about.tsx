@@ -20,7 +20,7 @@ export default function AboutScreen() {
         <Text className="mt-3 text-center font-sans text-body-md text-secondary-text">
           A calm mind.{"\n"}A smarter everyday.
         </Text>
-        <Text className="mt-6 text-center font-sans text-body-sm text-secondary-text">
+        <Text className="mt-6 text-center text-quiet">
           Your AI runs on this device. Nothing leaves it unless you ask.
         </Text>
       </View>

@@ -97,7 +97,7 @@ function Action({
       <Text
         className={
           tone === "primary"
-            ? "font-sans-semibold text-body-md text-on-primary"
+            ? "text-action"
             : tone === "secondary"
               ? "font-sans-semibold text-body-md text-primary"
               : "font-sans-semibold text-body-md text-secondary-text"
@@ -302,7 +302,7 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
           {group.kind === "ready" ? (
             <View>
               {engineId === "kokoro" ? (
-                <Text className="font-sans text-body-sm text-secondary-text">
+                <Text className="text-quiet">
                   Some voices may not work on all devices.
                 </Text>
               ) : null}
@@ -330,7 +330,7 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
                   </Pressable>
                 );
               })}
-              <Text className="mt-1 font-sans text-body-sm text-secondary-text">
+              <Text className="mt-1 text-quiet">
                 Tap a voice to select it and hear a sample.
               </Text>
               <Pressable
@@ -352,7 +352,7 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
                   {group.message ?? "The download failed."}
                 </Text>
               ) : (
-                <Text className="font-sans text-body-sm text-secondary-text">
+                <Text className="text-quiet">
                   {downloadLine(group, meta.modelBytes) ?? meta.tagline}
                 </Text>
               )}

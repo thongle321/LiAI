@@ -78,7 +78,7 @@ export function DownloadErrorDialog({
               accessibilityRole="link"
               accessibilityLabel="View this model on Hugging Face"
             >
-              <Text className="font-sans text-body-md text-primary">
+              <Text className="text-body">
                 View on Hugging Face
               </Text>
             </Pressable>
@@ -90,7 +90,7 @@ export function DownloadErrorDialog({
               accessibilityRole="button"
               accessibilityLabel="Download again without your Hugging Face token"
             >
-              <Text className="font-sans text-body-md text-primary">
+              <Text className="text-body">
                 Retry without token
               </Text>
             </Pressable>
@@ -102,7 +102,7 @@ export function DownloadErrorDialog({
               accessibilityRole="button"
               accessibilityLabel="Dismiss download error"
             >
-              <Text className="font-sans text-body-md text-primary">Dismiss</Text>
+              <Text className="text-body">Dismiss</Text>
             </Pressable>
             <Pressable
               onPress={onRetry}
@@ -110,7 +110,7 @@ export function DownloadErrorDialog({
               accessibilityRole="button"
               accessibilityLabel="Try the download again"
             >
-              <Text className="font-sans-semibold text-body-md text-on-primary">
+              <Text className="text-action">
                 Try Again
               </Text>
             </Pressable>

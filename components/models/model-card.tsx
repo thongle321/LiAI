@@ -186,7 +186,7 @@ export function ModelCard({
           // a 10px icon is off this system's scale.
           <View className="flex-row items-center gap-1">
             <Cpu size={12} color={colors.secondaryText} />
-            <Text className="font-sans text-caption text-secondary-text">
+            <Text className="text-quiet">
               {formatBytes(fileBytes)}
             </Text>
           </View>

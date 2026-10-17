@@ -70,7 +70,7 @@ export function ChatHeader({
           <Text
             numberOfLines={1}
             maxFontSizeMultiplier={1.5}
-            className="text-center font-sans text-caption text-secondary-text"
+            className="text-center text-quiet"
           >
             {modelLabel}
           </Text>

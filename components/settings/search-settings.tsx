@@ -151,7 +151,7 @@ function ProviderKeySheet({
               {busy === "clear" ? (
                 <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Text className="font-sans text-body-md text-primary">Clear Key</Text>
+                <Text className="text-body">Clear Key</Text>
               )}
             </Pressable>
           ) : null}
@@ -169,7 +169,7 @@ function ProviderKeySheet({
             {busy === "save" ? (
               <ActivityIndicator size="small" color={colors.surface1} />
             ) : (
-              <Text className="font-sans-semibold text-body-md text-on-primary">Set Key</Text>
+              <Text className="text-action">Set Key</Text>
             )}
           </Pressable>
         </View>

@@ -57,7 +57,7 @@ function WarningChip({ code, label }: { code: HFWarningCode; label: string }) {
             : "flex-row items-center rounded border px-2 py-1 bg-surface-2 border-border"
       }
     >
-      <Text className="font-sans text-caption text-secondary-text">{label}</Text>
+      <Text className="text-quiet">{label}</Text>
     </View>
   );
 }
@@ -158,7 +158,7 @@ export function HFFileRow({
             {result.gated ? (
               <View className="flex-row items-center gap-1 rounded bg-surface-2 px-2 py-0.5">
                 <Lock size={10} color={colors.secondaryText} />
-                <Text className="font-sans text-caption text-secondary-text">
+                <Text className="text-quiet">
                   Requires Token
                 </Text>
               </View>

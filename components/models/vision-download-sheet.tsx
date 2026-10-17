@@ -76,7 +76,7 @@ export function VisionDownloadSheet({
             accessibilityRole="button"
             accessibilityLabel="Cancel download"
           >
-            <Text className="font-sans text-body-md text-primary">Cancel</Text>
+            <Text className="text-body">Cancel</Text>
           </Pressable>
           <Pressable
             onPress={() => {
@@ -93,7 +93,7 @@ export function VisionDownloadSheet({
               visionEnabled ? "Download with vision" : "Download text only"
             }
           >
-            <Text className="font-sans-semibold text-body-md text-on-primary">
+            <Text className="text-action">
               {visionEnabled ? "Download with vision" : "Download text only"}
             </Text>
           </Pressable>
@@ -111,7 +111,7 @@ export function VisionDownloadSheet({
           }}
         />
 
-        <Text className="font-sans text-body-sm text-secondary-text">
+        <Text className="text-quiet">
           Projection models
         </Text>
         {candidates.length === 0 ? (
@@ -141,7 +141,7 @@ export function VisionDownloadSheet({
                   >
                     {c.name}
                   </Text>
-                  <Text className="font-sans text-body-sm text-secondary-text">
+                  <Text className="text-quiet">
                     {formatBytes(c.size)}
                   </Text>
                 </View>

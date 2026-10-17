@@ -26,7 +26,7 @@ export function CodeBlock({
   return (
     <View className="surface mt-2 overflow-hidden bg-surface-2">
       <View className="flex-row items-center justify-between border-b border-border px-3 py-2">
-        <Text className="font-sans text-caption text-secondary-text">{language}</Text>
+        <Text className="text-quiet">{language}</Text>
         <Pressable
           onPress={() => copy(text)}
           className="icon-btn"

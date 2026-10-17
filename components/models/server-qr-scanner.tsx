@@ -101,7 +101,7 @@ export function ServerQRScanner({
           accessibilityRole="button"
           accessibilityLabel="Close scanner"
         >
-          <Text className="font-sans text-body-md text-primary">Close</Text>
+          <Text className="text-body">Close</Text>
         </Pressable>
       </View>
     </Sheet>

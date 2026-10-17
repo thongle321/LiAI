@@ -124,7 +124,7 @@ function AuthorSheet({
           accessibilityRole="button"
           accessibilityLabel="Clear author filter"
         >
-          <Text className="font-sans text-body-md text-primary">Clear</Text>
+          <Text className="text-body">Clear</Text>
         </Pressable>
         <Pressable
           onPress={() => {
@@ -135,7 +135,7 @@ function AuthorSheet({
           accessibilityRole="button"
           accessibilityLabel="Apply author filter"
         >
-          <Text className="font-sans-semibold text-body-md text-on-primary">Apply</Text>
+          <Text className="text-action">Apply</Text>
         </Pressable>
       </View>
     </Sheet>

@@ -76,7 +76,7 @@ export function ModelAccordion({
         )}
       </Pressable>
       {description !== undefined ? (
-        <Text className="mb-3 mt-1 px-1 font-sans text-caption text-secondary-text">
+        <Text className="mb-3 mt-1 px-1 text-quiet">
           {description}
         </Text>
       ) : null}

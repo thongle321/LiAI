@@ -129,7 +129,7 @@ export function RemoteModelSheet({
             accessibilityRole="button"
             accessibilityLabel="Cancel"
           >
-            <Text className="font-sans text-body-md text-primary">Cancel</Text>
+            <Text className="text-body">Cancel</Text>
           </Pressable>
           <Pressable
             onPress={handleSubmit}
@@ -141,7 +141,7 @@ export function RemoteModelSheet({
             {validating ? (
               <ActivityIndicator size="small" color={colors.onPrimary} />
             ) : (
-              <Text className="font-sans-semibold text-body-md text-on-primary">Add</Text>
+              <Text className="text-action">Add</Text>
             )}
           </Pressable>
         </View>
@@ -156,13 +156,13 @@ export function RemoteModelSheet({
           <Text className="font-sans text-body-sm text-warning">{validationWarning}</Text>
         ) : null}
         {!privacyAcknowledged && (
-          <Text className="font-sans text-body-sm text-secondary-text">
+          <Text className="text-quiet">
             API keys stay on this device in encrypted storage.
           </Text>
         )}
 
         <View>
-          <Text className="font-sans text-body-sm text-secondary-text mb-1">Provider Type</Text>
+          <Text className="text-quiet mb-1">Provider Type</Text>
           <View className="flex-row gap-2">
             <Pressable
               onPress={() => setProviderType("openrouter")}
@@ -204,7 +204,7 @@ export function RemoteModelSheet({
         </View>
 
         <View>
-          <Text className="font-sans text-body-sm text-secondary-text mb-1">Name</Text>
+          <Text className="text-quiet mb-1">Name</Text>
           <TextInput
             value={name}
             onChangeText={setName}
@@ -214,7 +214,7 @@ export function RemoteModelSheet({
         </View>
 
         <View>
-          <Text className="font-sans text-body-sm text-secondary-text mb-1">Base URL</Text>
+          <Text className="text-quiet mb-1">Base URL</Text>
           <View className="flex-row items-center gap-2">
             <TextInput
               value={baseUrl}
@@ -257,7 +257,7 @@ export function RemoteModelSheet({
         </View>
 
         <View>
-          <Text className="font-sans text-body-sm text-secondary-text mb-1">
+          <Text className="text-quiet mb-1">
             API Key (optional for local)
           </Text>
           <TextInput
@@ -270,7 +270,7 @@ export function RemoteModelSheet({
         </View>
 
         <View>
-          <Text className="font-sans text-body-sm text-secondary-text mb-1">Model Name</Text>
+          <Text className="text-quiet mb-1">Model Name</Text>
           <TextInput
             value={modelName}
             onChangeText={setModelName}
@@ -280,7 +280,7 @@ export function RemoteModelSheet({
         </View>
 
         <View>
-          <Text className="font-sans text-body-sm text-secondary-text mb-1">
+          <Text className="text-quiet mb-1">
             Request Timeout (seconds)
           </Text>
           <TextInput

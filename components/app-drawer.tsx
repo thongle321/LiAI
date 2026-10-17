@@ -142,7 +142,7 @@ export function AppDrawerContent() {
           <DrawerItem Icon={CircleHelp} label="About" onPress={() => go("/about")} />
         </View>
 
-        <Text className="border-t border-border px-5 py-3 font-sans text-caption text-secondary-text">
+        <Text className="border-t border-border px-5 py-3 text-quiet">
           v{VERSION}
         </Text>
       </View>

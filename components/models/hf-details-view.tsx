@@ -49,7 +49,7 @@ function StatChip({
   return (
     <View className="flex-row items-center gap-1 rounded bg-surface-2 px-2 py-1">
       {trending ? <Flame size={11} color={colors.primary} /> : null}
-      <Text className="font-sans text-caption text-secondary-text">{label}</Text>
+      <Text className="text-quiet">{label}</Text>
     </View>
   );
 }

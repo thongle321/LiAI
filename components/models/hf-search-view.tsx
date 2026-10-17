@@ -141,7 +141,7 @@ export function HFSearchView({
             accessibilityRole="button"
             accessibilityLabel="Sort results"
           >
-            <Text className="font-sans text-body-sm text-secondary-text">
+            <Text className="text-quiet">
               {SORT_OPTIONS.find((o) => o.value === searchFilters.sortBy)?.label ?? "Sort"}
             </Text>
             <ChevronDown size={14} color={colors.secondaryText} />
@@ -236,7 +236,7 @@ export function HFSearchView({
                 {result.gated ? (
                   <View className="flex-row items-center gap-1 px-2 py-1 bg-surface-2 border border-border rounded">
                     <Lock size={10} color={colors.secondaryText} />
-                    <Text className="font-sans text-caption text-secondary-text">
+                    <Text className="text-quiet">
                       Requires Token
                     </Text>
                   </View>

@@ -50,7 +50,7 @@ export function ChatTemplateDialog({
           accessibilityRole="button"
           accessibilityLabel="Close chat template editor"
         >
-          <Text className="font-sans-semibold text-body-md text-on-primary">
+          <Text className="text-action">
             Close
           </Text>
         </Pressable>
@@ -73,10 +73,10 @@ export function ChatTemplateDialog({
             Jinja, not Nunjucks: llama.rn applies jinja templates, and
             claiming otherwise would send people hunting for the wrong
             syntax. */}
-        <Text className="font-sans text-caption text-secondary-text">
+        <Text className="text-quiet">
           Note: Changing the template may alter BOS, EOS, and system prompt.
         </Text>
-        <Text className="font-sans text-caption text-secondary-text">
+        <Text className="text-quiet">
           Uses Jinja. Leave empty to use the model's template.
         </Text>
         <TextInput

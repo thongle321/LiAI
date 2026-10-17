@@ -296,7 +296,7 @@ export function MessageInput({
           {editing === true && (
             <View className="flex-row items-center gap-2 border-b border-border px-4 py-1">
               <Pencil size={14} color={colors.secondaryText} />
-              <Text className="flex-1 font-sans text-body-sm text-secondary-text">
+              <Text className="flex-1 text-quiet">
                 Editing message — sending replaces this turn and everything after it
               </Text>
               <Pressable
@@ -415,7 +415,7 @@ export function MessageInput({
                     className={
                       thinkingEnabled
                         ? "font-sans text-caption text-primary-text"
-                        : "font-sans text-caption text-secondary-text"
+                        : "text-quiet"
                     }
                   >
                     Think

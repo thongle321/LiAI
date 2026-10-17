@@ -1,13 +1,13 @@
-/** The raised-plane shape has exactly one owner, enforced rather than
- *  documented.
+/** The raised-plane shape and the text roles each have exactly one owner,
+ *  enforced rather than documented.
  *
- *  The white ground + 1px hairline + 8px radius was the app's most repeated
- *  visual fact and it had no single home: `.card` baked in `padding: 20px`,
- *  so every call site that wanted a different padding re-stated the shape as
- *  raw utilities. That made a radius or hairline change a nineteen-file sweep,
- *  and it had already drifted once — the shape used `--radius-card`'s 8px
- *  while most call sites said `rounded-lg`, which is Tailwind's unrelated
- *  0.5rem default that merely happens to agree today.
+ *  THE SHAPE. The white ground + 1px hairline + 8px radius was the app's most
+ *  repeated visual fact and it had no single home: `.card` baked in
+ *  `padding: 20px`, so every call site that wanted a different padding
+ *  re-stated the shape as raw utilities. That made a radius or hairline change
+ *  a nineteen-file sweep, and it had already drifted once — the shape used
+ *  `--radius-card`'s 8px while most call sites said `rounded-lg`, which is
+ *  Tailwind's unrelated 0.5rem default that merely happens to agree today.
  *
  *  `.surface` now owns the shape; `.card` and `.rows` join it and each add only
  *  what makes them different. The plane (`bg-surface-1/2/3`) and the padding
@@ -15,6 +15,13 @@
  *  global.css — so the guard below has to accept the conditional-border call
  *  sites (`border-primary`, `border-error`), which state their own border
  *  rather than fighting `.surface` for it.
+ *
+ *  THE TEXT ROLES. Same disease, same cure: `(family, size, colour)` tuples
+ *  retyped at 122 sites, where the tuple IS the design decision and nothing
+ *  stopped a copy from answering it slightly differently. The blocks read their
+ *  values from the tokens so a role cannot drift off the scale the way a
+ *  copied hex does — `.seg-label` had done exactly that, holding the rejected
+ *  slate at 4.37:1 on the Surface Tint `.seg--active` paints behind it.
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -42,6 +49,24 @@ for (const [, list, body] of readFileSync(join(ROOT, "global.css"), "utf8").matc
 }
 
 const bodyOf = (selector: string) => RULES.get(selector)?.body ?? "";
+
+/** Every .tsx/.ts under app/ and components/, with the path Jest should
+ *  report. */
+function sources(): string[] {
+  return ["app", "components"]
+    .filter((dir) => existsSync(join(ROOT, dir)))
+    .flatMap((dir) => walk(join(ROOT, dir)).filter((f) => /\.tsx?$/.test(f)))
+    .map((f) => f.slice(ROOT.length + 1).split("\\").join("/"));
+}
+
+/** Every line of every source file that matches `pattern`. */
+function hits(pattern: RegExp): string[] {
+  return sources().flatMap((rel) =>
+    readFileSync(join(ROOT, rel), "utf8")
+      .split("\n")
+      .flatMap((line, i) => (pattern.test(line) ? [`${rel}:${i + 1}`] : [])),
+  );
+}
 
 describe("surface shape", () => {
   it("declares .surface once, in one group with the cards that share it", () => {
@@ -96,5 +121,42 @@ describe("surface shape", () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("text roles", () => {
+  it("reads every role through its token, never a copied value", () => {
+    for (const role of [".text-body", ".text-quiet", ".text-action"]) {
+      const body = bodyOf(role);
+      expect(body).toContain("font-family: var(--font-sans");
+      expect(body).toContain("font-size: var(--text-");
+      expect(body).toContain("line-height: var(--text-");
+      expect(body).toContain("color: var(--color-");
+      // A hex here is how .seg-label ended up at 4.37:1 on Surface Tint.
+      expect(body).not.toMatch(/#[0-9a-f]{3,8}/i);
+    }
+  });
+
+  it("has no call site retyping a role tuple by hand", () => {
+    // (?![\w-]) matters: `font-sans text-body-md text-primary` is a PREFIX of
+    // the legitimate `... text-primary-text`, and a naive string replace turns
+    // 33 real call sites into the garbage class `text-body-text`.
+    const tuples = [
+      /font-sans text-body-md text-primary(?![\w-])/,
+      /font-sans text-body-sm text-secondary-text(?![\w-])/,
+      /font-sans text-caption text-secondary-text(?![\w-])/,
+      /font-sans-semibold text-body-md text-on-primary(?![\w-])/,
+    ];
+    expect(tuples.flatMap(hits)).toEqual([]);
+  });
+
+  it("never pairs a role block with a colour utility beside it", () => {
+    // The blocks are unlayered and Tailwind's utilities are not, so a leftover
+    // colour utility on the same element would lose silently.
+    expect(
+      hits(
+        /className=[^\n]*\btext-(body|quiet|action)(?![\w-])[^\n]*\btext-(primary|secondary-text|inverse-text|on-primary|error|success|warning)(?![\w-])/,
+      ),
+    ).toEqual([]);
   });
 });

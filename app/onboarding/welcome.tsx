@@ -36,7 +36,7 @@ export default function WelcomeStep() {
                 <Text className="font-sans-semibold text-body-md text-primary-text">
                   {r.title}
                 </Text>
-                <Text className="font-sans text-body-sm text-secondary-text">
+                <Text className="text-quiet">
                   {r.body}
                 </Text>
               </View>

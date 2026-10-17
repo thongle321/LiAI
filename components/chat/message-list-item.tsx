@@ -72,7 +72,7 @@ function ToolBlock({ step }: { step: AgentStep }) {
   return (
     <View className="flex-row items-center gap-1 self-start rounded-full border border-border bg-surface-2 px-2 py-0.5">
       <Wrench size={11} color={colors.secondaryText} />
-      <Text className="font-sans text-caption text-secondary-text">
+      <Text className="text-quiet">
         {/* PocketPal's chip reads "Used {{name}}" (ToolUsedChip.tsx:53-66),
             so the reader can tell a tool ran from a label that just names
             one. Their metrics suffix is the same " · 1,500 tokens · 35s"
@@ -208,7 +208,7 @@ export const MessageListItem = memo(function MessageListItem({
               grouped turn is visual noise. */}
           {!grouped && (
             <View className="mt-1 flex-row items-center">
-              <Text className="font-sans text-caption text-secondary-text">
+              <Text className="text-quiet">
                 {formatTime(message.at)}
               </Text>
               {/* Three states, one row. The error icon is the row's own

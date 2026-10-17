@@ -308,16 +308,58 @@
   background-color: #eff6ff;
   border-color: #3882f6;
 }
+/* The label colour rides the token, not a copied hex: the board's slate
+   (#64748b) was rejected precisely because it measured 4.37:1 on the Surface
+   Tint that `.seg--active` paints behind this label. */
 .seg-label {
-  font-family: 'Inter_400Regular';
+  font-family: var(--font-sans);
   font-size: 14px;
-  color: #64748b;
+  color: var(--color-secondary-text);
 }
 .seg-label--active {
-  color: #2563eb;
+  color: var(--color-primary);
 }
 
 /* Status dots removed per D2-10: no call site in app/ or components/. */
+
+/* Text roles. The (family, size, colour) tuples the app retyped most, each
+   with one owner. A role bundles the whole tuple because the tuple IS the
+   design decision: `text-body-sm` alone says nothing about whether the copy
+   beside it is meant to recede, and nothing stopped 92 call sites from
+   answering that question slightly differently.
+
+   Every property is referenced through its token, so a role can never drift
+   off the scale the way a copied hex does (see .seg-label below).
+
+   Colours are part of the role, never a second utility beside it. These
+   blocks are unlayered and Tailwind's utilities are not, so a leftover
+   `text-primary` on a `.text-quiet` would lose silently - the overlap
+   AGENTS.md warns about. If a call site needs a different colour it needs a
+   different role. */
+.text-body {
+  font-family: var(--font-sans);
+  font-size: var(--text-body-md);
+  line-height: var(--text-body-md--line-height);
+  color: var(--color-primary);
+}
+/* `body-sm` and `caption` are the same 12px step on the scale (both 12/16), so
+   one role covers both spellings; split them here if the scale ever separates
+   them. */
+.text-quiet {
+  font-family: var(--font-sans);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  color: var(--color-secondary-text);
+}
+/* The only text the app puts on a Signal Blue fill: a semibold body-md label.
+   It cannot be spelled `text-on-primary`, because that is already a colour
+   utility in use at five call sites that pair it with a different size. */
+.text-action {
+  font-family: var(--font-sans-semibold);
+  font-size: var(--text-body-md);
+  line-height: var(--text-body-md--line-height);
+  color: var(--color-on-primary);
+}
 
 /* Voice screen (lib/tts). One expandable card per engine, plus the System
    card that sits above the list. House styling rules apply (AGENTS.md,

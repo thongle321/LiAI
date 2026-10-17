@@ -47,7 +47,7 @@ export function isProgressVisible(status: ModelDownloadStatus): boolean {
 export function Chip({ label }: { label: string }) {
   return (
     <View className="rounded bg-surface-2 px-2 py-0.5">
-      <Text className="font-sans text-caption text-secondary-text">{label}</Text>
+      <Text className="text-quiet">{label}</Text>
     </View>
   );
 }
@@ -73,7 +73,7 @@ export function StatusBadge({ status }: { status: ModelDownloadStatus }) {
   return (
     <View className="flex-row items-center gap-2">
       <StatusDot color={STATUS_DOT_COLOR[status]} />
-      <Text className="font-sans text-body-sm text-secondary-text">
+      <Text className="text-quiet">
         {STATUS_LABEL[status]}
       </Text>
     </View>
@@ -110,7 +110,7 @@ export function DownloadProgressBar({
   return (
     <View className="mx-0.5 mb-3 mt-1">
       <ProgressTrack progress={progress} />
-      <Text className="mt-1 text-right font-sans text-caption text-secondary-text">
+      <Text className="mt-1 text-right text-quiet">
         {progressCaption(downloaded, total, speed ?? 0)}
       </Text>
     </View>
@@ -208,7 +208,7 @@ export function DownloadButton({
     return (
       <View className="flex-row items-center rounded-lg bg-surface-2 px-3 py-2">
         <CheckCircle2 size={16} color={colors.success} />
-        <Text className="ml-2 font-sans text-body-sm text-secondary-text">Downloaded</Text>
+        <Text className="ml-2 text-quiet">Downloaded</Text>
       </View>
     );
   }
@@ -255,7 +255,7 @@ export function DownloadButton({
         <Text
           className={
             disabled
-              ? "font-sans text-body-sm text-secondary-text"
+              ? "text-quiet"
               : "font-sans text-body-sm text-success-deep"
           }
         >

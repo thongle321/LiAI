@@ -168,7 +168,7 @@ export default function VoiceScreen() {
                 </Text>
               </Pressable>
             ) : (
-              <Text className="text-center font-sans text-body-sm text-secondary-text">
+              <Text className="text-center text-quiet">
                 {issue}
               </Text>
             )}
@@ -178,7 +178,7 @@ export default function VoiceScreen() {
               accessibilityRole="button"
               accessibilityLabel="Try again"
             >
-              <Text className="font-sans text-body-md text-primary">Try again</Text>
+              <Text className="text-body">Try again</Text>
             </Pressable>
           </View>
         )}

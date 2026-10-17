@@ -48,10 +48,10 @@ export function TierCard({
           </View>
         )}
       </View>
-      <Text className="mt-1 font-sans text-body-sm text-secondary-text">
+      <Text className="mt-1 text-quiet">
         {tier.blurb}
       </Text>
-      <Text className="mt-1 font-sans text-caption text-secondary-text">
+      <Text className="mt-1 text-quiet">
         {formatRamFloor(tier.minRamMb)} · {tier.presetIds.length} model
         {tier.presetIds.length === 1 ? "" : "s"}
       </Text>

@@ -75,7 +75,7 @@ export function ChatEmptyPlaceholder({
         <Text className="text-center font-sans-medium text-body-lg text-primary-text">
           {title}
         </Text>
-        <Text className="mt-2 text-center font-sans text-body-sm text-secondary-text">
+        <Text className="mt-2 text-center text-quiet">
           {description}
         </Text>
       </View>
@@ -90,7 +90,7 @@ export function ChatEmptyPlaceholder({
           accessibilityRole="button"
           accessibilityLabel={buttonText}
         >
-          <Text className="text-center font-sans-semibold text-body-md text-on-primary">
+          <Text className="text-center text-action">
             {buttonText}
           </Text>
         </Pressable>

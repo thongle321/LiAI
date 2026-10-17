@@ -447,7 +447,7 @@ export function ModelSettingsSheet({
                       // arrive holding a long phrase. flex-wrap re-flows the
                       // row BETWEEN chips; it cannot break one chip, whose
                       // width is its content — hence the bound here too.
-                      className="max-w-[70%] font-sans text-body-sm text-secondary-text"
+                      className="max-w-[70%] text-quiet"
                     >
                       {word}
                     </Text>

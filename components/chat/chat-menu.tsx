@@ -101,7 +101,7 @@ function MenuRow({
       {value !== undefined ? (
         <Text
           numberOfLines={1}
-          className="mr-1 font-sans text-body-sm text-secondary-text"
+          className="mr-1 text-quiet"
         >
           {value}
         </Text>
@@ -412,7 +412,7 @@ onPress={() => setPanel("export")}
                     accessibilityRole="button"
                     accessibilityLabel="Save title"
                   >
-                    <Text className="font-sans-semibold text-body-md text-on-primary">
+                    <Text className="text-action">
                       Save
                     </Text>
                   </Pressable>

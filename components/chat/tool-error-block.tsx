@@ -42,7 +42,7 @@ export function ToolErrorBlock({
           {tool} failed
         </Text>
         {message !== "" && (
-          <Text className="mt-0.5 font-sans text-caption text-secondary-text">
+          <Text className="mt-0.5 text-quiet">
             {message}
           </Text>
         )}

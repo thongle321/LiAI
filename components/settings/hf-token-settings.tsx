@@ -108,7 +108,7 @@ function HfTokenSheet({ open, onClose }: { open: boolean; onClose: () => void })
               {busy === "reset" ? (
                 <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Text className="font-sans text-body-md text-primary">Reset Token</Text>
+                <Text className="text-body">Reset Token</Text>
               )}
             </Pressable>
           ) : null}
@@ -126,7 +126,7 @@ className={
             {busy === "save" ? (
               <ActivityIndicator size="small" color={colors.surface1} />
             ) : (
-              <Text className="font-sans-semibold text-body-md text-on-primary">Save Token</Text>
+              <Text className="text-action">Save Token</Text>
             )}
           </Pressable>
         </View>

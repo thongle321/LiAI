@@ -141,11 +141,12 @@ function Sheet({
   onDismiss: () => void;
   children: ReactNode;
 }) {
-  if (!visible) return null;
+  // Mounted always, never early-returned: an unmounted Modal cannot play its
+  // dismissal, so the close was a hard cut while the open slid up (D4-3).
   return (
     // `Modal` takes no className -- on the AGENTS.md exception list. Its
     // children are ordinary components and do.
-    <Modal visible transparent animationType="slide" onRequestClose={onDismiss}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
       <Pressable
         className="flex-1 justify-end bg-scrim"
         onPress={onDismiss}

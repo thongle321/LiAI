@@ -9,7 +9,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-    "bundleIdentifier": "com.liai.app",
+      "bundleIdentifier": "com.liai.app",
       "infoPlist": {
         "NSCameraUsageDescription": "LiAI needs the camera to see what you see."
       }
@@ -84,7 +84,13 @@
           "resizeMode": "contain"
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "LiAI needs your photo library to attach pictures to a message."
+        }
+      ]
     ],
     "extra": {
       "router": {},

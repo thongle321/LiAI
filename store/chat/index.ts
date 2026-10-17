@@ -42,10 +42,15 @@ import type { SessionStore } from "../../services/chat/session-store.ts";
  * Short-circuits before touching SecureStore when consent is absent. */
 async function defaultSearchAuth(): Promise<SearchAuth | null> {
   const search = useSearch.getState();
-  if (!search.hasConsented) return null;
-  const key = await search.getProviderKey(search.activeProviderId);
+  // Self-heal: the startup gate hydrates this, but a deep link can reach a
+  // turn without it, and consent is persisted - reading the default `false`
+  // would tell the user search is off when they turned it on.
+  if (!search.loaded) await search.load();
+  if (!useSearch.getState().hasConsented) return null;
+  const { activeProviderId, getProviderKey, resultCount } = useSearch.getState();
+  const key = await getProviderKey(activeProviderId);
   if (!key) return null;
-  return { provider: search.activeProviderId, key, count: search.resultCount };
+  return { provider: activeProviderId, key, count: resultCount };
 }
 
 /** Default engine source: live models store (no keys needed to pick). */

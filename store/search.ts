@@ -67,6 +67,9 @@ function parseSearchSettings(raw: string | null): {
 }
 
 export function createSearchStore(storage: KeyValueStorage, secure: SecureAdapter) {
+  /** In-flight `load()`, so concurrent callers share one read. */
+  let hydrating: Promise<void> | null = null;
+
   return create<SearchState>()((set, get) => {
     async function persist(): Promise<void> {
       const { activeProviderId, resultCount, hasConsented } = get();
@@ -94,7 +97,16 @@ export function createSearchStore(storage: KeyValueStorage, secure: SecureAdapte
       hasConsented: false,
       loaded: false,
       load: async () => {
-        set({ ...parseSearchSettings(await storage.getItem(SEARCH_KEY)), loaded: true });
+        // Single-flight, like the model store's loadPersisted: the startup
+        // gate and the settings screen both call this, and a second read
+        // racing the first could overwrite a consent the user just toggled.
+        if (get().loaded) return;
+        hydrating ??= (async () => {
+          set({ ...parseSearchSettings(await storage.getItem(SEARCH_KEY)), loaded: true });
+        })().finally(() => {
+          hydrating = null;
+        });
+        await hydrating;
       },
       setActiveProvider: (id) => {
         set({ activeProviderId: id });

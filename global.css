@@ -24,6 +24,8 @@
   --color-primary-hover: #1d4ed8;
   --color-primary-pressed: #1d4ed8;
   --color-on-primary: #ffffff;
+  /* Warm accent for tier badges (Kitten's warm ramp). */
+  --color-warm-accent: #c2410c;
   /* Coolant cyan is reserved for machine-in-the-loop states (thinking, vision, streaming). */
   --color-info: #06b6d4;
   --color-success: #10b981;
@@ -220,16 +222,13 @@
 }
 /* Modifier: parameter cards (pocketpal's CompletionSettings shape) carry
    16px padding with 24px between items and NO dividers — rhythm comes
-   from margin, not borders. Children keep their own py-2 (8px), so the
-   margin fills the rest: 8 + 8 + 8 = 24. */
+   from gap, not borders. Children keep their own py-2 (8px), so the
+   gap fills the rest: 8 + 8 + 8 = 24. */
 .rows--plain {
   padding: 16px;
-}
-.rows--plain > * {
-  margin-bottom: 8px;
-}
-.rows--plain > *:last-child {
-  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .row {
@@ -244,7 +243,7 @@
   border-bottom-style: solid;
   border-bottom-color: #e2e8f0;
 }
-.row:last-child {
+.row--last {
   border-bottom-width: 0;
 }
 
@@ -401,7 +400,4 @@
    read in Signal Blue. */
 .voice-badge--warm {
   background-color: #ffedd5;
-}
-.voice-badge--warm .voice-badge__text {
-  color: #c2410c;
 }

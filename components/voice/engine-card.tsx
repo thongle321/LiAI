@@ -284,7 +284,7 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
         <View className="flex-1">
           <Text className="voice-card__title">{meta.title}</Text>
           <View className={meta.warmBadge ? "voice-badge voice-badge--warm" : "voice-badge"}>
-            <Text className="voice-badge__text">{meta.badge}</Text>
+            <Text className={meta.warmBadge ? "voice-badge__text text-warm-accent" : "voice-badge__text"}>{meta.badge}</Text>
           </View>
           <Text className="voice-card__spec">{meta.spec}</Text>
         </View>

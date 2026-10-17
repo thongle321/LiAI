@@ -563,7 +563,7 @@ export function AdvancedGroup({
             // buys nothing. (The previous version synthesised one from
             // String(child), which is always "[object Object]" and so
             // collapsed to a single key for every row — a crash.)
-            <View className="row" key={index}>
+            <View className={index === Children.count(children) - 1 ? "row row--last" : "row"} key={index}>
               {child}
             </View>
           ))

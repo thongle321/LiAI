@@ -59,7 +59,10 @@ export default function ModelStep() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
-      <ScrollView contentContainerClassName="w-full">
+      <ScrollView
+        contentContainerClassName="w-full"
+        automaticallyAdjustKeyboardInsets
+        >
         <ContentColumn className="p-5">
         <Text className="font-sans-semibold text-h2 text-primary-text">
           Pick your model

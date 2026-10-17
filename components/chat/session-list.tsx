@@ -33,6 +33,8 @@ import {
 } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
+import { useKeyboardLift } from "../../hooks/useKeyboardLift.ts";
+import Animated from "react-native-reanimated";
 import { formatTime } from "../../utils/format.ts";
 import { groupSessions, type SessionSection } from "../../services/chat/session-groups.ts";
 import type { ChatSession } from "../../types/chat.ts";
@@ -142,6 +144,10 @@ export function SessionList({
   const [notice, setNotice] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<ChatSession | null>(null);
   const [draft, setDraft] = useState("");
+  // The rename field autoFocuses, so on iOS (Android is saved by
+  // adjustResize) a dead-centred dialog lands under the keyboard. Same lift
+  // the composer and the vision panel use, so all three agree (D6-12).
+  const renameLift = useKeyboardLift();
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [menu, setMenu] = useState<MenuAnchor | null>(null);
@@ -464,7 +470,10 @@ export function SessionList({
         animationType="fade"
         onRequestClose={() => setRenaming(null)}
       >
-        <View className="flex-1 items-center justify-center bg-scrim p-5">
+        <Animated.View
+          className="flex-1 items-center justify-center bg-scrim p-5"
+          style={renameLift}
+        >
           <View className="w-full rounded-2xl border border-border bg-surface-1 p-5">
             <Text className="mb-4 font-sans-semibold text-body-lg text-primary-text">
               Rename conversation
@@ -498,7 +507,7 @@ export function SessionList({
               </Pressable>
             </View>
           </View>
-        </View>
+        </Animated.View>
       </Modal>
     </>
   );

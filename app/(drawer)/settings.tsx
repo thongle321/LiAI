@@ -37,7 +37,11 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
       <ScreenHeader title="Settings" />
-      <ScrollView className="flex-1" contentContainerClassName="w-full">
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="w-full"
+        automaticallyAdjustKeyboardInsets
+        >
         <ContentColumn className="p-5">
           <ModelInitializationSettings />
           <MemorySettings />

@@ -30,11 +30,11 @@ import {
 } from "react-native-keyboard-controller";
 import type { SharedValue } from "react-native-reanimated";
 import Animated from "react-native-reanimated";
-import { motionLayout } from "../../utils/motion.ts";
+import { motionLayout } from "@/utils/motion.ts";
 
 
-import type { ChatRow } from "../../services/chat/rows.ts";
-import { messageWidths, type MessageWidths } from "../../services/chat/message-width.ts";
+import type { ChatRow } from "@/services/chat/rows.ts";
+import { messageWidths, type MessageWidths } from "@/services/chat/message-width.ts";
 
 /** PocketPal STICK/LEAVE hysteresis (ChatView.tsx:451): re-arm "at latest"
  * below 24px from the end, leave it above 40px. The library's own end

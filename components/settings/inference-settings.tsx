@@ -26,15 +26,15 @@ import {
   useInference,
   type CacheType,
   type FlashAttn,
-} from "../../store/inference.ts";
+} from "@/store/inference.ts";
 import { useShallow } from "zustand/shallow";
-import { useModelStore } from "../../store/modelStore";
-import { useModelsUi } from "../../store/modelsUi.ts";
-import { colors } from "../../themes/tokens.ts";
+import { useModelStore } from "@/store/modelStore";
+import { useModelsUi } from "@/store/modelsUi.ts";
+import { colors } from "@/themes/tokens.ts";
 import {
   getAvailableDevices,
   getDeviceAvailability,
-} from "../../services/inference/deviceSelection.ts";
+} from "@/services/inference/deviceSelection.ts";
 import {
   AdvancedGroup,
   PickerRow,

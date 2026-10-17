@@ -21,8 +21,8 @@ import Animated, {
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { ChevronDown, ChevronRight } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { MOTION_DURATION_MS, motionLayout } from "../../utils/motion.ts";
+import { colors } from "@/themes/tokens.ts";
+import { MOTION_DURATION_MS, motionLayout } from "@/utils/motion.ts";
 import { MarkdownView } from "./markdown-view.tsx";
 
 type BubbleState = "collapsed" | "partial" | "expanded";

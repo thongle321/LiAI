@@ -3,14 +3,14 @@
 import type { StateCreator } from "zustand";
 
 import type { ModelStore, PersistenceSlice } from "./types";
-import { parseModelSettingsMap } from "../../utils/model-settings";
-import { platformDownloadService } from "../../services/downloads/download-service";
-import { HF_TOKEN_SS_KEY, providerKeySS } from "../../services/auth/secrets";
+import { parseModelSettingsMap } from "@/utils/model-settings";
+import { platformDownloadService } from "@/services/downloads/download-service";
+import { HF_TOKEN_SS_KEY, providerKeySS } from "@/services/auth/secrets";
 import {
   upgradeModelList,
   upgradeRemoteApis,
   upgradeRemoteCaps,
-} from "../../utils/model-upgrade";
+} from "@/utils/model-upgrade";
 import {
   ACTIVE_MODEL_KEY,
   HF_TOKEN_KEY,

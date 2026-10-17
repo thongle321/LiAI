@@ -24,13 +24,13 @@ import { CheckCircle2 } from "lucide-react-native";
 
 import { Sheet } from "../sheet.tsx";
 import { useSnackbar } from "../snackbar.tsx";
-import { colors } from "../../themes/tokens.ts";
-import { useModelStore } from "../../store/modelStore";
-import { extractHFModelTitle } from "../../services/models/hf-format.ts";
+import { colors } from "@/themes/tokens.ts";
+import { useModelStore } from "@/store/modelStore";
+import { extractHFModelTitle } from "@/services/models/hf-format.ts";
 import { HFDetailsView } from "./hf-details-view.tsx";
 import { HFSearchView, SORT_OPTIONS } from "./hf-search-view.tsx";
 import type { VisionDownloadChoice } from "./vision-download-sheet.tsx";
-import type { HFModelFile, HFModelSearchResult } from "../../types/models";
+import type { HFModelFile, HFModelSearchResult } from "@/types/models";
 
 function SearchErrorSnackbar({
   error,

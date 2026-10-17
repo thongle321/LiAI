@@ -12,11 +12,11 @@ import type {
   SessionStore,
   StoredMessage,
   StoredTurn,
-} from "../../services/chat/session-store.ts";
-import { draftSlot } from "../../services/chat/session-store.ts";
-import type { SamplerParams } from "../../services/inference/sampler.ts";
-import type { AgentStep, SessionInfo } from "../../types/chat.ts";
-import type { TurnRunner } from "../../store/chat/types.ts";
+} from "@/services/chat/session-store.ts";
+import { draftSlot } from "@/services/chat/session-store.ts";
+import type { SamplerParams } from "@/services/inference/sampler.ts";
+import type { AgentStep, SessionInfo } from "@/types/chat.ts";
+import type { TurnRunner } from "@/store/chat/types.ts";
 
 interface SeedSession {
   id: string;

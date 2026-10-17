@@ -20,11 +20,11 @@
 import { View } from "react-native";
 import { Drawer } from "expo-router/drawer";
 
-import { colors, scrim } from "../../themes/tokens.ts";
-import { AppDrawerContent } from "../../components/app-drawer.tsx";
+import { colors, scrim } from "@/themes/tokens.ts";
+import { AppDrawerContent } from "@/components/app-drawer.tsx";
 
 // Same story as the root boundary: this was `app/(drawer)/+error.tsx`.
-export { DrawerErrorBoundary as ErrorBoundary } from "../../components/route-error-boundaries.tsx";
+export { DrawerErrorBoundary as ErrorBoundary } from "@/components/route-error-boundaries.tsx";
 
 export default function DrawerLayout() {
   return (

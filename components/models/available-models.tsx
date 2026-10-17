@@ -11,14 +11,14 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { ChevronDown, ChevronUp, X } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { useFreeSpacePoll } from "../../hooks/useStorageDisclosure.ts";
-import { useModelStore } from "../../store/modelStore";
-import { presetSpecId } from "../../services/models/huggingface.ts";
-import { storageDisclosure } from "../../services/models/storage-disclosure.ts";
-import { presetCardState, presetFileState } from "../../services/models/file-state.ts";
-import { findProjectorFile } from "../../services/models/vision-pairing.ts";
-import type { PresetModel, PresetModelFile } from "../../types/models";
+import { colors } from "@/themes/tokens.ts";
+import { useFreeSpacePoll } from "@/hooks/useStorageDisclosure.ts";
+import { useModelStore } from "@/store/modelStore";
+import { presetSpecId } from "@/services/models/huggingface.ts";
+import { storageDisclosure } from "@/services/models/storage-disclosure.ts";
+import { presetCardState, presetFileState } from "@/services/models/file-state.ts";
+import { findProjectorFile } from "@/services/models/vision-pairing.ts";
+import type { PresetModel, PresetModelFile } from "@/types/models";
 import {
   CancelDownloadButton,
   DownloadButton,

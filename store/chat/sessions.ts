@@ -1,8 +1,8 @@
 /** Sessions slice: Store-owned list + active-session lifecycle. */
 
-import { toMessages, toSession } from "../../services/chat/messages.ts";
-import type { SessionStore } from "../../services/chat/session-store.ts";
-import { parseImport } from "../../services/chat/import.ts";
+import { toMessages, toSession } from "@/services/chat/messages.ts";
+import type { SessionStore } from "@/services/chat/session-store.ts";
+import { parseImport } from "@/services/chat/import.ts";
 import { readDraftFor } from "./draft.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 import { useVoice } from "../voice.ts";

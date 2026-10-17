@@ -1,8 +1,8 @@
 /** Local turn: engine + agent + persisted turns. */
 
 import { createTurnRunner } from "../turn.ts";
-import type { CompletionEngine } from "../../inference/engine.ts";
-import type { ChatMessage } from "../../../types/chat.ts";
+import type { CompletionEngine } from "@/services/inference/engine.ts";
+import type { ChatMessage } from "@/types/chat.ts";
 
 function bubble(over: Partial<ChatMessage> = {}): ChatMessage {
   return {

@@ -16,16 +16,16 @@
 import { Pressable, Text, View } from "react-native";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { usePressFeedback } from "../../utils/motion.ts";
+import { usePressFeedback } from "@/utils/motion.ts";
 import {
   ESCALATED_AFTER_FAILURES,
   type BannerVariant,
   type ContextFullCopy,
-} from "../../services/chat/banner-variant.ts";
-import { useInference } from "../../store/inference.ts";
-import { reloadLocalEngine } from "../../store/chat/index.ts";
-import { useContextLadder } from "../../hooks/useContextLadder.ts";
-import { labelTokens } from "../../services/chat/context-ladder.ts";
+} from "@/services/chat/banner-variant.ts";
+import { useInference } from "@/store/inference.ts";
+import { reloadLocalEngine } from "@/store/chat/index.ts";
+import { useContextLadder } from "@/hooks/useContextLadder.ts";
+import { labelTokens } from "@/services/chat/context-ladder.ts";
 import { formatBytes } from "../models/model-bits.tsx";
 
 /** One surface, five variants. `services/chat//banner-variant.ts` decides which

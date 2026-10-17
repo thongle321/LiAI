@@ -46,11 +46,11 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
-import { APP_NAME } from "../../constants/app.ts";
-import { MOTION_DURATION_MS, fadeEntering, fadeExiting } from "../../utils/motion.ts";
-import type { MessageWidths } from "../../services/chat/message-width.ts";
-import { useChatStore } from "../../store/chat";
-import { formatPendingRow, phaseLabel } from "../../services/chat/pending-phase.ts";
+import { APP_NAME } from "@/constants/app.ts";
+import { MOTION_DURATION_MS, fadeEntering, fadeExiting } from "@/utils/motion.ts";
+import type { MessageWidths } from "@/services/chat/message-width.ts";
+import { useChatStore } from "@/store/chat";
+import { formatPendingRow, phaseLabel } from "@/services/chat/pending-phase.ts";
 
 function Dot({ delayMs }: { delayMs: number }) {
   const opacity = useSharedValue(0.3);

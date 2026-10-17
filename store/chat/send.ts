@@ -5,11 +5,11 @@
  * mark the bubble (tap-to-retry) and persist nothing.
  */
 
-import type { ApiError } from "../../types/api.ts";
-import type { ChatMessage } from "../../types/chat.ts";
-import { newId } from "../../services/chat/messages.ts";
-import type { SessionStore } from "../../services/chat/session-store.ts";
-import { canSeeImages, loadModelState } from "../../services/inference/mmproj.ts";
+import type { ApiError } from "@/types/api.ts";
+import type { ChatMessage } from "@/types/chat.ts";
+import { newId } from "@/services/chat/messages.ts";
+import type { SessionStore } from "@/services/chat/session-store.ts";
+import { canSeeImages, loadModelState } from "@/services/inference/mmproj.ts";
 import { useVoice } from "../voice.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 

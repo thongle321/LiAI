@@ -5,8 +5,8 @@ import { Check, Copy } from "lucide-react-native";
 import CodeHighlighter from "react-native-code-highlighter";
 import github from "react-syntax-highlighter/dist/esm/styles/hljs/github";
 
-import { colors, font, typeScale } from "../../themes/tokens.ts";
-import { useCopy } from "../../hooks/useCopy.ts";
+import { colors, font, typeScale } from "@/themes/tokens.ts";
+import { useCopy } from "@/hooks/useCopy.ts";
 
 /** github's own white code background cleared so the Mist card shows through. */
 const CODE_STYLE = {

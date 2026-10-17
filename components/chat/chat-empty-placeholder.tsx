@@ -8,8 +8,8 @@
 import { Image, Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
-import { images } from "../../constants/images.ts";
-import { useModelStore } from "../../store/modelStore";
+import { images } from "@/constants/images.ts";
+import { useModelStore } from "@/store/modelStore";
 
 export function ChatEmptyPlaceholder({
   onSelectModel,

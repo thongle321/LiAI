@@ -5,8 +5,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Eye, MessageCircle, Mic, type LucideIcon } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { APP_NAME } from "../../constants/app.ts";
+import { colors } from "@/themes/tokens.ts";
+import { APP_NAME } from "@/constants/app.ts";
 
 const ROWS: { Icon: LucideIcon; title: string; body: string }[] = [
   { Icon: Eye, title: "See", body: "Point. Ask. Learn." },

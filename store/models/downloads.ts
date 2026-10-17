@@ -9,8 +9,8 @@ import type { StateCreator } from "zustand";
 import * as LegacyFileSystem from "expo-file-system/legacy";
 
 import type { DownloadsSlice, ModelStore } from "./types";
-import type { DownloadJob, PresetModel } from "../../types/models";
-import type { HFModelSearchResult } from "../../types/models";
+import type { DownloadJob, PresetModel } from "@/types/models";
+import type { HFModelSearchResult } from "@/types/models";
 import {
   buildHfModelSpec,
   buildPresetModelSpec,
@@ -18,13 +18,13 @@ import {
   hfRefFromId,
   hfRefFromSearch,
   isHuggingFaceUrl,
-} from "../../services/models/huggingface";
-import { platformDownloadService, failureCode } from "../../services/downloads/download-service";
-import { latestJobForModel } from "../../services/models/download-jobs.ts";
-import { resumeDataForPartial, classifyFileOnDisk } from "../../services/models/resume-state.ts";
-import { findProjectorFile, pairDownloadStep } from "../../services/models/vision-pairing.ts";
-import { readGgufMetadata } from "../../services/models/gguf-header.ts";
-import { modelFitsOnDevice } from "../../utils/storage-fit.ts";
+} from "@/services/models/huggingface";
+import { platformDownloadService, failureCode } from "@/services/downloads/download-service";
+import { latestJobForModel } from "@/services/models/download-jobs.ts";
+import { resumeDataForPartial, classifyFileOnDisk } from "@/services/models/resume-state.ts";
+import { findProjectorFile, pairDownloadStep } from "@/services/models/vision-pairing.ts";
+import { readGgufMetadata } from "@/services/models/gguf-header.ts";
+import { modelFitsOnDevice } from "@/utils/storage-fit.ts";
 import { asyncStorage, MEMORY_GUARD_KEY, generateId } from "./storage";
 
 function hfRefFor(modelId: string, results: HFModelSearchResult[]) {

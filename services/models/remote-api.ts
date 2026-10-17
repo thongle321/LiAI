@@ -8,8 +8,8 @@ import type {
   ModelSpec,
   RemoteApiProvider,
   RemoteCaps,
-} from "../../types/models";
-import { asRecord, positiveFinite } from "../../utils/guards.ts";
+} from "@/types/models";
+import { asRecord, positiveFinite } from "@/utils/guards.ts";
 
 /** Capability fields a /props probe can report (everything but the
  *  reachability bookkeeping the store owns). */

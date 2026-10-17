@@ -26,38 +26,38 @@ import {
 import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
 import { ChevronDown } from "lucide-react-native";
 
-import { colors } from "../../../themes/tokens.ts";
-import { filterMessages } from "../../../services/chat/filter.ts";
-import { buildRows, type ChatRow } from "../../../services/chat/rows.ts";
+import { colors } from "@/themes/tokens.ts";
+import { filterMessages } from "@/services/chat/filter.ts";
+import { buildRows, type ChatRow } from "@/services/chat/rows.ts";
 import {
   MOTION_DURATION_MS,
   fadeEntering,
   fadeExiting,
-} from "../../../utils/motion.ts";
-import { useChatStore } from "../../../store/chat.ts";
-import { useKeyboardStore } from "../../../store/keyboard.ts";
-import { useModelStore } from "../../../store/modelStore";
-import { useInference } from "../../../store/inference.ts";
-import { useKeyboardLift } from "../../../hooks/useKeyboardLift.ts";
-import { MessageListItem } from "../../../components/chat/message-list-item.tsx";
-import { ChatEmptyPlaceholder } from "../../../components/chat/chat-empty-placeholder.tsx";
-import { PendingIndicator } from "../../../components/chat/pending-indicator.tsx";
-import { MessageInput } from "../../../components/chat/message-input.tsx";
-import { SuggestedPrompts } from "../../../components/chat/suggested-prompts.tsx";
-import { MessageList } from "../../../components/chat/message-list.tsx";
+} from "@/utils/motion.ts";
+import { useChatStore } from "@/store/chat.ts";
+import { useKeyboardStore } from "@/store/keyboard.ts";
+import { useModelStore } from "@/store/modelStore";
+import { useInference } from "@/store/inference.ts";
+import { useKeyboardLift } from "@/hooks/useKeyboardLift.ts";
+import { MessageListItem } from "@/components/chat/message-list-item.tsx";
+import { ChatEmptyPlaceholder } from "@/components/chat/chat-empty-placeholder.tsx";
+import { PendingIndicator } from "@/components/chat/pending-indicator.tsx";
+import { MessageInput } from "@/components/chat/message-input.tsx";
+import { SuggestedPrompts } from "@/components/chat/suggested-prompts.tsx";
+import { MessageList } from "@/components/chat/message-list.tsx";
 import {
   ContextFullBanner,
   ContextLadderSheet,
-} from "../../../components/chat/context-full-banner.tsx";
-import { labelTokens } from "../../../services/chat/context-ladder.ts";
-import { useContextLadder } from "../../../hooks/useContextLadder.ts";
-import { useChatBanner } from "../../../hooks/useChatBanner.ts";
-import { pickableModels } from "../../../services/chat/models.ts";
-import { useModelReady } from "../../../hooks/useModelReady.ts";
-import { GenerationSettingsSheet } from "../../../components/chat/generation-settings-sheet.tsx";
-import { ChatWarningSnackbar } from "../../../components/chat/chat-warning-snackbar.tsx";
-import { ChatHeader } from "../../../components/chat/chat-header.tsx";
-import { ModelPickerSheet } from "../../../components/chat/model-picker-sheet.tsx";
+} from "@/components/chat/context-full-banner.tsx";
+import { labelTokens } from "@/services/chat/context-ladder.ts";
+import { useContextLadder } from "@/hooks/useContextLadder.ts";
+import { useChatBanner } from "@/hooks/useChatBanner.ts";
+import { pickableModels } from "@/services/chat/models.ts";
+import { useModelReady } from "@/hooks/useModelReady.ts";
+import { GenerationSettingsSheet } from "@/components/chat/generation-settings-sheet.tsx";
+import { ChatWarningSnackbar } from "@/components/chat/chat-warning-snackbar.tsx";
+import { ChatHeader } from "@/components/chat/chat-header.tsx";
+import { ModelPickerSheet } from "@/components/chat/model-picker-sheet.tsx";
 
 export default function ChatRoute() {
   const messages = useChatStore((s) => s.messages);

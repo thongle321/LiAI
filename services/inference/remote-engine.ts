@@ -12,8 +12,8 @@ import type {
   CompletionOutcome,
   EngineToolCall,
 } from "./engine.ts";
-import type { RemoteApiProvider } from "../../types/models.ts";
-import { asRecord, positiveFinite } from "../../utils/guards.ts";
+import type { RemoteApiProvider } from "@/types/models.ts";
+import { asRecord, positiveFinite } from "@/utils/guards.ts";
 
 export interface RemoteEngineOptions {
   fetchImpl?: typeof fetch;

@@ -9,23 +9,23 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
-import { colors } from "../../themes/tokens.ts";
-import { ContentColumn } from "../../components/content-column.tsx";
+import { colors } from "@/themes/tokens.ts";
+import { ContentColumn } from "@/components/content-column.tsx";
 import {
   matchTier,
   parseTiers,
   readTotalMemory,
-} from "../../services/models/device-tiers.ts";
-import tiersJson from "../../assets/device-tiers.json";
+} from "@/services/models/device-tiers.ts";
+import tiersJson from "@/assets/device-tiers.json";
 
 // Parsed once: the bundle can't change at runtime, and every render
 // re-parsing would be pure waste.
 const TIERS = parseTiers(tiersJson);
-import { TierCard } from "../../components/onboarding/tier-card.tsx";
-import { PresetModelCard } from "../../components/models/available-models.tsx";
-import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
-import { useModelStore } from "../../store/modelStore";
-import type { PresetModelFile } from "../../types/models";
+import { TierCard } from "@/components/onboarding/tier-card.tsx";
+import { PresetModelCard } from "@/components/models/available-models.tsx";
+import { useLoadGuard } from "@/hooks/useLoadGuard.ts";
+import { useModelStore } from "@/store/modelStore";
+import type { PresetModelFile } from "@/types/models";
 
 export default function ModelStep() {
   const tiers = TIERS;

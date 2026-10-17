@@ -24,7 +24,7 @@ import { useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors } from "@/themes/tokens.ts";
 
 export function ModelAccordion({
   title,

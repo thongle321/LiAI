@@ -11,7 +11,7 @@ import type {
   ModelSpec,
   PresetModel,
   PresetModelFile,
-} from "../../types/models.ts";
+} from "@/types/models.ts";
 
 export interface PresetFileState {
   status: ModelDownloadStatus;

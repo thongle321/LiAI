@@ -24,11 +24,11 @@ import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Check, Copy, Volume2, VolumeX } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { useCopy } from "../../hooks/useCopy.ts";
-import { speakReply, stopSpeaking } from "../../services/voice/voice-speak.ts";
-import { useVoice } from "../../store/voice.ts";
-import type { TurnOutcomeFlags } from "../../types/chat.ts";
+import { colors } from "@/themes/tokens.ts";
+import { useCopy } from "@/hooks/useCopy.ts";
+import { speakReply, stopSpeaking } from "@/services/voice/voice-speak.ts";
+import { useVoice } from "@/store/voice.ts";
+import type { TurnOutcomeFlags } from "@/types/chat.ts";
 
 /** A reported number, or absent. NOT `> 0`: a zero rate is a
  *  measurement, and their finiteNumber() shows it. The old code gated on

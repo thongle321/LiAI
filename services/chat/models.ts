@@ -16,7 +16,7 @@
  */
 
 import { isLocalModelReady } from "../inference/engine.ts";
-import type { ModelOrigin } from "../../types/models.ts";
+import type { ModelOrigin } from "@/types/models.ts";
 
 /** A selectable model. `host` is present only for remote entries, and is
  *  what tells two servers offering the same model name apart. */

@@ -19,11 +19,11 @@ import { memo, useState } from "react";
 import Animated from "react-native-reanimated";
 import { CheckCheck, CircleAlert, Wrench } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { formatTime, formatToolMetrics } from "../../utils/format.ts";
-import type { MessageRow } from "../../services/chat/rows.ts";
-import { blocksOf, turnText } from "../../services/chat/blocks.ts";
-import type { AgentStep } from "../../types/chat.ts";
+import { colors } from "@/themes/tokens.ts";
+import { formatTime, formatToolMetrics } from "@/utils/format.ts";
+import type { MessageRow } from "@/services/chat/rows.ts";
+import { blocksOf, turnText } from "@/services/chat/blocks.ts";
+import type { AgentStep } from "@/types/chat.ts";
 import { MarkdownView } from "./markdown-view.tsx";
 import { MessageActions } from "./message-actions.tsx";
 import { LinkPreviewCard } from "./link-preview.tsx";
@@ -32,8 +32,8 @@ import { MessageMenu } from "./message-menu.tsx";
 import { ToolErrorBlock } from "./tool-error-block.tsx";
 import { ToolMetricsLine, toolSurfaceFor } from "./tool-surfaces.tsx";
 import { ImageViewer } from "./image-viewer.tsx";
-import type { PickableModel } from "../../services/chat/models.ts";
-import type { MessageWidths } from "../../services/chat/message-width.ts";
+import type { PickableModel } from "@/services/chat/models.ts";
+import type { MessageWidths } from "@/services/chat/message-width.ts";
 
 /** One tool block, as a SIBLING of the text bubbles — never nested in
  * one. THREE-WAY DISPATCH, in this order (G5):

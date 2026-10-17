@@ -11,18 +11,18 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { CloudDownload, Database, Play, Square, Volume2 } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { cn } from "../../utils/cn.ts";
-import { formatBytes } from "../../services/models/progress.ts";
-import { useFreeSpacePoll } from "../../hooks/useStorageDisclosure.ts";
-import { ENGINE_ORDER } from "../../services/tts/engineMeta.ts";
-import { DEVICE_DEFAULT_VOICE } from "../../services/tts/types.ts";
-import { VOICE_PREVIEW_SAMPLE } from "../../constants/voice-strings.ts";
-import { speakReply, stopSpeaking } from "../../services/voice/voice-speak.ts";
+import { colors } from "@/themes/tokens.ts";
+import { cn } from "@/utils/cn.ts";
+import { formatBytes } from "@/services/models/progress.ts";
+import { useFreeSpacePoll } from "@/hooks/useStorageDisclosure.ts";
+import { ENGINE_ORDER } from "@/services/tts/engineMeta.ts";
+import { DEVICE_DEFAULT_VOICE } from "@/services/tts/types.ts";
+import { VOICE_PREVIEW_SAMPLE } from "@/constants/voice-strings.ts";
+import { speakReply, stopSpeaking } from "@/services/voice/voice-speak.ts";
 import { EngineCard } from "../voice/engine-card.tsx";
 import { RadioDot } from "../voice/radio-dot.tsx";
 import { SettingsSection, ToggleRow } from "../settings-rows.tsx";
-import { useVoice } from "../../store/voice.ts";
+import { useVoice } from "@/store/voice.ts";
 
 /** The section's storage caption. A real reading, not the design's static
  *  "1.2 GB available": the same poll the model cards use, so freeing space

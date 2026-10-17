@@ -15,9 +15,9 @@ import { CheckCircle2 } from "lucide-react-native";
 
 import { Sheet } from "../sheet.tsx";
 import { ToggleRow } from "../settings-rows.tsx";
-import { colors } from "../../themes/tokens.ts";
-import { mmprojSiblings } from "../../services/models/vision-pairing.ts";
-import type { HFModelFile, ModelFile } from "../../types/models";
+import { colors } from "@/themes/tokens.ts";
+import { mmprojSiblings } from "@/services/models/vision-pairing.ts";
+import type { HFModelFile, ModelFile } from "@/types/models";
 import { formatBytes } from "./model-bits.tsx";
 
 /** What the sheet hands back: whether the pair is fetched, and which

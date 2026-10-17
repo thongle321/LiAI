@@ -29,9 +29,9 @@ import { KeyboardControllerNative } from "react-native-keyboard-controller";
 import { Check } from "lucide-react-native";
 
 import { Sheet } from "../sheet.tsx";
-import { colors } from "../../themes/tokens.ts";
-import { pickableModels } from "../../services/chat/models.ts";
-import { useModelStore } from "../../store/modelStore";
+import { colors } from "@/themes/tokens.ts";
+import { pickableModels } from "@/services/chat/models.ts";
+import { useModelStore } from "@/store/modelStore";
 
 export function ModelPickerSheet({
   visible,

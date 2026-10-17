@@ -14,8 +14,8 @@ import type {
   ToolDefinition,
 } from "../inference/engine.ts";
 import type { SamplerParams } from "../inference/sampler.ts";
-import type { EffortLevel } from "../../utils/reasoning-capability.ts";
-import type { TurnOutcomeFlags, ToolMetrics, TurnBlock } from "../../types/chat.ts";
+import type { EffortLevel } from "@/utils/reasoning-capability.ts";
+import type { TurnOutcomeFlags, ToolMetrics, TurnBlock } from "@/types/chat.ts";
 import { runTalent, type TalentSearchAuth } from "./registry.ts";
 import { resetReadUrlAllowlist } from "./allowlist.ts";
 

@@ -16,7 +16,7 @@ import type {
   SessionInfo,
   TurnBlock,
   TurnOutcomeFlags,
-} from "../../types/chat.ts";
+} from "@/types/chat.ts";
 import type { SamplerParams } from "../inference/sampler.ts";
 
 /** One durable turn. Streaming/error are NOT here: they are live render

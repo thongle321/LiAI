@@ -23,9 +23,9 @@ import {
   menuEnteringFade,
   menuEnteringZoom,
   menuExiting,
-} from "../../utils/motion.ts";
-import { colors } from "../../themes/tokens.ts";
-import type { ModelsUiFilter } from "../../store/modelsUi.ts";
+} from "@/utils/motion.ts";
+import { colors } from "@/themes/tokens.ts";
+import type { ModelsUiFilter } from "@/store/modelsUi.ts";
 
 function GroupLabel({ label }: { label: string }) {
   return (

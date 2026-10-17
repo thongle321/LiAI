@@ -34,11 +34,11 @@ import {
   DEFAULT_SAMPLER,
   resolveSampler,
   type SamplerParams,
-} from "../../services/inference/sampler.ts";
+} from "@/services/inference/sampler.ts";
 import { useShallow } from "zustand/shallow";
-import { useInference } from "../../store/inference.ts";
-import { useModelStore } from "../../store/modelStore.ts";
-import { useChatStore, defaultGetStore } from "../../store/chat";
+import { useInference } from "@/store/inference.ts";
+import { useModelStore } from "@/store/modelStore.ts";
+import { useChatStore, defaultGetStore } from "@/store/chat";
 import { SamplerRows } from "./sampler-rows.tsx";
 import { Sheet } from "../sheet.tsx";
 import { ResetMenu } from "../reset-menu.tsx";

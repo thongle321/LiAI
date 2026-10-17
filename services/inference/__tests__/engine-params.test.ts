@@ -18,7 +18,7 @@ import {
   type LlamaCompletionParams,
   type LlamaContextLike,
 } from "../local-engine";
-import { parseModelSettings } from "../../../utils/model-settings";
+import { parseModelSettings } from "@/utils/model-settings";
 
 /** Captures exactly what would cross the JSI boundary. */
 function capturingContext(): {

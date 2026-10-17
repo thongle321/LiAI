@@ -1,6 +1,6 @@
 /** Local file import helpers: type inference + ModelSpec builder (pure, tested). */
 
-import type { ModelSpec } from "../../types/models";
+import type { ModelSpec } from "@/types/models";
 
 export function inferLocalModelType(fileName: string): ModelSpec["type"] {
   const lower = fileName.toLowerCase();

@@ -47,21 +47,21 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { X, Check } from "lucide-react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
-import { useModelStore } from "../../store/modelStore";
-import { useInference } from "../../store/inference.ts";
+import { useModelStore } from "@/store/modelStore";
+import { useInference } from "@/store/inference.ts";
 import { Sheet } from "../sheet.tsx";
 import { ToggleRow } from "../settings-rows.tsx";
 import { ChatTemplateDialog } from "./chat-template-dialog.tsx";
 import { ModelMultimodalSection } from "./model-multimodal-section.tsx";
-import { DEFAULT_MODEL_SETTINGS } from "../../utils/model-settings";
-import type { ChatTemplatePreset } from "../../utils/chat-templates.ts";
-import { resolveThinking } from "../../services/inference/thinking.ts";
+import { DEFAULT_MODEL_SETTINGS } from "@/utils/model-settings";
+import type { ChatTemplatePreset } from "@/utils/chat-templates.ts";
+import { resolveThinking } from "@/services/inference/thinking.ts";
 import {
   DEFAULT_EFFORT_LEVEL,
   EFFORT_LABELS,
   EFFORT_LEVELS,
-} from "../../utils/reasoning-capability.ts";
-import { colors } from "../../themes/tokens.ts";
+} from "@/utils/reasoning-capability.ts";
+import { colors } from "@/themes/tokens.ts";
 
 /** PocketPal's 1px hairline Divider between rows. */
 function Divider() {

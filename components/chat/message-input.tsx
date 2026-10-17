@@ -20,21 +20,21 @@ import { KeyboardControllerNative } from "react-native-keyboard-controller";
 
 import * as Haptics from "expo-haptics";
 
-import { colors } from "../../themes/tokens.ts";
-import { useChatStore } from "../../store/chat.ts";
-import { useInference } from "../../store/inference.ts";
-import { suspendBackgroundRelease } from "../../services/inference/offload.ts";
-import { useModelReady } from "../../hooks/useModelReady.ts";
-import { useMultimodalAvailable } from "../../hooks/useMultimodalAvailable.ts";
-import { useModelStore } from "../../store/modelStore";
-import { resolveThinking } from "../../services/inference/thinking.ts";
+import { colors } from "@/themes/tokens.ts";
+import { useChatStore } from "@/store/chat.ts";
+import { useInference } from "@/store/inference.ts";
+import { suspendBackgroundRelease } from "@/services/inference/offload.ts";
+import { useModelReady } from "@/hooks/useModelReady.ts";
+import { useMultimodalAvailable } from "@/hooks/useMultimodalAvailable.ts";
+import { useModelStore } from "@/store/modelStore";
+import { resolveThinking } from "@/services/inference/thinking.ts";
 import {
   MAX_IMAGES,
   pickImages,
   type ImageSource,
-} from "../../services/chat/attachments.ts";
-import { usePressFeedback } from "../../utils/motion.ts";
-import { useKeyboardLift } from "../../hooks/useKeyboardLift.ts";
+} from "@/services/chat/attachments.ts";
+import { usePressFeedback } from "@/utils/motion.ts";
+import { useKeyboardLift } from "@/hooks/useKeyboardLift.ts";
 
 export function MessageInput({
   sending,

@@ -16,8 +16,8 @@ import {
   fabActionExiting,
   fadeEntering,
   fadeExiting,
-} from "../../utils/motion.ts";
-import { colors } from "../../themes/tokens.ts";
+} from "@/utils/motion.ts";
+import { colors } from "@/themes/tokens.ts";
 
 // Reanimated ships no animated Pressable; the backdrop needs to be one so
 // its fade and its tap-to-dismiss live on the same view.

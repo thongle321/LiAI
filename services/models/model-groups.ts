@@ -20,8 +20,8 @@
  * other. Not implemented.
  */
 
-import type { ModelSpec, PresetModel } from "../../types/models";
-import type { RemoteApiProvider } from "../../types/models";
+import type { ModelSpec, PresetModel } from "@/types/models";
+import type { RemoteApiProvider } from "@/types/models";
 import { presetSpecId } from "./huggingface.ts";
 import { isPresetDownloaded } from "./file-state.ts";
 

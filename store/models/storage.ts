@@ -5,7 +5,7 @@
  */
 
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
-import type { KeyValueStorage } from "../../services/storage/storage";
+import type { KeyValueStorage } from "@/services/storage/storage";
 
 export const STORAGE_KEY = "liai_models_v1";
 export const ACTIVE_MODEL_KEY = "liai_active_model_v1";

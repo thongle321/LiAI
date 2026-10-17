@@ -8,7 +8,7 @@
  * below it is verified here.
  */
 
-import { readSource } from "../../../jest/source";
+import { readSource } from "@/jest/source";
 import { createStore } from "tinybase";
 
 import { TinyBaseSessionStore } from "../tinybase-store";

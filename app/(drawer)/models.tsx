@@ -16,33 +16,33 @@ import { FlatList, RefreshControl, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
-import { colors } from "../../themes/tokens.ts";
-import { ScreenHeader } from "../../components/screen-header.tsx";
-import { ContentColumn } from "../../components/content-column.tsx";
-import { useLocalModelImport } from "../../hooks/useLocalModelImport.ts";
-import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
+import { colors } from "@/themes/tokens.ts";
+import { ScreenHeader } from "@/components/screen-header.tsx";
+import { ContentColumn } from "@/components/content-column.tsx";
+import { useLocalModelImport } from "@/hooks/useLocalModelImport.ts";
+import { useLoadGuard } from "@/hooks/useLoadGuard.ts";
 import { useShallow } from "zustand/shallow";
-import { useModelStore } from "../../store/modelStore.ts";
-import { useChatStore } from "../../store/chat.ts";
-import { useModelsUi } from "../../store/modelsUi.ts";
-import { isProviderActive } from "../../services/search/model-providers.ts";
+import { useModelStore } from "@/store/modelStore.ts";
+import { useChatStore } from "@/store/chat.ts";
+import { useModelsUi } from "@/store/modelsUi.ts";
+import { isProviderActive } from "@/services/search/model-providers.ts";
 import {
   buildModelGroups,
   flattenModelGroups,
   type ModelGroup,
   type ModelRow,
-} from "../../services/models/model-groups.ts";
-import { DownloadErrorDialog } from "../../components/models/download-error-dialog.tsx";
-import { ModelsHeaderRight } from "../../components/models/models-header-right.tsx";
-import { FABGroup } from "../../components/models/fab-group.tsx";
-import { ModelAccordion } from "../../components/models/model-accordion.tsx";
-import { PresetModelCard } from "../../components/models/available-models.tsx";
-import { ModelCard, RemoteProviderCard } from "../../components/models/model-card.tsx";
-import { HFModelSearch } from "../../components/models/hf-model-search.tsx";
-import { RemoteModelSheet } from "../../components/models/remote-model-sheet.tsx";
-import { ModelSettingsSheet } from "../../components/models/model-settings-sheet.tsx";
-import { ModelsResetDialog } from "../../components/models/models-reset-dialog.tsx";
-import type { PresetModelFile } from "../../types/models";
+} from "@/services/models/model-groups.ts";
+import { DownloadErrorDialog } from "@/components/models/download-error-dialog.tsx";
+import { ModelsHeaderRight } from "@/components/models/models-header-right.tsx";
+import { FABGroup } from "@/components/models/fab-group.tsx";
+import { ModelAccordion } from "@/components/models/model-accordion.tsx";
+import { PresetModelCard } from "@/components/models/available-models.tsx";
+import { ModelCard, RemoteProviderCard } from "@/components/models/model-card.tsx";
+import { HFModelSearch } from "@/components/models/hf-model-search.tsx";
+import { RemoteModelSheet } from "@/components/models/remote-model-sheet.tsx";
+import { ModelSettingsSheet } from "@/components/models/model-settings-sheet.tsx";
+import { ModelsResetDialog } from "@/components/models/models-reset-dialog.tsx";
+import type { PresetModelFile } from "@/types/models";
 
 export default function ModelsRoute() {
   // Stable selectors: actions never change identity, so each subscribes

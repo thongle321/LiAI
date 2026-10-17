@@ -21,8 +21,8 @@ import {
   CHAT_TEMPLATE_NAMES,
   getChatTemplate,
   type ChatTemplatePreset,
-} from "../../utils/chat-templates.ts";
-import { colors } from "../../themes/tokens.ts";
+} from "@/utils/chat-templates.ts";
+import { colors } from "@/themes/tokens.ts";
 
 export function ChatTemplateDialog({
   visible,

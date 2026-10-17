@@ -19,7 +19,7 @@
  * Falls back to null (and therefore to the legacy driver) whenever the native
  * side is absent: a clone that has not run `expo prebuild` yet still works.
  */
-import { androidDownload, addDownloadListener, type NativeDownload } from "../../modules/native-download/src/NativeDownloadModule";
+import { androidDownload, addDownloadListener, type NativeDownload } from "@/modules/native-download/src/NativeDownloadModule";
 import {
   claimTerminal,
   isTerminalState,
@@ -27,7 +27,7 @@ import {
   nativeStateToJobStatus,
   nextSpeedSample,
 } from "../models/download-jobs.ts";
-import type { DownloadJob } from "../../types/models.ts";
+import type { DownloadJob } from "@/types/models.ts";
 
 export type ProgressCallback = (job: DownloadJob) => void;
 export type CompleteCallback = (job: DownloadJob, success: boolean) => void;

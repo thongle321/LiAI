@@ -24,9 +24,9 @@ import {
   type RendererInterface,
 } from "react-native-marked";
 
-import { isOpenableUrl } from "../../services/chat/links.ts";
-import { useChatStore } from "../../store/chat";
-import { colors, embeddedText, font, typeScale } from "../../themes/tokens.ts";
+import { isOpenableUrl } from "@/services/chat/links.ts";
+import { useChatStore } from "@/store/chat";
+import { colors, embeddedText, font, typeScale } from "@/themes/tokens.ts";
 import { CodeBlock } from "./code-block.tsx";
 
 /** One guarded open shared by both link overrides: Linking, then the

@@ -4,9 +4,9 @@ import { Alert, Pressable, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import { CheckCircle2, Download, Eye, MessageSquare, Pause, Play, X } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { clampPercent, formatBytes, progressCaption } from "../../services/models/progress.ts";
-import type { ModelDownloadStatus, ModelType } from "../../types/models";
+import { colors } from "@/themes/tokens.ts";
+import { clampPercent, formatBytes, progressCaption } from "@/services/models/progress.ts";
+import type { ModelDownloadStatus, ModelType } from "@/types/models";
 
 // Re-exported so the six existing importers keep one import path. The
 // implementation lives in services/models/ now, where it is testable by `jest`

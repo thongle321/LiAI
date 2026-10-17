@@ -11,8 +11,8 @@
  */
 import * as Speech from "expo-speech";
 
-import { stripForSpeech } from "../../utils/strip-for-speech.ts";
-import { useVoice } from "../../store/voice.ts";
+import { stripForSpeech } from "@/utils/strip-for-speech.ts";
+import { useVoice } from "@/store/voice.ts";
 
 export type SpeakCallbacks = {
   onDone?: () => void;

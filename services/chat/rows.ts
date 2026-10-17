@@ -16,7 +16,7 @@
  * add when it tracks more.
  */
 
-import type { ChatMessage } from "../../types/chat.ts";
+import type { ChatMessage } from "@/types/chat.ts";
 
 export interface MessageRow {
   kind: "message";

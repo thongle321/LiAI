@@ -16,7 +16,7 @@
 import { Text, View } from "react-native";
 import { AlertTriangle } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors } from "@/themes/tokens.ts";
 
 export function ToolErrorBlock({
   tool,

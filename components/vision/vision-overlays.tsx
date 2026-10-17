@@ -15,11 +15,11 @@ import {
   useCameraFormat,
 } from "react-native-vision-camera";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors } from "@/themes/tokens.ts";
 import * as Haptics from "expo-haptics";
-import { useKeyboardLift } from "../../hooks/useKeyboardLift.ts";
-import { usePressFeedback } from "../../utils/motion.ts";
-import type { VoicePhase } from "../../services/voice/voice-status.ts";
+import { useKeyboardLift } from "@/hooks/useKeyboardLift.ts";
+import { usePressFeedback } from "@/utils/motion.ts";
+import type { VoicePhase } from "@/services/voice/voice-status.ts";
 
 export function VisionPreview({
   hasPermission,

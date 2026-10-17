@@ -3,7 +3,7 @@
 
 
 import { isPresetDownloaded, presetCardState, presetFileState } from "../file-state";
-import type { ModelSpec, PresetModel } from "../../../types/models";
+import type { ModelSpec, PresetModel } from "@/types/models";
 
 const PRESET: PresetModel = {
   id: "qwen3-0.6b",

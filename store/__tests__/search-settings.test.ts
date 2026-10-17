@@ -6,9 +6,9 @@ import {
   isSearchProviderId,
   parseResultCount,
   searchKeySS,
-} from "../../services/search/search-providers";
+} from "@/services/search/search-providers";
 import { createSearchStore, SEARCH_KEY } from "../search";
-import { memorySecure, memoryStorage } from "../../jest/storage";
+import { memorySecure, memoryStorage } from "@/jest/storage";
 
 describe("search providers lib", () => {
   it("keys namespace per provider, counts clamp", () => {

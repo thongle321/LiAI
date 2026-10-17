@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import { Image as RNImage, Pressable, Text, View } from "react-native";
 import { openURL } from "expo-linking";
 
-import { fetchPreview, firstUrl, type LinkPreview } from "../../services/chat/link-preview.ts";
+import { fetchPreview, firstUrl, type LinkPreview } from "@/services/chat/link-preview.ts";
 
 export function LinkPreviewCard({ text }: { text: string }) {
   const url = firstUrl(text);

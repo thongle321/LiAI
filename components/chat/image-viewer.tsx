@@ -16,7 +16,7 @@ import { Image, Modal, Pressable, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { X } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors } from "@/themes/tokens.ts";
 
 export function ImageViewer({
   uri,

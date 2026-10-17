@@ -33,8 +33,8 @@ import * as Haptics from "expo-haptics";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Code2, Copy, Maximize2, Minimize2 } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { wrapDocument } from "../../utils/preview-document.ts";
+import { colors } from "@/themes/tokens.ts";
+import { wrapDocument } from "@/utils/preview-document.ts";
 import { CodeBlock } from "./code-block.tsx";
 
 // Soft cap on concurrently live WebViews to avoid memory pressure on

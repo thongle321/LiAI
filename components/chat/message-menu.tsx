@@ -17,8 +17,8 @@ import { Pressable, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import MenuView, { type MenuAction } from "@expo/ui/community/menu";
 
-import { useCopy } from "../../hooks/useCopy.ts";
-import type { PickableModel } from "../../services/chat/models.ts";
+import { useCopy } from "@/hooks/useCopy.ts";
+import type { PickableModel } from "@/services/chat/models.ts";
 
 /** Action ids. `onPressAction` reports `action.id ?? action.title`, so
  * every action MUST carry an explicit id — a renamed label must not

@@ -31,16 +31,16 @@ import {
   X,
 } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { useModelStore } from "../../store/modelStore";
+import { colors } from "@/themes/tokens.ts";
+import { useModelStore } from "@/store/modelStore";
 import {
   extractHFModelTitle,
   formatNumber,
   isVisionModel,
   timeAgo,
-} from "../../services/models/hf-format.ts";
+} from "@/services/models/hf-format.ts";
 import { ModelTypeIcon } from "./model-bits.tsx";
-import type { HFModelSearchResult } from "../../types/models";
+import type { HFModelSearchResult } from "@/types/models";
 
 export const SORT_OPTIONS: {
   value: "relevance" | "downloads" | "lastModified" | "likes";

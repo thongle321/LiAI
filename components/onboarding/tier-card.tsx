@@ -3,8 +3,8 @@
 import { Pressable, Text, View } from "react-native";
 import { CheckCircle2, Circle } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import type { DeviceTier } from "../../services/models/device-tiers.ts";
+import { colors } from "@/themes/tokens.ts";
+import type { DeviceTier } from "@/services/models/device-tiers.ts";
 
 export function formatRamFloor(minRamMb: number): string {
   if (minRamMb <= 0) return "Any phone";

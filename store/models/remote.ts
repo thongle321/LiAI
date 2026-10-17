@@ -3,8 +3,8 @@
 import type { StateCreator } from "zustand";
 
 import type { ModelStore, RemoteSlice } from "./types";
-import { buildRemoteModelSpec, mergeRemoteCaps, probeRemoteCaps, stripMeasuredCaps, validateRemoteApi } from "../../services/models/remote-api.ts";
-import { providerKeySS } from "../../services/auth/secrets.ts";
+import { buildRemoteModelSpec, mergeRemoteCaps, probeRemoteCaps, stripMeasuredCaps, validateRemoteApi } from "@/services/models/remote-api.ts";
+import { providerKeySS } from "@/services/auth/secrets.ts";
 import {
   ACTIVE_MODEL_KEY,
   asyncStorage,

@@ -11,8 +11,8 @@
  */
 
 import { createVoiceStore, VOICE_KEY } from "../voice";
-import { memoryStorage } from "../../jest/storage";
-import { DEVICE_DEFAULT_VOICE } from "../../services/tts/types";
+import { memoryStorage } from "@/jest/storage";
+import { DEVICE_DEFAULT_VOICE } from "@/services/tts/types";
 
 describe("voice store hydration (D3-4)", () => {
   /** A saved voice from an earlier session, on disk. `sanitizeVoice`

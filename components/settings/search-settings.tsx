@@ -17,16 +17,16 @@ import {
 } from "react-native";
 import { Eye, EyeOff } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { cn } from "../../utils/cn.ts";
+import { colors } from "@/themes/tokens.ts";
+import { cn } from "@/utils/cn.ts";
 import {
   MAX_RESULT_COUNT,
   MIN_RESULT_COUNT,
   SEARCH_PROVIDERS,
   type SearchProviderId,
-} from "../../services/search/search-providers.ts";
+} from "@/services/search/search-providers.ts";
 import { useShallow } from "zustand/shallow";
-import { useSearch } from "../../store/search.ts";
+import { useSearch } from "@/store/search.ts";
 import { Sheet } from "../sheet.tsx";
 import {
   ActionRow,

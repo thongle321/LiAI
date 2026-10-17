@@ -28,6 +28,9 @@ module.exports = {
     'node_modules/@react-native/babel-preset/',
   ],
   moduleNameMapper: {
+    // Mirrors tsconfig.json's "paths": { "@/*": ["./*"] }. Metro resolves
+    // those itself; jest has to be told. First so it wins over anything below.
+    '^@/(.*)$': '<rootDir>/$1',
     '\\.css$': '<rootDir>/jest/styleMock.js',
     'react-native/setup-env': '<rootDir>/jest/react-native-setup-env.js',
     'llama.rn': '<rootDir>/__mocks__/external/llama.rn.ts',

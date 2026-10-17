@@ -9,9 +9,9 @@ import { Pressable, Text, View } from "react-native";
 import { Menu, SquarePen } from "lucide-react-native";
 import Animated from "react-native-reanimated";
 
-import { colors } from "../../themes/tokens.ts";
-import { APP_NAME } from "../../constants/app.ts";
-import { usePressFeedback } from "../../utils/motion.ts";
+import { colors } from "@/themes/tokens.ts";
+import { APP_NAME } from "@/constants/app.ts";
+import { usePressFeedback } from "@/utils/motion.ts";
 import { ChatMenu } from "./chat-menu.tsx";
 
 export function ChatHeader({

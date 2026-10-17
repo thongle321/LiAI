@@ -178,6 +178,13 @@ downloads/ auth/ storage/`. Never expose secret keys here.
 **utils/** is pure functions only: formatting, parsing, guards, motion,
 capability rules. A file that imports `expo-*`, `react-native-*`, SQLite or
 TinyBase belongs in `services/`, not here.
+**Imports:** anything two or more directories deep imports through the `@/`
+alias (`tsconfig.json` maps `@/*` to the repo root; Metro resolves it, and
+`jest.config.js` mirrors the mapping). A sibling stays relative — `./x` is
+already unambiguous. So `import { useChatStore } from "@/store/chat.ts";`, not
+`"../../../store/chat.ts"`. `jest/architecture-conventions.test.ts` enforces
+this. Dynamic `import()` calls are the one exception and keep their relative
+paths: jest's CJS runtime does not route them through `moduleNameMapper`.
 **jest/** is the test harness: `setup.ts` (module boundaries, loaded before
 a module is imported), `setupFilesAfterEnv.ts` (per-test hygiene),
 `fixtures/` (shared fakes), plus the router/storage/source helpers and the

@@ -32,12 +32,12 @@ import {
   Trash,
 } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { useKeyboardLift } from "../../hooks/useKeyboardLift.ts";
+import { colors } from "@/themes/tokens.ts";
+import { useKeyboardLift } from "@/hooks/useKeyboardLift.ts";
 import Animated from "react-native-reanimated";
-import { formatTime } from "../../utils/format.ts";
-import { groupSessions, type SessionSection } from "../../services/chat/session-groups.ts";
-import type { ChatSession } from "../../types/chat.ts";
+import { formatTime } from "@/utils/format.ts";
+import { groupSessions, type SessionSection } from "@/services/chat/session-groups.ts";
+import type { ChatSession } from "@/types/chat.ts";
 
 /** The row whose menu is open, and where the finger was. */
 interface MenuAnchor {

@@ -19,7 +19,7 @@ import {
 } from "expo-file-system/legacy";
 import { Paths } from "expo-file-system";
 import * as Haptics from "expo-haptics";
-import type { DownloadErrorCode, DownloadJob } from "../../types/models.ts";
+import type { DownloadErrorCode, DownloadJob } from "@/types/models.ts";
 import {
   describeHttpFailure,
   errorCodeForStatus,

@@ -8,7 +8,7 @@
 
 import type { CompletionEngine, EngineSource } from "./engine.ts";
 import type { LlamaInitParams } from "./local-engine.ts";
-import type { RemoteApiProvider } from "../../types/models.ts";
+import type { RemoteApiProvider } from "@/types/models.ts";
 
 export interface EngineLoader {
   loadLocal(

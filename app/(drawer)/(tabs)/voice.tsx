@@ -26,16 +26,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { openSettings } from "expo-linking";
 import { Mic } from "lucide-react-native";
 
-import { colors } from "../../../themes/tokens.ts";
-import { VOICE_STATUS_LABEL } from "../../../services/voice/voice-status.ts";
+import { colors } from "@/themes/tokens.ts";
+import { VOICE_STATUS_LABEL } from "@/services/voice/voice-status.ts";
 import {
   MOTION_DURATION_MS,
   fadeEntering,
   motionEasing,
   usePressFeedback,
-} from "../../../utils/motion.ts";
-import { useVoiceLoop } from "../../../hooks/useVoiceLoop.ts";
-import { useModelReady } from "../../../hooks/useModelReady.ts";
+} from "@/utils/motion.ts";
+import { useVoiceLoop } from "@/hooks/useVoiceLoop.ts";
+import { useModelReady } from "@/hooks/useModelReady.ts";
 
 export default function VoiceScreen() {
   const { phase, heard, reply, issue, needsSettings, bargeIn, retry } = useVoiceLoop();

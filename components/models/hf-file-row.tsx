@@ -16,18 +16,18 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Bookmark, ChevronRight, Eye, Lock, Trash2 } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { useModelStore } from "../../store/modelStore";
-import { hfSpecId } from "../../services/models/huggingface.ts";
-import { visionSizeBreakdown } from "../../services/models/hf-format.ts";
-import { hfFileWarnings } from "../../services/models/hf-warnings.ts";
-import { storageDisclosure } from "../../services/models/storage-disclosure.ts";
-import type { HFWarningCode } from "../../services/models/hf-warnings.ts";
+import { colors } from "@/themes/tokens.ts";
+import { useModelStore } from "@/store/modelStore";
+import { hfSpecId } from "@/services/models/huggingface.ts";
+import { visionSizeBreakdown } from "@/services/models/hf-format.ts";
+import { hfFileWarnings } from "@/services/models/hf-warnings.ts";
+import { storageDisclosure } from "@/services/models/storage-disclosure.ts";
+import type { HFWarningCode } from "@/services/models/hf-warnings.ts";
 import type {
   HFModelFile,
   HFModelSearchResult,
   ModelDownloadStatus,
-} from "../../types/models";
+} from "@/types/models";
 import {
   CancelDownloadButton,
   Chip,

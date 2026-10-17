@@ -15,12 +15,12 @@ import { Alert } from "react-native";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { CheckCircle2, Download, Trash2 } from "lucide-react-native";
 
-import { useModelStore } from "../../store/modelStore";
-import { useChatStore } from "../../store/chat";
+import { useModelStore } from "@/store/modelStore";
+import { useChatStore } from "@/store/chat";
 import { Sheet } from "../sheet.tsx";
-import { colors } from "../../themes/tokens.ts";
+import { colors } from "@/themes/tokens.ts";
 import { formatBytes, progressCaption } from "./model-bits.tsx";
-import type { ModelFile, ModelSpec } from "../../types/models";
+import type { ModelFile, ModelSpec } from "@/types/models";
 
 export function ProjectorSelectorSheet({
   model,

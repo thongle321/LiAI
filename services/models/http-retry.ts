@@ -12,7 +12,7 @@
  * this account cannot read, and they need different words.
  */
 
-import type { DownloadErrorCode } from "../../types/models.ts";
+import type { DownloadErrorCode } from "@/types/models.ts";
 
 /** Which failures the UI can offer a real fix for.
  *

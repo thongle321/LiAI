@@ -28,7 +28,7 @@ import {
   TextFieldRow,
   ToggleRow,
 } from "../settings-rows.tsx";
-import type { MirostatMode, SamplerParams } from "../../services/inference/sampler.ts";
+import type { MirostatMode, SamplerParams } from "@/services/inference/sampler.ts";
 
 const MIROSTAT_OPTIONS: MirostatMode[] = [0, 1, 2];
 const MIROSTAT_LABELS = ["Off", "v1", "v2"] as const;

@@ -27,9 +27,9 @@ import { useState, type ReactNode } from "react";
 import { Linking, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { ChevronRight, ExternalLink, Search, Wrench } from "lucide-react-native";
 
-import type { AgentStep } from "../../types/chat.ts";
-import { formatToolMetrics } from "../../utils/format.ts";
-import { colors } from "../../themes/tokens.ts";
+import type { AgentStep } from "@/types/chat.ts";
+import { formatToolMetrics } from "@/utils/format.ts";
+import { colors } from "@/themes/tokens.ts";
 import { HtmlPreviewBubble } from "./html-preview-bubble.tsx";
 
 export interface ToolSurfaceProps {

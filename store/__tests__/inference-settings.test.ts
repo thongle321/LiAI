@@ -9,9 +9,9 @@ import {
   MIN_CONTEXT,
   parseInferenceParams,
 } from "../inference";
-import { DEFAULT_SAMPLER } from "../../services/inference/sampler";
-import { EngineManager } from "../../services/inference/manager";
-import { memoryStorage } from "../../jest/storage";
+import { DEFAULT_SAMPLER } from "@/services/inference/sampler";
+import { EngineManager } from "@/services/inference/manager";
+import { memoryStorage } from "@/jest/storage";
 
 describe("inference store", () => {
   let storage: ReturnType<typeof memoryStorage>;

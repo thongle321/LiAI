@@ -1,5 +1,5 @@
 
-import { readSource } from "../../../jest/source";
+import { readSource } from "@/jest/source";
 
 import { specCanSeeImages } from "../mmproj";
 

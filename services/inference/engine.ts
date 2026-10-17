@@ -7,12 +7,12 @@
  */
 
 import { buildRemoteModelSpec } from "../models/remote-api.ts";
-import type { EffortLevel } from "../../utils/reasoning-capability.ts";
-import type { ModelOrigin, ModelSpec, RemoteApiProvider } from "../../types/models.ts";
+import type { EffortLevel } from "@/utils/reasoning-capability.ts";
+import type { ModelOrigin, ModelSpec, RemoteApiProvider } from "@/types/models.ts";
 // The timings shape is a DOMAIN type, defined once in types/chat.ts and
 // shared: the engine projects it, the store persists it, the footer reads
 // it. Restating it here would be a second definition waiting to drift.
-import type { TurnTimings } from "../../types/chat.ts";
+import type { TurnTimings } from "@/types/chat.ts";
 import type { SamplerParams } from "./sampler.ts";
 
 /** Token deltas stream here; the runner feeds bubbles directly. */

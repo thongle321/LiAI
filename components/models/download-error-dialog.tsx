@@ -15,8 +15,8 @@
 
 import { Linking, Modal, Pressable, Text, View } from "react-native";
 
-import { downloadErrorCopy } from "../../services/models/download-error.ts";
-import type { DownloadErrorCode } from "../../types/models.ts";
+import { downloadErrorCopy } from "@/services/models/download-error.ts";
+import type { DownloadErrorCode } from "@/types/models.ts";
 
 export function DownloadErrorDialog({
   error,

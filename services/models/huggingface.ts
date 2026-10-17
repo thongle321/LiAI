@@ -13,7 +13,7 @@ import type {
   PresetModelFile,
   HFModelSearchResult,
   HFModelFile,
-} from "../../types/models";
+} from "@/types/models";
 
 import {
   hfSortParams,

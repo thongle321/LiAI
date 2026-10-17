@@ -33,17 +33,17 @@ import {
   X,
 } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { useModelStore } from "../../store/modelStore";
-import { useStorageDisclosure } from "../../hooks/useStorageDisclosure.ts";
-import { parseModelSettings } from "../../utils/model-settings.ts";
-import { cardActions, statusDotState } from "../../services/models/card-actions.ts";
+import { colors } from "@/themes/tokens.ts";
+import { useModelStore } from "@/store/modelStore";
+import { useStorageDisclosure } from "@/hooks/useStorageDisclosure.ts";
+import { parseModelSettings } from "@/utils/model-settings.ts";
+import { cardActions, statusDotState } from "@/services/models/card-actions.ts";
 import {
   MOTION_DURATION_MS,
   fadeEntering,
   fadeExiting,
-} from "../../utils/motion.ts";
-import type { ModelSpec, RemoteApiProvider } from "../../types/models";
+} from "@/utils/motion.ts";
+import type { ModelSpec, RemoteApiProvider } from "@/types/models";
 import {
   Chip,
   CancelDownloadButton,

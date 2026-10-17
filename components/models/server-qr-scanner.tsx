@@ -13,9 +13,9 @@ import {
   type CameraRuntimeError,
 } from "react-native-vision-camera";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors } from "@/themes/tokens.ts";
 import { Sheet } from "../sheet.tsx";
-import { isServerUrl } from "../../services/models/server-url.ts";
+import { isServerUrl } from "@/services/models/server-url.ts";
 
 export function ServerQRScanner({
   visible,

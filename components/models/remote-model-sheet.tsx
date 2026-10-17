@@ -11,8 +11,8 @@ import {
 } from "react-native";
 import { CheckCircle2, Circle } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { useModelStore } from "../../store/modelStore";
+import { colors } from "@/themes/tokens.ts";
+import { useModelStore } from "@/store/modelStore";
 import { Sheet } from "../sheet.tsx";
 import {
   useCameraPermission,
@@ -20,8 +20,8 @@ import {
 import { openSettings } from "expo-linking";
 import { ServerQRScanner } from "./server-qr-scanner.tsx";
 import { ScanLine } from "lucide-react-native";
-import { normalizeTimeoutMs } from "../../services/inference/remote-engine.ts";
-import type { RemoteApiProvider } from "../../types/models";
+import { normalizeTimeoutMs } from "@/services/inference/remote-engine.ts";
+import type { RemoteApiProvider } from "@/types/models";
 
 export function RemoteModelSheet({
   visible,

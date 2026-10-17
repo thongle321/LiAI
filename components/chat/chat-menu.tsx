@@ -37,26 +37,26 @@ import {
   Download,
 } from "lucide-react-native";
 
-import { useChatStore } from "../../store/chat";
-import { useModelStore } from "../../store/modelStore";
+import { useChatStore } from "@/store/chat";
+import { useModelStore } from "@/store/modelStore";
 import {
   exportFilename,
   toAllSessionsJson,
   toMarkdown,
   toSessionJson,
   type ExportKind,
-} from "../../services/chat/export.ts";
-import { readExportSessions } from "../../services/chat/export-read.ts";
+} from "@/services/chat/export.ts";
+import { readExportSessions } from "@/services/chat/export-read.ts";
 import {
   MENU_DURATION_MS,
   menuEnteringZoom,
   menuExiting,
   usePressFeedback,
-} from "../../utils/motion.ts";
-import { useChatImport } from "../../hooks/useChatImport.ts";
-import { shareExportedFile } from "../../services/chat/share-export.ts";
-import { pickableModels } from "../../services/chat/models.ts";
-import { colors } from "../../themes/tokens.ts";
+} from "@/utils/motion.ts";
+import { useChatImport } from "@/hooks/useChatImport.ts";
+import { shareExportedFile } from "@/services/chat/share-export.ts";
+import { pickableModels } from "@/services/chat/models.ts";
+import { colors } from "@/themes/tokens.ts";
 
 type Panel = "menu" | "model" | "export" | "rename";
 

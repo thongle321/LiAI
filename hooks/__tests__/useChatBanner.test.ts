@@ -10,8 +10,8 @@
 import { act, renderHook } from "@testing-library/react-native";
 
 import { useChatBanner, type ChatBannerInput } from "../useChatBanner.ts";
-import type { ChatMessage } from "../../types/chat.ts";
-import { AUTOCLEAR_RUNWAY } from "../../services/chat/banner-variant.ts";
+import type { ChatMessage } from "@/types/chat.ts";
+import { AUTOCLEAR_RUNWAY } from "@/services/chat/banner-variant.ts";
 
 const NCtx = 4096;
 

@@ -11,32 +11,32 @@
 
 import { create } from "zustand";
 
-import type { SearchAuth } from "../../types/api.ts";
+import type { SearchAuth } from "@/types/api.ts";
 import { useSearch } from "../search.ts";
 import { createSendSlice, multimodalAvailable } from "./send.ts";
 import { createSessionsSlice } from "./sessions.ts";
 import { createDraftSlice } from "./draft.ts";
 import type { ChatCtx, ChatDeps, ChatState, TurnRunner } from "./types.ts";
-import { createToolTokenCounter } from "../../services/chat/tool-token-count.ts";
-import { selectEngineSource, type EngineSource } from "../../services/inference/engine.ts";
-import { EngineManager } from "../../services/inference/manager.ts";
-import type { LlamaInitParams } from "../../services/inference/local-engine.ts";
-import { projectorPathForFileName } from "../../services/inference/mmproj.ts";
-import { resolveSampler, type SamplerParams } from "../../services/inference/sampler.ts";
-import { resolveThinking } from "../../services/inference/thinking.ts";
+import { createToolTokenCounter } from "@/services/chat/tool-token-count.ts";
+import { selectEngineSource, type EngineSource } from "@/services/inference/engine.ts";
+import { EngineManager } from "@/services/inference/manager.ts";
+import type { LlamaInitParams } from "@/services/inference/local-engine.ts";
+import { projectorPathForFileName } from "@/services/inference/mmproj.ts";
+import { resolveSampler, type SamplerParams } from "@/services/inference/sampler.ts";
+import { resolveThinking } from "@/services/inference/thinking.ts";
 import {
   resolveEffort,
   type EffortLevel,
-} from "../../utils/reasoning-capability.ts";
-import type { ThinkingChatProbe } from "../../services/inference/thinking-detection.ts";
+} from "@/utils/reasoning-capability.ts";
+import type { ThinkingChatProbe } from "@/services/inference/thinking-detection.ts";
 import {
   getAvailableDevices,
   resolveComputeDevices,
-} from "../../services/inference/deviceSelection.ts";
-import { createRemoteEngine } from "../../services/inference/remote-engine.ts";
-import { createTurnRunner } from "../../services/chat/turn.ts";
-import { holdScreen, releaseScreen } from "../../services/chat/keep-awake.ts";
-import type { SessionStore } from "../../services/chat/session-store.ts";
+} from "@/services/inference/deviceSelection.ts";
+import { createRemoteEngine } from "@/services/inference/remote-engine.ts";
+import { createTurnRunner } from "@/services/chat/turn.ts";
+import { holdScreen, releaseScreen } from "@/services/chat/keep-awake.ts";
+import type { SessionStore } from "@/services/chat/session-store.ts";
 
 /** Default BYOK resolver: consent-gated key from SecureStore, never KV.
  * Short-circuits before touching SecureStore when consent is absent. */

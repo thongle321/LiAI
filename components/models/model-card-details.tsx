@@ -15,26 +15,26 @@ import * as FileSystem from "expo-file-system/legacy";
 import { ExternalLink, ImageOff } from "lucide-react-native";
 
 import { useShallow } from "zustand/shallow";
-import { useInference } from "../../store/inference.ts";
-import { useModelStore } from "../../store/modelStore";
-import { useChatStore } from "../../store/chat";
-import { resolveLocalFile } from "../../services/inference/engine.ts";
-import { formatParams } from "../../services/search/model-providers.ts";
-import { readTotalMemory } from "../../services/models/device-tiers.ts";
+import { useInference } from "@/store/inference.ts";
+import { useModelStore } from "@/store/modelStore";
+import { useChatStore } from "@/store/chat";
+import { resolveLocalFile } from "@/services/inference/engine.ts";
+import { formatParams } from "@/services/search/model-providers.ts";
+import { readTotalMemory } from "@/services/models/device-tiers.ts";
 import {
   projectorStatus,
   visionActive,
-} from "../../services/models/vision-pairing.ts";
-import { colors } from "../../themes/tokens.ts";
+} from "@/services/models/vision-pairing.ts";
+import { colors } from "@/themes/tokens.ts";
 import {
   estimateModelMemory,
   toMemoryMetadata,
-} from "../../services/models/memoryEstimator.ts";
+} from "@/services/models/memoryEstimator.ts";
 import {
   checkModelFileIntegrity,
   type IntegrityResult,
-} from "../../services/models/modelIntegrity.ts";
-import type { ModelSpec } from "../../types/models";
+} from "@/services/models/modelIntegrity.ts";
+import type { ModelSpec } from "@/types/models";
 import { Chip, formatBytes } from "./model-bits.tsx";
 import { ToggleRow } from "../settings-rows.tsx";
 import { ProjectorSelectorSheet } from "./projector-selector-sheet.tsx";

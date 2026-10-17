@@ -3,9 +3,9 @@
 import { Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { colors } from "../../themes/tokens.ts";
-import { APP_NAME } from "../../constants/app.ts";
-import { ScreenHeader } from "../../components/screen-header.tsx";
+import { colors } from "@/themes/tokens.ts";
+import { APP_NAME } from "@/constants/app.ts";
+import { ScreenHeader } from "@/components/screen-header.tsx";
 
 export default function AboutScreen() {
   return (

@@ -13,7 +13,7 @@ import {
   ggufMetadataFromHeader,
   type GgufHeader,
 } from "./gguf-metadata.ts";
-import { sanitizeGgufMetadata } from "../../utils/model-upgrade.ts";
+import { sanitizeGgufMetadata } from "@/utils/model-upgrade.ts";
 
 /** Candidate paths for a file already on disk: downloads land in
  *  `models/`, local imports in `models/local/`. Neither the stored

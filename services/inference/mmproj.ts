@@ -12,7 +12,7 @@
  * failed import resolves to undefined (cannot see — the honest default).
  */
 
-import type { ModelSpec } from "../../types/models.ts";
+import type { ModelSpec } from "@/types/models.ts";
 import { resolveLocalFile } from "./engine.ts";
 
 /** Pure decision: can the ACTIVE local model see images? (vision-series 03)

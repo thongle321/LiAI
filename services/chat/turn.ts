@@ -6,17 +6,17 @@
  * are best-effort (the reply still renders); a missing engine rejects.
  */
 
-import type { AgentStep, TurnBlock, TurnOutcomeFlags } from "../../types/chat.ts";
-import type { ChatMessage } from "../../types/chat.ts";
+import type { AgentStep, TurnBlock, TurnOutcomeFlags } from "@/types/chat.ts";
+import type { ChatMessage } from "@/types/chat.ts";
 import type { StoredTurn } from "./session-store.ts";
-import type { TurnPaths } from "../../store/chat/types.ts";
+import type { TurnPaths } from "@/store/chat/types.ts";
 import type {
   CompletionEngine,
   CompletionMessage,
   EngineSource,
 } from "../inference/engine.ts";
 import type { SamplerParams } from "../inference/sampler.ts";
-import type { EffortLevel } from "../../utils/reasoning-capability.ts";
+import type { EffortLevel } from "@/utils/reasoning-capability.ts";
 import { runLocalAgent } from "../agent/runner.ts";
 import { talentDefinitions, type TalentSearchAuth } from "../agent/registry.ts";
 

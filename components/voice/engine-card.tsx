@@ -40,21 +40,21 @@ import {
   Trash2,
 } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { motionLayout } from "../../utils/motion.ts";
-import { formatBytes } from "../../services/models/progress.ts";
-import { NEURAL_ENGINE_META } from "../../services/tts/engineMeta.ts";
+import { colors } from "@/themes/tokens.ts";
+import { motionLayout } from "@/utils/motion.ts";
+import { formatBytes } from "@/services/models/progress.ts";
+import { NEURAL_ENGINE_META } from "@/services/tts/engineMeta.ts";
 import {
   canStartInstall,
   downloadLine,
   engineGroupState,
   voiceTap,
   type EngineGroupState,
-} from "../../services/tts/voiceUi.ts";
-import { useFreeSpacePoll } from "../../hooks/useStorageDisclosure.ts";
-import type { NeuralEngineId, Voice } from "../../services/tts/types.ts";
-import { VOICE_PREVIEW_SAMPLE } from "../../constants/voice-strings.ts";
-import { useVoice } from "../../store/voice.ts";
+} from "@/services/tts/voiceUi.ts";
+import { useFreeSpacePoll } from "@/hooks/useStorageDisclosure.ts";
+import type { NeuralEngineId, Voice } from "@/services/tts/types.ts";
+import { VOICE_PREVIEW_SAMPLE } from "@/constants/voice-strings.ts";
+import { useVoice } from "@/store/voice.ts";
 import { RadioDot } from "./radio-dot.tsx";
 
 /** The engine's glyph. Lucide only — no bundled logo PNGs, which is what

@@ -18,6 +18,7 @@ import {
 import { Eye, EyeOff } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
+import { cn } from "../../utils/cn.ts";
 import {
   MAX_RESULT_COUNT,
   MIN_RESULT_COUNT,
@@ -190,7 +191,7 @@ function ProviderKeySheet({
           autoCapitalize="none"
           autoCorrect={false}
           spellCheck={false}
-          className="input font-sans text-body-md pr-12"
+          className={cn("input font-sans text-body-md", "pr-12")}
           placeholderTextColor={colors.secondaryText}
           accessibilityLabel={`${providerId ?? ""} API key`}
         />

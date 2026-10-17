@@ -12,6 +12,7 @@ import { Pressable, Text, View } from "react-native";
 import { CloudDownload, Database, Play, Square, Volume2 } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
+import { cn } from "../../utils/cn.ts";
 import { formatBytes } from "../../services/models/progress.ts";
 import { useFreeSpacePoll } from "../../hooks/useStorageDisclosure.ts";
 import { ENGINE_ORDER } from "../../services/tts/engineMeta.ts";
@@ -106,7 +107,7 @@ export function VoiceSettings() {
             onPress={togglePreview}
             accessibilityRole="button"
             accessibilityLabel={previewing ? "Stop preview" : "Preview the system voice"}
-            className="btn btn--tonal flex-row items-center gap-2 self-start px-4 py-2"
+            className={cn("btn btn--tonal flex-row items-center gap-2 self-start", "px-4 py-2")}
           >
             {previewing ? (
               <Square size={14} color={colors.primary} />

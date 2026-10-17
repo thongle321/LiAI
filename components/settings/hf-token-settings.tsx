@@ -17,6 +17,7 @@ import {
 import { Eye, EyeOff, ExternalLink } from "lucide-react-native";
 
 import { colors } from "../../themes/tokens.ts";
+import { cn } from "../../utils/cn.ts";
 import { useModelStore } from "../../store/modelStore";
 import { useSnackbar } from "../snackbar.tsx";
 import { Sheet } from "../sheet.tsx";
@@ -173,7 +174,7 @@ className={
           autoCapitalize="none"
           autoCorrect={false}
           spellCheck={false}
-          className="input font-sans text-body-md pr-12"
+          className={cn("input font-sans text-body-md", "pr-12")}
           placeholderTextColor={colors.secondaryText}
           accessibilityLabel="Personal Access Token"
         />

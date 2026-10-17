@@ -61,7 +61,7 @@ export function ImageViewer({
         <View className="absolute left-0 top-0">
           <Pressable
             onPress={onClose}
-            className="h-12 w-12 items-center justify-center"
+            className="icon-btn"
             accessibilityRole="button"
             accessibilityLabel="Close image"
             hitSlop={8}

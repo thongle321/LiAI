@@ -166,7 +166,7 @@ export function VisionTopFloat({
             onPress={onExit}
             onPressIn={exitPress.onPressIn}
             onPressOut={exitPress.onPressOut}
-            className="h-12 w-12 items-center justify-center"
+            className="icon-btn"
             accessibilityRole="button"
             accessibilityLabel="Stop vision"
           >
@@ -179,7 +179,7 @@ export function VisionTopFloat({
             onPress={onToggleWatch}
             onPressIn={watchPress.onPressIn}
             onPressOut={watchPress.onPressOut}
-            className="h-12 w-12 items-center justify-center"
+            className="icon-btn"
             accessibilityRole="button"
             accessibilityState={{ selected: watchOn }}
             accessibilityLabel={watchOn ? "Stop watching" : "Watch mode — keep recent frames for the next question"}
@@ -196,7 +196,7 @@ export function VisionTopFloat({
             onPress={onFlip}
             onPressIn={flipPress.onPressIn}
             onPressOut={flipPress.onPressOut}
-            className="h-12 w-12 items-center justify-center"
+            className="icon-btn"
             accessibilityRole="button"
             accessibilityLabel="Switch camera"
           >
@@ -382,7 +382,7 @@ export function VisionBottomPanel({
               onPressIn={sendPress.onPressIn}
               onPressOut={sendPress.onPressOut}
               disabled={!modelReady}
-              className="h-12 w-12 items-center justify-center"
+              className="icon-btn"
               accessibilityRole="button"
               accessibilityState={{ disabled: !modelReady }}
               accessibilityLabel="Send question"

@@ -231,7 +231,7 @@ export function ChatMenu({
           onPress={toggle}
           onPressIn={triggerPress.onPressIn}
           onPressOut={triggerPress.onPressOut}
-          className="h-12 w-12 items-center justify-center"
+          className="icon-btn"
           hitSlop={4}
           accessibilityRole="button"
           accessibilityLabel="Chat menu"

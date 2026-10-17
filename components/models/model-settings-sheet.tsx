@@ -450,7 +450,7 @@ export function ModelSettingsSheet({
                     </Text>
                     <Pressable
                       onPress={() => setStopWords((prev) => prev.filter((w) => w !== word))}
-                      className="h-12 w-12 items-center justify-center"
+                      className="icon-btn"
                       accessibilityRole="button"
                       accessibilityLabel={`Remove stop word ${word}`}
                     >

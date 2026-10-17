@@ -632,7 +632,7 @@ export default function ChatRoute() {
           >
             <Pressable
               onPress={() => listRef.current?.scrollToEnd({ animated: true })}
-              className="h-12 w-12 items-center justify-center rounded-full bg-primary"
+              className="icon-btn rounded-full bg-primary"
               accessibilityRole="button"
               accessibilityLabel="Jump to latest message"
             >

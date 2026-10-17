@@ -28,7 +28,7 @@ import {
   isProgressVisible,
   confirmRemoveModel,
 } from "./model-bits.tsx";
-import { ICON_BUTTON, ICON_DESTRUCTIVE } from "./model-card.tsx";
+import { ICON_DESTRUCTIVE } from "./model-card.tsx";
 
 export function PresetModelCard({
   preset,
@@ -103,7 +103,7 @@ export function PresetModelCard({
           {!transferring ? (
             <Pressable
               onPress={confirmRemove}
-              className={`${ICON_BUTTON} ${ICON_DESTRUCTIVE}`}
+              className={`icon-btn ${ICON_DESTRUCTIVE}`}
               accessibilityRole="button"
               accessibilityLabel={`Remove ${preset.name}`}
             >

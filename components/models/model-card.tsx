@@ -68,10 +68,8 @@ const CARD =
  *  circle is 40px; the touch target is 48×48dp minimum. Pad the hit area, not
  *  the circle" — so the icon sits directly in the pressable and there is no
  *  wrapper box around it. PocketPal's `styles.iconButton` is exactly this
- *  (40px, radius 16, transparent); ours keeps the legal target. */
-/** Exported so the preset card's remove button is the same button: one
- *  48dp target, one destructive ground, no drift between the cards. */
-export const ICON_BUTTON = "h-12 w-12 items-center justify-center";
+ *  (40px, radius 16, transparent); ours keeps the legal target. The 48dp floor
+ *  itself lives in the shared `.icon-btn` class in global.css. */
 /** Destructive only — settings and expand stay bare. DESIGN.md calls for
  *  "Destructive: Alert Tint fill, Alert Red Mark icon" (Icon Buttons) and
  *  circles for what you press, so the trash keeps a ground and a circular
@@ -280,7 +278,7 @@ export function ModelCard({
             {actions.includes("settings") ? (
               <Pressable
                 onPress={onSettings}
-                className={ICON_BUTTON}
+                className="icon-btn"
                 accessibilityRole="button"
                 accessibilityLabel={`Settings for ${title}`}
               >
@@ -295,7 +293,7 @@ export function ModelCard({
             {actions.includes("remove") || actions.includes("delete") ? (
               <Pressable
                 onPress={confirmDestructive}
-                className={`${ICON_BUTTON} ${ICON_DESTRUCTIVE}`}
+                className={`icon-btn ${ICON_DESTRUCTIVE}`}
                 accessibilityRole="button"
                 accessibilityLabel={
                   actions.includes("remove") ? `Remove ${title}` : `Delete ${title}`
@@ -317,7 +315,7 @@ export function ModelCard({
             {actions.includes("expand") ? (
               <Pressable
                 onPress={() => setExpanded((v) => !v)}
-                className={ICON_BUTTON}
+                className="icon-btn"
                 accessibilityRole="button"
                 accessibilityState={{ expanded }}
                 accessibilityLabel={
@@ -409,7 +407,7 @@ export function RemoteProviderCard({
         )}
         <Pressable
           onPress={onRemove}
-          className={`${ICON_BUTTON} ${ICON_DESTRUCTIVE}`}
+          className={`icon-btn ${ICON_DESTRUCTIVE}`}
           accessibilityRole="button"
           accessibilityLabel={`Remove ${item.name}`}
         >

@@ -88,7 +88,7 @@ export function ChatWarningSnackbar({
       )}
       <Pressable
         onPress={onDismiss}
-        className="h-12 w-12 items-center justify-center"
+        className="icon-btn"
         accessibilityRole="button"
         accessibilityLabel="Dismiss warning"
         hitSlop={4}

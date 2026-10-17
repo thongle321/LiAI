@@ -164,6 +164,15 @@
   opacity: 0.4;
 }
 
+/* Icon buttons: the 48dp touch-target floor, so every tappable glyph in the
+   app clears the a11y minimum by name rather than by hand-typed class. */
+.icon-btn {
+  width: 48px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Inputs: .input + optional .input--error (focused border is signal blue) */
 .input {
   background-color: #ffffff;

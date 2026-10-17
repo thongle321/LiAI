@@ -301,7 +301,7 @@ export function MessageInput({
               </Text>
               <Pressable
                 onPress={() => onCancelEdit?.()}
-                className="h-12 w-12 items-center justify-center"
+                className="icon-btn"
                 hitSlop={4}
                 accessibilityRole="button"
                 accessibilityLabel="Cancel editing"

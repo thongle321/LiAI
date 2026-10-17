@@ -62,13 +62,9 @@ function WarningChip({ code, label }: { code: HFWarningCode; label: string }) {
   );
 }
 
-/** The destructive control's geometry, matching ModelCard's trash: the
- *  48dp floor is binding here (`tests/touch-targets.test.ts`), and the error
- *  ground is what DESIGN.md documents for a destructive icon button. Held
- *  as a literal rather than imported because
- *  `tests/model-card-anatomy.test.ts` pins these class strings in
- *  ModelCard.tsx itself. */
-const ICON_BUTTON = "h-12 w-12 items-center justify-center";
+/** The destructive control's error ground, matching ModelCard's trash — what
+ *  DESIGN.md documents for a destructive icon button. The 48dp floor comes
+ *  from the shared `.icon-btn` class in global.css. */
 const ICON_DESTRUCTIVE = "rounded-full bg-error/10";
 
 export function HFFileRow({
@@ -219,7 +215,7 @@ export function HFFileRow({
                 ? onUnbookmark(file.oid)
                 : bookmarkModel(result, file)
             }
-            className="h-12 w-12 items-center justify-center"
+            className="icon-btn"
             accessibilityRole="button"
             accessibilityLabel={bookmarked ? `Remove bookmark for ${file.name}` : `Bookmark ${file.name}`}
             testID={`hf-bookmark-${file.name}`}
@@ -240,7 +236,7 @@ export function HFFileRow({
               onPress={() =>
                 confirmDeleteModel(() => void removeModel(specId))
               }
-              className={`${ICON_BUTTON} ${ICON_DESTRUCTIVE}`}
+              className={`icon-btn ${ICON_DESTRUCTIVE}`}
               accessibilityRole="button"
               accessibilityLabel={`Delete ${file.name}`}
             >

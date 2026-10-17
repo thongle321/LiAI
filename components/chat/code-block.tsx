@@ -29,7 +29,7 @@ export function CodeBlock({
         <Text className="font-sans text-caption text-secondary-text">{language}</Text>
         <Pressable
           onPress={() => copy(text)}
-          className="h-12 w-12 items-center justify-center"
+          className="icon-btn"
           hitSlop={4}
           accessibilityRole="button"
           accessibilityLabel={copied ? "Copied" : "Copy code"}

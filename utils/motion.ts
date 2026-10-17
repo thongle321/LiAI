@@ -11,7 +11,7 @@ import {
   FadeIn,
   FadeInDown,
   FadeOut,
-  Layout,
+  LinearTransition,
   ZoomIn,
   useAnimatedStyle,
   useSharedValue,
@@ -96,7 +96,7 @@ export function bubbleEntering(durationMs: number): BaseAnimationBuilder {
 /** Expand/collapse layout transition for disclosure bodies (engine card etc).
  *  One duration + easing for every height/opacity change, on the UI thread. */
 export function motionLayout() {
-  return Layout.duration(MOTION_DURATION_MS).easing(motionEasing);
+  return LinearTransition.duration(MOTION_DURATION_MS).easing(motionEasing);
 }
 
 /** Transient rows: typing indicator, voice status, issue lines. */

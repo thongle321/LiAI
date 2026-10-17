@@ -88,6 +88,9 @@ module.exports = {
 };
 module.exports.FadeIn = module.exports.createAnimationBuilder();
 module.exports.FadeOut = module.exports.createAnimationBuilder();
+module.exports.Layout = module.exports.createAnimationBuilder();
+module.exports.LinearTransition = module.exports.createAnimationBuilder();
+module.exports.ZoomIn = module.exports.createAnimationBuilder();
 module.exports.FadeInDown = module.exports.createAnimationBuilder();
 module.exports.FadeInUp = module.exports.createAnimationBuilder();
 module.exports.FadeOutDown = module.exports.createAnimationBuilder();
@@ -96,3 +99,5 @@ module.exports.SlideInDown = module.exports.createAnimationBuilder();
 module.exports.SlideInUp = module.exports.createAnimationBuilder();
 module.exports.SlideOutDown = module.exports.createAnimationBuilder();
 module.exports.SlideOutUp = module.exports.createAnimationBuilder();
+module.exports.withRepeat = (animation) => animation;
+module.exports.useReducedMotion = () => false;

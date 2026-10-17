@@ -94,8 +94,6 @@ export function FABGroup({
     );
     return () => subscription.remove();
   }, [open]);
-  // PocketPal parity: the group always plays, ignoring the OS reduce-motion
-  // setting (paper hardcodes its durations the same way).
   const actionMs = ACTION_DURATION_MS;
   const backdropInMs = MENU_DURATION_MS;
   const backdropOutMs = 200;

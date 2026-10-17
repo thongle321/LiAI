@@ -38,7 +38,7 @@ import {
   VisionBottomPanel,
   VisionPreview,
   VisionTopFloat,
-} from "../../../components/vision-overlays.tsx";
+} from "../../../components/vision/vision-overlays.tsx";
 
 export default function VisionScreen() {
   const [position, setPosition] = useState<"back" | "front">("back");

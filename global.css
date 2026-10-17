@@ -158,6 +158,11 @@
   background-color: transparent;
   color: #2563eb;
 }
+/* Disabled buttons: opacity 0.4 is the chosen rule (the voice-action fill
+   is a special case for that screen). Apply alongside a .btn variant. */
+.btn--disabled {
+  opacity: 0.4;
+}
 
 /* Inputs: .input + optional .input--error (focused border is signal blue) */
 .input {

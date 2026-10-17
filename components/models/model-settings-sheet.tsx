@@ -55,6 +55,7 @@ import { ChatTemplateDialog } from "./chat-template-dialog.tsx";
 import { ModelMultimodalSection } from "./model-multimodal-section.tsx";
 import { DEFAULT_MODEL_SETTINGS } from "@/utils/model-settings";
 import type { ChatTemplatePreset } from "@/utils/chat-templates.ts";
+import type { ModelSpec } from "@/types/models";
 import { resolveThinking } from "@/services/inference/thinking.ts";
 import {
   DEFAULT_EFFORT_LEVEL,
@@ -131,20 +132,29 @@ function parseStopWords(text: string): string[] {
 }
 
 export function ModelSettingsSheet({
-  modelId,
+  model,
   onClose,
 }: {
-  modelId: string | null;
+  /** The model being configured — a store row, or a catalog preset that has
+   *  no row yet because it has never been downloaded. */
+  model: ModelSpec | null;
   onClose: () => void;
 }) {
   // Stable selectors: both are stable store functions, so this sheet
   // never re-renders on model-store writes.
   const getModelSettings = useModelStore((s) => s.getModelSettings);
   const updateModelSettings = useModelStore((s) => s.updateModelSettings);
-  // The spec carries origin (remote guard) and the projector candidates.
-  const spec = useModelStore((s) =>
+  const modelId = model?.id ?? null;
+  // The store's own row, when there is one: it carries origin (the remote
+  // guard) and the projector candidates. Stable selector, no prop in it.
+  const stored = useModelStore((s) =>
     modelId === null ? undefined : s.models.find((m) => m.id === modelId),
   );
+  // A catalog preset passes its own view and has no row until it is
+  // downloaded; the store's row takes over the moment the file lands — same
+  // id, so every setting saved here survives the download (PocketParity: the
+  // reference keys per-model settings the same way).
+  const spec = stored ?? model;
   const setThinkingOverride = useInference((s) => s.setThinkingOverride);
   const thinkingOverrides = useInference((s) => s.thinkingOverrides);
   const setEffortOverride = useInference((s) => s.setEffortOverride);

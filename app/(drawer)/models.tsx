@@ -32,6 +32,7 @@ import {
   type ModelGroup,
   type ModelRow,
 } from "@/services/models/model-groups.ts";
+import { presetPrimaryFile, presetSpecView } from "@/services/models/preset-spec.ts";
 import { DownloadErrorDialog } from "@/components/models/download-error-dialog.tsx";
 import { ModelsHeaderRight } from "@/components/models/models-header-right.tsx";
 import { FABGroup } from "@/components/models/fab-group.tsx";
@@ -42,7 +43,7 @@ import { HFModelSearch } from "@/components/models/hf-model-search.tsx";
 import { RemoteModelSheet } from "@/components/models/remote-model-sheet.tsx";
 import { ModelSettingsSheet } from "@/components/models/model-settings-sheet.tsx";
 import { ModelsResetDialog } from "@/components/models/models-reset-dialog.tsx";
-import type { PresetModelFile } from "@/types/models";
+import type { ModelSpec, PresetModel, PresetModelFile } from "@/types/models";
 
 export default function ModelsRoute() {
   // Stable selectors: actions never change identity, so each subscribes
@@ -120,7 +121,10 @@ export default function ModelsRoute() {
 
   const [hfOpen, setHfOpen] = useState(false);
   const [remoteModalOpen, setRemoteModalOpen] = useState(false);
-  const [settingsModelId, setSettingsModelId] = useState<string | null>(null);
+  // The spec itself, not its id: a catalog preset has no store row until it
+  // is downloaded, and its settings sheet still has to open (PocketParity:
+  // the reference's settings gear works on a not-yet-downloaded model).
+  const [settingsModel, setSettingsModel] = useState<ModelSpec | null>(null);
   // PocketParity: the reset lives in its own dialog (ModelsResetDialog), not
   // an inline Alert — its copy is three paragraphs with one bolded word.
   const [resetOpen, setResetOpen] = useState(false);
@@ -166,14 +170,23 @@ export default function ModelsRoute() {
     guard(file.size, () => startDownload(modelId, file));
   }
 
-  function renderItem(item: ModelGroup["items"][number], presetDownload: typeof guardedDownload) {
+  // One card, one Download: presetPrimaryFile is the catalog's own rule for
+  // which file a preset card fetches (services/models/preset-spec.ts).
+  function downloadPresetFile(preset: PresetModel): void {
+    const file = presetPrimaryFile(preset);
+    if (!file) return;
+    guardedDownload(preset.id, file);
+  }
+
+  function renderItem(item: ModelGroup["items"][number]) {
     if (item.kind === "preset") {
       const preset = presetById.get(item.id);
       return preset ? (
         <PresetModelCard
           key={item.id}
           preset={preset}
-          onDownload={presetDownload}
+          onDownload={() => downloadPresetFile(preset)}
+          onSettings={() => setSettingsModel(presetSpecView(preset, models))}
         />
       ) : null;
     }
@@ -215,7 +228,7 @@ export default function ModelsRoute() {
             setActiveModel(null);
             releaseEngine();
           }}
-          onSettings={() => setSettingsModelId(spec.id)}
+          onSettings={() => setSettingsModel(spec)}
         />
       );
     }
@@ -237,7 +250,7 @@ export default function ModelsRoute() {
            neither callback is reachable from a bookmark. */
         onActivate={() => {}}
         onDeactivate={() => {}}
-        onSettings={() => setSettingsModelId(spec.id)}
+        onSettings={() => setSettingsModel(spec)}
       />
     );
   }
@@ -263,7 +276,7 @@ export default function ModelsRoute() {
         />
       );
     }
-    return renderItem(row.item, guardedDownload);
+    return renderItem(row.item);
   };
 
   return (
@@ -338,7 +351,10 @@ export default function ModelsRoute() {
 
       <RemoteModelSheet visible={remoteModalOpen} onClose={() => setRemoteModalOpen(false)} />
 
-      <ModelSettingsSheet modelId={settingsModelId} onClose={() => setSettingsModelId(null)} />
+      <ModelSettingsSheet
+        model={settingsModel}
+        onClose={() => setSettingsModel(null)}
+      />
 
       <ModelsResetDialog
         visible={resetOpen}

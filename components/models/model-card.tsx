@@ -89,6 +89,7 @@ export function ModelCard({
   onDeactivate,
   onSettings,
   onDownload,
+  onRemove,
 }: {
   item: ModelSpec;
   isActive: boolean;
@@ -101,6 +102,10 @@ export function ModelCard({
    *  Download instead of Load/Unload. PocketParity with PocketPal's
    *  not-downloaded ModelCard branch. */
   onDownload?: () => void;
+  /** Replaces the card's own X handler. A catalog preset has no store row to
+   *  remove until it is downloaded — it dismisses from the catalog instead,
+   *  and the caller owns that. */
+  onRemove?: () => void;
 }) {
   // Stable selectors: actions never change identity, so each subscribes
   // alone and no card re-renders on unrelated store writes.
@@ -145,6 +150,14 @@ export function ModelCard({
    *  reference's, because the difference between them is the whole point:
    *  one deletes a file, the other only drops a list entry. */
   function confirmDestructive(): void {
+    // A caller-supplied remove REPLACES the store's own: a catalog preset's X
+    // drops it from the catalog, which is the caller's list surgery. Checked
+    // before the delete branch so a preset can never fall through to
+    // removeModel on an id that is not in the store.
+    if (onRemove) {
+      confirmRemoveModel(onRemove);
+      return;
+    }
     // Read the same thing the glyph and the a11y label read, so the three
     // cannot disagree about what the button does.
     if (!actions.includes("remove")) {

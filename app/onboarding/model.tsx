@@ -23,9 +23,11 @@ import tiersJson from "@/assets/device-tiers.json";
 const TIERS = parseTiers(tiersJson);
 import { TierCard } from "@/components/onboarding/tier-card.tsx";
 import { PresetModelCard } from "@/components/models/available-models.tsx";
+import { ModelSettingsSheet } from "@/components/models/model-settings-sheet.tsx";
+import { presetPrimaryFile, presetSpecView } from "@/services/models/preset-spec.ts";
 import { useLoadGuard } from "@/hooks/useLoadGuard.ts";
 import { useModelStore } from "@/store/modelStore";
-import type { PresetModelFile } from "@/types/models";
+import type { ModelSpec, PresetModel } from "@/types/models";
 
 export default function ModelStep() {
   const tiers = TIERS;
@@ -35,7 +37,12 @@ export default function ModelStep() {
   // the preset list re-renders only when presets themselves change.
   const startDownload = useModelStore((s) => s.startDownload);
   const presets = useModelStore((s) => s.presets);
+  // The same card as the models screen, so it needs the same store rows.
+  const models = useModelStore((s) => s.models);
   const guard = useLoadGuard();
+  // The card carries a settings gear (PocketPal parity), so the gear works
+  // here too rather than being a dead button in a short flow.
+  const [settingsModel, setSettingsModel] = useState<ModelSpec | null>(null);
 
   useEffect(() => {
     // Hydration already happened in app/index.tsx before onboarding was
@@ -53,8 +60,12 @@ export default function ModelStep() {
   const tier = tiers.find((t) => t.id === selectedId) ?? tiers[0];
   const tierPresets = presets.filter((p) => tier.presetIds.includes(p.id));
 
-  function onDownload(modelId: string, file: PresetModelFile): void {
-    guard(file.size, () => void startDownload(modelId, file));
+  // The card's one Download button fetches presetPrimaryFile — the catalog's
+  // own rule, shared with the models screen.
+  function downloadPreset(preset: PresetModel): void {
+    const file = presetPrimaryFile(preset);
+    if (!file) return;
+    guard(file.size, () => void startDownload(preset.id, file));
   }
 
   return (
@@ -93,7 +104,8 @@ export default function ModelStep() {
           <PresetModelCard
             key={preset.id}
             preset={preset}
-            onDownload={onDownload}
+            onDownload={() => downloadPreset(preset)}
+            onSettings={() => setSettingsModel(presetSpecView(preset, models))}
           />
         ))}
         <Pressable
@@ -108,6 +120,11 @@ export default function ModelStep() {
         </Pressable>
         </ContentColumn>
       </ScrollView>
+
+      <ModelSettingsSheet
+        model={settingsModel}
+        onClose={() => setSettingsModel(null)}
+      />
     </SafeAreaView>
   );
 }

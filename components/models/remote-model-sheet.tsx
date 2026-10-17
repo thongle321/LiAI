@@ -89,7 +89,15 @@ export function RemoteModelSheet({
       setValidationWarning("Could not validate API endpoint. Adding anyway.");
     }
 
-    addRemoteApi(provider);
+    // Awaited, so a refused SecureStore write surfaces on the form instead of
+    // closing the sheet over a key that was never stored (D3-6).
+    try {
+      await addRemoteApi(provider);
+    } catch {
+      setFormError("Could not save the API key securely");
+      setValidating(false);
+      return;
+    }
     acknowledgePrivacy();
     onClose();
     setName("");

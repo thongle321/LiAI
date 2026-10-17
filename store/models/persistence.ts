@@ -178,9 +178,17 @@ async function hydrate(
     if (ssToken) {
       set({ hfToken: ssToken });
     } else if (legacyTokenRaw) {
-      await writeSecret(HF_TOKEN_SS_KEY, legacyTokenRaw);
-      await asyncStorage.removeItem(HF_TOKEN_KEY);
-      set({ hfToken: legacyTokenRaw });
+      // Isolated: writeSecret now rejects, and letting that rejection reach
+      // hydrate's outer catch would abandon every read after this line. A
+      // failed migration keeps the legacy value in AsyncStorage to retry
+      // next launch.
+      try {
+        await writeSecret(HF_TOKEN_SS_KEY, legacyTokenRaw);
+        await asyncStorage.removeItem(HF_TOKEN_KEY);
+        set({ hfToken: legacyTokenRaw });
+      } catch {
+        // Legacy copy stays put; the token is simply absent this session.
+      }
     }
     // Absent means the default (on): only an explicit "false" parks it.
     if (useTokenRaw !== null) {

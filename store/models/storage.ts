@@ -21,33 +21,64 @@ async function secureStore(): Promise<typeof import("expo-secure-store")> {
   return await import("expo-secure-store");
 }
 
-/** Read a secret; null when missing or SecureStore unavailable. */
-export async function readSecret(key: string): Promise<string | null> {
-  try {
-    return await (await secureStore()).getItemAsync(key);
-  } catch (e) {
-    console.warn(`Failed to read secret ${key}:`, e);
-    return null;
+/**
+ * The three secret operations, built over an injected loader.
+ *
+ * The loader is a parameter for the same reason
+ * `services/chat/keep-awake.ts`'s is: SecureStore is reached by a DYNAMIC
+ * import, which Jest's CommonJS runtime cannot resolve, so without a seam
+ * nothing could cover the one contract that matters here — a refused write
+ * must REACH the caller. Production passes the real loader.
+ */
+export function createSecrets(load: typeof secureStore) {
+  /** Read a secret; null when missing or SecureStore unavailable. A read is
+   *  forgiving on purpose: "no token" and "cannot tell" both mean the app
+   *  continues unauthenticated, and nothing the user typed is at stake. */
+  async function readSecret(key: string): Promise<string | null> {
+    try {
+      return await (await load()).getItemAsync(key);
+    } catch (e) {
+      console.warn(`Failed to read secret ${key}:`, e);
+      return null;
+    }
   }
+
+  /** Write a secret; REJECTS when SecureStore refuses.
+   *
+   *  The failure has to reach the caller: `setHfToken` persists before it
+   *  flips the store, and `components/settings/hf-token-settings.tsx` keys its
+   *  inline "Error saving token" state off that rejection. A silent warn here
+   *  would report success for a token that is not on disk. */
+  async function writeSecret(key: string, value: string): Promise<void> {
+    try {
+      await (await load()).setItemAsync(key, value);
+    } catch (e) {
+      console.warn(`Failed to write secret ${key}:`, e);
+      throw e;
+    }
+  }
+
+  /** Delete a secret; REJECTS when SecureStore refuses, for the same reason
+   *  `writeSecret` does — a token the UI says is gone but isn't is the same
+   *  lie as one it says is saved but isn't. */
+  async function deleteSecret(key: string): Promise<void> {
+    try {
+      await (await load()).deleteItemAsync(key);
+    } catch (e) {
+      console.warn(`Failed to delete secret ${key}:`, e);
+      throw e;
+    }
+  }
+
+  return { readSecret, writeSecret, deleteSecret };
 }
 
-/** Write a secret; warns when SecureStore unavailable. */
-export async function writeSecret(key: string, value: string): Promise<void> {
-  try {
-    await (await secureStore()).setItemAsync(key, value);
-  } catch (e) {
-    console.warn(`Failed to write secret ${key}:`, e);
-  }
-}
+/** The app's secret access: the real module, loaded on first use. */
+const secrets = createSecrets(secureStore);
 
-/** Delete a secret; warns when SecureStore unavailable. */
-export async function deleteSecret(key: string): Promise<void> {
-  try {
-    await (await secureStore()).deleteItemAsync(key);
-  } catch (e) {
-    console.warn(`Failed to delete secret ${key}:`, e);
-  }
-}
+export const readSecret = secrets.readSecret;
+export const writeSecret = secrets.writeSecret;
+export const deleteSecret = secrets.deleteSecret;
 
 async function rnStorage(): Promise<AsyncStorageStatic> {
   const mod = await import("@react-native-async-storage/async-storage");

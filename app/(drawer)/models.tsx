@@ -186,7 +186,14 @@ export default function ModelsRoute() {
           isActive={isProviderActive(activeModelId, item.id)}
           reachable={remoteCaps[item.id]?.reachable}
           onActivate={() => setActiveRemoteApi(item.id)}
-          onRemove={() => removeRemoteApi(item.id)}
+          onRemove={() => {
+            // removeRemoteApi rejects if SecureStore refuses the delete;
+            // the row is already gone either way, so there is nothing to
+            // put the user back to — log it and let the store stand.
+            void removeRemoteApi(item.id).catch((e: unknown) => {
+              console.warn("[LiAI] failed to remove remote API", e);
+            });
+          }}
         />
       ) : null;
     }

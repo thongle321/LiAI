@@ -475,8 +475,11 @@ async function hubRequest(
       // The UI renders this message verbatim, so the raw fetch text
       // ("Network request failed", "The operation was aborted") must not
       // escape. Keep it in the log, hand the screen the clean fallback.
+      //
+      // A transport failure is the one the user can act on by reconnecting
+      // (D3-15), so the copy says so rather than restating the operation.
       console.warn(`[huggingface] ${fallback}:`, error);
-      throw new HfError(fallback, "network");
+      throw new HfError(`${fallback} — check your connection`, "network");
     }
     if (!isRetryableStatus(resp.status) || attempt === MAX_ATTEMPTS - 1) return resp;
     await sleep(retryAfterMs(resp.headers, attempt), externalSignal);

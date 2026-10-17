@@ -81,4 +81,19 @@ describe("searchModels retry policy", () => {
     await expect(searchModels("tiny")).rejects.toMatchObject({ code: "authentication" });
     expect(fetcher.calls()).toBe(1);
   });
+
+  it("names the connection when the request never reaches the Hub", async () => {
+    installFetch([
+      () => {
+        throw new TypeError("Network request failed");
+      },
+    ]);
+
+    // A bare "Search failed" leaves the user guessing; this is the one
+    // failure whose fix is on their side of the air gap.
+    await expect(searchModels("tiny")).rejects.toMatchObject({
+      code: "network",
+      message: "Search failed — check your connection",
+    });
+  });
 });

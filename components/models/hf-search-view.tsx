@@ -25,6 +25,7 @@ import {
   ChevronDown,
   ChevronRight,
   Lock,
+  RefreshCw,
   Search,
   SlidersHorizontal,
   X,
@@ -76,6 +77,8 @@ export function HFSearchView({
   const searchFilters = useModelStore((s) => s.searchFilters);
   const loadMoreModels = useModelStore((s) => s.loadMoreModels);
   const disableHfTokenAndRetry = useModelStore((s) => s.disableHfTokenAndRetry);
+  const searchQuery = useModelStore((s) => s.searchQuery);
+  const retrySearch = useModelStore((s) => s.searchModels);
   // A ref, not state: this runs on scroll and must not re-render the list.
   const lastPageCall = useRef(0);
 
@@ -162,6 +165,18 @@ export function HFSearchView({
               <Text className="font-sans text-body-sm text-primary">
                 Disable Token &amp; Retry
               </Text>
+            </Pressable>
+          ) : searchError.code === "network" ? (
+            /* Offline-shaped error: the only fix is reconnecting, so the
+               affordance is a plain re-run of the same query. */
+            <Pressable
+              onPress={() => void retrySearch(searchQuery)}
+              className="min-h-12 flex-row items-center gap-2 mt-2 self-start rounded-lg border border-border px-4 py-2"
+              accessibilityRole="button"
+              accessibilityLabel="Retry search"
+            >
+              <RefreshCw size={14} color={colors.primary} />
+              <Text className="font-sans text-body-sm text-primary">Retry</Text>
             </Pressable>
           ) : null}
         </View>

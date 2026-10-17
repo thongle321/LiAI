@@ -100,7 +100,7 @@ export function ReasoningBlock({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Toggle reasoning"
-      className="my-1.5 overflow-hidden rounded-[20px] border border-border bg-surface-3"
+      className="my-1.5 overflow-hidden rounded-2xl border border-border bg-surface-3"
     >
       <View className="flex-row items-center justify-between px-4 py-2">
         <Text className="font-sans text-body-sm tracking-[0.5px] text-primary-text">

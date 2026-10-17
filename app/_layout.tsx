@@ -1,5 +1,6 @@
 import "../global.css";
 import { Stack } from "expo-router";
+import { ThemeProvider, DefaultTheme } from "expo-router/react-navigation";
 import * as SplashScreen from "expo-splash-screen";
 import {
   Inter_400Regular,
@@ -111,6 +112,7 @@ export default function RootLayout() {
               overlays for a frame or two (the card that still moved). */}
           <KeyboardVisibilitySync />
           <SnackbarProvider>
+          <ThemeProvider value={DefaultTheme}>
           <Stack
             screenOptions={{
               headerShown: false,
@@ -124,6 +126,7 @@ export default function RootLayout() {
             <Stack.Screen name="(drawer)" options={{ animation: "none" }} />
             <Stack.Screen name="onboarding" />
           </Stack>
+          </ThemeProvider>
           </SnackbarProvider>
         </KeyboardProvider>
         </GestureHandlerRootView>

@@ -86,8 +86,8 @@ export function StatusBadge({ status }: { status: ModelDownloadStatus }) {
 export function ProgressTrack({ progress }: { progress: number }) {
   const clamped = clampPercent(progress);
   return (
-    <View className="h-2 overflow-hidden rounded-[5px] bg-surface-2">
-      <View className="h-full rounded-[5px] bg-primary" style={{ width: `${clamped}%` }} />
+    <View className="h-2 overflow-hidden rounded bg-surface-2">
+      <View className="h-full rounded bg-primary" style={{ width: `${clamped}%` }} />
     </View>
   );
 }

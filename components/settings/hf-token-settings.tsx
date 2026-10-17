@@ -202,12 +202,7 @@ export function HfTokenSettings() {
   const hfToken = useModelStore((s) => s.hfToken);
   const useHfToken = useModelStore((s) => s.useHfToken);
   const setUseHfToken = useModelStore((s) => s.setUseHfToken);
-  const loadPersisted = useModelStore((s) => s.loadPersisted);
   const [sheetOpen, setSheetOpen] = useState(false);
-
-  useEffect(() => {
-    void loadPersisted();
-  }, []);
 
   return (
     <SettingsSection>

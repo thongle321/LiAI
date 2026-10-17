@@ -47,7 +47,6 @@ import type { PresetModelFile } from "../../types/models";
 export default function ModelsRoute() {
   // Stable selectors: actions never change identity, so each subscribes
   // alone and preset/download writes never re-render this screen.
-  const loadPersisted = useModelStore((s) => s.loadPersisted);
   const startDownload = useModelStore((s) => s.startDownload);
   const clearDownloadError = useModelStore((s) => s.clearDownloadError);
   const retryWithoutToken = useModelStore((s) => s.retryWithoutToken);
@@ -113,7 +112,9 @@ export default function ModelsRoute() {
   );
 
   useEffect(() => {
-    loadPersisted();
+    // No loadPersisted() here: app/index.tsx hydrates the store before any
+    // screen mounts, and the slice is single-flight, so a call from here would
+    // only ever be a no-op (D3-3).
     void loadUi();
   }, []);
 

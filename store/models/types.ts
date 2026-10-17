@@ -201,6 +201,13 @@ export interface ActiveSlice {
 }
 
 export interface PersistenceSlice {
+  /** True once the persisted catalog, APIs, token and settings have been read
+   * from disk. The app gates its first paint on this, so the chat screen can
+   * never render "no model" against a store that simply hasn't read yet. */
+  hydrated: boolean;
+  /** Hydrate from disk. Single-flight and idempotent: the first caller
+   * starts the read, concurrent callers await the same promise, and a call
+   * after hydration returns immediately. */
   loadPersisted: () => Promise<void>;
 }
 

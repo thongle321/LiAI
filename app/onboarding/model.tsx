@@ -33,13 +33,13 @@ export default function ModelStep() {
   const [ramUnknown, setRamUnknown] = useState(false);
   // Stable selectors plus one useShallow read: actions subscribe alone,
   // the preset list re-renders only when presets themselves change.
-  const loadPersisted = useModelStore((s) => s.loadPersisted);
   const startDownload = useModelStore((s) => s.startDownload);
   const presets = useModelStore((s) => s.presets);
   const guard = useLoadGuard();
 
   useEffect(() => {
-    void loadPersisted();
+    // Hydration already happened in app/index.tsx before onboarding was
+    // routed to, so the preset list below is populated (D3-3).
     void readTotalMemory().then((bytes) => {
       if (bytes === null) {
         setRamUnknown(true);

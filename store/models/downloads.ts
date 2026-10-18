@@ -24,6 +24,12 @@ import {
   failureCode,
   type DownloadDriver,
 } from "@/services/downloads/download-service";
+import { latestJobForModel } from "@/services/models/download-jobs.ts";
+import { resumeDataForPartial, classifyFileOnDisk } from "@/services/models/resume-state.ts";
+import { findProjectorFile, pairDownloadStep } from "@/services/models/vision-pairing.ts";
+import { readGgufMetadata } from "@/services/models/gguf-header.ts";
+import { modelFitsOnDevice } from "@/utils/storage-fit.ts";
+import { asyncStorage, MEMORY_GUARD_KEY, generateId } from "./storage";
 
 /** Injectable download driver (Phase 2.2). Defaults to the platform driver;
  *  tests override via setDownloadService. */
@@ -34,12 +40,6 @@ export function setDownloadService(service: DownloadDriver): void {
 export function getDownloadService(): DownloadDriver {
   return downloadService;
 }
-import { latestJobForModel } from "@/services/models/download-jobs.ts";
-import { resumeDataForPartial, classifyFileOnDisk } from "@/services/models/resume-state.ts";
-import { findProjectorFile, pairDownloadStep } from "@/services/models/vision-pairing.ts";
-import { readGgufMetadata } from "@/services/models/gguf-header.ts";
-import { modelFitsOnDevice } from "@/utils/storage-fit.ts";
-import { asyncStorage, MEMORY_GUARD_KEY, generateId } from "./storage";
 
 function hfRefFor(modelId: string, results: HFModelSearchResult[]) {
   const found = results.find((r) => r.modelId === modelId);

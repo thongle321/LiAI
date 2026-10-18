@@ -149,7 +149,7 @@ export function GenerationSettingsSheet({
     if (!visible || mode !== "session") return;
     let cancelled = false;
     void (async () => {
-      const { getSessionStore } = await import("@/services/chat/tinybase.ts");
+      const { getSessionStore } = await import("../../services/chat/tinybase.ts");
       const store = await getSessionStore().catch(() => null);
       const value = store && sessionId
         ? await store.getSessionOverride(sessionId).catch(() => null)
@@ -224,7 +224,7 @@ export function GenerationSettingsSheet({
     }
     if (isSession) {
       void (async () => {
-        const { getSessionStore } = await import("@/services/chat/tinybase.ts");
+        const { getSessionStore } = await import("../../services/chat/tinybase.ts");
       const store = await getSessionStore().catch(() => null);
         if (store && sessionId) {
           await store

@@ -51,7 +51,7 @@ import { colors } from "@/themes/tokens.ts";
 import { motionLayout } from "@/utils/motion.ts";
 import type { NeuralEngineId } from "@/services/tts/types.ts";
 import { downloadLine } from "@/services/tts/voiceUi.ts";
-import { useEngineCardController } from "./use-engine-card-controller.ts";
+import { useEngineCardController } from "@/hooks/use-engine-card-controller.ts";
 import { ProgressRing } from "./progress-ring.tsx";
 import { RadioDot } from "./radio-dot.tsx";
 

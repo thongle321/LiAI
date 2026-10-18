@@ -27,7 +27,7 @@ import {
   type CacheType,
   type FlashAttn,
 } from "@/store/inference.ts";
-import { useShallow } from "zustand/shallow";
+import { useShallow } from "zustand/react/shallow";
 import { useModelStore } from "@/store/modelStore";
 import { useModelsUi } from "@/store/modelsUi.ts";
 import { colors } from "@/themes/tokens.ts";

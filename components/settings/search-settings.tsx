@@ -25,7 +25,7 @@ import {
   SEARCH_PROVIDERS,
   type SearchProviderId,
 } from "@/services/search/search-providers.ts";
-import { useShallow } from "zustand/shallow";
+import { useShallow } from "zustand/react/shallow";
 import { useSearch } from "@/store/search.ts";
 import { Sheet } from "../sheet.tsx";
 import {

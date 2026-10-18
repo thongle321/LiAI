@@ -14,7 +14,7 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import { ExternalLink, ImageOff } from "lucide-react-native";
 
-import { useShallow } from "zustand/shallow";
+import { useShallow } from "zustand/react/shallow";
 import { useInference } from "@/store/inference.ts";
 import { useModelStore } from "@/store/modelStore";
 import { useChatStore } from "@/store/chat";

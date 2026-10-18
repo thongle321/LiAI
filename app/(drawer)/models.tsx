@@ -21,7 +21,7 @@ import { ScreenHeader } from "@/components/screen-header.tsx";
 import { ContentColumn } from "@/components/content-column.tsx";
 import { useLocalModelImport } from "@/hooks/useLocalModelImport.ts";
 import { useLoadGuard } from "@/hooks/useLoadGuard.ts";
-import { useShallow } from "zustand/shallow";
+import { useShallow } from "zustand/react/shallow";
 import { useModelStore } from "@/store/modelStore.ts";
 import { useChatStore } from "@/store/chat.ts";
 import { useModelsUi } from "@/store/modelsUi.ts";

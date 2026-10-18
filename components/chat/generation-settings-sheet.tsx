@@ -36,7 +36,7 @@ import {
   type SamplerParams,
 } from "@/services/inference/sampler.ts";
 import type { SessionOverride } from "@/services/chat/session-store.ts";
-import { useShallow } from "zustand/shallow";
+import { useShallow } from "zustand/react/shallow";
 import { useInference } from "@/store/inference.ts";
 import { useModelStore } from "@/store/modelStore.ts";
 import { useChatStore, defaultGetStore } from "@/store/chat";

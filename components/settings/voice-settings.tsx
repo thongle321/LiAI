@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { useShallow } from "zustand/react/shallow";
 import { CloudDownload, Database, Play, Square, Volume2 } from "lucide-react-native";
 
 import { colors } from "@/themes/tokens.ts";
@@ -40,7 +41,17 @@ function FreeStorageLine() {
 }
 
 export function VoiceSettings() {
-  const { currentVoice, autoSpeak, load, setCurrentVoice, setAutoSpeak } = useVoice();
+  // Named selector: the screen only reads these five, so subscribing to the
+  // whole store would re-render it on every voice-store write.
+  const { currentVoice, autoSpeak, load, setCurrentVoice, setAutoSpeak } = useVoice(
+    useShallow((s) => ({
+      currentVoice: s.currentVoice,
+      autoSpeak: s.autoSpeak,
+      load: s.load,
+      setCurrentVoice: s.setCurrentVoice,
+      setAutoSpeak: s.setAutoSpeak,
+    })),
+  );
   const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {

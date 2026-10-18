@@ -13,7 +13,8 @@ import { create } from "zustand";
 
 import type { SearchAuth } from "@/types/api.ts";
 import { useSearch } from "../search.ts";
-import { createSendSlice, multimodalAvailable } from "./send.ts";
+import { createSendSlice } from "./send.ts";
+import { multimodalAvailable } from "@/services/inference/mmproj.ts";
 import { createSessionsSlice } from "./sessions.ts";
 import { createDraftSlice } from "./draft.ts";
 import type { ChatCtx, ChatDeps, ChatState, TurnRunner } from "./types.ts";

@@ -9,7 +9,7 @@ import type { ApiError } from "@/types/api.ts";
 import type { ChatMessage } from "@/types/chat.ts";
 import { newId } from "@/services/chat/messages.ts";
 import type { SessionStore } from "@/services/chat/session-store.ts";
-import { canSeeImages, loadModelState } from "@/services/inference/mmproj.ts";
+import { canSeeImages, loadModelState, multimodalAvailable } from "@/services/inference/mmproj.ts";
 import { useVoice } from "../voice.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
@@ -17,22 +17,10 @@ function llmError(message: string): ApiError {
   return { code: "llm_error", message };
 }
 
-/** Can the ACTIVE engine see an image this turn? (G12, vision-series 02)
- *
- * PocketPal asks `modelStore.activeModelCaps.visionActive` — whether a
- * projector is loaded RIGHT NOW. LiAI's engine slot is lazy (loaded at
- * send time), so this answers the equivalent question predictively: the
- * ACTIVE local model's spec is completed AND records its paired
- * projector (ticket 01), which is exactly the path ensureEngine will
- * attach (services/inference//mmproj.ts). A declaration alone never flips it.
- * Remote stays cannot-see until ticket 04.
- *
- * EXPORTED: the vision screen reads this same gate to show the can't-see
- * notice, so the strip and the notice can never disagree. */
-export async function multimodalAvailable(): Promise<boolean> {
-  const st = await loadModelState();
-  return st !== undefined && canSeeImages(st);
-}
+/** Can the ACTIVE engine see an image this turn? Moved to
+ *  services/inference/mmproj.ts (single owner). Re-exported for backward
+ *  compat; new code should import from mmproj directly. */
+export { multimodalAvailable } from "@/services/inference/mmproj.ts";
 
 /** What PocketPal says when images ride a turn the model cannot see.
  *  Shared with the vision screen's own notice surface (vision-series 01). */

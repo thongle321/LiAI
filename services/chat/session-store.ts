@@ -79,20 +79,11 @@ export interface SessionOverride {
   effort?: EffortLevel;
 }
 
-export interface SessionStore {
+/** Catalog of conversations: listing, minting, renaming, pinning, deleting,
+ *  duplicating, and titling. */
+export interface SessionCatalog {
   /** Mint a session and return its id. */
   create(): Promise<string>;
-  /** Turns in call order, or null when the session does not exist. Each
-   *  carries the row id it can be addressed by. Hydrate-once (C17): the
-   *  first open reads, later re-opens are served from memory — every
-   *  writer in the store invalidates its own session first, so a
-   *  cached transcript can never show a stale or empty conversation. */
-  get(sessionId: string): Promise<StoredMessage[] | null>;
-  /** Append one turn, creating the session row if it is not there yet.
-   *  Pass `id` to pin the row id — the chat slice mints it up front so a
-   *  bubble's id and its persisted id are the same string. Omit it and
-   *  the store mints one. */
-  append(sessionId: string, turn: StoredTurn, id?: string): Promise<void>;
   /** Every session, pinned first, then most recently updated. */
   listSessions(): Promise<SessionInfo[]>;
   /** False when the session does not exist. */
@@ -103,67 +94,51 @@ export interface SessionStore {
   deleteSession(sessionId: string): Promise<boolean>;
   /** Title the session only while it is still empty (first turn wins). */
   setTitleIfEmpty(sessionId: string, title: string): Promise<void>;
-  /** Drop the trailing assistant turn, for regenerate. False when the
-   *  last turn is not an assistant turn. */
+  /** Fork a conversation. Null when the source does not exist. */
+  duplicateSession(sessionId: string): Promise<string | null>;
+}
+
+/** Reading and writing a conversation's turns. */
+export interface TurnWriter {
+  /** Turns in call order, or null when the session does not exist. */
+  get(sessionId: string): Promise<StoredMessage[] | null>;
+  /** Append one turn, creating the session row if it is not there yet. */
+  append(sessionId: string, turn: StoredTurn, id?: string): Promise<void>;
+  /** Drop the trailing assistant turn, for regenerate. */
   popLastAssistant(sessionId: string): Promise<boolean>;
-  /** Drop the turn with `messageId` and everything after it, cascading to
-   *  those turns' tool calls. This is what edit-and-resend and
-   *  regenerate-from-the-middle need: re-running anything but the last
-   *  turn is meaningless unless the branch it sits on can be deleted.
-   *
-   *  Keyed by the id `get()` hands back, not by an index — the same way
-   *  pocketpal deletes (`removeMessagesFromId(message.id, true)`), so the
-   *  call cannot drift if render state and storage ever disagree about
-   *  order. False when the session or the id does not exist — an unknown
-   *  id drops nothing rather than guessing.
-   *
-   *  Deliberately additive: `popLastAssistant` stays for the last-turn
-   *  regenerate, which is cheaper and keeps its boolean contract. */
+  /** Drop the turn with `messageId` and everything after it. */
   truncateFrom(sessionId: string, messageId: string): Promise<boolean>;
-  /** Composer draft for a session, or "" when there is none. `null` is
-   *  the slot for a conversation that has not been sent yet. */
+}
+
+/** Composer drafts. `null` is the slot for a conversation not yet sent. */
+export interface DraftStore {
   getDraft(sessionId: string | null): Promise<string>;
   setDraft(sessionId: string | null, text: string): Promise<void>;
   clearDraft(sessionId: string | null): Promise<void>;
-  /** Which conversation is open, or null. */
+}
+
+/** Per-conversation companion binding and settings override layer. */
+export interface SessionSettings {
   getActiveSessionId(): Promise<string | null>;
   setActiveSessionId(sessionId: string | null): Promise<void>;
-  /** The companion this conversation is bound to (settings_source's other
-   *  half), or null when it follows no companion. PocketPal's
-   *  chat_sessions.active_pal_id. */
   getSessionCompanion(sessionId: string): Promise<string | null>;
-  /** Bind (or with null, unbind) the session's companion. Unbinding resets the
-   *  settings source to 'companion' — a source with no companion is meaningless.
-   *  False when the session does not exist. */
   setSessionCompanion(sessionId: string, companionId: string | null): Promise<boolean>;
-  /** 'companion' = the session follows its companion's resolved settings; 'custom' =
-   *  the session's own override wins. Null (absent) reads 'companion' — the
-   *  default PocketPal gives every new session. */
   getSessionSettingsSource(sessionId: string): Promise<"companion" | "custom" | null>;
-  /** Flip the source. False when the session does not exist. */
   setSessionSettingsSource(
     sessionId: string,
     source: "companion" | "custom",
   ): Promise<boolean>;
-  /** This conversation's own settings override, or null when it follows
-   *  the resolved (companion-aware) base. Partial on purpose: only the fields
-   *  the session actually changed are stored, so a new global default
-   *  still reaches it. Covers sampler knobs PLUS the thinking/effort
-   *  overrides absorbed from the per-session override work — one cell,
-   *  one save, because the sheet edits all three together. */
   getSessionOverride(sessionId: string): Promise<SessionOverride | null>;
   setSessionOverride(
     sessionId: string,
     override: SessionOverride | null,
   ): Promise<void>;
-  /** Fork a conversation: its turns, its tool calls, its settings
-   *  override, its companion and its settings source. Titled "<title> - Copy",
-   *  becomes the active conversation, and is never pinned. Null when the
-   *  source does not exist.
-   *
-   *  The override AND the companion travel with the copy on purpose: both are
-   *  per conversation, so a fork that dropped either would silently
-   *  revert to the preset or lose its persona — noticed only after
-   *  trusting the fork. */
-  duplicateSession(sessionId: string): Promise<string | null>;
 }
+
+/** Composite port: a full session store. Prefer depending on one of the
+ *  four focused ports above when a caller only needs a slice. */
+export interface SessionStore
+  extends SessionCatalog,
+    TurnWriter,
+    DraftStore,
+    SessionSettings {}

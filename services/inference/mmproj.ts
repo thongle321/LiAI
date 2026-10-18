@@ -131,6 +131,16 @@ export async function activeLocalProjectorPath(): Promise<string | undefined> {
   );
 }
 
+/** Can the ACTIVE engine see an image this turn? (G12, vision-series 02)
+ *
+ *  Moved here from store/chat/send.ts so the send gate and the vision screen
+ *  share one owner (services/inference/mmproj.ts). The store/UI boundary
+ *  stays state-only. */
+export async function multimodalAvailable(): Promise<boolean> {
+  const st = await loadModelState();
+  return st !== undefined && canSeeImages(st);
+}
+
 /** The projector path for the model the ENGINE is being asked to load
  *  (looked up by the file the source names, not the active pointer — the
  *  two must agree when the slot is keyed, but the slot decides by file). */

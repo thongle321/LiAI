@@ -39,7 +39,7 @@ import type { SessionOverride } from "@/services/chat/session-store.ts";
 import { useShallow } from "zustand/react/shallow";
 import { useInference } from "@/store/inference.ts";
 import { useModelStore } from "@/store/modelStore.ts";
-import { useChatStore, defaultGetStore } from "@/store/chat";
+import { useChatStore } from "@/store/chat";
 import { useCompanions } from "@/store/companions.ts";
 import { SamplerRows } from "./sampler-rows.tsx";
 import { Sheet } from "../sheet.tsx";
@@ -149,7 +149,8 @@ export function GenerationSettingsSheet({
     if (!visible || mode !== "session") return;
     let cancelled = false;
     void (async () => {
-      const store = await defaultGetStore().catch(() => null);
+      const { getSessionStore } = await import("@/services/chat/tinybase.ts");
+      const store = await getSessionStore().catch(() => null);
       const value = store && sessionId
         ? await store.getSessionOverride(sessionId).catch(() => null)
         : null;
@@ -223,7 +224,8 @@ export function GenerationSettingsSheet({
     }
     if (isSession) {
       void (async () => {
-        const store = await defaultGetStore().catch(() => null);
+        const { getSessionStore } = await import("@/services/chat/tinybase.ts");
+      const store = await getSessionStore().catch(() => null);
         if (store && sessionId) {
           await store
             .setSessionOverride(sessionId, {

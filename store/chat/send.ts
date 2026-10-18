@@ -194,6 +194,11 @@ export function createSendSlice(
       // inside the try so an early throw (e.g. multimodalAvailable) can't
       // strand the lock (D6-6).
       ctx.keepAwake(true);
+      // A conversation being born carries its staged companion, so the FIRST
+      // turn already runs with the persona's prompt and pact. Const so
+      // TS narrows past the null check (a second get() would not be).
+      const stagedCompanionId =
+        opts.sessionId === null ? get().stagedCompanionId : null;
       const outcome = await ctx.runTurn(
         opts.text,
         {
@@ -205,6 +210,7 @@ export function createSendSlice(
           // never a moment where a bubble exists but cannot be addressed.
           ...(opts.userId !== undefined ? { userMessageId: opts.userId } : {}),
           assistantMessageId: opts.assistantId,
+          ...(stagedCompanionId !== null ? { companionId: stagedCompanionId } : {}),
         },
         (token) => {
           if (gen !== ctx.streamGen) return;
@@ -246,6 +252,15 @@ export function createSendSlice(
         ...(outcome.outcome !== undefined ? { outcome: outcome.outcome } : {}),
       });
       adoptSession(outcome.sessionId);
+      // The staged companion was consumed: the row it was bound to exists now
+      // (sessionCompanionId mirrors it), so the stage must not leak into the
+      // NEXT conversation the user starts from the drawer.
+      if (opts.sessionId === null && get().stagedCompanionId !== null) {
+        const bornCompanion = await (await ctx.getStore())
+          ?.getSessionCompanion(outcome.sessionId)
+          .catch(() => null);
+        set({ stagedCompanionId: null, ...(bornCompanion !== null ? { sessionCompanionId: bornCompanion } : {}) });
+      }
       // Auto-speak: the finished reply, read aloud (ticket 05 / spec
       // Q3 + Q14) — spoken once per message, only when the user opted
       // in and the device passes the availability gate. Stopping first

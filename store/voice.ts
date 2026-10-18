@@ -33,7 +33,7 @@ import { ttsDownloads, type TtsModelStatus } from "../services/tts/download.ts";
 import { ttsRuntime } from "../services/tts/runtime.ts";
 import { readTotalMemory } from "../services/models/device-tiers.ts";
 
-export const VOICE_KEY = "liai_voice_v2";
+export const VOICE_KEY = "liai_voice";
 
 /** The kokoro model id, kept as a named export because the spec pins it and
  *  the tests assert it. The value's single home is the engine table. */

@@ -40,6 +40,7 @@ export default function DrawerLayout() {
         >
           <Drawer.Screen name="(tabs)" />
           <Drawer.Screen name="models" />
+          <Drawer.Screen name="companions" />
           <Drawer.Screen name="settings" />
           <Drawer.Screen name="voice-settings" />
           <Drawer.Screen name="about" />

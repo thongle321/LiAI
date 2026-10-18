@@ -18,6 +18,7 @@ import type {
   TurnOutcomeFlags,
 } from "@/types/chat.ts";
 import type { SamplerParams } from "../inference/sampler.ts";
+import type { EffortLevel } from "@/utils/reasoning-capability.ts";
 
 /** One durable turn. Streaming/error are NOT here: they are live render
  * state owned by the chat store, and persisting them would resurrect a
@@ -69,6 +70,15 @@ export function draftSlot(sessionId: string | null): string {
   return sessionId ?? "new";
 }
 
+/** One conversation's own settings override — the 'custom' layer of the
+ *  session → companion → global chain. Every field optional: a field the user
+ *  never touched stays absent so the layer below reaches it. */
+export interface SessionOverride {
+  sampler?: Partial<SamplerParams>;
+  thinking?: boolean;
+  effort?: EffortLevel;
+}
+
 export interface SessionStore {
   /** Mint a session and return its id. */
   create(): Promise<string>;
@@ -118,20 +128,42 @@ export interface SessionStore {
   /** Which conversation is open, or null. */
   getActiveSessionId(): Promise<string | null>;
   setActiveSessionId(sessionId: string | null): Promise<void>;
-  /** Sampling override for one conversation, or null when it follows the
-   *  global preset. Partial on purpose: only the fields the session actually
-   *  changed are stored, so a new global default still reaches it. */
-  getSessionSampler(sessionId: string): Promise<Partial<SamplerParams> | null>;
-  setSessionSampler(
+  /** The companion this conversation is bound to (settings_source's other
+   *  half), or null when it follows no companion. PocketPal's
+   *  chat_sessions.active_pal_id. */
+  getSessionCompanion(sessionId: string): Promise<string | null>;
+  /** Bind (or with null, unbind) the session's companion. Unbinding resets the
+   *  settings source to 'companion' — a source with no companion is meaningless.
+   *  False when the session does not exist. */
+  setSessionCompanion(sessionId: string, companionId: string | null): Promise<boolean>;
+  /** 'companion' = the session follows its companion's resolved settings; 'custom' =
+   *  the session's own override wins. Null (absent) reads 'companion' — the
+   *  default PocketPal gives every new session. */
+  getSessionSettingsSource(sessionId: string): Promise<"companion" | "custom" | null>;
+  /** Flip the source. False when the session does not exist. */
+  setSessionSettingsSource(
     sessionId: string,
-    override: Partial<SamplerParams> | null,
+    source: "companion" | "custom",
+  ): Promise<boolean>;
+  /** This conversation's own settings override, or null when it follows
+   *  the resolved (companion-aware) base. Partial on purpose: only the fields
+   *  the session actually changed are stored, so a new global default
+   *  still reaches it. Covers sampler knobs PLUS the thinking/effort
+   *  overrides absorbed from the per-session override work — one cell,
+   *  one save, because the sheet edits all three together. */
+  getSessionOverride(sessionId: string): Promise<SessionOverride | null>;
+  setSessionOverride(
+    sessionId: string,
+    override: SessionOverride | null,
   ): Promise<void>;
-  /** Fork a conversation: its turns, its tool calls, and its sampler
-   *  override. Titled "<title> - Copy", becomes the active conversation,
-   *  and is never pinned. Null when the source does not exist.
+  /** Fork a conversation: its turns, its tool calls, its settings
+   *  override, its companion and its settings source. Titled "<title> - Copy",
+   *  becomes the active conversation, and is never pinned. Null when the
+   *  source does not exist.
    *
-   *  The override travels with the copy on purpose: it is per
-   *  conversation, so a fork that dropped it would silently revert to the
-   *  preset — noticed only after trusting the fork. */
+   *  The override AND the companion travel with the copy on purpose: both are
+   *  per conversation, so a fork that dropped either would silently
+   *  revert to the preset or lose its persona — noticed only after
+   *  trusting the fork. */
   duplicateSession(sessionId: string): Promise<string | null>;
 }

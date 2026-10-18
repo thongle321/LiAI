@@ -30,6 +30,10 @@ export interface TurnPaths {
    *  bubble's id, so the rerun overwrites that row instead of appending
    *  a second one. */
   assistantMessageId?: string;
+  /** The companion staged for a conversation that has not been born yet: the
+   *  turn binds it to the session row it mints, so the FIRST turn
+   *  already runs with the persona's prompt and pact tools. */
+  companionId?: string;
 }
 
 export interface TurnRunner {
@@ -147,6 +151,28 @@ export interface ChatState {
   /** Raise (or with null, clear) the chat notice. */
   setChatWarning: (warning: ChatWarning | null) => void;
   sessions: ChatSession[];
+  /** The OPEN conversation's bound companion id, or null (PocketPal's
+   *  session.activePalId, mirrored into state so render paths stay
+   *  synchronous). */
+  sessionCompanionId: string | null;
+  /** Companion staged for the NEXT conversation — not yet born. PocketPal's
+   *  newChatPalId: memory only, bound to the session row at birth and
+   *  cleared after. */
+  stagedCompanionId: string | null;
+  /** Settings source chosen before the session exists (PocketPal's
+   *  newChatSettingsSource); the birth read for it. */
+  stagedSettingsSource: "companion" | "custom";
+  /** Bind (or with null, unbind) the conversation's companion. With no
+   *  session yet the choice stages for the next one. Binding a companion
+   *  resets the settings source to 'companion' — a new persona starts from
+   *  its own tuning (PocketPal's updateSessionActivePal). */
+  setActiveCompanion: (companionId: string | null) => Promise<void>;
+  /** Choose the new-chat settings source (pre-birth half of the
+   *  companion/custom toggle). */
+  setStagedSettingsSource: (source: "companion" | "custom") => void;
+  /** Flip the OPEN conversation's settings source ('companion' ⇄ 'custom').
+   *  False when there is no session or the write failed. */
+  setSessionSettingsSource: (source: "companion" | "custom") => Promise<boolean>;
   /** Composer draft for the active session (persisted on switch/send). */
   draft: string;
   setDraft: (text: string) => void;

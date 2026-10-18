@@ -42,6 +42,12 @@ export function createSessionsSlice(
   ChatState,
   | "sessions"
   | "sessionId"
+  | "sessionCompanionId"
+  | "stagedCompanionId"
+  | "stagedSettingsSource"
+  | "setActiveCompanion"
+  | "setStagedSettingsSource"
+  | "setSessionSettingsSource"
   | "loadSession"
   | "newConversation"
   | "switchSession"
@@ -104,6 +110,44 @@ export function createSessionsSlice(
   return {
     sessions: [],
     sessionId: null,
+    sessionCompanionId: null,
+    stagedCompanionId: null,
+    stagedSettingsSource: "companion",
+
+    setActiveCompanion: async (companionId) => {
+      const sid = get().sessionId;
+      if (sid === null) {
+        // Not born yet: stage for the next conversation. Changing the
+        // persona also resets the staged source, like the bound case.
+        set({ stagedCompanionId: companionId, stagedSettingsSource: "companion" });
+        return;
+      }
+      const store = await storeOf(ctx);
+      if (!store) return;
+      try {
+        if (!(await store.setSessionCompanion(sid, companionId))) return;
+        if (companionId !== null) {
+          await store.setSessionSettingsSource(sid, "companion");
+        }
+        set({ sessionCompanionId: companionId });
+      } catch {
+        // best-effort persistence; the UI re-reads on the next switch
+      }
+    },
+
+    setStagedSettingsSource: (source) => set({ stagedSettingsSource: source }),
+
+    setSessionSettingsSource: async (source) => {
+      const sid = get().sessionId;
+      if (sid === null) return false;
+      const store = await storeOf(ctx);
+      if (!store) return false;
+      try {
+        return await store.setSessionSettingsSource(sid, source);
+      } catch {
+        return false;
+      }
+    },
 
     refreshSessions,
 
@@ -128,7 +172,12 @@ export function createSessionsSlice(
         stored = null;
       }
       if (stored === null) {
-        set({ sessionId: null, messages: [], draft: await readDraftFor(ctx, null) });
+        set({
+          sessionId: null,
+          sessionCompanionId: null,
+          messages: [],
+          draft: await readDraftFor(ctx, null),
+        });
         return;
       }
       if (!listed) {
@@ -138,7 +187,12 @@ export function createSessionsSlice(
       }
       if (!get().sessions.some((s) => s.id === stored)) {
         if (store) await quiet(store.setActiveSessionId(null));
-        set({ sessionId: null, messages: [], draft: await readDraftFor(ctx, null) });
+        set({
+          sessionId: null,
+          sessionCompanionId: null,
+          messages: [],
+          draft: await readDraftFor(ctx, null),
+        });
         return;
       }
       await get().switchSession(stored);
@@ -151,12 +205,15 @@ export function createSessionsSlice(
       voiceStop();
       await quiet(get().persistDraft());
       const store = await storeOf(ctx);
-if (store) await quiet(store.setActiveSessionId(null));
+      if (store) await quiet(store.setActiveSessionId(null));
       // A notice raised in the conversation you just left must not follow
       // you into the next one — "the image was dropped" is only ever true
-      // of the turn that raised it.
+      // of the turn that raised it. The STAGED companion survives: it is the
+      // persona picked for the conversation you are about to start
+      // (PocketPal's newChatPalId outlives newChat too).
       set({
         sessionId: null,
+        sessionCompanionId: null,
         messages: [],
         sending: false,
         turnStartedAt: null,
@@ -177,8 +234,10 @@ if (store) await quiet(store.setActiveSessionId(null));
         const turns = await store.get(id);
         if (turns === null) return false;
         await quiet(store.setActiveSessionId(id));
+        const companionId = await store.getSessionCompanion(id).catch(() => null);
         set({
           sessionId: id,
+          sessionCompanionId: companionId,
           messages: toMessages(turns),
           draft: await readDraftFor(ctx, id),
           chatWarning: null,
@@ -201,9 +260,10 @@ if (store) await quiet(store.setActiveSessionId(null));
         // the same no-haunting rule as switching (ticket 05).
         voiceStop();
         // The deleted session's text must not haunt the fresh composer:
-// fall back to whatever is parked in the unsent slot.
+        // fall back to whatever is parked in the unsent slot.
         set({
           sessionId: null,
+          sessionCompanionId: null,
           messages: [],
           sending: false,
           turnStartedAt: null,

@@ -7,15 +7,15 @@
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "@/services/storage/storage";
 
-export const STORAGE_KEY = "liai_models_v1";
-export const ACTIVE_MODEL_KEY = "liai_active_model_v1";
-export const REMOTE_APIS_KEY = "liai_remote_apis_v1";
-export const HF_TOKEN_KEY = "liai_hf_token_v1"; // legacy AsyncStorage location (migrated to SecureStore)
-export const HF_TOKEN_USE_KEY = "liai_hf_token_use_v1"; // attach the token to requests, or park it
-export const MODEL_SETTINGS_KEY = "liai_model_settings_v1";
-export const HF_SEARCH_FILTERS_KEY = "liai_hf_search_filters_v1"; // author + sort, per the HF search sheet
-export const MEMORY_GUARD_KEY = "liai_memory_guard_v1";
-export const REMOTE_CAPS_KEY = "liai_remote_caps_v1";
+export const STORAGE_KEY = "liai_models";
+export const ACTIVE_MODEL_KEY = "liai_active_model";
+export const REMOTE_APIS_KEY = "liai_remote_apis";
+export const HF_TOKEN_KEY = "liai_hf_token_v1"; // legacy ON-DISK name, read once to migrate the secret to SecureStore — the string must match what already shipped, so it keeps its suffix
+export const HF_TOKEN_USE_KEY = "liai_hf_token_use"; // attach the token to requests, or park it
+export const MODEL_SETTINGS_KEY = "liai_model_settings";
+export const HF_SEARCH_FILTERS_KEY = "liai_hf_search_filters"; // author + sort, per the HF search sheet
+export const MEMORY_GUARD_KEY = "liai_memory_guard";
+export const REMOTE_CAPS_KEY = "liai_remote_caps";
 
 async function secureStore(): Promise<typeof import("expo-secure-store")> {
   return await import("expo-secure-store");

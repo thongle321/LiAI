@@ -37,7 +37,9 @@ import { createRemoteEngine } from "@/services/inference/remote-engine.ts";
 import { resolveImage } from "@/services/storage/images.ts";
 import { createTurnRunner } from "@/services/chat/turn.ts";
 import { holdScreen, releaseScreen } from "@/services/chat/keep-awake.ts";
-import type { SessionStore } from "@/services/chat/session-store.ts";
+import type { SessionStore, SessionOverride } from "@/services/chat/session-store.ts";
+import type { Companion } from "@/types/companion.ts";
+import { generateFinalSystemPrompt } from "@/utils/companion-template.ts";
 
 /** Default BYOK resolver: consent-gated key from SecureStore, never KV.
  * Short-circuits before touching SecureStore when consent is absent. */
@@ -271,12 +273,67 @@ async function recordThinkingCapability(
   }
 }
 
-/** Resolved thinking state for the ACTIVE model (C6): a user
- *  override, then the spec's detected capability, then the global
- *  preference. An unclassified model gets the global flag, exactly as
- *  before this ticket. */
-async function defaultThinking(): Promise<boolean | undefined> {
+/** The ACTIVE model's companion-bound persona for THIS conversation, or null.
+ *  The session's binding wins; a staged (not-yet-sent) session has none. */
+async function sessionCompanion(sessionId: string | null): Promise<Companion | null> {
   try {
+    if (!sessionId) return null;
+    const store = await defaultGetStore();
+    if (!store) return null;
+    const companionId = await store.getSessionCompanion(sessionId).catch(() => null);
+    if (!companionId) return null;
+    const { useCompanions } = await import("../companions.ts");
+    return useCompanions.getState().getCompanion(companionId) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The session's OWN override layer — read ONLY when the session
+ *  flipped to 'custom'. With source 'companion' (the default) the session
+ *  follows the companion-resolved base and its stale override must not leak
+ *  into a turn (PocketPal's settings_source gate). */
+async function sessionCustomOverride(
+  sessionId: string | null,
+): Promise<SessionOverride | null> {
+  try {
+    if (!sessionId) return null;
+    const store = await defaultGetStore();
+    if (!store) return null;
+    const source = await store
+      .getSessionSettingsSource(sessionId)
+      .catch(() => null);
+    if (source !== "custom") return null;
+    return await store.getSessionOverride(sessionId).catch(() => null);
+  } catch {
+    return null;
+  }
+}
+
+/** Pact talent names for THIS conversation (tool gating). Always from
+ *  the session's companion, regardless of settings source: the pact is the
+ *  source of truth for tool availability, exactly like PocketPal — a
+ *  custom-settings session keeps its persona's tools. */
+async function defaultTalentNames(sessionId: string | null): Promise<string[]> {
+  try {
+    const companion = await sessionCompanion(sessionId);
+    return companion?.pact?.talents.map((t) => t.name) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** Resolved thinking state for THIS turn (C6 + session override).
+ *
+ *  Chain: session override (only when 'custom') → per-model user
+ *  override → the spec's detected capability → the global preference.
+ *  An unclassified model gets the global flag, exactly as before. */
+async function defaultThinking(
+  sessionId: string | null,
+): Promise<boolean | undefined> {
+  try {
+    const custom = await sessionCustomOverride(sessionId);
+    if (custom?.thinking !== undefined) return custom.thinking;
     const { useInference } = await import("../inference.ts");
     const { useModelStore } = await import("../modelStore.ts");
     const inf = useInference.getState();
@@ -299,15 +356,20 @@ async function defaultThinking(): Promise<boolean | undefined> {
   }
 }
 
-/** Graded effort for the ACTIVE model (PocketPal axis-2 parity).
+/** Graded effort for THIS turn (PocketPal axis-2 parity + session
+ *  override).
  *
  *  Axis 1 gates the send: with "Reasoning model" OFF the kwarg is not
  *  sent at all — a kwarg the model ignores would otherwise ride along on
- *  every turn of a model the user told us does not think. Remote models
- *  included: their sheet shows Reasoning too, and the remote engine
- *  carries the provider-appropriate body field. */
-async function defaultEffort(): Promise<EffortLevel | undefined> {
+ *  every turn of a model the user told us does not think. An explicit
+ *  session effort ('custom' source) beats the gate the same way it beats
+ *  the per-model map: it is the most specific choice that exists. */
+async function defaultEffort(
+  sessionId: string | null,
+): Promise<EffortLevel | undefined> {
   try {
+    const custom = await sessionCustomOverride(sessionId);
+    if (custom?.effort !== undefined) return custom.effort;
     const { useInference } = await import("../inference.ts");
     const { useModelStore } = await import("../modelStore.ts");
     const m = useModelStore.getState();
@@ -358,18 +420,29 @@ async function defaultSampler(sessionId: string | null): Promise<SamplerParams |
     if (useModelStore.getState().activeProviderType === "remote") return null;
     const global = useInference.getState().sampler;
     if (!sessionStore || !sessionId) return global;
-    return resolveSampler(
-      global,
-      await sessionStore.getSessionSampler(sessionId).catch(() => null),
-    );
+    const override = await sessionCustomOverride(sessionId);
+    return resolveSampler(global, override?.sampler ?? null);
   } catch {
     return null;
   }
 }
 
-/** Per-model system prompt override; absent stays absent. */
-async function defaultSystemPrompt(): Promise<string | undefined> {
+/** Per-model system prompt override; absent stays absent. WITH a bound
+ *  companion the persona WINS: the companion's prompt (Mustache-rendered with its
+ *  parameters) is the conversation's identity, and settings_source does
+ *  not gate it — that only governs generation settings (PocketPal's
+ *  resolveSystemPrompt: companion → model → none). */
+async function defaultSystemPrompt(
+  sessionId: string | null,
+): Promise<string | undefined> {
   try {
+    const companion = await sessionCompanion(sessionId);
+    if (companion?.systemPrompt && companion.systemPrompt.trim() !== "") {
+      if (companion.parameters && Object.keys(companion.parameters).length > 0) {
+        return generateFinalSystemPrompt(companion.systemPrompt, companion.parameters);
+      }
+      return companion.systemPrompt;
+    }
     const { useModelStore } = await import("../modelStore.ts");
     const m = useModelStore.getState();
     if (!m.activeModelId) return undefined;
@@ -449,12 +522,13 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
         const auth = await getSearch().catch(() => null);
         return auth ? { provider: auth.provider, key: auth.key, count: auth.count } : null;
       },
-      getSystemPrompt: () => defaultSystemPrompt(),
+      getSystemPrompt: (sid) => defaultSystemPrompt(sid),
+      getTalentNames: (sid) => defaultTalentNames(sid),
       getStopWords: () => defaultStopWords(),
       getChatTemplate: () => defaultChatTemplate(),
       getAddGenerationPrompt: () => defaultAddGenerationPrompt(),
-      getThinking: () => defaultThinking(),
-      getEffort: () => defaultEffort(),
+      getThinking: (sid) => defaultThinking(sid),
+      getEffort: (sid) => defaultEffort(sid),
       getJinja: () => defaultJinja(),
       getSampler: (sid) => defaultSampler(sid),
       // Attachment → file for the engine. Lives in services/storage/images

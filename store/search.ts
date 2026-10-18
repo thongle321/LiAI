@@ -17,7 +17,7 @@ import {
   type SearchProviderId,
 } from "../services/search/search-providers.ts";
 
-export const SEARCH_KEY = "liai_search_v1";
+export const SEARCH_KEY = "liai_search";
 
 export interface SecureAdapter {
   getItem(key: string): Promise<string | null>;

@@ -19,7 +19,7 @@ import {
   READY_TO_USE,
 } from "../services/models/model-groups.ts";
 
-export const UI_STATE_KEY = "liai_models_ui_v1";
+export const UI_STATE_KEY = "liai_models_ui";
 
 /** PocketPal `filters` mapped onto our groups:
  * - downloadedOnly (PocketPal `downloaded`): only downloaded models.

@@ -27,7 +27,7 @@
  * flag, threaded store → turn → engine.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 
 import {
@@ -35,16 +35,18 @@ import {
   resolveSampler,
   type SamplerParams,
 } from "@/services/inference/sampler.ts";
+import type { SessionOverride } from "@/services/chat/session-store.ts";
 import { useShallow } from "zustand/shallow";
 import { useInference } from "@/store/inference.ts";
 import { useModelStore } from "@/store/modelStore.ts";
 import { useChatStore, defaultGetStore } from "@/store/chat";
+import { useCompanions } from "@/store/companions.ts";
 import { SamplerRows } from "./sampler-rows.tsx";
 import { Sheet } from "../sheet.tsx";
 import { ResetMenu } from "../reset-menu.tsx";
 import { RowSizeProvider, Segmented, SettingsSection } from "../settings-rows.tsx";
 
-type Mode = "session" | "preset";
+type Mode = "companion" | "session" | "preset";
 
 /** Save-time bounds for the typed fields: their live checks cover the floor
  *  only (n-predict) or nothing at all (seed), so over-max values can reach
@@ -73,6 +75,14 @@ export function GenerationSettingsSheet({
   onClose: () => void;
 }) {
   const sessionId = useChatStore((s) => s.sessionId);
+  const sessionCompanionId = useChatStore((s) => s.sessionCompanionId);
+  const setSettingsSource = useChatStore((s) => s.setSessionSettingsSource);
+  const companion = useCompanions((s) =>
+    sessionCompanionId === null ? undefined : s.companions.find((p) => p.id === sessionCompanionId),
+  );
+  // PocketPal: with an active companion the source toggle shows (companion ⇄ custom);
+  // without one the sheet keeps LiAI's session/preset split.
+  const hasCompanion = companion !== undefined;
   // One useShallow unit: all five fields feed the draft, so the sheet
   // re-renders only when one of them changes.
   const {
@@ -92,6 +102,10 @@ export function GenerationSettingsSheet({
   );
   const [mode, setMode] = useState<Mode>("session");
   const [override, setOverride] = useState<Partial<SamplerParams> | null>(null);
+  // The WHOLE override as loaded (sampler + thinking + effort): Save
+  // writes back through it so the fields this sheet does not edit stay.
+  // A ref, not state: a re-render must not reset it before Save reads it.
+  const loadedOverride = useRef<SessionOverride | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [errors, setErrors] = useState<Partial<Record<"seed" | "nPredict", string>>>({});
 
@@ -126,42 +140,68 @@ export function GenerationSettingsSheet({
   }, []);
 
   // Load this conversation's override whenever the sheet opens on it.
+  // The override carries sampler + thinking + effort; this sheet edits
+  // the SAMPLER layer, so it reads `.sampler` and commits back through
+  // the whole override (Save must not erase thinking/effort it does not
+  // show). Skipped in 'companion' mode: the companion's settings have no session
+  // override to read.
   useEffect(() => {
     if (!visible || mode !== "session") return;
     let cancelled = false;
     void (async () => {
       const store = await defaultGetStore().catch(() => null);
       const value = store && sessionId
-        ? await store.getSessionSampler(sessionId).catch(() => null)
+        ? await store.getSessionOverride(sessionId).catch(() => null)
         : null;
-      if (!cancelled) setOverride(value);
+      if (!cancelled) setOverride(value?.sampler ?? null);
+      loadedOverride.current = value;
     })();
     return () => {
       cancelled = true;
     };
   }, [visible, mode, sessionId]);
 
+  // The sheet opens on the source the conversation actually has: 'companion'
+  // when a persona is bound (PocketPal's default), else 'session'.
+  useEffect(() => {
+    if (!visible) return;
+    setMode(hasCompanion ? "companion" : "session");
+  }, [visible, hasCompanion]);
+
   // A conversation that has not been sent yet has no session row to write
   // an override to, so Session is not offered: a slider that moves and then
   // loses the value is worse than not offering the choice.
   const hasSession = sessionId !== null;
-  const availableModes: Mode[] = hasSession ? ["session", "preset"] : ["preset"];
+  const availableModes: Mode[] = hasSession
+    ? hasCompanion
+      ? ["companion", "session", "preset"]
+      : ["session", "preset"]
+    : ["preset"];
   const isSession = hasSession && mode === "session";
-  const title = isSession
-    ? "Chat Generation Settings (Session)"
-    : "Chat Generation Settings (Preset)";
+  const isCompanion = hasSession && hasCompanion && mode === "companion";
+  const title = isCompanion
+    ? `Chat Generation Settings (Companion: ${companion.name})`
+    : isSession
+      ? "Chat Generation Settings (Session)"
+      : "Chat Generation Settings (Preset)";
 
   // Buffer a fresh draft whenever the sheet opens or the source switches
   // (PocketPal reloads settings on source change too — edits on the old
-  // source are abandoned, not merged).
+  // source are abandoned, not merged). 'companion' mode buffers the RESOLVED
+  // companion settings (its partial completionSettings over the preset) —
+  // shown inert, never committed.
   useEffect(() => {
     if (!visible) return;
     setErrors({});
     setDraft({
-      sampler: isSession ? resolveSampler(preset, override) : { ...preset },
+      sampler: isSession
+        ? resolveSampler(preset, override)
+        : isCompanion
+          ? resolveSampler(preset, companion?.completionSettings ?? null)
+          : { ...preset },
       jinja: jinjaEnabled,
     });
-  }, [visible, mode, isSession, preset, override, jinjaEnabled]);
+  }, [visible, mode, isSession, isCompanion, preset, override, jinjaEnabled, companion]);
 
   /** Validate, commit the draft to the stores, close-worthy. False = the
    *  validation alert is showing and the sheet stays open. */
@@ -185,7 +225,12 @@ export function GenerationSettingsSheet({
       void (async () => {
         const store = await defaultGetStore().catch(() => null);
         if (store && sessionId) {
-          await store.setSessionSampler(sessionId, current.sampler).catch(() => null);
+          await store
+            .setSessionOverride(sessionId, {
+              ...loadedOverride.current,
+              sampler: current.sampler,
+            })
+            .catch(() => null);
         }
       })();
     } else {
@@ -249,7 +294,12 @@ export function GenerationSettingsSheet({
       onClose={onClose}
       title={title}
       actions={
-        /* Pinned action row (PocketPal's Sheet.Actions) — see Sheet.tsx. */
+        /* Pinned action row (PocketPal's Sheet.Actions) — see Sheet.tsx.
+           'companion' mode owns no settings to save or reset: the row shows
+           only the close affordance via the sheet's own X. */
+        isCompanion ? (
+          <View />
+        ) : (
         <View className="flex-row items-center justify-between">
           {isSession ? (
             <ResetMenu
@@ -291,6 +341,7 @@ export function GenerationSettingsSheet({
             </Pressable>
           </View>
         </View>
+        )
       }
     >
       {/* PocketPal: the source control sits ABOVE the card, not inside it
@@ -303,13 +354,31 @@ export function GenerationSettingsSheet({
             label="Settings source"
             description={
               hasSession
-                ? undefined
+                ? isCompanion
+                  ? `${companion.name}'s generation settings apply. Choose Session to tune this conversation on its own.`
+                  : undefined
                 : "Start a conversation to give it its own settings. Until then these are the preset."
             }
-            value={isSession ? "session" : "preset"}
+            value={mode}
             options={availableModes}
-            displayFor={(m) => (m === "session" ? "Session" : "Preset")}
-            onPick={setMode}
+            displayFor={(m) =>
+              m === "companion"
+                ? `Companion (${companion?.name ?? "persona"})`
+                : m === "session"
+                  ? "Session"
+                  : "Preset"
+            }
+            onPick={(m) => {
+              setMode(m);
+              // PocketPal parity: the toggle writes the source
+              // IMMEDIATELY, not on Save — 'custom' takes effect the
+              // moment the user asks for it, and back to 'companion' makes
+              // the session follow the persona again (its stored
+              // override stays, inert, for the next flip).
+              if (hasSession && (m === "companion" || m === "session")) {
+                void setSettingsSource(m === "companion" ? "companion" : "custom");
+              }
+            }}
           />
         </RowSizeProvider>
       </View>
@@ -318,16 +387,21 @@ export function GenerationSettingsSheet({
           {serverDefaultsNote}
         </Text>
       ) : null}
-      {/* One divider-less card, 24px rhythm — CompletionSettings' shape. */}
+      {/* One divider-less card, 24px rhythm — CompletionSettings' shape.
+          In 'companion' mode the rows are INERT (no pointer events, dimmed):
+          the values shown are the companion's, and a slider that moved and
+          snapped back would be a lie. */}
       <SettingsSection plain>
         {draft ? (
-          <SamplerRows
-            sampler={draft.sampler}
-            jinjaEnabled={draft.jinja}
-            errors={errors}
-            onChange={apply}
-            onJinjaChange={setDraftJinja}
-          />
+          <View pointerEvents={isCompanion ? "none" : "auto"} className={isCompanion ? "opacity-40" : undefined}>
+            <SamplerRows
+              sampler={draft.sampler}
+              jinjaEnabled={draft.jinja}
+              errors={errors}
+              onChange={apply}
+              onJinjaChange={setDraftJinja}
+            />
+          </View>
         ) : null}
       </SettingsSection>
     </Sheet>

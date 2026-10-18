@@ -65,7 +65,7 @@ export interface ModelSpec {
   error?: string;
   /** Machine-readable failure kind; see DownloadErrorCode. */
   errorCode?: DownloadErrorCode;
-  // Catalog metadata (PocketPal parity, minus pal features)
+  // Catalog metadata (PocketPal parity, minus companion features)
   params?: number; // parameter count, e.g. 135_000_000
   capabilities?: string[];
   /** Whether this model reasons at all (C6): true = known reasoner,

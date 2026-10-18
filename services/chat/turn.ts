@@ -17,8 +17,12 @@ import type {
 } from "../inference/engine.ts";
 import type { SamplerParams } from "../inference/sampler.ts";
 import type { EffortLevel } from "@/utils/reasoning-capability.ts";
-import { runLocalAgent } from "../agent/runner.ts";
-import { talentDefinitions, type TalentSearchAuth } from "../agent/registry.ts";
+import { runLocalAgent, DEFAULT_MAX_TURNS } from "../agent/runner.ts";
+import {
+  collectSystemPromptFragments,
+  deriveToolSchemas,
+  type TalentSearchAuth,
+} from "../agent/registry.ts";
 import { toDataUris } from "../storage/images.ts";
 
 /** First user message becomes the session title, truncated here. */
@@ -34,6 +38,9 @@ export interface TurnSessionStore {
    *  one string. Optional here exactly as on `SessionStore.append`. */
   append(sessionId: string, turn: StoredTurn, id?: string): Promise<void>;
   setTitleIfEmpty(sessionId: string, title: string): Promise<void>;
+  /** Bind the staged companion at session birth, before the first turn's
+   *  resolutions read it. Optional so older fakes stay valid. */
+  setSessionCompanion?(sessionId: string, companionId: string | null): Promise<unknown>;
 }
 
 export interface TurnOutcome {
@@ -56,13 +63,20 @@ export interface TurnDeps {
   getEngineSource(): Promise<EngineSource | null>;
   getStore(): Promise<TurnSessionStore | null>;
   getSearch(): Promise<TalentSearchAuth | null>;
-  getSystemPrompt(): Promise<string | undefined>;
+  getSystemPrompt(sessionId: string): Promise<string | undefined>;
+  /** Pact allowlist for THIS session — the talent names its companion
+   *  declares. Empty/absent = no tools at all (a chat with no companion sends
+   *  none, PocketPal gating). Takes the id because a turn that mints its
+   *  own session is not the pointer until after it runs. */
+  getTalentNames?: (sessionId: string) => Promise<string[]>;
   /** Local-only thinking preference; `undefined` sends NO flag, leaving
-   *  the model's chat template to decide (services/inference//thinking.ts). */
-  getThinking?: () => Promise<boolean | undefined>;
+   *  the model's chat template to decide (services/inference//thinking.ts).
+   *  Session-aware: the session override (when settings_source is
+   *  'custom') beats the per-model/global resolution. */
+  getThinking?: (sessionId: string) => Promise<boolean | undefined>;
   /** Per-model graded effort; undefined sends NO kwarg (the model's own
-   *  default reasoning depth stands). */
-  getEffort?: () => Promise<EffortLevel | undefined>;
+   *  default reasoning depth stands). Session-aware, like getThinking. */
+  getEffort?: (sessionId: string) => Promise<EffortLevel | undefined>;
   /** Local-only jinja template preference; omitted keeps the native default. */
   getJinja?: () => Promise<boolean>;
   /** Local-only sampling params for THIS session, already resolved
@@ -165,11 +179,25 @@ export function createTurnRunner(deps: TurnDeps) {
     const store = await deps.getStore().catch(() => null);
     const sid = paths.sessionId ?? (await store?.create().catch(() => null)) ?? null;
     const sessionId = sid ?? `local-${Date.now().toString(36)}`;
+    // Birth binding: the staged companion lands on the freshly minted row
+    // BEFORE any resolution below reads it, so the FIRST turn already
+    // runs with the persona's prompt and its pact's tools — and the
+    // settings_source default ('companion') needs no write: absence IS 'companion'.
+    if (
+      store &&
+      sid !== null &&
+      paths.sessionId === null &&
+      paths.companionId !== undefined &&
+      store.setSessionCompanion
+    ) {
+      await store.setSessionCompanion(sid, paths.companionId).catch(() => {});
+    }
 
     const search = await deps.getSearch().catch(() => null);
-    const systemPrompt = await deps.getSystemPrompt().catch(() => undefined);
-    const thinking = await deps.getThinking?.().catch(() => undefined);
-    const effort = await deps.getEffort?.().catch(() => undefined);
+    const systemPrompt = await deps.getSystemPrompt(sessionId).catch(() => undefined);
+    const talentNames = (await deps.getTalentNames?.(sessionId).catch(() => [])) ?? [];
+    const thinking = await deps.getThinking?.(sessionId).catch(() => undefined);
+    const effort = await deps.getEffort?.(sessionId).catch(() => undefined);
     const jinja = await deps.getJinja?.().catch(() => undefined);
     const sampler = await deps.getSampler?.(sessionId).catch(() => null);
     const stopWords = (await deps.getStopWords?.().catch(() => [])) ?? [];
@@ -204,16 +232,30 @@ export function createTurnRunner(deps: TurnDeps) {
 
     let result: Awaited<ReturnType<typeof runLocalAgent>>;
     try {
+      // ONE leading system message: the resolved prompt (companion or
+      // per-model) plus the active talents' fragments, blank parts
+      // dropped — a second system message makes strict chat templates
+      // raise (PocketPal's assembleMessages).
+      const fragments = collectSystemPromptFragments(talentNames, {
+        now: new Date(),
+        maxToolTurns: DEFAULT_MAX_TURNS,
+      });
+      const systemMessage = [systemPrompt ?? "", ...fragments]
+        .filter((part) => part.trim() !== "")
+        .join("\n\n");
       result = await runLocalAgent({
       engine,
       messages: toAgentMessages(
         paths.history,
         trimmed,
-        systemPrompt,
+        systemMessage,
         // A missing sampler means no override — default to including.
         sampler?.includeThinkingInContext !== false,
       ),
-      tools: talentDefinitions(),
+      // Gating: ONLY the session's companion pact's talents get schemas, so a
+      // call to anything else is rejected by the runner as unadvertised
+      // (and a no-companion chat offers none at all).
+      tools: deriveToolSchemas(talentNames),
       // Local reads imagePaths (llama media_paths); remote reads the
       // data URIs (OpenAI content arrays — a server can't read our files).
       ...(imagePaths ? { imagePaths } : {}),

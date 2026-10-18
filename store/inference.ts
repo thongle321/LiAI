@@ -16,7 +16,7 @@ import {
 } from "../services/inference/sampler.ts";
 import { isEffortLevel, type EffortLevel } from "../utils/reasoning-capability.ts";
 
-export const INFERENCE_KEY = "liai_inference_v1";
+export const INFERENCE_KEY = "liai_inference";
 
 export const MIN_CONTEXT = 512;
 export const MAX_GPU_LAYERS = 99;

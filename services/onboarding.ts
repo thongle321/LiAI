@@ -5,7 +5,7 @@
 
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 
-export const ONBOARDED_KEY = "liai_onboarded_v1";
+export const ONBOARDED_KEY = "liai_onboarded";
 
 async function rnStorage(): Promise<AsyncStorageStatic> {
   const mod = await import("@react-native-async-storage/async-storage");

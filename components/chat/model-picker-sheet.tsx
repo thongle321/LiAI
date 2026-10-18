@@ -3,7 +3,7 @@
  *
  * Opened from the empty thread's "Select Model" card: activating a model
  * no longer means leaving the conversation. PocketPal's sheet is a tabbed
- * picker over pals AND models — LiAI has no pals, so this is the models
+ * picker over companions AND models — LiAI has no companions, so this is the models
  * half only, and management (download, delete, remote setup) stays on the
  * /models screen, exactly as PocketPal's picker defers to their Models
  * screen for the same things.

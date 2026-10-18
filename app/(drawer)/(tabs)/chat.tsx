@@ -57,6 +57,13 @@ import { GenerationSettingsSheet } from "@/components/chat/generation-settings-s
 import { ChatWarningSnackbar } from "@/components/chat/chat-warning-snackbar.tsx";
 import { ChatHeader } from "@/components/chat/chat-header.tsx";
 import { ModelPickerSheet } from "@/components/chat/model-picker-sheet.tsx";
+import {
+  GreetingBubble,
+  SuggestedPromptChips,
+} from "@/components/chat/greeting-bubble.tsx";
+import { CompanionsSheet } from "@/components/companions/companions-sheet.tsx";
+import { useCompanions } from "@/store/companions.ts";
+import { recommendedContextTokens } from "@/services/agent/registry.ts";
 
 export default function ChatRoute() {
   const messages = useChatStore((s) => s.messages);
@@ -75,8 +82,8 @@ export default function ChatRoute() {
   // that consumed flag: without it the effect re-fires on every render
   // and would stomp whatever the user had typed since.
   //
-  // No in-app producer for this URL. pocketpal's link is pal-keyed
-  // (`pocketpal://chat?palId=p1`) and pals are out of scope here, so
+  // No in-app producer for this URL. pocketpal's link is companion-keyed
+  // (`pocketpal://chat?palId=p1`) and companions are out of scope here, so
   // this only fires when an external app or Shortcut hands LiAI a
   // `liai://chat?message=...`. Deliberate, and recorded in the audit.
   const { message: deepLinkPrompt } = useLocalSearchParams<{ message?: string }>();
@@ -252,6 +259,28 @@ export default function ChatRoute() {
   // send-enable and the prompt chips.
   const showPlaceholder = activeModelId === null && emptyState;
 
+  // ---- The companion persona (greeting + chips + load hint) ----------------
+  // The bound companion applies to the open conversation; the staged one to the
+  // conversation about to start (its greeting greets the empty new chat).
+  const sessionCompanionId = useChatStore((s) => s.sessionCompanionId);
+  const stagedCompanionId = useChatStore((s) => s.stagedCompanionId);
+  const effectiveCompanionId = sessionId !== null ? sessionCompanionId : stagedCompanionId;
+  const activeCompanion = useCompanions((s) =>
+    effectiveCompanionId === null ? undefined : s.companions.find((p) => p.id === effectiveCompanionId),
+  );
+  // Greeting only with a loaded model and an EMPTY, unsearched thread —
+  // exactly PocketPal's render predicate. Never persisted.
+  const greeting =
+    emptyState && !showPlaceholder && activeCompanion?.greeting?.text
+      ? activeCompanion.greeting
+      : undefined;
+  // One-shot context hint (PocketPal's usePalLoadHint): a companion whose heavy
+  // talent wants a bigger window than the loaded one gets ONE notice per
+  // (companion, context, talents) signature. Local engine only — a remote
+  // provider reports no n_ctx. Declared BELOW nCtx, which the banner
+  // section resolves.
+  const hintSeen = useRef<Set<string>>(new Set());
+
   const motionDuration = MOTION_DURATION_MS;
 
   // ---- The context banner slot -------------------------------------
@@ -262,6 +291,21 @@ export default function ChatRoute() {
   // supplies the state. Both halves moved out in one go: the view-model had
   // no seam to test through while it lived here.
   const nCtx = useInference((s) => s.nCtx);
+  useEffect(() => {
+    if (activeProviderType !== "local" || activeCompanion === undefined) return;
+    if (activeModelId === null) return;
+    const names = activeCompanion.pact?.talents.map((t) => t.name) ?? [];
+    const wanted = Math.max(0, ...names.map((n) => recommendedContextTokens(n) ?? 0));
+    if (wanted === 0 || wanted <= nCtx) return;
+    const key = `${activeCompanion.id}|${nCtx}|${names.join(",")}`;
+    if (hintSeen.current.has(key)) return;
+    hintSeen.current.add(key);
+    setChatWarning({
+      message: `"${activeCompanion.name}" works best with a bigger context window than the current ${nCtx} — some tool results may not fit.`,
+      severity: "warning",
+      recoverable: false,
+    });
+  }, [activeCompanion, nCtx, activeProviderType, activeModelId, setChatWarning]);
   const {
     banner,
     bannerShowing,
@@ -377,11 +421,14 @@ export default function ChatRoute() {
   // header title routes to /models, and each message offers "Regenerate
   // with…"); the picker is the no-model path only.
   const [pickerOpen, setPickerOpen] = useState(false);
+  // The persona half of the chat picker (PocketPal's ChatPalModelPicker
+  // companions tab): header button -> sheet of installed companions.
+  const [companionsSheetOpen, setCompanionsSheetOpen] = useState(false);
   // Sync the freeze flag with the sheet-open state (declared above because the
   // pickers are defined late in this component).
   useEffect(() => {
-    freeze.value = pickerOpen || generationOpen;
-  }, [pickerOpen, generationOpen, freeze]);
+    freeze.value = pickerOpen || generationOpen || companionsSheetOpen;
+  }, [pickerOpen, generationOpen, companionsSheetOpen, freeze]);
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
 
@@ -404,6 +451,7 @@ export default function ChatRoute() {
         modelLabel={activeModelLabel}
         onOpenModels={() => router.navigate("/models")}
         onOpenDrawer={() => navigation.openDrawer()}
+        onOpenCompanions={() => setCompanionsSheetOpen(true)}
         onNewConversation={() => {
           // The pen starts a fresh chat; a stale search bar must
           // not outlive the conversation it was filtering.
@@ -478,6 +526,13 @@ export default function ChatRoute() {
                   bottomInset={composerHeight + tabBarCompensation}
                   onSelectModel={() => setPickerOpen(true)}
                 />
+              ) : greeting !== undefined && activeCompanion !== undefined ? (
+                // The greeting bubble is LIST content (PocketPal renders it
+                // in the empty view), so it clears the floating composer the
+                // same way the placeholder does.
+                <View style={{ paddingTop: composerHeight + tabBarCompensation }}>
+                  <GreetingBubble companionName={activeCompanion.name} greeting={greeting.text} />
+                </View>
               ) : null
             }
             onEndVisibleChange={setAtEnd}
@@ -597,6 +652,17 @@ export default function ChatRoute() {
             onDismiss={dismissWarning}
             onRetry={retryFailedTurn}
           />
+          {/* Suggested-prompt chips (PocketPal's chip row): above the
+              composer, only on an empty thread with a greeting. Tapping
+              one SENDS it like any user message. */}
+          {greeting?.suggestedPrompts !== undefined &&
+          greeting.suggestedPrompts.length > 0 &&
+          !sending ? (
+            <SuggestedPromptChips
+              prompts={greeting.suggestedPrompts}
+              onSend={(text) => void send(text)}
+            />
+          ) : null}
   {/* The banner's own resolution — which of five, plus its fill — is
       useChatBanner's answer; this only draws it. */}
   {bannerShowing && (
@@ -647,6 +713,10 @@ export default function ChatRoute() {
       <ModelPickerSheet
         visible={pickerOpen}
         onClose={() => setPickerOpen(false)}
+      />
+      <CompanionsSheet
+        visible={companionsSheetOpen}
+        onClose={() => setCompanionsSheetOpen(false)}
       />
     </SafeAreaView>
   );

@@ -11,7 +11,7 @@ import type { AsyncStorageStatic } from "@react-native-async-storage/async-stora
 import type { KeyValueStorage } from "../services/storage/storage.ts";
 import { clampWatchInterval, WATCH_INTERVAL_DEFAULT_MS } from "../services/vision/vision-watch.ts";
 
-export const WATCH_KEY = "liai_watch_v1";
+export const WATCH_KEY = "liai_watch";
 
 export interface WatchState {
   watchIntervalMs: number;

@@ -16,6 +16,7 @@ import {
   Settings,
   Download,
   Mic,
+  Users,
   type LucideIcon,
 } from "lucide-react-native";
 
@@ -73,7 +74,9 @@ export function AppDrawerContent() {
     }
   }
 
-  function go(path: "/chat" | "/settings" | "/about" | "/models" | "/voice-settings"): void {
+  function go(
+    path: "/chat" | "/settings" | "/about" | "/models" | "/companions" | "/voice-settings",
+  ): void {
     // ONE navigation, no closeDrawer(): every destination is a screen of
     // the drawer navigator, and its router closes the panel as part of the
     // same state transition as the swap (DrawerRouter getStateForAction /
@@ -137,6 +140,7 @@ export function AppDrawerContent() {
             }}
           />
           <DrawerItem Icon={Download} label="Models" onPress={() => go("/models")} />
+          <DrawerItem Icon={Users} label="Companions" onPress={() => go("/companions")} />
           <DrawerItem Icon={Mic} label="Voice" onPress={() => go("/voice-settings")} />
           <DrawerItem Icon={Settings} label="Settings" onPress={() => go("/settings")} />
           <DrawerItem Icon={CircleHelp} label="About" onPress={() => go("/about")} />

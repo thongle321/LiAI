@@ -703,7 +703,7 @@ export { ResumableDownloadService };
  * Exported as one object with one shape so store/models/downloads.ts never has
  * to know which driver it is talking to.
  */
-type DownloadDriver = {
+export type DownloadDriver = {
   startDownload(
     job: DownloadJob,
     progressCallback?: DownloadProgressCallback,

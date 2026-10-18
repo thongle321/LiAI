@@ -28,9 +28,9 @@ import type { AsyncStorageStatic } from "@react-native-async-storage/async-stora
 import type { KeyValueStorage } from "../services/storage/storage.ts";
 import { DEVICE_DEFAULT_VOICE, type NeuralEngineId, type Voice } from "../services/tts/types.ts";
 import { ENGINE_ORDER, NEURAL_ENGINE_META } from "../services/tts/engineMeta.ts";
-import { getEngine } from "../services/tts/engineRegistry.ts";
 import { ttsDownloads, type TtsModelStatus } from "../services/tts/download.ts";
 import { ttsRuntime } from "../services/tts/runtime.ts";
+import { playVoice } from "../services/tts/voice-engine.ts";
 import { readTotalMemory } from "../services/models/device-tiers.ts";
 
 export const VOICE_KEY = "liai_voice";
@@ -343,23 +343,9 @@ export function createVoiceStore(storage: KeyValueStorage) {
 
       play: async (text, options = {}) => {
         const voice = options.voice ?? get().currentVoice ?? DEVICE_DEFAULT_VOICE;
-        const engine = getEngine(voice.engine);
-        const installed = await engine.isInstalled().catch(() => false);
-        if (!installed) {
-          // Nothing to say through this engine right now — stop cleanly so
-          // a previous utterance cannot keep talking over the silence.
-          await get().stop();
-          return;
-        }
         set({ playbackState: { mode: "playing", messageId: options.messageId } });
         try {
-          // No sid here: every neural engine derives it from its own curated
-          // table's order, which is the only place that mapping is correct.
-          await ttsRuntime.acquire(engine, () =>
-            engine.play(text, voice, {
-              ...(options.speed !== undefined ? { speed: options.speed } : {}),
-            }),
-          );
+          await playVoice(text, voice, { speed: options.speed }, { stop: () => get().stop() });
         } catch {
           // A failed play must not wedge the state machine.
         } finally {

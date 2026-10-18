@@ -186,7 +186,8 @@ class ResumableDownloadService {
     ).catch(() => {
       // No haptic hardware (and no Expo Haptics module in tests).
     });
-    this.callbacks.onComplete?.(job, success);
+    const entry = this.activeDownloads.get(job.id);
+    entry?.completeCallback(job, success);
   }
 
   /** Terminal failure that keeps the partial on disk, for the cases where
@@ -210,7 +211,6 @@ class ResumableDownloadService {
     this.activeDownloads.set(jobId, { ...entry, job: failedJob, task: null });
     entry.progressCallback(failedJob);
     entry.completeCallback(failedJob, false);
-    this.callbacks.onProgress?.(failedJob);
     this.announceOutcome(failedJob, false);
     this.stopSpaceWatchIfIdle();
     // Cleared only AFTER the terminal event is published: whichever order the
@@ -220,20 +220,7 @@ class ResumableDownloadService {
     this.cancelling.delete(jobId);
   }
 
-  private callbacks: {
-    onProgress?: DownloadProgressCallback;
-    onComplete?: DownloadCompleteCallback;
-  } = {};
-
-  /** Set global progress callback */
-  setProgressCallback(callback: DownloadProgressCallback): void {
-    this.callbacks.onProgress = callback;
-  }
-
-  /** Set global complete callback */
-  setCompleteCallback(callback: DownloadCompleteCallback): void {
-    this.callbacks.onComplete = callback;
-  }
+  /** Per-job subscribers are the store's callback; no global registration. */
 
   /** Start a new download.
    *
@@ -267,7 +254,6 @@ class ResumableDownloadService {
       });
       onProgress(failedJob);
       onComplete(failedJob, false);
-      this.callbacks.onProgress?.(failedJob);
       this.announceOutcome(failedJob, false);
       this.stopSpaceWatchIfIdle();
       throw new Error(message);
@@ -322,7 +308,6 @@ class ResumableDownloadService {
           completeCallback: onComplete,
         });
         onProgress(updatedJob);
-        this.callbacks.onProgress?.(updatedJob);
       };
 
       const startTask = (resume?: string): DownloadResumable => {
@@ -384,7 +369,6 @@ class ResumableDownloadService {
           completeCallback: onComplete,
         });
         onProgress(pausedJob);
-        this.callbacks.onProgress?.(pausedJob);
         this.stopSpaceWatchIfIdle();
       };
 
@@ -483,7 +467,6 @@ class ResumableDownloadService {
       });
       onProgress(completedJob);
       onComplete(completedJob, true);
-      this.callbacks.onProgress?.(completedJob);
       this.announceOutcome(completedJob, true);
       this.stopSpaceWatchIfIdle();
     } catch (error) {
@@ -510,7 +493,7 @@ class ResumableDownloadService {
       job: pausedJob,
     });
 
-    this.callbacks.onProgress?.(pausedJob);
+    entry.progressCallback(pausedJob);
     return pausedJob;
   }
 
@@ -528,7 +511,7 @@ class ResumableDownloadService {
     }
 
     if (entry.job.status === "completed") {
-      this.callbacks.onProgress?.(entry.job);
+      entry.progressCallback(entry.job);
       this.announceOutcome(entry.job, true);
       return;
     }
@@ -552,7 +535,7 @@ class ResumableDownloadService {
       job: resumedJob,
     });
 
-    this.callbacks.onProgress?.(resumedJob);
+    entry.progressCallback(resumedJob);
     this.startSpaceWatch();
 
     try {
@@ -561,7 +544,7 @@ class ResumableDownloadService {
       if (!result) {
         const pausedJob: DownloadJob = { ...entry.job, status: "paused" };
         this.activeDownloads.set(jobId, { ...entry, job: pausedJob });
-        this.callbacks.onProgress?.(pausedJob);
+        entry.progressCallback(pausedJob);
         return;
       }
 
@@ -615,7 +598,7 @@ class ResumableDownloadService {
         job: completedJob,
       });
 
-      this.callbacks.onProgress?.(completedJob);
+      entry.progressCallback(completedJob);
       this.announceOutcome(completedJob, true);
       this.stopSpaceWatchIfIdle();
     } catch (error) {
@@ -631,7 +614,7 @@ class ResumableDownloadService {
         job: failedJob,
       });
 
-      this.callbacks.onProgress?.(failedJob);
+      entry.progressCallback(failedJob);
       this.announceOutcome(failedJob, false);
 
       throw error;
@@ -676,8 +659,8 @@ class ResumableDownloadService {
     this.forget(jobId);
     this.activeDownloads.delete(jobId);
     this.stopSpaceWatchIfIdle();
-    this.callbacks.onProgress?.(cancelledJob);
-    this.callbacks.onComplete?.(cancelledJob, false);
+    entry?.progressCallback(cancelledJob);
+    entry?.completeCallback(cancelledJob, false);
   }
 
   /** Get current job status */
@@ -721,8 +704,6 @@ export { ResumableDownloadService };
  * to know which driver it is talking to.
  */
 type DownloadDriver = {
-  setProgressCallback(callback: DownloadProgressCallback): void;
-  setCompleteCallback(callback: DownloadCompleteCallback): void;
   startDownload(
     job: DownloadJob,
     progressCallback?: DownloadProgressCallback,

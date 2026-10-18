@@ -257,14 +257,10 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
       error: undefined,
     });
 
-    // The service's callbacks are global (last registered wins); keying each
-    // update off the job's own modelId makes re-registration harmless.
-    platformDownloadService.setProgressCallback((downloadJob) => {
-      // Persist only on a real status transition (idle->downloading,
-      // ->paused, ->failed). Progress bytes go through the transient path so
-      // a many-per-second tick never hits AsyncStorage (the models screen
-      // went unresponsive). Resume reads the partial file on disk, so a
-      // slightly-stale in-memory bar never costs a byte.
+    // Per-job subscribers (Phase 2.1): each download carries its own
+    // progress/completion handler, so concurrent downloads no longer
+    // clobber each other through a shared global callback.
+    const onProgress = (downloadJob: DownloadJob) => {
       const prevStatus = get().getModel(downloadJob.modelId)?.downloadStatus;
       if (prevStatus !== downloadJob.status) {
         get().updateModel(downloadJob.modelId, {
@@ -272,24 +268,15 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
           error: downloadJob.error,
         });
       }
-      // One transient push per emitted tick. There is deliberately no gate here:
-//      // progress is already throttled once, at the emitter, in
-      // download-service.ts (PocketPal's per-byte-loop throttle). A second
-      // gate in the store was only ever a second place to forget one.
       get().setModelProgress(downloadJob.modelId, {
         downloadProgress: downloadJob.progress,
         downloadedBytes: downloadJob.downloadedBytes,
         totalBytes: downloadJob.totalBytes,
         speedBytesPerSec: downloadJob.speedBytesPerSec,
       });
-    });
-
-    platformDownloadService.setCompleteCallback((downloadJob, success) => {
+    };
+    const onComplete = (downloadJob: DownloadJob, success: boolean) => {
       const specNow = get().getModel(downloadJob.modelId);
-      // Pair handoff (vision-series 01): the MAIN leg finishing while a
-      // projector is still missing does NOT complete the model — the
-      // projector leg starts (startSpecDownload re-reads the disk and
-      // takes the "projector" step), and completion belongs to THAT leg.
       if (
         success &&
         specNow?.projector !== undefined &&
@@ -303,10 +290,6 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
         return;
       }
       if (success) {
-        // Final completion (main-only model, or the projector leg): the
-        // row carries the MAIN file's stats — the load-guard ceiling is
-        // the model's footprint, not the projector's, and localPath is
-        // where the engine loads from.
         const mainFile = specNow?.files[0];
         const mainSize = mainFile?.size ?? downloadJob.totalBytes;
         get().updateModel(downloadJob.modelId, {
@@ -318,24 +301,12 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
             ? `${LegacyFileSystem.documentDirectory}models/${mainFile.name}`
             : downloadJob.destinationPath,
         });
-        // Nothing selects the model here: activation is an explicit Load
-        // (PocketPal parity), so the row flipping to Downloaded is the whole
-        // of what a finished download does.
-        // The file is whole: read what it says about itself while it is
-        // still known-fresh. Fire-and-forget — metadata is a bonus, and
-        // the row is already correct without it.
         void get().refreshGgufMetadata(downloadJob.modelId);
-        // ponytail: learn the ceiling from what actually succeeded.
         if (mainSize > get().largestSuccessfulBytes) {
           set({ largestSuccessfulBytes: mainSize });
           void get().saveMemoryGuard();
         }
       } else if (downloadJob.status !== "cancelled") {
-        // A cancelled job is a user action, not a failure: without this
-        // guard the cancel flow's own callback re-marked the row failed and
-        // the card offered "Retry" instead of a clean "Download".
-        // A projector-leg failure names itself, so the retry story is
-        // readable (Retry re-runs only the projector leg).
         const message =
           specNow?.projector !== undefined &&
           downloadJob.fileName === specNow?.projector?.name
@@ -347,10 +318,10 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
           errorCode: downloadJob.errorCode,
         });
       }
-    });
+    };
 
     try {
-      await platformDownloadService.startDownload(job, undefined, undefined, resume ?? undefined);
+      await platformDownloadService.startDownload(job, onProgress, onComplete, resume ?? undefined);
     } catch (error) {
       get().updateModel(specId, {
         downloadStatus: "failed",

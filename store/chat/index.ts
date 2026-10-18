@@ -500,6 +500,24 @@ async function defaultAddGenerationPrompt(): Promise<boolean | undefined> {
 }
 
 /** Default on-device turn: engine slot + agent loop + persisted turns. */
+async function resolveTurnInputs(sessionId: string | null): Promise<import("@/services/chat/turn.ts").TurnInputs> {
+  const sid = sessionId ?? null;
+  return {
+    engineSource: await defaultEngineSource().catch(() => null),
+    store: await defaultGetStore().catch(() => null),
+    search: null,
+    systemPrompt: await defaultSystemPrompt(sid ?? "").catch(() => undefined),
+    talentNames: (await defaultTalentNames(sid).catch(() => [])) ?? [],
+    thinking: await defaultThinking(sid ?? "").catch(() => undefined),
+    effort: await defaultEffort(sid ?? "").catch(() => undefined),
+    jinja: (await defaultJinja().catch(() => false)) ?? false,
+    sampler: await defaultSampler(sid).catch(() => null),
+    stopWords: (await defaultStopWords().catch(() => [])) ?? [],
+    chatTemplate: (await defaultChatTemplate().catch(() => "")) ?? "",
+    addGenerationPrompt: await defaultAddGenerationPrompt().catch(() => undefined),
+  };
+}
+
 function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner {
   return (text, paths, onToken, onReasoning, onToolStart, onToolDelta) => {
     const runTurn = createTurnRunner({
@@ -523,15 +541,7 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
         const auth = await getSearch().catch(() => null);
         return auth ? { provider: auth.provider, key: auth.key, count: auth.count } : null;
       },
-      getSystemPrompt: (sid) => defaultSystemPrompt(sid),
-      getTalentNames: (sid) => defaultTalentNames(sid),
-      getStopWords: () => defaultStopWords(),
-      getChatTemplate: () => defaultChatTemplate(),
-      getAddGenerationPrompt: () => defaultAddGenerationPrompt(),
-      getThinking: (sid) => defaultThinking(sid),
-      getEffort: (sid) => defaultEffort(sid),
-      getJinja: () => defaultJinja(),
-      getSampler: (sid) => defaultSampler(sid),
+      getTurnInputs: (sid) => resolveTurnInputs(sid),
       // Attachment → file for the engine. Lives in services/storage/images
       // so the borrowed-path pass-through and the legacy data-uri decode
       // have one owner (D5-4).

@@ -63,7 +63,7 @@ export interface TurnDeps {
   getEngineSource(): Promise<EngineSource | null>;
   getStore(): Promise<TurnSessionStore | null>;
   getSearch(): Promise<TalentSearchAuth | null>;
-  getSystemPrompt(sessionId: string): Promise<string | undefined>;
+  getSystemPrompt?(sessionId: string): Promise<string | undefined>;
   /** Pact allowlist for THIS session — the talent names its companion
    *  declares. Empty/absent = no tools at all (a chat with no companion sends
    *  none, PocketPal gating). Takes the id because a turn that mints its
@@ -101,6 +101,26 @@ export interface TurnDeps {
    *  them. Optional so existing test deps stay valid; the default is the
    *  real file deletion (see removeOwnedImages). */
   removeImages?(paths: string[]): Promise<void>;
+  /** Consolidated turn-input resolver (Phase 1.2). When present, the
+   *  runner calls it once per turn instead of the individual get* deps;
+   *  individual deps remain the fallback for tests that inject them. */
+  getTurnInputs?(sessionId: string): Promise<TurnInputs>;
+}
+
+/** Everything a turn needs from the world, resolved in one pass. */
+export interface TurnInputs {
+  engineSource: EngineSource | null;
+  store: TurnSessionStore | null;
+  search: TalentSearchAuth | null;
+  systemPrompt: string | undefined;
+  talentNames: string[];
+  thinking: boolean | undefined;
+  effort: EffortLevel | undefined;
+  jinja: boolean;
+  sampler: SamplerParams | null;
+  stopWords: string[];
+  chatTemplate: string;
+  addGenerationPrompt: boolean | undefined;
 }
 
 /** Best-effort deletion of the files this turn wrote.
@@ -193,18 +213,32 @@ export function createTurnRunner(deps: TurnDeps) {
       await store.setSessionCompanion(sid, paths.companionId).catch(() => {});
     }
 
-    const search = await deps.getSearch().catch(() => null);
-    const systemPrompt = await deps.getSystemPrompt(sessionId).catch(() => undefined);
-    const talentNames = (await deps.getTalentNames?.(sessionId).catch(() => [])) ?? [];
-    const thinking = await deps.getThinking?.(sessionId).catch(() => undefined);
-    const effort = await deps.getEffort?.(sessionId).catch(() => undefined);
-    const jinja = await deps.getJinja?.().catch(() => undefined);
-    const sampler = await deps.getSampler?.(sessionId).catch(() => null);
-    const stopWords = (await deps.getStopWords?.().catch(() => [])) ?? [];
-    const chatTemplate = (await deps.getChatTemplate?.().catch(() => "")) ?? "";
-    const addGenerationPrompt = await deps
-      .getAddGenerationPrompt?.()
-      .catch(() => undefined);
+    // Phase 1.2: prefer the consolidated resolver when provided; fall
+    // back to the individual deps so existing tests keep working.
+    const inputs = deps.getTurnInputs
+      ? await deps.getTurnInputs(sessionId).catch(() => undefined)
+      : undefined;
+    const search =
+      inputs?.search ?? (await deps.getSearch().catch(() => null));
+    const systemPrompt =
+      inputs?.systemPrompt ?? (await deps.getSystemPrompt?.(sessionId).catch(() => undefined));
+    const talentNames =
+      inputs?.talentNames ?? ((await deps.getTalentNames?.(sessionId).catch(() => [])) ?? []);
+    const thinking =
+      inputs?.thinking ?? (await deps.getThinking?.(sessionId).catch(() => undefined));
+    const effort =
+      inputs?.effort ?? (await deps.getEffort?.(sessionId).catch(() => undefined));
+    const jinja =
+      inputs?.jinja ?? (await deps.getJinja?.().catch(() => undefined));
+    const sampler =
+      inputs?.sampler ?? (await deps.getSampler?.(sessionId).catch(() => null));
+    const stopWords =
+      inputs?.stopWords ?? ((await deps.getStopWords?.().catch(() => [])) ?? []);
+    const chatTemplate =
+      inputs?.chatTemplate ?? ((await deps.getChatTemplate?.().catch(() => "")) ?? "");
+    const addGenerationPrompt =
+      inputs?.addGenerationPrompt ??
+      (await deps.getAddGenerationPrompt?.().catch(() => undefined));
 // G8: every attached photo becomes a media path. One that cannot be
     // resolved is dropped rather than failing the turn -- the text still
     // went, and losing a photo is better than losing the message.

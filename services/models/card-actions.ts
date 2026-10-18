@@ -11,7 +11,7 @@
  * a capability the reference does not have, kept by request.
  */
 
-import type { ModelSpec } from "../../types/models.ts";
+import type { ModelSpec } from "@/types/models.ts";
 
 /** In flight or paused — the states that show a progress bar. Spelled out
  *  here rather than imported from `components/models/model-bits.tsx`: a lib

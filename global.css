@@ -24,6 +24,8 @@
   --color-primary-hover: #1d4ed8;
   --color-primary-pressed: #1d4ed8;
   --color-on-primary: #ffffff;
+  /* Warm accent for tier badges (Kitten's warm ramp). */
+  --color-warm-accent: #c2410c;
   /* Coolant cyan is reserved for machine-in-the-loop states (thinking, vision, streaming). */
   --color-info: #06b6d4;
   --color-success: #10b981;
@@ -52,6 +54,8 @@
   /* Surface tint — a ground for selected elements only, never a border. */
   --color-surface-3: #eff6ff;
   --color-border: #e2e8f0;
+  /* Scrim for modal/sheet backdrops (ticket 024 / D2-11). */
+  --color-scrim: rgb(15 23 42 / 0.6);
 
   /* Slate for anything merely counted. One step darker than the board's
      #64748b, which passed on white (4.76) but failed on the two recessed
@@ -107,31 +111,9 @@
 }
 
 /* Light-locked app: one theme, and it is the light one. Device dark mode
-   must not invent a second world. */
-@layer theme {
-  :root {
-    @variant light {
-      --color-background: #f8fafc;
-      --color-foreground: #0f172a;
-      --color-card: #ffffff;
-      --color-border: #e2e8f0;
-      --color-muted: #475569;
-      --color-primary: #2563eb;
-      --color-danger: #ef4444;
-      --color-success: #10b981;
-    }
-    @variant dark {
-      --color-background: #f8fafc;
-      --color-foreground: #0f172a;
-      --color-card: #ffffff;
-      --color-border: #e2e8f0;
-      --color-muted: #475569;
-      --color-primary: #2563eb;
-      --color-danger: #ef4444;
-      --color-success: #10b981;
-    }
-  }
-}
+   must not invent a second world. (The previous @layer theme block was a
+   latent trap: it redeclared `--color-danger: #ef4444`, the non-AA red
+   that global.css documents as illegal for text. Removed per D2-9.) */
 
 /* BEM bundles — multi-property patterns reused across screens.
  * Flat selectors only. For property conflicts with Tailwind
@@ -174,23 +156,29 @@
   border-color: #3882f6;
   color: #2563eb;
 }
-.btn--destructive {
-  background-color: #b91c1c;
-  color: #ffffff;
-}
 .btn--ghost {
   background-color: transparent;
   color: #2563eb;
 }
-.btn--circle {
+/* Disabled buttons: opacity 0.4 is the chosen rule (the voice-action fill
+   is a special case for that screen). Apply alongside a .btn variant. */
+.btn--disabled {
+  opacity: 0.4;
+}
+
+/* Icon buttons: the 48dp touch-target floor, so every tappable glyph in the
+   app clears the a11y minimum by name rather than by hand-typed class. */
+.icon-btn {
   width: 48px;
   height: 48px;
-  border-radius: 999px;
   align-items: center;
   justify-content: center;
 }
 
-/* Inputs: .input + optional .input--error (focused border is signal blue) */
+/* Inputs: .input + optional .input--error (focused border is signal blue).
+   The field box is a surface too, but it needs its own padding, its own ink
+   and a focus border, so it states the shape rather than joining `.surface`
+   below (D2-12). */
 .input {
   background-color: #ffffff;
   border-width: 1px;
@@ -203,17 +191,35 @@
   padding-bottom: 12px;
   color: #0f172a;
 }
-.input--error {
-  border-color: #ef4444;
-}
+/* .input--error removed per D2-10: no call site in app/ or components/. */
 
-/* Cards. Never a shadow. */
-.card {
-  background-color: #ffffff;
+/* Surfaces. The raised-plane shape — 1px hairline, 8px radius — is the app's
+   most repeated visual fact, so it is stated ONCE, here, and every card is a
+   member of this group. Never a shadow.
+
+   Only the SHAPE lives here. Two things deliberately stay at the call site,
+   because the design system keeps them apart:
+     · the PLANE — `bg-surface-1` raised (the default), `bg-surface-2`
+       recessed, `bg-surface-3` selected. The three-plane depth model;
+     · the PADDING — a menu has none, `.card` has 20px, `.rows` runs its
+       dividers edge to edge.
+
+   A call site whose border is CONDITIONAL (`border-primary`, `border-error`)
+   keeps its own `border-*` utility and does not join the group: two
+   unlayered-vs-layered declarations for one property is not worth the
+   shorthand. Radius mirrors `--radius-card` and the TS mirror in
+   themes/tokens.ts. */
+.surface,
+.card,
+.rows {
   border-width: 1px;
   border-style: solid;
   border-color: #e2e8f0;
   border-radius: 8px;
+}
+
+.card {
+  background-color: #ffffff;
   padding: 20px;
 }
 
@@ -228,27 +234,21 @@
 }
 
 /* Grouped rows: .rows is a row card (0 internal padding so the dividers run
-   edge to edge); .row is one row inside it. */
+   edge to edge — the shape comes from the group above); .row is one row
+   inside it. */
 .rows {
   background-color: #ffffff;
-  border-width: 1px;
-  border-style: solid;
-  border-color: #e2e8f0;
-  border-radius: 8px;
   overflow: hidden;
 }
 /* Modifier: parameter cards (pocketpal's CompletionSettings shape) carry
    16px padding with 24px between items and NO dividers — rhythm comes
-   from margin, not borders. Children keep their own py-2 (8px), so the
-   margin fills the rest: 8 + 8 + 8 = 24. */
+   from gap, not borders. Children keep their own py-2 (8px), so the
+   gap fills the rest: 8 + 8 + 8 = 24. */
 .rows--plain {
   padding: 16px;
-}
-.rows--plain > * {
-  margin-bottom: 8px;
-}
-.rows--plain > *:last-child {
-  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .row {
@@ -263,7 +263,7 @@
   border-bottom-style: solid;
   border-bottom-color: #e2e8f0;
 }
-.row:last-child {
+.row--last {
   border-bottom-width: 0;
 }
 
@@ -308,56 +308,81 @@
   background-color: #eff6ff;
   border-color: #3882f6;
 }
+/* The label colour rides the token, not a copied hex: the board's slate
+   (#64748b) was rejected precisely because it measured 4.37:1 on the Surface
+   Tint that `.seg--active` paints behind this label. */
 .seg-label {
-  font-family: 'Inter_400Regular';
+  font-family: var(--font-sans);
   font-size: 14px;
-  color: #64748b;
+  color: var(--color-secondary-text);
 }
 .seg-label--active {
-  color: #2563eb;
+  color: var(--color-primary);
 }
 
-/* Status dots: .status-dot + .status-dot--online | --warning | --error | --info | --offline */
-.status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
+/* Status dots removed per D2-10: no call site in app/ or components/. */
+
+/* Text roles. The (family, size, colour) tuples the app retyped most, each
+   with one owner. A role bundles the whole tuple because the tuple IS the
+   design decision: `text-body-sm` alone says nothing about whether the copy
+   beside it is meant to recede, and nothing stopped 92 call sites from
+   answering that question slightly differently.
+
+   Every property is referenced through its token, so a role can never drift
+   off the scale the way a copied hex does (see .seg-label below).
+
+   Colours are part of the role, never a second utility beside it. These
+   blocks are unlayered and Tailwind's utilities are not, so a leftover
+   `text-primary` on a `.text-quiet` would lose silently - the overlap
+   AGENTS.md warns about. If a call site needs a different colour it needs a
+   different role. */
+.text-body {
+  font-family: var(--font-sans);
+  font-size: var(--text-body-md);
+  line-height: var(--text-body-md--line-height);
+  color: var(--color-primary);
 }
-.status-dot--online {
-  background-color: #10b981;
+/* `body-sm` and `caption` are the same 12px step on the scale (both 12/16), so
+   one role covers both spellings; split them here if the scale ever separates
+   them. */
+.text-quiet {
+  font-family: var(--font-sans);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  color: var(--color-secondary-text);
 }
-.status-dot--warning {
-  background-color: #f59e0b;
-}
-.status-dot--error {
-  background-color: #ef4444;
-}
-.status-dot--info {
-  background-color: #06b6d4;
-}
-.status-dot--offline {
-  background-color: #64748b;
+/* The only text the app puts on a Signal Blue fill: a semibold body-md label.
+   It cannot be spelled `text-on-primary`, because that is already a colour
+   utility in use at five call sites that pair it with a different size. */
+.text-action {
+  font-family: var(--font-sans-semibold);
+  font-size: var(--text-body-md);
+  line-height: var(--text-body-md--line-height);
+  color: var(--color-on-primary);
 }
 
 /* Voice screen (lib/tts). One expandable card per engine, plus the System
-   card that sits above the list. Colours come from the same slate/blue ramp
-   as the rest of this file — no engine-specific accents until an engine
-   actually ships audio. */
-
+   card that sits above the list. House styling rules apply (AGENTS.md,
+   DESIGN.md): standard 8px radii, hairline borders, Slate text, Signal
+   Blue confined to signal-bearing elements and the sanctioned warm accent. */
+/* Active System card: Surface-Tint fill + Signal-Mark border, as confirmed
+   during grilling (Selection ground Q2), recorded as an accepted exception
+   to the Tint Rule — see DESIGN.md § Colors. */
 /* The System card, and the frame every engine card sits in. */
 .voice-card {
   background-color: #ffffff;
   border-width: 1px;
   border-style: solid;
   border-color: #e2e8f0;
-  border-radius: 16px;
+  border-radius: 8px;
   overflow: hidden;
 }
 /* Modifier: the System card is tinted so it reads as "in use, no download
-   needed" against the plain engine cards below it. */
+   needed" against the plain engine cards below it. Aligned to DESIGN.md's
+   Selection ground: surface-tint fill + primary-mark border. */
 .voice-card--active {
   background-color: #eff6ff;
-  border-color: #bfdbff;
+  border-color: #3882f6;
 }
 .voice-card__header {
   flex-direction: row;
@@ -377,30 +402,20 @@
 .voice-card__title {
   font-family: var(--font-sans-semibold);
   font-size: 16px;
-  line-height: 22px;
+  line-height: 24px;
   color: #0f172a;
 }
 .voice-card__spec {
   font-family: var(--font-sans);
-  font-size: 13px;
-  line-height: 18px;
-  color: #64748b;
+  /* Body-Small floor: DESIGN.md bars text below 14px for anything read. */
+  font-size: 14px;
+  line-height: 20px;
+  color: #475569;
 }
-/* The recessed ground the Voice screen's cards sit on. Mist, so the white
-   cards below it read as raised without a second tint. */
-.voice-panel {
-  background-color: #f1f5f9;
-  border-width: 1px;
-  border-style: solid;
-  border-color: #e2e8f0;
-  /* 16, not 20: DESIGN.md's shape scale has five steps (2/4/8/12/16) and this
-     panel is a rounded rectangle, not a full-bleed one. */
-  border-radius: 16px;
-  padding: 16px;
-}
+
 /* The full-width action inside an expanded engine card: Install, Retry,
    Resume, Pause. One shape for all four, so the body has exactly two looks
-   — actionable, or not. --disabled is a fill change, never opacity. */
+   -- actionable, or not. --disabled is a fill change, never opacity. */
 .voice-action {
   width: 100%;
   min-height: 48px;
@@ -408,7 +423,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border-radius: 12px;
+  border-radius: 8px;
 }
 .voice-action--primary {
   background-color: #2563eb;
@@ -433,7 +448,7 @@
   padding-right: 8px;
   padding-top: 2px;
   padding-bottom: 2px;
-  background-color: #dbeafe;
+  background-color: #eff6ff;
 }
 .voice-badge__text {
   font-family: var(--font-sans-semibold);
@@ -447,7 +462,4 @@
    read in Signal Blue. */
 .voice-badge--warm {
   background-color: #ffedd5;
-}
-.voice-badge--warm .voice-badge__text {
-  color: #c2410c;
 }

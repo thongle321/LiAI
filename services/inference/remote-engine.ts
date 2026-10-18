@@ -12,8 +12,8 @@ import type {
   CompletionOutcome,
   EngineToolCall,
 } from "./engine.ts";
-import type { RemoteApiProvider } from "../../types/models.ts";
-import { asRecord, positiveFinite } from "../../utils/guards.ts";
+import type { RemoteApiProvider } from "@/types/models.ts";
+import { asRecord, positiveFinite } from "@/utils/guards.ts";
 
 export interface RemoteEngineOptions {
   fetchImpl?: typeof fetch;
@@ -147,7 +147,16 @@ export function createRemoteEngine(
           signal: controller.signal,
         });
         if (!resp.ok) {
-          throw new Error(`remote completion failed (${resp.status})`);
+          const body = (await resp.json().catch(() => ({}))) as Record<string, unknown> | null;
+          const message =
+            (body && typeof body === "object" && asRecord(body["error"])
+              ? (body["error"] as Record<string, unknown>)["message"]
+              : body && typeof body === "object"
+                ? body["message"]
+                : undefined) ?? undefined;
+          throw new Error(
+            `remote completion failed (${resp.status})${message ? `: ${String(message)}` : ""}`,
+          );
         }
         const payload: unknown = await resp.json();
         const choice = asRecord(payload)

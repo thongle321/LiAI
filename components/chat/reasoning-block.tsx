@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { InteractionManager, Pressable, Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -21,7 +21,8 @@ import Animated, {
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { ChevronDown, ChevronRight } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors } from "@/themes/tokens.ts";
+import { MOTION_DURATION_MS, motionLayout } from "@/utils/motion.ts";
 import { MarkdownView } from "./markdown-view.tsx";
 
 type BubbleState = "collapsed" | "partial" | "expanded";
@@ -52,14 +53,20 @@ export function ReasoningBlock({
   const rotation = useSharedValue(90);
 
   // Rising edge only: once the answer starts, snap to the compact row —
-  // but never over a choice the user already made.
+  // but never over a choice the user already made. Defer the state flip
+  // past the in-flight interaction so a streaming tail doesn't fight the
+  // layout settle (PocketPal's InteractionManager.runAfterInteractions).
   useEffect(() => {
-    if (autoCollapse && !userToggledRef.current) setState("collapsed");
+    if (autoCollapse && !userToggledRef.current) {
+      InteractionManager.runAfterInteractions(() => {
+        if (!userToggledRef.current) setState("collapsed");
+      });
+    }
   }, [autoCollapse]);
 
   useEffect(() => {
     rotation.value = withTiming(state === "expanded" ? 180 : 90, {
-      duration: 200,
+      duration: MOTION_DURATION_MS,
     });
   }, [state, rotation]);
 
@@ -83,7 +90,7 @@ export function ReasoningBlock({
         className="mt-1.5 flex-row items-center gap-1.5 self-start px-1 py-1"
       >
         <ChevronRight size={12} color={colors.secondaryText} />
-        <Text className="font-sans text-caption text-secondary-text">Reasoning</Text>
+        <Text className="text-quiet">Reasoning</Text>
       </Pressable>
     );
   }
@@ -93,7 +100,7 @@ export function ReasoningBlock({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Toggle reasoning"
-      className="my-1.5 overflow-hidden rounded-[20px] border border-border bg-surface-3"
+      className="my-1.5 overflow-hidden rounded-2xl border border-border bg-surface-3"
     >
       <View className="flex-row items-center justify-between px-4 py-2">
         <Text className="font-sans text-body-sm tracking-[0.5px] text-primary-text">
@@ -103,7 +110,8 @@ export function ReasoningBlock({
           <AnimatedChevron size={18} color={colors.secondaryText} style={chevronStyle} />
         </View>
       </View>
-      <View
+      <Animated.View
+        layout={motionLayout()}
         className={
           state === "partial" ? "h-[150px] overflow-hidden px-4 pb-4" : "px-4 pb-4"
         }
@@ -125,7 +133,7 @@ export function ReasoningBlock({
             <Rect x="0" y="0" width="100%" height="40" fill="url(#reasoningFade)" />
           </Svg>
         ) : null}
-      </View>
+      </Animated.View>
     </Pressable>
   );
 }

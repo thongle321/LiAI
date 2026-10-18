@@ -22,9 +22,9 @@ import { Pressable, Text } from "react-native";
 import Animated, { FadeInDown, FadeOutDown } from "react-native-reanimated";
 import { AlertTriangle, RotateCw, X } from "lucide-react-native";
 
-import { MOTION_DURATION_MS } from "../../utils/motion.ts";
-import { colors } from "../../themes/tokens.ts";
-import type { ChatWarning } from "../../store/chat/types.ts";
+import { MOTION_DURATION_MS } from "@/utils/motion.ts";
+import { colors } from "@/themes/tokens.ts";
+import type { ChatWarning } from "@/store/chat/types.ts";
 
 /** Severity-scaled dwell, as PocketPal does: an error is worth more of
  *  the user's attention than a warning. */
@@ -56,7 +56,7 @@ export function ChatWarningSnackbar({
     <Animated.View
       entering={FadeInDown.duration(MOTION_DURATION_MS)}
       exiting={FadeOutDown.duration(MOTION_DURATION_MS)}
-      className="mb-2 flex-row items-center gap-2 rounded-lg border border-border bg-surface-1 px-3 py-2"
+      className="surface bg-surface-1 mb-2 flex-row items-center gap-2 px-3 py-2"
       // assertive: the turn already went through, so this is not blocking
       // anything -- it just must not be missed.
       accessibilityLiveRegion="assertive"
@@ -88,7 +88,7 @@ export function ChatWarningSnackbar({
       )}
       <Pressable
         onPress={onDismiss}
-        className="h-12 w-12 items-center justify-center"
+        className="icon-btn"
         accessibilityRole="button"
         accessibilityLabel="Dismiss warning"
         hitSlop={4}

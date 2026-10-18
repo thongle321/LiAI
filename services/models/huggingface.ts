@@ -13,7 +13,7 @@ import type {
   PresetModelFile,
   HFModelSearchResult,
   HFModelFile,
-} from "../../types/models";
+} from "@/types/models";
 
 import {
   hfSortParams,
@@ -22,6 +22,7 @@ import {
   type HFSortBy,
 } from "./hf-format.ts";
 import { mmprojSiblings } from "./vision-pairing.ts";
+import { isRetryableStatus, MAX_ATTEMPTS, retryAfterMs } from "./http-retry.ts";
 
 const HF_HUB_BASE = "https://huggingface.co";
 const HF_API_BASE = "https://huggingface.co/api";
@@ -437,6 +438,54 @@ interface HubPage {
   link: string | null;
 }
 
+/** Waits out a retry backoff, but gives up the moment the caller aborts —
+ *  a superseded search must not sit in a backoff timer. */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const done = (): void => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+  });
+}
+
+/** One Hub GET, riding the download path's retry policy: a 429 or 5xx is
+ *  the server asking for time, and search would otherwise die on a single
+ *  tick. Each attempt builds its own signal, so a slow retry still gets a
+ *  fresh ceiling. 4xx is a fact about the request and never retries. */
+async function hubRequest(
+  url: string,
+  headers: Record<string, string>,
+  fallback: string,
+  externalSignal?: AbortSignal,
+): Promise<Response> {
+  for (let attempt = 0; ; attempt += 1) {
+    let resp: Response;
+    try {
+      resp = await fetch(url, {
+        method: "GET",
+        headers,
+        signal: hubSignal(externalSignal),
+      });
+    } catch (error) {
+      // The UI renders this message verbatim, so the raw fetch text
+      // ("Network request failed", "The operation was aborted") must not
+      // escape. Keep it in the log, hand the screen the clean fallback.
+      //
+      // A transport failure is the one the user can act on by reconnecting
+      // (D3-15), so the copy says so rather than restating the operation.
+      console.warn(`[huggingface] ${fallback}:`, error);
+      throw new HfError(`${fallback} — check your connection`, "network");
+    }
+    if (!isRetryableStatus(resp.status) || attempt === MAX_ATTEMPTS - 1) return resp;
+    await sleep(retryAfterMs(resp.headers, attempt), externalSignal);
+  }
+}
+
 async function hubFetch(
   url: string,
   token: string | undefined,
@@ -448,20 +497,7 @@ async function hubFetch(
     "User-Agent": HF_USER_AGENT,
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  let resp: Response;
-  try {
-    resp = await fetch(url, {
-      method: "GET",
-      headers,
-      signal: hubSignal(externalSignal),
-    });
-  } catch (error) {
-    // The UI renders this message verbatim, so the raw fetch text
-    // ("Network request failed", "The operation was aborted") must not
-    // escape. Keep it in the log, hand the screen the clean fallback.
-    console.warn(`[huggingface] ${fallback}:`, error);
-    throw new HfError(fallback, "network");
-  }
+  const resp = await hubRequest(url, headers, fallback, externalSignal);
   if (resp.status === 401 || resp.status === 403) {
     throw new HfError("check your Hugging Face token", "authentication");
   }

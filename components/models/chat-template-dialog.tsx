@@ -21,8 +21,8 @@ import {
   CHAT_TEMPLATE_NAMES,
   getChatTemplate,
   type ChatTemplatePreset,
-} from "../../utils/chat-templates.ts";
-import { colors } from "../../themes/tokens.ts";
+} from "@/utils/chat-templates.ts";
+import { colors } from "@/themes/tokens.ts";
 
 export function ChatTemplateDialog({
   visible,
@@ -46,11 +46,11 @@ export function ChatTemplateDialog({
       actions={
         <Pressable
           onPress={onClose}
-          className="btn btn--primary min-h-12 self-end"
+          className="btn btn--primary active:opacity-80 min-h-12 self-end"
           accessibilityRole="button"
           accessibilityLabel="Close chat template editor"
         >
-          <Text className="font-sans-semibold text-body-md text-on-primary">
+          <Text className="text-action">
             Close
           </Text>
         </Pressable>
@@ -73,10 +73,10 @@ export function ChatTemplateDialog({
             Jinja, not Nunjucks: llama.rn applies jinja templates, and
             claiming otherwise would send people hunting for the wrong
             syntax. */}
-        <Text className="font-sans text-caption text-secondary-text">
+        <Text className="text-quiet">
           Note: Changing the template may alter BOS, EOS, and system prompt.
         </Text>
-        <Text className="font-sans text-caption text-secondary-text">
+        <Text className="text-quiet">
           Uses Jinja. Leave empty to use the model's template.
         </Text>
         <TextInput
@@ -89,7 +89,7 @@ export function ChatTemplateDialog({
           textAlignVertical="top"
           autoCapitalize="none"
           autoCorrect={false}
-          className="rounded-lg border border-border bg-surface-2 px-4 py-3 font-mono text-body-sm text-primary-text"
+          className="rounded-lg border border-border bg-surface-2 px-4 py-3 font-sans text-body-sm text-primary-text"
         />
       </View>
     </Sheet>

@@ -10,7 +10,7 @@
  * here because the renderer cannot execute under node.
  */
 
-import type { AgentStep, TurnBlock } from "../../types/chat.ts";
+import type { AgentStep, TurnBlock } from "@/types/chat.ts";
 
 export interface TurnLike {
   text: string;

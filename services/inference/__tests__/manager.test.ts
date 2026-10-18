@@ -3,7 +3,7 @@
 
 import { EngineManager } from "../manager";
 import type { CompletionEngine } from "../engine";
-import type { RemoteApiProvider } from "../../../types/models";
+import type { RemoteApiProvider } from "@/types/models";
 
 function fakeEngine(): CompletionEngine & { stops: number } {
   const engine = {

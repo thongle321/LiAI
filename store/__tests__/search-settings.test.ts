@@ -6,9 +6,9 @@ import {
   isSearchProviderId,
   parseResultCount,
   searchKeySS,
-} from "../../services/search/search-providers";
+} from "@/services/search/search-providers";
 import { createSearchStore, SEARCH_KEY } from "../search";
-import { memorySecure, memoryStorage } from "../../jest/storage";
+import { memorySecure, memoryStorage } from "@/jest/storage";
 
 describe("search providers lib", () => {
   it("keys namespace per provider, counts clamp", () => {
@@ -62,5 +62,53 @@ describe("search store", () => {
     const bad = createSearchStore(memoryStorage({ [SEARCH_KEY]: "[bad" }), secure);
     await bad.getState().load();
     expect(bad.getState().activeProviderId).toBe(DEFAULT_PROVIDER);
+  });
+});
+
+describe("search consent hydration (D3-5)", () => {
+  /** Consent that was granted in an earlier session, on disk. */
+  const CONSENTED = JSON.stringify({
+    activeProviderId: "brave",
+    resultCount: 3,
+    hasConsented: true,
+  });
+
+  it("reads persisted consent on a cold start", async () => {
+    const useStore = createSearchStore(memoryStorage({ [SEARCH_KEY]: CONSENTED }), memorySecure());
+
+    await useStore.getState().load();
+
+    const s = useStore.getState();
+    // The unhydrated default is hasConsented: false, which is what made
+    // defaultSearchAuth report search as disabled on every cold start.
+    expect(s.hasConsented).toBe(true);
+    expect(s.activeProviderId).toBe("brave");
+    expect(s.resultCount).toBe(3);
+  });
+
+  it("concurrent loaders share one read (single-flight)", async () => {
+    const kv = memoryStorage({ [SEARCH_KEY]: CONSENTED });
+    const useStore = createSearchStore(kv, memorySecure());
+
+    await Promise.all([
+      useStore.getState().load(),
+      useStore.getState().load(),
+      useStore.getState().load(),
+    ]);
+
+    expect(kv.reads.filter((k) => k === SEARCH_KEY)).toHaveLength(1);
+  });
+
+  it("a later load reads nothing and keeps live state", async () => {
+    const kv = memoryStorage({ [SEARCH_KEY]: CONSENTED });
+    const useStore = createSearchStore(kv, memorySecure());
+    await useStore.getState().load();
+    useStore.getState().setConsented(false);
+
+    await useStore.getState().load();
+
+    // The re-read must not resurrect consent the user revoked this session.
+    expect(useStore.getState().hasConsented).toBe(false);
+    expect(kv.reads.filter((k) => k === SEARCH_KEY)).toHaveLength(1);
   });
 });

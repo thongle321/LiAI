@@ -26,6 +26,7 @@ import {
   type ReactNode,
 } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
+import * as Haptics from "expo-haptics";
 import { Host, Switch } from "@expo/ui";
 import Slider from "@expo/ui/community/slider";
 import { ChevronDown, ChevronRight, Minus, Plus } from "lucide-react-native";
@@ -186,7 +187,7 @@ export function StepperRow({
       <RowLabel label={label} description={description} />
       <View className="flex-row items-center gap-2">
         <Pressable
-          onPress={onMinus}
+          onPress={() => { void Haptics.selectionAsync(); onMinus(); }}
           disabled={minusDisabled}
           className="h-12 w-12 items-center justify-center rounded-full border border-border bg-surface-1"
           accessibilityRole="button"
@@ -196,7 +197,7 @@ export function StepperRow({
         </Pressable>
         <Text className="w-14 text-center font-sans text-body-md text-primary-text">{display}</Text>
         <Pressable
-          onPress={onPlus}
+          onPress={() => { void Haptics.selectionAsync(); onPlus(); }}
           disabled={plusDisabled}
           className="h-12 w-12 items-center justify-center rounded-full border border-border bg-surface-1"
           accessibilityRole="button"
@@ -358,7 +359,7 @@ export function Segmented<T extends string | number>({
         {options.map((o) => (
           <Pressable
             key={String(o)}
-            onPress={() => onPick(o)}
+            onPress={() => { void Haptics.selectionAsync(); onPick(o); }}
             className={o === value ? "seg seg--active" : "seg"}
             accessibilityRole="radio"
             accessibilityLabel={show(o)}
@@ -497,10 +498,10 @@ export function ActionRow({
         accessibilityState={{ disabled }}
         className={`${
           variant === "primary"
-            ? "btn btn--primary"
+            ? "btn btn--primary active:opacity-80"
             : variant === "ghost"
-              ? "btn btn--ghost"
-              : "btn btn--secondary"
+              ? "btn btn--ghost active:opacity-80"
+              : "btn btn--secondary active:opacity-80"
         } mt-2 self-start${disabled ? " opacity-40" : ""}`}
         accessibilityRole="button"
         accessibilityLabel={buttonLabel}
@@ -508,8 +509,8 @@ export function ActionRow({
         <Text
           className={
             variant === "primary"
-              ? "font-sans-semibold text-body-md text-on-primary"
-              : "font-sans text-body-md text-primary"
+              ? "text-action"
+              : "text-body"
           }
         >
           {buttonLabel}
@@ -535,7 +536,7 @@ export function AdvancedGroup({
     <View>
       <Pressable
         onPress={() => setOpen((v) => !v)}
-        className="flex-row items-center justify-between py-2"
+        className="flex-row items-center justify-between py-2 active:opacity-70"
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         accessibilityLabel={label}
@@ -562,7 +563,7 @@ export function AdvancedGroup({
             // buys nothing. (The previous version synthesised one from
             // String(child), which is always "[object Object]" and so
             // collapsed to a single key for every row — a crash.)
-            <View className="row" key={index}>
+            <View className={index === Children.count(children) - 1 ? "row row--last" : "row"} key={index}>
               {child}
             </View>
           ))

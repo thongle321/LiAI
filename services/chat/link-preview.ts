@@ -39,10 +39,31 @@ async function defaultFetcher(url: string): Promise<PreviewRow> {
   return row;
 }
 
+/** Module-level cache/dedupe so scrolling a long thread doesn't re-fetch
+ *  every link on each re-mount (D3-10 / D6-9). Concurrent and repeat reads
+ *  for the same URL share one in-flight request. */
+const previewCache = new Map<string, Promise<LinkPreview | null>>();
+
 /** Normalized preview, or null when the page can't be previewed. */
 export async function fetchPreview(
   url: string,
   fetcher: PreviewFetcher = defaultFetcher,
+): Promise<LinkPreview | null> {
+  // Only cache the default fetcher path; tests pass custom fetchers and
+  // must not share state across cases.
+  if (fetcher === defaultFetcher) {
+    const cached = previewCache.get(url);
+    if (cached) return cached;
+    const promise = fetchPreviewImpl(url, fetcher);
+    previewCache.set(url, promise);
+    return promise;
+  }
+  return fetchPreviewImpl(url, fetcher);
+}
+
+async function fetchPreviewImpl(
+  url: string,
+  fetcher: PreviewFetcher,
 ): Promise<LinkPreview | null> {
   let row: PreviewRow;
   try {

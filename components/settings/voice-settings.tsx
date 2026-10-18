@@ -1,33 +1,28 @@
 /** Voice screen: how LiAI speaks.
  *
- * Built to the Voice settings design, with each engine card's expand /
- * collapse and its state-driven body following PocketPal's
- * VoicePickerView (components/voice/engine-card.tsx). Colours are this
- * project's tokens, not PocketPal's paper-and-orange: the warm tint is a
- * decorative avatar/badge accent, and anything that carries text or is
- * interactive is Signal Blue.
- *
- * Shape: the System voice card first (what the device can already do, zero
- * install), then the three downloadable engines, then the offline note.
- * Auto-speak sits above them all — PocketPal puts it at the top of the
- * picker, where a user looking for "does it talk" finds it first.
+ * Rebuilt so the Voice screen matches LiAI's app style: it uses the
+ * Settings family helpers (ScreenHeader + ContentColumn at the route), drops
+ * the PocketPal "paper panel" wrapper, and renormalises onto the design
+ * system's tokens (DESIGN.md). Engine cards keep their disclosure anatomy;
+ * only the surface token values changed in global.css.
  */
 
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { AudioLines, CloudDownload, Database, Play, Square, Volume2 } from "lucide-react-native";
+import { CloudDownload, Database, Play, Square, Volume2 } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { formatBytes } from "../../services/models/progress.ts";
-import { useFreeSpacePoll } from "../../hooks/useStorageDisclosure.ts";
-import { ENGINE_ORDER } from "../../services/tts/engineMeta.ts";
-import { DEVICE_DEFAULT_VOICE } from "../../services/tts/types.ts";
-import { VOICE_PREVIEW_SAMPLE } from "../../constants/voice-strings.ts";
-import { speakReply, stopSpeaking } from "../../services/voice/voice-speak.ts";
+import { colors } from "@/themes/tokens.ts";
+import { cn } from "@/utils/cn.ts";
+import { formatBytes } from "@/services/models/progress.ts";
+import { useFreeSpacePoll } from "@/hooks/useStorageDisclosure.ts";
+import { ENGINE_ORDER } from "@/services/tts/engineMeta.ts";
+import { DEVICE_DEFAULT_VOICE } from "@/services/tts/types.ts";
+import { VOICE_PREVIEW_SAMPLE } from "@/constants/voice-strings.ts";
+import { speakReply, stopSpeaking } from "@/services/voice/voice-speak.ts";
 import { EngineCard } from "../voice/engine-card.tsx";
 import { RadioDot } from "../voice/radio-dot.tsx";
 import { SettingsSection, ToggleRow } from "../settings-rows.tsx";
-import { useVoice } from "../../store/voice.ts";
+import { useVoice } from "@/store/voice.ts";
 
 /** The section's storage caption. A real reading, not the design's static
  *  "1.2 GB available": the same poll the model cards use, so freeing space
@@ -37,7 +32,7 @@ function FreeStorageLine() {
   return (
     <View className="flex-row items-center gap-1">
       <Database size={14} color={colors.secondaryText} />
-      <Text className="font-sans text-body-sm text-secondary-text">
+      <Text className="text-quiet">
         {checked && freeBytes !== null ? `${formatBytes(freeBytes, 1)} available` : "…"}
       </Text>
     </View>
@@ -70,22 +65,7 @@ export function VoiceSettings() {
   }
 
   return (
-    <View className="voice-panel mb-4">
-      {/* Screen lede, inside the panel — the design's container holds the
-          whole screen, not just the cards. */}
-      <View className="mb-4 flex-row items-center gap-3">
-        <View className="h-11 w-11 items-center justify-center rounded-full bg-surface-3">
-          <AudioLines size={22} color={colors.primary} />
-        </View>
-        <View className="flex-1">
-          <Text className="section-title">Voice output</Text>
-          <Text className="voice-card__spec">Choose how LiAI speaks</Text>
-        </View>
-      </View>
-
-      {/* Auto-speak first (PocketPal's order). It is a preference about
-          every voice on this screen, so it belongs above the list rather
-          than below it. */}
+    <View className="mb-4">
       <SettingsSection>
         <View className="row">
           <ToggleRow
@@ -127,7 +107,7 @@ export function VoiceSettings() {
             onPress={togglePreview}
             accessibilityRole="button"
             accessibilityLabel={previewing ? "Stop preview" : "Preview the system voice"}
-            className="btn btn--tonal flex-row items-center gap-2 self-start px-4 py-2"
+            className={cn("btn btn--tonal active:opacity-80 flex-row items-center gap-2 self-start", "px-4 py-2")}
           >
             {previewing ? (
               <Square size={14} color={colors.primary} />
@@ -145,7 +125,7 @@ export function VoiceSettings() {
       <View className="mb-3 mt-6 flex-row items-end justify-between">
         <View className="flex-1 pr-4">
           <Text className="section-title">Downloadable engines</Text>
-          <Text className="mt-1 font-sans text-body-sm text-secondary-text">
+          <Text className="mt-1 text-quiet">
             Voice packs are stored on your device. Uses storage space.
           </Text>
         </View>
@@ -158,7 +138,7 @@ export function VoiceSettings() {
 
       <View className="mt-1 flex-row items-center gap-2">
         <CloudDownload size={14} color={colors.secondaryText} />
-        <Text className="font-sans text-body-sm text-secondary-text">
+        <Text className="text-quiet">
           Downloaded voices work offline
         </Text>
       </View>

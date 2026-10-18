@@ -9,9 +9,9 @@ import { Pressable, Text, View } from "react-native";
 import { Menu, SquarePen } from "lucide-react-native";
 import Animated from "react-native-reanimated";
 
-import { colors } from "../../themes/tokens.ts";
-import { APP_NAME } from "../../constants/app.ts";
-import { usePressFeedback } from "../../utils/motion.ts";
+import { colors } from "@/themes/tokens.ts";
+import { APP_NAME } from "@/constants/app.ts";
+import { usePressFeedback } from "@/utils/motion.ts";
 import { ChatMenu } from "./chat-menu.tsx";
 
 export function ChatHeader({
@@ -42,7 +42,7 @@ export function ChatHeader({
             onPress={onOpenDrawer}
             onPressIn={menuPress.onPressIn}
             onPressOut={menuPress.onPressOut}
-            className="h-12 w-12 items-center justify-center"
+            className="icon-btn"
             accessibilityRole="button"
             accessibilityLabel="Open menu"
             hitSlop={4}
@@ -70,7 +70,7 @@ export function ChatHeader({
           <Text
             numberOfLines={1}
             maxFontSizeMultiplier={1.5}
-            className="text-center font-sans text-caption text-secondary-text"
+            className="text-center text-quiet"
           >
             {modelLabel}
           </Text>
@@ -82,7 +82,7 @@ export function ChatHeader({
             onPress={onNewConversation}
             onPressIn={penPress.onPressIn}
             onPressOut={penPress.onPressOut}
-            className="h-12 w-12 items-center justify-center"
+            className="icon-btn"
             hitSlop={4}
             accessibilityRole="button"
             accessibilityLabel="New conversation"

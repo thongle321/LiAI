@@ -15,7 +15,7 @@ import type { Camera as VisionCameraView } from "react-native-vision-camera";
 
 import { MAX_IMAGES } from "../services/chat/attachments.ts";
 import { pushFrame } from "../services/vision/vision-watch.ts";
-import { snapshotToBase64 } from "../services/storage/snapshot.ts";
+import { snapshotToUri } from "../services/storage/snapshot.ts";
 import { useWatch } from "../store/watch.ts";
 
 export function useWatchMode(
@@ -28,6 +28,19 @@ export function useWatchMode(
   const setWatchIntervalMs = useWatch((s) => s.setWatchIntervalMs);
   const framesRef = useRef<string[]>([]);
   const inFlightRef = useRef(false);
+  // The caller's readiness predicate is an inline closure, so it is a NEW
+  // reference on every render of the vision screen. Left in the effect's
+  // dependency array it re-runs the effect on every keystroke in the draft
+  // — and the cleanup wipes the buffer, so watch mode loses exactly the
+  // frames the user was asking about. Same ref treatment `useVisionTurn`
+  // gives it (D5-3).
+  const cameraReadyRef = useRef(cameraReady);
+  cameraReadyRef.current = cameraReady;
+
+  // Hydrate the persisted capture interval once per mount (D3-9).
+  useEffect(() => {
+    void useWatch.getState().load();
+  }, []);
 
   useEffect(() => {
     if (!watchOn || !active) return;
@@ -36,19 +49,15 @@ export function useWatchMode(
       // A slow frame never queues captures: one snapshot in flight at most.
       if (inFlightRef.current) return;
       const cam = camera.current;
-      if (cam === null || !cameraReady()) return;
+      if (cam === null || !cameraReadyRef.current()) return;
       inFlightRef.current = true;
       void (async () => {
         try {
-          const jpeg = await snapshotToBase64(() =>
+          const frameUri = await snapshotToUri(() =>
             cam.takeSnapshot({ quality: 50 }),
           );
           if (!stopped) {
-            framesRef.current = pushFrame(
-              framesRef.current,
-              `data:image/jpeg;base64,${jpeg}`,
-              MAX_IMAGES,
-            );
+            framesRef.current = pushFrame(framesRef.current, frameUri, MAX_IMAGES);
           }
         } catch {
           // A dropped frame is not an error; the buffer just holds less.
@@ -63,7 +72,7 @@ export function useWatchMode(
       // Fresh on resume: frames captured before losing focus are stale.
       framesRef.current = [];
     };
-  }, [watchOn, active, intervalMs, camera, cameraReady]);
+  }, [watchOn, active, intervalMs, camera]);
 
   function stopWatch(): void {
     setWatchOn(false);

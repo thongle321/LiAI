@@ -12,13 +12,14 @@ import {
   makeDirectoryAsync,
   deleteAsync,
   getInfoAsync,
-  getFreeDiskStorageAsync,
   documentDirectory,
   FileSystemSessionType,
   type DownloadResumable,
   type DownloadProgressData,
 } from "expo-file-system/legacy";
-import type { DownloadErrorCode, DownloadJob } from "../../types/models.ts";
+import { Paths } from "expo-file-system";
+import * as Haptics from "expo-haptics";
+import type { DownloadErrorCode, DownloadJob } from "@/types/models.ts";
 import {
   describeHttpFailure,
   errorCodeForStatus,
@@ -153,7 +154,7 @@ class ResumableDownloadService {
     }
     let free: number;
     try {
-      free = await getFreeDiskStorageAsync();
+      free = Paths.availableDiskSpace;
     } catch {
       // Unknown free space: the transfer reports the truth, as pre-flight does.
       return;
@@ -170,6 +171,22 @@ class ResumableDownloadService {
         );
       }
     }
+  }
+
+  /** One haptic for a transfer that ENDED, fired beside the callback so the
+   *  badge flip and the buzz can never drift apart (D4-8).
+   *
+   *  A multi-minute model download is the longest wait in the app, and it used
+   *  to end in silence: only a badge changed. Cancel is deliberately NOT routed
+   *  here — the user pulled the plug themselves and already got the press
+   *  haptic, so an error buzz would blame the app for their own action. */
+  private announceOutcome(job: DownloadJob, success: boolean): void {
+    void Haptics.notificationAsync(
+      success ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error,
+    ).catch(() => {
+      // No haptic hardware (and no Expo Haptics module in tests).
+    });
+    this.callbacks.onComplete?.(job, success);
   }
 
   /** Terminal failure that keeps the partial on disk, for the cases where
@@ -194,7 +211,7 @@ class ResumableDownloadService {
     entry.progressCallback(failedJob);
     entry.completeCallback(failedJob, false);
     this.callbacks.onProgress?.(failedJob);
-    this.callbacks.onComplete?.(failedJob, false);
+    this.announceOutcome(failedJob, false);
     this.stopSpaceWatchIfIdle();
     // Cleared only AFTER the terminal event is published: whichever order the
     // native side resolves the paused downloadAsync() in, reportPaused now
@@ -251,7 +268,7 @@ class ResumableDownloadService {
       onProgress(failedJob);
       onComplete(failedJob, false);
       this.callbacks.onProgress?.(failedJob);
-      this.callbacks.onComplete?.(failedJob, false);
+      this.announceOutcome(failedJob, false);
       this.stopSpaceWatchIfIdle();
       throw new Error(message);
     };
@@ -467,7 +484,7 @@ class ResumableDownloadService {
       onProgress(completedJob);
       onComplete(completedJob, true);
       this.callbacks.onProgress?.(completedJob);
-      this.callbacks.onComplete?.(completedJob, true);
+      this.announceOutcome(completedJob, true);
       this.stopSpaceWatchIfIdle();
     } catch (error) {
       fail(error instanceof Error ? error.message : "Download failed");
@@ -512,7 +529,7 @@ class ResumableDownloadService {
 
     if (entry.job.status === "completed") {
       this.callbacks.onProgress?.(entry.job);
-      this.callbacks.onComplete?.(entry.job, true);
+      this.announceOutcome(entry.job, true);
       return;
     }
 
@@ -599,7 +616,7 @@ class ResumableDownloadService {
       });
 
       this.callbacks.onProgress?.(completedJob);
-      this.callbacks.onComplete?.(completedJob, true);
+      this.announceOutcome(completedJob, true);
       this.stopSpaceWatchIfIdle();
     } catch (error) {
       const failedJob: DownloadJob = {
@@ -615,7 +632,7 @@ class ResumableDownloadService {
       });
 
       this.callbacks.onProgress?.(failedJob);
-      this.callbacks.onComplete?.(failedJob, false);
+      this.announceOutcome(failedJob, false);
 
       throw error;
     }

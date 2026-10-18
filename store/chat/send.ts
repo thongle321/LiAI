@@ -5,11 +5,11 @@
  * mark the bubble (tap-to-retry) and persist nothing.
  */
 
-import type { ApiError } from "../../types/api.ts";
-import type { ChatMessage } from "../../types/chat.ts";
-import { newId } from "../../services/chat/messages.ts";
-import type { SessionStore } from "../../services/chat/session-store.ts";
-import { canSeeImages, loadModelState } from "../../services/inference/mmproj.ts";
+import type { ApiError } from "@/types/api.ts";
+import type { ChatMessage } from "@/types/chat.ts";
+import { newId } from "@/services/chat/messages.ts";
+import type { SessionStore } from "@/services/chat/session-store.ts";
+import { canSeeImages, loadModelState } from "@/services/inference/mmproj.ts";
 import { useVoice } from "../voice.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
@@ -138,10 +138,6 @@ export function createSendSlice(
     clearOnFirst: boolean;
   }): Promise<void> {
     const gen = (ctx.streamGen += 1);
-    // Hold the screen awake for the life of the turn (audit G2). Every
-    // send/retry/regenerate funnels through here, so this is the one
-    // place that has to know a turn started.
-    ctx.keepAwake(true);
     set({ turnStartedAt: Date.now() });
     // A rerun reuses the bubble id: forget any spoken mark from the
     // previous run, or the new reply would be silenced by it (ticket 05).
@@ -194,6 +190,10 @@ export function createSendSlice(
     // C16: the macrotask beat lives exactly as long as this turn.
     const endStreamYield = startStreamYield();
     try {
+      // Hold the screen awake for the life of the turn (audit G2). Acquired
+      // inside the try so an early throw (e.g. multimodalAvailable) can't
+      // strand the lock (D6-6).
+      ctx.keepAwake(true);
       const outcome = await ctx.runTurn(
         opts.text,
         {

@@ -4,8 +4,8 @@ import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
-import { colors } from "../../themes/tokens.ts";
-import { setOnboarded } from "../../services/onboarding.ts";
+import { colors } from "@/themes/tokens.ts";
+import { setOnboarded } from "@/services/onboarding.ts";
 
 export default function DoneStep() {
   async function finish(to: "/chat" | "/models"): Promise<void> {
@@ -24,7 +24,7 @@ export default function DoneStep() {
         </Text>
         <Pressable
           onPress={() => void finish("/chat")}
-          className="btn btn--primary mt-8"
+          className="btn btn--primary active:opacity-80 mt-8"
           accessibilityRole="button"
           accessibilityLabel="Start chatting"
         >
@@ -34,11 +34,11 @@ export default function DoneStep() {
         </Pressable>
         <Pressable
           onPress={() => void finish("/models")}
-          className="btn btn--ghost mt-3"
+          className="btn btn--ghost active:opacity-80 mt-3"
           accessibilityRole="button"
           accessibilityLabel="Browse all models"
         >
-          <Text className="text-center font-sans text-body-md text-primary">
+          <Text className="text-center text-body">
             Browse all models
           </Text>
         </Pressable>

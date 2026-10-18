@@ -210,6 +210,7 @@ const MIN_COUNT = 1;
 const MAX_COUNT = 10;
 
 const cache = new TTLCache<string, SearchResult[]>();
+const inFlight = new Map<string, Promise<SearchResult[]>>();
 
 export type SearchFetcher = (
   fetchImpl: HttpFetch,
@@ -239,8 +240,20 @@ export async function searchWeb(
   const cacheKey = `${provider}::${clamped}::${query.trim()}`;
   const hit = cache.get(cacheKey);
   if (hit) return hit;
-  const results = await fetcher(fetchImpl, key, query.trim(), clamped);
-  const clipped = clipResults(results, SEARCH_BUDGET_CHARS);
-  cache.set(cacheKey, clipped);
-  return clipped;
+  // Dedupe in-flight requests for the same key so a model that calls
+  // web_search twice in one turn pays provider quota once (D3-14).
+  const pending = inFlight.get(cacheKey);
+  if (pending) return pending;
+  const promise = (async () => {
+    try {
+      const results = await fetcher(fetchImpl, key, query.trim(), clamped);
+      const clipped = clipResults(results, SEARCH_BUDGET_CHARS);
+      cache.set(cacheKey, clipped);
+      return clipped;
+    } finally {
+      inFlight.delete(cacheKey);
+    }
+  })();
+  inFlight.set(cacheKey, promise);
+  return promise;
 }

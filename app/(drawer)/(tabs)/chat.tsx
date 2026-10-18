@@ -26,45 +26,37 @@ import {
 import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
 import { ChevronDown } from "lucide-react-native";
 
-import { colors } from "../../../themes/tokens.ts";
-import { filterMessages } from "../../../services/chat/filter.ts";
-import { buildRows, type ChatRow } from "../../../services/chat/rows.ts";
+import { colors } from "@/themes/tokens.ts";
+import { filterMessages } from "@/services/chat/filter.ts";
+import { buildRows, type ChatRow } from "@/services/chat/rows.ts";
 import {
   MOTION_DURATION_MS,
   fadeEntering,
   fadeExiting,
-} from "../../../utils/motion.ts";
-import { useChatStore } from "../../../store/chat.ts";
-import { useKeyboardStore } from "../../../store/keyboard.ts";
-import { useModelStore } from "../../../store/modelStore";
-import { useInference } from "../../../store/inference.ts";
-import { useKeyboardLift } from "../../../hooks/useKeyboardLift.ts";
-import { MessageListItem } from "../../../components/chat/message-list-item.tsx";
-import { ChatEmptyPlaceholder } from "../../../components/chat/chat-empty-placeholder.tsx";
-import { PendingIndicator } from "../../../components/chat/pending-indicator.tsx";
-import { MessageInput } from "../../../components/chat/message-input.tsx";
-import { SuggestedPrompts } from "../../../components/chat/suggested-prompts.tsx";
-import { MessageList } from "../../../components/chat/message-list.tsx";
+} from "@/utils/motion.ts";
+import { useChatStore } from "@/store/chat.ts";
+import { useKeyboardStore } from "@/store/keyboard.ts";
+import { useModelStore } from "@/store/modelStore";
+import { useInference } from "@/store/inference.ts";
+import { useKeyboardLift } from "@/hooks/useKeyboardLift.ts";
+import { MessageListItem } from "@/components/chat/message-list-item.tsx";
+import { ChatEmptyPlaceholder } from "@/components/chat/chat-empty-placeholder.tsx";
+import { PendingIndicator } from "@/components/chat/pending-indicator.tsx";
+import { MessageInput } from "@/components/chat/message-input.tsx";
+import { MessageList } from "@/components/chat/message-list.tsx";
 import {
   ContextFullBanner,
   ContextLadderSheet,
-} from "../../../components/chat/context-full-banner.tsx";
-import { effectiveNCtx, fillPercent } from "../../../services/chat/context-fill.ts";
-import { labelTokens } from "../../../services/chat/context-ladder.ts";
-import { useContextLadder } from "../../../hooks/useContextLadder.ts";
-import {
-  type BannerVariant,
-  consecutiveFullFailures,
-  dismissBanner,
-  resolveBannerVariant,
-} from "../../../services/chat/banner-variant.ts";
-import { talentDefinitions } from "../../../services/agent/registry.ts";
-import { pickableModels } from "../../../services/chat/models.ts";
-import { useModelReady } from "../../../hooks/useModelReady.ts";
-import { GenerationSettingsSheet } from "../../../components/chat/generation-settings-sheet.tsx";
-import { ChatWarningSnackbar } from "../../../components/chat/chat-warning-snackbar.tsx";
-import { ChatHeader } from "../../../components/chat/chat-header.tsx";
-import { ModelPickerSheet } from "../../../components/chat/model-picker-sheet.tsx";
+} from "@/components/chat/context-full-banner.tsx";
+import { labelTokens } from "@/services/chat/context-ladder.ts";
+import { useContextLadder } from "@/hooks/useContextLadder.ts";
+import { useChatBanner } from "@/hooks/useChatBanner.ts";
+import { pickableModels } from "@/services/chat/models.ts";
+import { useModelReady } from "@/hooks/useModelReady.ts";
+import { GenerationSettingsSheet } from "@/components/chat/generation-settings-sheet.tsx";
+import { ChatWarningSnackbar } from "@/components/chat/chat-warning-snackbar.tsx";
+import { ChatHeader } from "@/components/chat/chat-header.tsx";
+import { ModelPickerSheet } from "@/components/chat/model-picker-sheet.tsx";
 
 export default function ChatRoute() {
   const messages = useChatStore((s) => s.messages);
@@ -245,14 +237,12 @@ export default function ChatRoute() {
   // when editing either side.
   const ready = connection === "up";
   // The empty placeholder ("Activate Model To Get Started" / "No Models
-  // Available") is NOT scroll content, despite pocketpal-ai putting it in
-  // ListEmptyComponent (ChatView.tsx:990). KeyboardChatScrollView adds the
-  // keyboard height to the scroll viewport as a contentInset, and a centred
-  // child inside a shrinking box re-centres — which is exactly the "no models
-  // available section moves when the keyboard shows up" symptom. So it is an
-  // overlay beside the list, where the keyboard simply covers it. It renders
-  // only with no model and no conversation; the empty thread with a model is
-  // SuggestedPrompts' job.
+  // Available") is list content (PocketParity, ChatView.tsx:990), so the
+  // empty view scrolls instead of being pinned as an overlay. The composer
+  // clearance is a marginBottom on the placeholder (PocketPal's
+  // bottomComponentHeight), not a keyboard inset — that is what keeps it
+  // from re-centring as the keyboard rises. It renders only with no model
+  // and no conversation.
   const emptyState = messages.length === 0 && query.trim() === "";
   // PocketPal's single-source gate: the placeholder asks whether a MODEL is
   // active, not whether the transport is healthy. Gating it on `connection`
@@ -265,129 +255,30 @@ export default function ChatRoute() {
   const motionDuration = MOTION_DURATION_MS;
 
   // ---- The context banner slot -------------------------------------
-  // It speaks for the NEWEST assistant turn and nothing else. Scoping it
-  // that way makes it self-clearing: keep chatting, answer successfully,
-  // and the banner goes away on its own without a reset rule. Which of
-  // the five variants renders is services/chat//banner-variant.ts's decision —
-  // the screen only collects the state and draws the answer.
-  const newestAssistant = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      if (messages[i].role === "assistant") return messages[i];
-    }
-    return null;
-  }, [messages]);
-  // Dismissals are held PER SESSION and cleared when each turn is
-  // recorded, so a banner stays gone for exactly one turn and the next
-  // occurrence of the same problem speaks again.
-  const [dismissed, setDismissed] = useState<Set<BannerVariant>>(
-    () => new Set<BannerVariant>(),
-  );
-  const turnCount = messages.length;
-  useEffect(() => {
-    setDismissed(new Set<BannerVariant>());
-  }, [turnCount]);
-  const [ladderOpen, setLadderOpen] = useState(false);
+  // The banner speaks for the NEWEST assistant turn and nothing else, which
+  // is what makes it self-clearing. Deciding WHICH of the five variants
+  // renders is services/chat//banner-variant.ts's job; deriving its inputs
+  // from a thread is the hook's, so this screen only draws the answer and
+  // supplies the state. Both halves moved out in one go: the view-model had
+  // no seam to test through while it lived here.
   const nCtx = useInference((s) => s.nCtx);
+  const {
+    banner,
+    bannerShowing,
+    contextFullShowing,
+    fill,
+    dismiss: dismissBanner,
+  } = useChatBanner({
+    messages,
+    nCtx,
+    activeModelId,
+    activeProviderType,
+    remoteCaps,
+  });
+  const [ladderOpen, setLadderOpen] = useState(false);
   // The same ladder the sheet draws, so the banner's more-room action and
   // the sheet's picker can never disagree about what fits.
   const ladder = useContextLadder(nCtx);
-  // C4: the window this thread divides by. Local = configured nCtx;
-  // remote = the C7 /props contextLength, which is unknown until a probe
-  // lands — and an unknown window never warns and never fills.
-  const isRemote = activeProviderType === "remote";
-  const windowSize = effectiveNCtx({
-    isRemote,
-    localNCtx: nCtx,
-    remoteContextLength:
-      activeProviderType === "remote" && activeModelId?.startsWith("remote-")
-        ? remoteCaps[activeModelId.slice("remote-".length)]?.contextLength
-        : undefined,
-  });
-  // Every HTML preview surface in the conversation. The soft-cap notice
-  // reads this and NO model state, which is why it can appear with no
-  // model loaded.
-  const htmlPreviewCount = useMemo(() => {
-    let n = 0;
-    for (const m of messages) {
-      for (const step of m.steps ?? []) {
-        if (step.tool === "render_html" && step.ok !== false) n += 1;
-      }
-    }
-    return n;
-  }, [messages]);
-  // The turn's LAST tool, when its definition declares a recommended
-  // context cost. No talent declares one yet, so this reads undefined
-  // until one does — the field is opt-in precisely so that day changes
-  // nothing else.
-  const heavyToolName = useMemo(() => {
-    const steps = newestAssistant?.steps ?? [];
-    let maxTokens = -1;
-    let maxTool: string | undefined;
-    for (const step of steps) {
-      const def = talentDefinitions().find(
-        (t) => t.function.name === step.tool,
-      );
-      if (!def) continue;
-      const tokens = def.function.recommendedContextTokens;
-      if (tokens !== undefined && tokens > maxTokens) {
-        maxTokens = tokens;
-        maxTool = def.function.name;
-      }
-    }
-    return maxTool;
-  }, [newestAssistant]);
-  const fullFailures = useMemo(
-    () =>
-      consecutiveFullFailures(
-        messages
-          .filter((m) => m.role === "assistant")
-          .map((m) => m.outcome ?? {}),
-      ),
-    [messages],
-  );
-  const banner = useMemo(
-    () =>
-      resolveBannerVariant(
-        newestAssistant
-          ? {
-              ...(newestAssistant.outcome?.contextFull !== undefined
-                ? { contextFull: newestAssistant.outcome.contextFull }
-                : {}),
-              ...(newestAssistant.usage !== undefined
-                ? {
-                    promptTokens: newestAssistant.usage.promptTokens,
-                    completionTokens: newestAssistant.usage.completionTokens,
-                  }
-                : {}),
-              ...(newestAssistant.outcome?.stoppedEarly !== undefined
-                ? { stoppedEarly: newestAssistant.outcome.stoppedEarly }
-                : {}),
-              content: newestAssistant.text,
-            }
-          : undefined,
-        {
-          windowSize,
-          isRemote,
-          modelLoaded: activeModelId !== null,
-          htmlPreviewCount,
-          dismissed,
-          consecutiveFullFailures: fullFailures,
-          ...(heavyToolName !== undefined ? { heavyToolName } : {}),
-        },
-      ),
-    [
-      newestAssistant,
-      windowSize,
-      isRemote,
-      activeModelId,
-      htmlPreviewCount,
-      dismissed,
-      fullFailures,
-      heavyToolName,
-    ],
-  );
-  const bannerShowing = banner.variant !== "none";
-  const contextFullShowing = banner.variant === "context-full";
   const navigation = useNavigation<{ openDrawer: () => void }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -425,6 +316,8 @@ export default function ChatRoute() {
   const keyboardVisible = useKeyboardStore((s) => s.isVisible);
   const tabBarCompensation = keyboardVisible ? keyboardOffset : 0;
   const [composerHeight, setComposerHeight] = useState(0);
+  // Hold the list's keyboard inset steady while a sheet is open.
+  const freeze = useSharedValue(false);
   // Height of the field, which IS the composer. NOT a delta from a baseline,
   // unlike the library's example: the field is out of flow, so nothing else
   // accounts for it and the newest message would sit behind it. The banners
@@ -455,20 +348,28 @@ export default function ChatRoute() {
   const handleComposerHeight = useCallback(
     (event: LayoutChangeEvent) => {
       const height = event.nativeEvent.layout.height;
+      // Reserve the composer's height directly rather than easing into it:
+      // easing here only lagged the layout by ~MOTION_DURATION_MS, which
+      // left the newest message briefly overlapping (or gapped from) the
+      // composer during the spring. PocketPal holds a single measured
+      // height with no animation, so we match that. See docs/research/...
+      // (keyboard/composer revert) for the scroll-follow follow-up.
       setComposerHeight(height);
-      extraContentPadding.value = withTiming(height, { duration: motionDuration });
+      extraContentPadding.value = height;
     },
-    [extraContentPadding, motionDuration],
+    [extraContentPadding],
   );
 
   // Derived from the message itself rather than toggled on send, so it
   // cannot get stuck if a turn is cancelled or the screen is left mid-reply.
   const streaming = messages[messages.length - 1]?.streaming === true;
+  // Reserve scroll room for a streaming reply directly, instead of easing
+  // into it. The eased version ran one duration behind the token stream and
+  // fought the follow-scroll; a hard reserve keeps blankSpace coincident
+  // with the streaming flag (PocketPal: no timing on the equivalent value).
   useEffect(() => {
-    blankSpace.value = withTiming(streaming ? listHeight : 0, {
-      duration: motionDuration,
-    });
-  }, [streaming, listHeight, blankSpace, motionDuration]);
+    blankSpace.value = streaming ? listHeight : 0;
+  }, [streaming, listHeight, blankSpace]);
   const [generationOpen, setGenerationOpen] = useState(false);
   // PocketPal's in-chat model picker: opened from the empty thread's CTA so
   // activating a model no longer means leaving the conversation. There is
@@ -476,6 +377,11 @@ export default function ChatRoute() {
   // header title routes to /models, and each message offers "Regenerate
   // with…"); the picker is the no-model path only.
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Sync the freeze flag with the sheet-open state (declared above because the
+  // pickers are defined late in this component).
+  useEffect(() => {
+    freeze.value = pickerOpen || generationOpen;
+  }, [pickerOpen, generationOpen, freeze]);
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
 
@@ -526,7 +432,7 @@ export default function ChatRoute() {
             className="flex-1 font-sans text-body-md text-primary-text"
           />
           {matchLabel !== null && (
-            <Text className="font-sans text-caption text-secondary-text">
+            <Text className="text-quiet">
               {matchLabel}
             </Text>
           )}
@@ -563,8 +469,17 @@ export default function ChatRoute() {
             listRef={listRef}
             rows={rows}
             offset={keyboardOffset}
+            freeze={freeze}
             extraContentPadding={extraContentPadding}
             blankSpace={blankSpace}
+            listEmpty={
+              showPlaceholder ? (
+                <ChatEmptyPlaceholder
+                  bottomInset={composerHeight + tabBarCompensation}
+                  onSelectModel={() => setPickerOpen(true)}
+                />
+              ) : null
+            }
             onEndVisibleChange={setAtEnd}
             streaming={streaming}
             renderRow={(row, widths) =>
@@ -587,23 +502,6 @@ export default function ChatRoute() {
             }
           />
         </View>
-        {/* The no-model empty state, as an overlay rather than scroll content.
-            MessageList's header explains why: a ListEmptyComponent would sit
-            inside the keyboard's contentInset and visibly re-centre as the
-            keyboard rose. The bottom padding lifts it clear of the floating
-            composer, from the measured height rather than pocketpal's
-            hard-coded bottomComponentHeight + 100. */}
-        {showPlaceholder && (
-          <Animated.View
-            className="absolute inset-x-0 top-0"
-            style={{ bottom: composerHeight + tabBarCompensation }}
-            pointerEvents="box-none"
-          >
-            <ChatEmptyPlaceholder
-              onSelectModel={() => setPickerOpen(true)}
-            />
-          </Animated.View>
-        )}
         {/* Jump to latest: an overlay pinned to the content column's
             bottom-right, above the floating composer — pocketpal's FAB
             placement. It lifts on the same hook as the composer so the two
@@ -624,7 +522,7 @@ export default function ChatRoute() {
           >
             <Pressable
               onPress={() => listRef.current?.scrollToEnd({ animated: true })}
-              className="h-12 w-12 items-center justify-center rounded-full bg-primary"
+              className="icon-btn rounded-full bg-primary"
               accessibilityRole="button"
               accessibilityLabel="Jump to latest message"
             >
@@ -699,31 +597,25 @@ export default function ChatRoute() {
             onDismiss={dismissWarning}
             onRetry={retryFailedTurn}
           />
-  {/* `?? 0` is dead-in-practice: a FULL banner implies the local engine
-      (remote hardcodes contextFull: false) so windowSize is nCtx there,
-      and the warning branch only renders when the resolver already saw
-      a real window. fillPercent(…, 0) would read 0 rather than divide
-      blind. */}
+  {/* The banner's own resolution — which of five, plus its fill — is
+      useChatBanner's answer; this only draws it. */}
   {bannerShowing && (
     <ContextFullBanner
       variant={banner.variant}
       copy={banner.copy}
       heavyToolName={banner.heavyToolName}
-      fill={fillPercent(newestAssistant?.usage?.promptTokens, windowSize ?? 0)}
+      fill={fill}
       onMoreRoom={() => setLadderOpen(true)}
       // The banner keeps the local/remote rule for this action; we add only
       // the ladder's verdict, so it is absent when nothing larger fits.
       canIncrease={banner.copy !== "remote" && ladder.anyFits}
       onNewChat={() => {
-        setDismissed(dismissBanner(dismissed, banner.variant));
+        dismissBanner();
         void newConversation();
       }}
-      onDismiss={() => setDismissed(dismissBanner(dismissed, banner.variant))}
+      onDismiss={dismissBanner}
     />
   )}
-        {ready && emptyState && (
-          <SuggestedPrompts onPick={(prompt) => void send(prompt)} />
-        )}
       </Animated.View>
       {/* The ladder lives OUTSIDE the overlay row: it is a modal sheet
           with its own scrim, so it must not inherit the composer's lift
@@ -741,9 +633,7 @@ export default function ChatRoute() {
           })
         }
         onNewChat={() => {
-          if (banner.variant !== "none") {
-            setDismissed(dismissBanner(dismissed, banner.variant));
-          }
+          if (bannerShowing) dismissBanner();
           void newConversation();
         }}
         onClose={() => setLadderOpen(false)}

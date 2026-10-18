@@ -22,22 +22,22 @@ import {
 } from "react-native";
 import { ArrowLeft, Flame } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors } from "@/themes/tokens.ts";
 import { useSnackbar } from "../snackbar.tsx";
-import { useFreeSpacePoll } from "../../hooks/useStorageDisclosure.ts";
-import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
-import { useModelStore } from "../../store/modelStore";
+import { useFreeSpacePoll } from "@/hooks/useStorageDisclosure.ts";
+import { useLoadGuard } from "@/hooks/useLoadGuard.ts";
+import { useModelStore } from "@/store/modelStore";
 import {
   formatNumber,
   isVisionModel,
   timeAgo,
   visionSizeBreakdown,
-} from "../../services/models/hf-format.ts";
-import { hfFileWarnings } from "../../services/models/hf-warnings.ts";
+} from "@/services/models/hf-format.ts";
+import { hfFileWarnings } from "@/services/models/hf-warnings.ts";
 import { Chip, confirmRemoveModel } from "./model-bits.tsx";
 import { HFFileRow } from "./hf-file-row.tsx";
 import type { VisionDownloadChoice } from "./vision-download-sheet.tsx";
-import type { HFModelFile, HFModelSearchResult } from "../../types/models";
+import type { HFModelFile, HFModelSearchResult } from "@/types/models";
 
 function StatChip({
   label,
@@ -49,7 +49,7 @@ function StatChip({
   return (
     <View className="flex-row items-center gap-1 rounded bg-surface-2 px-2 py-1">
       {trending ? <Flame size={11} color={colors.primary} /> : null}
-      <Text className="font-sans text-caption text-secondary-text">{label}</Text>
+      <Text className="text-quiet">{label}</Text>
     </View>
   );
 }

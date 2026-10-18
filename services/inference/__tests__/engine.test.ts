@@ -5,7 +5,7 @@ import {
   resolveLocalFile,
   selectEngineSource,
 } from "../engine";
-import type { ModelSpec, RemoteApiProvider } from "../../../types/models";
+import type { ModelSpec, RemoteApiProvider } from "@/types/models";
 
 function spec(over: Partial<ModelSpec> = {}): ModelSpec {
   return {

@@ -10,7 +10,7 @@
  * skipped, as ChatMenu always did.
  */
 
-import { defaultGetStore } from "../../store/chat.ts";
+import { defaultGetStore } from "@/store/chat.ts";
 import type { ExportSession } from "./export.ts";
 
 export async function readExportSessions(

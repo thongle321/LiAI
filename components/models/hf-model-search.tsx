@@ -19,17 +19,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
+import * as Haptics from "expo-haptics";
 import { CheckCircle2 } from "lucide-react-native";
 
 import { Sheet } from "../sheet.tsx";
 import { useSnackbar } from "../snackbar.tsx";
-import { colors } from "../../themes/tokens.ts";
-import { useModelStore } from "../../store/modelStore";
-import { extractHFModelTitle } from "../../services/models/hf-format.ts";
+import { colors } from "@/themes/tokens.ts";
+import { useModelStore } from "@/store/modelStore";
+import { extractHFModelTitle } from "@/services/models/hf-format.ts";
 import { HFDetailsView } from "./hf-details-view.tsx";
 import { HFSearchView, SORT_OPTIONS } from "./hf-search-view.tsx";
 import type { VisionDownloadChoice } from "./vision-download-sheet.tsx";
-import type { HFModelFile, HFModelSearchResult } from "../../types/models";
+import type { HFModelFile, HFModelSearchResult } from "@/types/models";
 
 function SearchErrorSnackbar({
   error,
@@ -67,6 +68,7 @@ function SortSheet({
         <Pressable
           key={option.value}
           onPress={() => {
+            void Haptics.selectionAsync();
             onPick(option.value);
             onClose();
           }}
@@ -110,7 +112,7 @@ function AuthorSheet({
         autoCorrect={false}
         placeholderTextColor={colors.secondaryText}
         accessibilityLabel="Author name"
-        className="font-sans text-body-lg text-primary-text bg-surface-1 border border-border rounded-lg px-5 py-3"
+        className="surface bg-surface-1 font-sans text-body-lg text-primary-text px-5 py-3"
       />
       <View className="flex-row gap-2 pt-4">
         <Pressable
@@ -122,7 +124,7 @@ function AuthorSheet({
           accessibilityRole="button"
           accessibilityLabel="Clear author filter"
         >
-          <Text className="font-sans text-body-md text-primary">Clear</Text>
+          <Text className="text-body">Clear</Text>
         </Pressable>
         <Pressable
           onPress={() => {
@@ -133,7 +135,7 @@ function AuthorSheet({
           accessibilityRole="button"
           accessibilityLabel="Apply author filter"
         >
-          <Text className="font-sans-semibold text-body-md text-on-primary">Apply</Text>
+          <Text className="text-action">Apply</Text>
         </Pressable>
       </View>
     </Sheet>

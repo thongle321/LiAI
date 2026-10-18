@@ -11,16 +11,17 @@ import {
 } from "react-native";
 import { CheckCircle2, Circle } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { useModelStore } from "../../store/modelStore";
+import { colors } from "@/themes/tokens.ts";
+import { useModelStore } from "@/store/modelStore";
 import { Sheet } from "../sheet.tsx";
 import {
   useCameraPermission,
 } from "react-native-vision-camera";
+import { openSettings } from "expo-linking";
 import { ServerQRScanner } from "./server-qr-scanner.tsx";
 import { ScanLine } from "lucide-react-native";
-import { normalizeTimeoutMs } from "../../services/inference/remote-engine.ts";
-import type { RemoteApiProvider } from "../../types/models";
+import { normalizeTimeoutMs } from "@/services/inference/remote-engine.ts";
+import type { RemoteApiProvider } from "@/types/models";
 
 export function RemoteModelSheet({
   visible,
@@ -88,7 +89,15 @@ export function RemoteModelSheet({
       setValidationWarning("Could not validate API endpoint. Adding anyway.");
     }
 
-    addRemoteApi(provider);
+    // Awaited, so a refused SecureStore write surfaces on the form instead of
+    // closing the sheet over a key that was never stored (D3-6).
+    try {
+      await addRemoteApi(provider);
+    } catch {
+      setFormError("Could not save the API key securely");
+      setValidating(false);
+      return;
+    }
     acknowledgePrivacy();
     onClose();
     setName("");
@@ -116,23 +125,23 @@ export function RemoteModelSheet({
         <View className="flex-row gap-2">
           <Pressable
             onPress={onClose}
-            className="btn btn--secondary flex-1"
+            className="btn btn--secondary active:opacity-80 flex-1"
             accessibilityRole="button"
             accessibilityLabel="Cancel"
           >
-            <Text className="font-sans text-body-md text-primary">Cancel</Text>
+            <Text className="text-body">Cancel</Text>
           </Pressable>
           <Pressable
             onPress={handleSubmit}
             disabled={validating}
-            className="btn btn--primary flex-1"
+            className="btn btn--primary active:opacity-80 flex-1"
             accessibilityRole="button"
             accessibilityLabel="Add provider"
           >
             {validating ? (
               <ActivityIndicator size="small" color={colors.onPrimary} />
             ) : (
-              <Text className="font-sans-semibold text-body-md text-on-primary">Add</Text>
+              <Text className="text-action">Add</Text>
             )}
           </Pressable>
         </View>
@@ -147,13 +156,13 @@ export function RemoteModelSheet({
           <Text className="font-sans text-body-sm text-warning">{validationWarning}</Text>
         ) : null}
         {!privacyAcknowledged && (
-          <Text className="font-sans text-body-sm text-secondary-text">
+          <Text className="text-quiet">
             API keys stay on this device in encrypted storage.
           </Text>
         )}
 
         <View>
-          <Text className="font-sans text-body-sm text-secondary-text mb-1">Provider Type</Text>
+          <Text className="text-quiet mb-1">Provider Type</Text>
           <View className="flex-row gap-2">
             <Pressable
               onPress={() => setProviderType("openrouter")}
@@ -195,7 +204,7 @@ export function RemoteModelSheet({
         </View>
 
         <View>
-          <Text className="font-sans text-body-sm text-secondary-text mb-1">Name</Text>
+          <Text className="text-quiet mb-1">Name</Text>
           <TextInput
             value={name}
             onChangeText={setName}
@@ -205,19 +214,18 @@ export function RemoteModelSheet({
         </View>
 
         <View>
-          <Text className="font-sans text-body-sm text-secondary-text mb-1">Base URL</Text>
+          <Text className="text-quiet mb-1">Base URL</Text>
           <View className="flex-row items-center gap-2">
             <TextInput
-              style={{ flex: 1 }}
-            value={baseUrl}
-            onChangeText={setBaseUrl}
-            placeholder={
-              providerType === "openrouter"
-                ? "https://openrouter.ai/api"
-                : "http://localhost:11434"
-            }
-            className="font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
-          />
+              value={baseUrl}
+              onChangeText={setBaseUrl}
+              placeholder={
+                providerType === "openrouter"
+                  ? "https://openrouter.ai/api"
+                  : "http://localhost:11434"
+              }
+              className="flex-1 font-sans text-body-md text-primary-text bg-surface-2 border border-border rounded-lg px-5 py-3"
+            />
             <Pressable
               onPress={() => {
                 (async () => {
@@ -227,6 +235,10 @@ export function RemoteModelSheet({
                       Alert.alert(
                         "Camera access denied",
                         "Enable camera permission to scan a server QR code.",
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          { text: "Open Settings", onPress: () => void openSettings().catch(() => {}) },
+                        ],
                       );
                       return;
                     }
@@ -234,7 +246,7 @@ export function RemoteModelSheet({
                   setScannerOpen(true);
                 })();
               }}
-              className="btn btn--secondary"
+              className="btn btn--secondary active:opacity-80"
               accessibilityRole="button"
               accessibilityLabel="Scan QR code"
               testID="remote-url-scan"
@@ -245,7 +257,7 @@ export function RemoteModelSheet({
         </View>
 
         <View>
-          <Text className="font-sans text-body-sm text-secondary-text mb-1">
+          <Text className="text-quiet mb-1">
             API Key (optional for local)
           </Text>
           <TextInput
@@ -258,7 +270,7 @@ export function RemoteModelSheet({
         </View>
 
         <View>
-          <Text className="font-sans text-body-sm text-secondary-text mb-1">Model Name</Text>
+          <Text className="text-quiet mb-1">Model Name</Text>
           <TextInput
             value={modelName}
             onChangeText={setModelName}
@@ -268,7 +280,7 @@ export function RemoteModelSheet({
         </View>
 
         <View>
-          <Text className="font-sans text-body-sm text-secondary-text mb-1">
+          <Text className="text-quiet mb-1">
             Request Timeout (seconds)
           </Text>
           <TextInput

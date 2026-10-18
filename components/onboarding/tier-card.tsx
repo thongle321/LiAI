@@ -3,8 +3,8 @@
 import { Pressable, Text, View } from "react-native";
 import { CheckCircle2, Circle } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import type { DeviceTier } from "../../services/models/device-tiers.ts";
+import { colors } from "@/themes/tokens.ts";
+import type { DeviceTier } from "@/services/models/device-tiers.ts";
 
 export function formatRamFloor(minRamMb: number): string {
   if (minRamMb <= 0) return "Any phone";
@@ -48,10 +48,10 @@ export function TierCard({
           </View>
         )}
       </View>
-      <Text className="mt-1 font-sans text-body-sm text-secondary-text">
+      <Text className="mt-1 text-quiet">
         {tier.blurb}
       </Text>
-      <Text className="mt-1 font-sans text-caption text-secondary-text">
+      <Text className="mt-1 text-quiet">
         {formatRamFloor(tier.minRamMb)} · {tier.presetIds.length} model
         {tier.presetIds.length === 1 ? "" : "s"}
       </Text>

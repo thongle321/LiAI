@@ -15,9 +15,9 @@ import { CheckCircle2 } from "lucide-react-native";
 
 import { Sheet } from "../sheet.tsx";
 import { ToggleRow } from "../settings-rows.tsx";
-import { colors } from "../../themes/tokens.ts";
-import { mmprojSiblings } from "../../services/models/vision-pairing.ts";
-import type { HFModelFile, ModelFile } from "../../types/models";
+import { colors } from "@/themes/tokens.ts";
+import { mmprojSiblings } from "@/services/models/vision-pairing.ts";
+import type { HFModelFile, ModelFile } from "@/types/models";
 import { formatBytes } from "./model-bits.tsx";
 
 /** What the sheet hands back: whether the pair is fetched, and which
@@ -72,11 +72,11 @@ export function VisionDownloadSheet({
         <View className="flex-row gap-2">
           <Pressable
             onPress={onClose}
-            className="btn btn--secondary flex-1"
+            className="btn btn--secondary active:opacity-80 flex-1"
             accessibilityRole="button"
             accessibilityLabel="Cancel download"
           >
-            <Text className="font-sans text-body-md text-primary">Cancel</Text>
+            <Text className="text-body">Cancel</Text>
           </Pressable>
           <Pressable
             onPress={() => {
@@ -87,13 +87,13 @@ export function VisionDownloadSheet({
               });
               onClose();
             }}
-            className="btn btn--primary flex-1"
+            className="btn btn--primary active:opacity-80 flex-1"
             accessibilityRole="button"
             accessibilityLabel={
               visionEnabled ? "Download with vision" : "Download text only"
             }
           >
-            <Text className="font-sans-semibold text-body-md text-on-primary">
+            <Text className="text-action">
               {visionEnabled ? "Download with vision" : "Download text only"}
             </Text>
           </Pressable>
@@ -111,7 +111,7 @@ export function VisionDownloadSheet({
           }}
         />
 
-        <Text className="font-sans text-body-sm text-secondary-text">
+        <Text className="text-quiet">
           Projection models
         </Text>
         {candidates.length === 0 ? (
@@ -141,7 +141,7 @@ export function VisionDownloadSheet({
                   >
                     {c.name}
                   </Text>
-                  <Text className="font-sans text-body-sm text-secondary-text">
+                  <Text className="text-quiet">
                     {formatBytes(c.size)}
                   </Text>
                 </View>

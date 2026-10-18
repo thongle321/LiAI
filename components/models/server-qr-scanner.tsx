@@ -13,9 +13,9 @@ import {
   type CameraRuntimeError,
 } from "react-native-vision-camera";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors } from "@/themes/tokens.ts";
 import { Sheet } from "../sheet.tsx";
-import { isServerUrl } from "../../services/models/server-url.ts";
+import { isServerUrl } from "@/services/models/server-url.ts";
 
 export function ServerQRScanner({
   visible,
@@ -73,7 +73,9 @@ export function ServerQRScanner({
           </Text>
         )}
         {showCamera && device && (
-          <View style={{ height: 280, width: "100%", overflow: "hidden" }}>
+          <View className="h-[280px] w-full overflow-hidden">
+            {/* Camera takes no className (third-party native view), so its
+                fill stays inline; the frame around it is Uniwind. */}
             <Camera
               device={device}
               isActive={visible}
@@ -95,11 +97,11 @@ export function ServerQRScanner({
         ) : null}
         <Pressable
           onPress={onClose}
-          className="btn btn--secondary w-full"
+          className="btn btn--secondary active:opacity-80 w-full"
           accessibilityRole="button"
           accessibilityLabel="Close scanner"
         >
-          <Text className="font-sans text-body-md text-primary">Close</Text>
+          <Text className="text-body">Close</Text>
         </Pressable>
       </View>
     </Sheet>

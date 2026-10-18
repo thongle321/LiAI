@@ -21,11 +21,11 @@ import { Alert } from "react-native";
 import { Pressable, Text, View } from "react-native";
 import { CheckCircle2, Download, Trash2 } from "lucide-react-native";
 
-import { useModelStore } from "../../store/modelStore";
-import { useChatStore } from "../../store/chat";
-import { colors } from "../../themes/tokens.ts";
+import { useModelStore } from "@/store/modelStore";
+import { useChatStore } from "@/store/chat";
+import { colors } from "@/themes/tokens.ts";
 import { formatBytes, progressCaption } from "./model-bits.tsx";
-import type { ModelFile, ModelSpec } from "../../types/models";
+import type { ModelFile, ModelSpec } from "@/types/models";
 
 export function ModelMultimodalSection({ model }: { model: ModelSpec }) {
   const setProjector = useModelStore((s) => s.setProjector);
@@ -83,12 +83,12 @@ export function ModelMultimodalSection({ model }: { model: ModelSpec }) {
       {/* The candidate header shows only when there is a choice to make
           (PocketPal parity: the section header hides for a single fit). */}
       {candidates.length > 1 ? (
-        <Text className="font-sans text-body-sm text-secondary-text">
+        <Text className="text-quiet">
           Projection Models
         </Text>
       ) : null}
       {candidates.length === 0 ? (
-        <Text className="py-2 text-center font-sans text-body-sm text-secondary-text">
+        <Text className="py-2 text-center text-quiet">
           No compatible projection models found
         </Text>
       ) : (
@@ -115,7 +115,7 @@ export function ModelMultimodalSection({ model }: { model: ModelSpec }) {
                 >
                   {file.name}
                 </Text>
-                <Text className="font-sans text-body-sm text-secondary-text">
+                <Text className="text-quiet">
                   {inFlight
                     ? progressCaption(
                         model.downloadedBytes,

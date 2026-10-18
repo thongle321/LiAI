@@ -26,16 +26,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { openSettings } from "expo-linking";
 import { Mic } from "lucide-react-native";
 
-import { colors } from "../../../themes/tokens.ts";
-import { VOICE_STATUS_LABEL } from "../../../services/voice/voice-status.ts";
+import { colors } from "@/themes/tokens.ts";
+import { VOICE_STATUS_LABEL } from "@/services/voice/voice-status.ts";
 import {
   MOTION_DURATION_MS,
   fadeEntering,
   motionEasing,
   usePressFeedback,
-} from "../../../utils/motion.ts";
-import { useVoiceLoop } from "../../../hooks/useVoiceLoop.ts";
-import { useModelReady } from "../../../hooks/useModelReady.ts";
+} from "@/utils/motion.ts";
+import { useVoiceLoop } from "@/hooks/useVoiceLoop.ts";
+import { useModelReady } from "@/hooks/useModelReady.ts";
 
 export default function VoiceScreen() {
   const { phase, heard, reply, issue, needsSettings, bargeIn, retry } = useVoiceLoop();
@@ -129,7 +129,7 @@ export default function VoiceScreen() {
           pointerEvents={replyVisible ? "auto" : "none"}
           className="mt-6 w-full"
         >
-          <View className="w-full rounded-lg border border-border bg-surface-1 p-5">
+          <View className="surface bg-surface-1 w-full p-5">
             <View className="flex-row items-center">
               <View className="h-10 w-10 items-center justify-center rounded-full bg-surface-3">
                 <ActivityIndicator size="small" color={colors.primary} />
@@ -139,7 +139,7 @@ export default function VoiceScreen() {
               </Text>
               <Pressable
                 onPress={bargeIn}
-                className="btn btn--ghost px-5 py-2"
+                className="btn btn--ghost active:opacity-80 px-5 py-2"
                 accessibilityRole="button"
                 accessibilityLabel="Stop playback"
               >
@@ -159,7 +159,7 @@ export default function VoiceScreen() {
           <View className="mt-4 items-center">
             {needsSettings ? (
               <Pressable
-                onPress={() => void openSettings()}
+                onPress={() => void openSettings().catch(() => {})}
                 accessibilityRole="button"
                 accessibilityLabel={issue}
               >
@@ -168,17 +168,17 @@ export default function VoiceScreen() {
                 </Text>
               </Pressable>
             ) : (
-              <Text className="text-center font-sans text-body-sm text-secondary-text">
+              <Text className="text-center text-quiet">
                 {issue}
               </Text>
             )}
             <Pressable
               onPress={() => void retry()}
-              className="btn btn--ghost mt-1 px-5 py-2"
+              className="btn btn--ghost active:opacity-80 mt-1 px-5 py-2"
               accessibilityRole="button"
               accessibilityLabel="Try again"
             >
-              <Text className="font-sans text-body-md text-primary">Try again</Text>
+              <Text className="text-body">Try again</Text>
             </Pressable>
           </View>
         )}

@@ -40,11 +40,11 @@ function Retry({
   return (
     <Pressable
       onPress={reset}
-      className="btn btn--primary"
+      className="btn btn--primary active:opacity-80"
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Text className="font-sans-semibold text-body-md text-on-primary">{label}</Text>
+      <Text className="text-action">{label}</Text>
     </Pressable>
   );
 }
@@ -62,11 +62,11 @@ export function RootErrorBoundary({ error, reset }: BoundaryProps) {
         <Retry label="Try again" reset={reset} />
         <Pressable
           onPress={() => router.replace("/(drawer)/(tabs)/chat")}
-          className="btn btn--secondary"
+          className="btn btn--secondary active:opacity-80"
           accessibilityRole="button"
           accessibilityLabel="Back to chat"
         >
-          <Text className="font-sans text-body-md text-primary">Back to chat</Text>
+          <Text className="text-body">Back to chat</Text>
         </Pressable>
       </View>
     </Shell>

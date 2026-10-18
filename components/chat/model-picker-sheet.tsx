@@ -29,9 +29,9 @@ import { KeyboardControllerNative } from "react-native-keyboard-controller";
 import { Check } from "lucide-react-native";
 
 import { Sheet } from "../sheet.tsx";
-import { colors } from "../../themes/tokens.ts";
-import { pickableModels } from "../../services/chat/models.ts";
-import { useModelStore } from "../../store/modelStore";
+import { colors } from "@/themes/tokens.ts";
+import { pickableModels } from "@/services/chat/models.ts";
+import { useModelStore } from "@/store/modelStore";
 
 export function ModelPickerSheet({
   visible,
@@ -65,7 +65,7 @@ export function ModelPickerSheet({
   return (
     <Sheet visible={visible} onClose={onClose} title="Select Model">
       {options.length === 0 ? (
-        <Text className="px-1 py-3 font-sans text-body-sm text-secondary-text">
+        <Text className="px-1 py-3 text-quiet">
           No models are ready yet — download one on the Models screen.
         </Text>
       ) : (
@@ -86,7 +86,7 @@ export function ModelPickerSheet({
                   {m.name}
                 </Text>
                 {m.host !== undefined && (
-                  <Text className="font-sans text-caption text-secondary-text">
+                  <Text className="text-quiet">
                     {m.host}
                   </Text>
                 )}

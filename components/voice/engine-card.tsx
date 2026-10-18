@@ -1,11 +1,16 @@
 /** One downloadable voice engine.
  *
  * PocketPal's engine-group card, rebuilt on this app's stack: a collapsed
- * header that is purely a disclosure (logo, title, tier chip, specs,
- * chevron) and an expanded body that carries every action — install,
- * pause/resume, retry, or the curated voice rows — because that is where
- * the reference design puts them and where PocketPal's VoicePickerView
- * puts them.
+ * header that is a disclosure (logo, title, tier chip, specs, chevron) and
+ * an expanded body that carries every action — install, pause/resume,
+ * retry, or the curated voice rows — because that is where the reference
+ * design puts them and where PocketPal's VoicePickerView puts them.
+ *
+ * The header keeps exactly one piece of state, the download arc: the
+ * progress copy it would otherwise report lives in the body the guard
+ * unmounts (see Motion). PocketPal makes the same trade on the same card —
+ * VoicePickerView passes `ringProgress` to EngineLogo, which draws the arc
+ * from that.
  *
  * Everything it renders comes from services/tts//engineMeta.ts (title, chip,
  * spec line, model id, size, voices) and services/tts//voiceUi.ts (which body the
@@ -14,9 +19,12 @@
  * component.
  *
  * Motion: Reanimated's `Layout` animation at the app's one
- * duration/easing (utils/motion.ts). The expanded height and opacity
- * animate on the UI thread with no manual measurement — the body
- * simply renders at natural height and `Layout` animates the change.
+ * duration/easing (utils/motion.ts). The body renders at natural
+ * height and the mount/unmount animates the height on the UI thread,
+ * with no manual measurement — `Layout` animates a child being ADDED
+ * or REMOVED, which is why the body is mounted behind an `expanded`
+ * guard. Rendered unconditionally it stays at natural height forever:
+ * the chevron swaps and the card never closes.
  *
  * The chevron is a glyph swap (ChevronRight/ChevronDown), NOT a rotation:
  * SettingsRows' AdvancedGroup records that a style-rotated lucide icon
@@ -25,7 +33,7 @@
 
 import { useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
-import Animated, { Layout } from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import {
   AudioLines,
   Cat,
@@ -40,29 +48,34 @@ import {
   Trash2,
 } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import {
-  MOTION_DURATION_MS,
-  motionEasing,
-} from "../../utils/motion.ts";
-import { formatBytes } from "../../services/models/progress.ts";
-import { NEURAL_ENGINE_META } from "../../services/tts/engineMeta.ts";
+import { colors } from "@/themes/tokens.ts";
+import { motionLayout } from "@/utils/motion.ts";
+import { formatBytes } from "@/services/models/progress.ts";
+import { NEURAL_ENGINE_META } from "@/services/tts/engineMeta.ts";
 import {
   canStartInstall,
   downloadLine,
   engineGroupState,
+  ringFraction,
   voiceTap,
   type EngineGroupState,
-} from "../../services/tts/voiceUi.ts";
-import { useFreeSpacePoll } from "../../hooks/useStorageDisclosure.ts";
-import type { NeuralEngineId, Voice } from "../../services/tts/types.ts";
-import { VOICE_PREVIEW_SAMPLE } from "../../constants/voice-strings.ts";
-import { useVoice } from "../../store/voice.ts";
+} from "@/services/tts/voiceUi.ts";
+import { useFreeSpacePoll } from "@/hooks/useStorageDisclosure.ts";
+import type { NeuralEngineId, Voice } from "@/services/tts/types.ts";
+import { VOICE_PREVIEW_SAMPLE } from "@/constants/voice-strings.ts";
+import { useVoice } from "@/store/voice.ts";
+import { ProgressRing } from "./progress-ring.tsx";
 import { RadioDot } from "./radio-dot.tsx";
 
 /** The engine's glyph. Lucide only — no bundled logo PNGs, which is what
  *  lets one card serve every engine. */
 const ENGINE_ICON = { kitten: Cat, kokoro: AudioLines, supertonic: Gauge } as const;
+
+/** Ring diameter. The glyph pill is 40, and the ring's own stroke eats 3 of
+ *  that radius, so it needs 48 for the arc to clear the pill rather than sit
+ *  on top of it (the reference gets its clearance from `ringPad` on the logo
+ *  surface instead). */
+const RING_SIZE = 48;
 
 /** PocketPal's disk preflight: the model must fit with 20% headroom. */
 const DISK_HEADROOM = 1.2;
@@ -100,7 +113,7 @@ function Action({
       <Text
         className={
           tone === "primary"
-            ? "font-sans-semibold text-body-md text-on-primary"
+            ? "text-action"
             : tone === "secondary"
               ? "font-sans-semibold text-body-md text-primary"
               : "font-sans-semibold text-body-md text-secondary-text"
@@ -145,6 +158,17 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
   // this card waits rather than fighting it for the same controller.
   const slotBusy = activeEngineId !== null && activeEngineId !== engineId;
   const installable = canStartInstall(group, slotBusy) && !lowDisk;
+
+  // Live progress only, and the rule (including why extraction is excluded)
+  // belongs to voiceUi with the rest of the card's state mapping.
+  const ringProgress = ringFraction(group);
+  // The glyph block's two marks, kept as one const each so the pill, its icon
+  // and the arc cannot drift apart. The arc is a non-text mark, so it takes
+  // the mark step rather than the signal step the icon beside it uses
+  // (DESIGN.md, The Two-Step Rule) — deliberately a shade apart. Kitten's
+  // warm ramp has no mark step of its own, so its arc reuses the accent.
+  const glyphColor = meta.warmBadge ? colors.warmAccent : colors.primary;
+  const ringColor = meta.warmBadge ? colors.warmAccent : colors.primaryMark;
 
   // Every failure the bridge already reported (network, disk, checksum) is
   // a status the body renders; this only covers a rejection it never saw.
@@ -275,19 +299,32 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
         accessibilityLabel={`${meta.title} — ${meta.spec}`}
         className="voice-card__header"
       >
-        <View
-          className={
-            meta.warmBadge
-              ? "h-10 w-10 items-center justify-center rounded-full bg-orange-100"
-              : "h-10 w-10 items-center justify-center rounded-full bg-surface-3"
-          }
-        >
-          <Icon size={20} color={meta.warmBadge ? colors.warmAccent : colors.primary} />
+        <View className="h-12 w-12 items-center justify-center">
+          <View
+            className={
+              meta.warmBadge
+                ? "h-10 w-10 items-center justify-center rounded-full bg-orange-100"
+                : "h-10 w-10 items-center justify-center rounded-full bg-surface-3"
+            }
+          >
+            <Icon size={20} color={glyphColor} />
+          </View>
+          {/* The body owns the progress copy and the body is gone while the
+              card is closed, so the header carries the arc — as PocketPal's
+              EngineLogo does. `ringFraction` says when. */}
+          {ringProgress !== null ? (
+            <ProgressRing
+              size={RING_SIZE}
+              progress={ringProgress}
+              color={ringColor}
+              testID="engine-card-ring"
+            />
+          ) : null}
         </View>
         <View className="flex-1">
           <Text className="voice-card__title">{meta.title}</Text>
           <View className={meta.warmBadge ? "voice-badge voice-badge--warm" : "voice-badge"}>
-            <Text className="voice-badge__text">{meta.badge}</Text>
+            <Text className={meta.warmBadge ? "voice-badge__text text-warm-accent" : "voice-badge__text"}>{meta.badge}</Text>
           </View>
           <Text className="voice-card__spec">{meta.spec}</Text>
         </View>
@@ -298,82 +335,86 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
         )}
       </Pressable>
 
-      <Animated.View
-        layout={Layout.duration(MOTION_DURATION_MS).easing(motionEasing)}
-      >
-        <View className="voice-card__body">
-          {group.kind === "ready" ? (
-            <View>
-              {engineId === "kokoro" ? (
-                <Text className="font-sans text-body-sm text-secondary-text">
-                  Some voices may not work on all devices.
+      {/* Collapsed means gone: the card is a disclosure, and the body's
+          height is what `Layout` animates on the way in and out. */}
+      {expanded ? (
+        <Animated.View
+          layout={motionLayout()}
+        >
+          <View className="voice-card__body">
+            {group.kind === "ready" ? (
+              <View>
+                {engineId === "kokoro" ? (
+                  <Text className="text-quiet">
+                    Some voices may not work on all devices.
+                  </Text>
+                ) : null}
+                {meta.voices.map((voice) => {
+                  const selected = currentVoice?.id === voice.id;
+                  const previewing = previewingId === voice.id;
+                  return (
+                    <Pressable
+                      key={voice.id}
+                      onPress={() => onTapVoice(voice)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: selected }}
+                      accessibilityLabel={
+                        previewing
+                          ? `Stop previewing ${voice.name}`
+                          : `Speak with ${voice.name} and preview`
+                      }
+                      className="flex-row items-center gap-3 py-2"
+                    >
+                      <RadioDot checked={selected} />
+                      <Text className="flex-1 font-sans text-body-md text-primary-text">
+                        {voice.name}
+                      </Text>
+                      {previewing ? <Square size={14} color={colors.primary} /> : null}
+                    </Pressable>
+                  );
+                })}
+                <Text className="mt-1 text-quiet">
+                  Tap a voice to select it and hear a sample.
                 </Text>
-              ) : null}
-              {meta.voices.map((voice) => {
-                const selected = currentVoice?.id === voice.id;
-                const previewing = previewingId === voice.id;
-                return (
-                  <Pressable
-                    key={voice.id}
-                    onPress={() => onTapVoice(voice)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: selected }}
-                    accessibilityLabel={
-                      previewing
-                        ? `Stop previewing ${voice.name}`
-                        : `Speak with ${voice.name} and preview`
-                    }
-                    className="flex-row items-center gap-3 py-2"
-                  >
-                    <RadioDot checked={selected} />
-                    <Text className="flex-1 font-sans text-body-md text-primary-text">
-                      {voice.name}
-                    </Text>
-                    {previewing ? <Square size={14} color={colors.primary} /> : null}
-                  </Pressable>
-                );
-              })}
-              <Text className="mt-1 font-sans text-body-sm text-secondary-text">
-                Tap a voice to select it and hear a sample.
-              </Text>
-              <Pressable
-                onPress={onRemove}
-                accessibilityRole="button"
-                accessibilityLabel={`Remove the ${meta.title} voice model and free its storage`}
-                className="btn btn--ghost mt-3 flex-row items-center gap-2 px-5 py-2"
-              >
-                <Trash2 size={14} color={colors.secondaryText} />
-                <Text className="font-sans-semibold text-body-md text-secondary-text">
-                  Remove
-                </Text>
-              </Pressable>
-            </View>
-          ) : (
-            <View>
-              {group.kind === "error" ? (
-                <Text className="font-sans text-body-sm text-error">
-                  {group.message ?? "The download failed."}
-                </Text>
-              ) : (
-                <Text className="font-sans text-body-sm text-secondary-text">
-                  {downloadLine(group, meta.modelBytes) ?? meta.tagline}
-                </Text>
-              )}
-              {lowDisk && group.kind === "install" ? (
-                <Text className="storage-warning mt-2">
-                  {`Not enough space — free up ${Math.round(
-                    (meta.modelBytes * DISK_HEADROOM) / 1_000_000,
-                  )} MB to install this engine (${Math.floor((freeBytes ?? 0) / 1_000_000)} MB available).`}
-                </Text>
-              ) : null}
-              {renderAction()}
-            </View>
-          )}
-          {errorNote !== null ? (
-            <Text className="mt-2 font-sans text-body-sm text-primary-text">{errorNote}</Text>
-          ) : null}
-        </View>
-      </Animated.View>
+                <Pressable
+                  onPress={onRemove}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove the ${meta.title} voice model and free its storage`}
+                  className="btn btn--ghost active:opacity-80 mt-3 flex-row items-center gap-2 px-5 py-2"
+                >
+                  <Trash2 size={14} color={colors.secondaryText} />
+                  <Text className="font-sans-semibold text-body-md text-secondary-text">
+                    Remove
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View>
+                {group.kind === "error" ? (
+                  <Text className="font-sans text-body-sm text-error">
+                    {group.message ?? "The download failed."}
+                  </Text>
+                ) : (
+                  <Text className="text-quiet">
+                    {downloadLine(group, meta.modelBytes) ?? meta.tagline}
+                  </Text>
+                )}
+                {lowDisk && group.kind === "install" ? (
+                  <Text className="storage-warning mt-2">
+                    {`Not enough space — free up ${Math.round(
+                      (meta.modelBytes * DISK_HEADROOM) / 1_000_000,
+                    )} MB to install this engine (${Math.floor((freeBytes ?? 0) / 1_000_000)} MB available).`}
+                  </Text>
+                ) : null}
+                {renderAction()}
+              </View>
+            )}
+            {errorNote !== null ? (
+              <Text className="mt-2 font-sans text-body-sm text-primary-text">{errorNote}</Text>
+            ) : null}
+          </View>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }

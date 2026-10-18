@@ -11,16 +11,22 @@
  * and animation when none is needed), and ships this component for chat
  * instead. All of the keyboard behaviour below is that component's job.
  *
- * The no-model empty state is deliberately NOT this list's ListEmptyComponent,
- * even though pocketpal-ai uses one. KeyboardChatScrollView adds the keyboard
- * height to the scroll viewport as a dynamic contentInset
- * (ScrollViewWithBottomPadding: `dynamic.bottom = bottomPadding.value`), and
- * on Android that is applied on every keyboard open regardless of
- * keyboardLiftBehavior. A centred flex-1 child inside that inset re-centres in
- * the shrunken box, so the empty state visibly MOVED as the keyboard rose.
- * pocketpal-ai gets away with it because their list is a plain FlatList that
- * adds no keyboard inset. ChatScreen renders the empty state as an overlay
- * beside this list instead, where no inset can move it.
+ * The empty state IS this list's ListEmptyComponent (PocketParity:
+ * ChatView.tsx:990), and that is what makes it scrollable — the placeholder
+ * is content the reader can reach with the keyboard up, not a fixed overlay
+ * the keyboard can bury. Two PocketPal details carry it:
+ *
+ * - `flexGrow: 1` on the content container with centring only while the
+ *   list is empty (ChatView.tsx:1038-1041, styles.ts:13-15). Centring needs
+ *   the container to fill the viewport, and an empty state taller than that
+ *   viewport has to overflow into a scroll rather than squash — hence
+ *   flexGrow, not flex-1 on the child.
+ * - The composer clearance is a `marginBottom` on the empty state
+ *   (ChatEmptyPlaceholder.tsx:86), NOT a keyboard inset. That distinction
+ *   is the whole trick: the bottom inset below still rides
+ *   KeyboardChatScrollView's dynamic contentInset exactly as before, so
+ *   this list is unchanged where it matters, while the empty state's
+ *   placement stops depending on it.
  */
 
 import { useCallback, useEffect, useMemo, useRef, type ReactElement, type RefObject } from "react";
@@ -29,10 +35,18 @@ import {
   KeyboardChatScrollView,
 } from "react-native-keyboard-controller";
 import type { SharedValue } from "react-native-reanimated";
+import Animated, {
+  useAnimatedReaction,
+  useAnimatedScrollHandler,
+  useSharedValue,
+} from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
+import { cn } from "@/utils/cn.ts";
+import { motionLayout } from "@/utils/motion.ts";
 
 
-import type { ChatRow } from "../../services/chat/rows.ts";
-import { messageWidths, type MessageWidths } from "../../services/chat/message-width.ts";
+import type { ChatRow } from "@/services/chat/rows.ts";
+import { messageWidths, type MessageWidths } from "@/services/chat/message-width.ts";
 
 /** PocketPal STICK/LEAVE hysteresis (ChatView.tsx:451): re-arm "at latest"
  * below 24px from the end, leave it above 40px. The library's own end
@@ -51,11 +65,17 @@ export function MessageList({
    *  safe-area inset). Without it the content overshoots by that much
    *  every time the keyboard appears. */
   offset,
+  freeze,
   /** Tracks the growing multiline composer so the newest message is never
-   *  clipped behind it. */
+   *  clipped behind it. The screen adds the floating composer's own height
+   *  here, because the empty state now lives INSIDE the list and therefore
+   *  has to clear the composer exactly like the last real message does. */
   extraContentPadding,
   /** Minimum bottom inset reserved while a reply streams. */
   blankSpace,
+  /** The empty state, drawn as list content (PocketParity, ChatView.tsx:990).
+   *  null/absent renders nothing. */
+  listEmpty,
   onEndVisibleChange,
   streaming,
 }: {
@@ -64,8 +84,16 @@ export function MessageList({
   rows: ChatRow[];
   renderRow: (row: ChatRow, widths: MessageWidths) => ReactElement | null;
   offset: number;
+  /** Hold the keyboard-driven inset (and with it the scroll position) frozen
+   *  while a sheet is open, so dismissing the keyboard to reveal the sheet
+   *  does not snap the chat layout (PocketPal parity: freeze, 1.21.9). */
+  freeze?: SharedValue<boolean> | boolean;
   extraContentPadding: SharedValue<number>;
   blankSpace: SharedValue<number>;
+  /** Empty-state content. Present => the container grows to fill the
+   *  viewport and centres it (PocketPal styles.ts:13-15 +
+   *  ChatView.tsx:1038-1041); absent => plain top-aligned padding. */
+  listEmpty?: ReactElement | null;
   /** Fires in BOTH directions (unlike FlatList's onEndReached, which only
    *  fires on entry), which is the state a jump-to-latest button needs. */
   onEndVisibleChange: (visible: boolean) => void;
@@ -91,38 +119,68 @@ export function MessageList({
   // the library signal is NOT consumed and this is the single source for
   // the pill and the follow flag. Distance from the viewport's bottom edge
   // to the content's end; transitions call out, steady state stays silent.
-  const metricsRef = useRef({ offsetY: 0, layoutHeight: 0, contentHeight: 0 });
-  const updateAtEnd = useCallback(() => {
-    const m = metricsRef.current;
-    const distance = m.contentHeight - (m.offsetY + m.layoutHeight);
-    const next = atEndRef.current
-      ? distance <= LEAVE_DISTANCE
-      : distance <= STICK_DISTANCE;
-    if (next !== atEndRef.current) {
-      atEndRef.current = next;
-      onEndVisibleChange(next);
+  //
+  // The three measurements live as shared values and the hysteresis runs in
+  // a reaction, i.e. on the UI thread. A scroll handler that reaches JS
+  // fires once per frame, which is precisely when the JS thread is busiest
+  // laying out a streaming reply (D4-16). JS is woken only on a flip, via
+  // scheduleOnRN.
+  const offsetY = useSharedValue(0);
+  const contentHeight = useSharedValue(0);
+  const layoutHeight = useSharedValue(0);
+  const atEnd = useSharedValue(true);
+
+  /** The one JS-thread landing pad: record the flip for the follow effect,
+   *  then tell the parent. Nothing else writes atEndRef. */
+  const reportAtEnd = useCallback(
+    (visible: boolean) => {
+      atEndRef.current = visible;
+      onEndVisibleChange(visible);
+    },
+    [onEndVisibleChange],
+  );
+
+  useAnimatedReaction(
+    () => {
+      const distance = contentHeight.value - (offsetY.value + layoutHeight.value);
+      return atEnd.value
+        ? distance <= LEAVE_DISTANCE
+        : distance <= STICK_DISTANCE;
+    },
+    (next, previous) => {
+      // `previous` is null on the first pass. atEnd already starts true and
+      // the list mounts at offset 0, so reporting then would only repeat the
+      // state the parent already has.
+      if (previous === null || next === previous) return;
+      atEnd.value = next;
+      scheduleOnRN(reportAtEnd, next);
+    },
+  );
+
+  const handleScroll = useAnimatedScrollHandler((event) => {
+    offsetY.value = event.contentOffset.y;
+    // Underflow guard (PocketPal ChatView.tsx:478-483): when the content is
+    // shorter than the viewport it cannot scroll, so the reader is by
+    // definition at the end. Force atEnd true here rather than relying on
+    // the hysteresis below to converge, so a thread that lands just under
+    // the fold can never flicker between followed and not-followed.
+    const contentHeight = event.contentSize?.height ?? 0;
+    const viewportHeight = event.layoutMeasurement?.height ?? 0;
+    if (contentHeight <= viewportHeight + 1) {
+      if (!atEnd.value) {
+        atEnd.value = true;
+        scheduleOnRN(reportAtEnd, true);
+      }
     }
-  }, [onEndVisibleChange]);
-  const handleScroll = useCallback(
-    (event: { nativeEvent: { contentOffset: { y: number } } }) => {
-      metricsRef.current.offsetY = event.nativeEvent.contentOffset.y;
-      updateAtEnd();
-    },
-    [updateAtEnd],
-  );
-  const handleContentSizeChange = useCallback(
-    (_width: number, height: number) => {
-      metricsRef.current.contentHeight = height;
-      updateAtEnd();
-    },
-    [updateAtEnd],
-  );
+  });
+  const handleContentSizeChange = useCallback((_width: number, height: number) => {
+    contentHeight.value = height;
+  }, []);
   const handleLayout = useCallback(
     (event: { nativeEvent: { layout: { height: number } } }) => {
-      metricsRef.current.layoutHeight = event.nativeEvent.layout.height;
-      updateAtEnd();
+      layoutHeight.value = event.nativeEvent.layout.height;
     },
-    [updateAtEnd],
+    [],
   );
 
   const renderScrollComponent = useCallback(
@@ -134,6 +192,7 @@ export function MessageList({
         automaticallyAdjustContentInsets={false}
         contentInsetAdjustmentBehavior="never"
         offset={offset}
+        freeze={freeze}
         extraContentPadding={extraContentPadding}
         blankSpace={blankSpace}
         // Lift only when the reader is already at the conversation. Scrolling
@@ -146,7 +205,7 @@ export function MessageList({
         keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "none"}
       />
     ),
-    [offset, extraContentPadding, blankSpace],
+    [offset, freeze, extraContentPadding, blankSpace],
   );
 
   // Follow the conversation, but only from the end: a background token
@@ -160,7 +219,7 @@ export function MessageList({
   }, [rowCount, listRef]);
 
   return (
-    <FlatList
+    <Animated.FlatList
       ref={listRef}
       data={rows}
       keyExtractor={(row) => (row.kind === "message" ? row.message.id : row.id)}
@@ -182,8 +241,21 @@ export function MessageList({
       // in the same commit, so streaming is unaffected.
       initialNumToRender={10}
       maxToRenderPerBatch={6}
-      contentContainerClassName="p-5"
+      // flex-grow + centring, but ONLY while the list is empty. That is
+      // PocketParity (styles.ts:13-15 flexGrow: 1, ChatView.tsx:1038-1041
+      // justifyContent: 'center' only when there are no messages), and it
+      // is what lets an empty state taller than the viewport overflow into
+      // a scroll instead of squashing to fit. With rows present the padding
+      // is all this container needs — forcing growth would strand the last
+      // message mid-screen whenever the composer grew.
+      contentContainerClassName={cn("p-5", listEmpty && "flex-grow justify-center")}
+      ListEmptyComponent={listEmpty ?? undefined}
       className="flex-1"
+      // Reflow, not entrance. Per-row entering/exiting on a virtualized list
+      // replays every time the render window recycles a row, so scrolling back
+      // through history re-animates every bubble (D4-2). Animated.FlatList
+      // (not RN's FlatList) is what carries itemLayoutAnimation.
+      itemLayoutAnimation={motionLayout()}
     />
   );
 }

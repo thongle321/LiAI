@@ -24,7 +24,7 @@ import { useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors } from "@/themes/tokens.ts";
 
 export function ModelAccordion({
   title,
@@ -76,7 +76,7 @@ export function ModelAccordion({
         )}
       </Pressable>
       {description !== undefined ? (
-        <Text className="mb-3 mt-1 px-1 font-sans text-caption text-secondary-text">
+        <Text className="mb-3 mt-1 px-1 text-quiet">
           {description}
         </Text>
       ) : null}

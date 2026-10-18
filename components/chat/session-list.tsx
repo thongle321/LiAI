@@ -19,6 +19,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Modal, Pressable, SectionList, Text, TextInput, View } from "react-native";
+import * as Haptics from "expo-haptics";
 import {
   CheckCircle2,
   Circle,
@@ -31,10 +32,12 @@ import {
   Trash,
 } from "lucide-react-native";
 
-import { colors, scrim } from "../../themes/tokens.ts";
-import { formatTime } from "../../utils/format.ts";
-import { groupSessions, type SessionSection } from "../../services/chat/session-groups.ts";
-import type { ChatSession } from "../../types/chat.ts";
+import { colors } from "@/themes/tokens.ts";
+import { useKeyboardLift } from "@/hooks/useKeyboardLift.ts";
+import Animated from "react-native-reanimated";
+import { formatTime } from "@/utils/format.ts";
+import { groupSessions, type SessionSection } from "@/services/chat/session-groups.ts";
+import type { ChatSession } from "@/types/chat.ts";
 
 /** The row whose menu is open, and where the finger was. */
 interface MenuAnchor {
@@ -76,7 +79,7 @@ const SessionRow = memo(function SessionRow({
         selecting ? undefined : (e) => onLongPress(item, e as never)
       }
       delayLongPress={350}
-      className={`menu-row ${active ? "bg-surface-2" : ""}`}
+      className={`menu-row active:bg-surface-3 ${active ? "bg-surface-2" : ""}`}
       accessibilityRole="button"
       accessibilityLabel={item.title}
       accessibilityState={{ selected: active }}
@@ -102,7 +105,7 @@ const SessionRow = memo(function SessionRow({
         >
           {item.title === "" ? "New conversation" : item.title}
         </Text>
-        <Text className="font-sans text-body-sm text-secondary-text">
+        <Text className="text-quiet">
           {formatTime(item.at)}
         </Text>
       </View>
@@ -141,6 +144,10 @@ export function SessionList({
   const [notice, setNotice] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<ChatSession | null>(null);
   const [draft, setDraft] = useState("");
+  // The rename field autoFocuses, so on iOS (Android is saved by
+  // adjustResize) a dead-centred dialog lands under the keyboard. Same lift
+  // the composer and the vision panel use, so all three agree (D6-12).
+  const renameLift = useKeyboardLift();
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [menu, setMenu] = useState<MenuAnchor | null>(null);
@@ -195,6 +202,7 @@ export function SessionList({
           text: "Delete",
           style: "destructive",
           onPress: () => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             const ids = [...selected];
             exitSelection();
             void runBulkDelete(ids);
@@ -286,7 +294,7 @@ export function SessionList({
                 Cancel
               </Text>
             </Pressable>
-            <Text className="flex-1 text-center font-sans text-body-sm text-secondary-text">
+            <Text className="flex-1 text-center text-quiet">
               {selected.size} selected
             </Text>
             <View className="flex-row items-center">
@@ -338,14 +346,14 @@ export function SessionList({
       ) : (
         <View className="flex-row items-center px-5 pb-1 pt-3">
           <History size={20} color={colors.secondaryText} />
-          <Text className="ml-3 font-sans text-body-sm text-secondary-text">
+          <Text className="ml-3 text-quiet">
             History
           </Text>
         </View>
       )}
 
       {notice !== null && (
-        <Text className="px-5 py-1 font-sans text-body-sm text-secondary-text">
+        <Text className="px-5 py-1 text-quiet">
           {notice}
         </Text>
       )}
@@ -367,7 +375,7 @@ export function SessionList({
           </Text>
         )}
         ListEmptyComponent={
-          <Text className="px-5 py-2 font-sans text-body-sm text-secondary-text">
+          <Text className="px-5 py-2 text-quiet">
             No conversations yet.
           </Text>
         }
@@ -398,7 +406,7 @@ export function SessionList({
               // Anchored at the finger, clamped so the panel cannot open
               // past the drawer's right edge.
               style={{ position: "absolute", left: Math.max(8, Math.min(menu!.x, 168)), top: menu!.y }}
-              className="w-56 overflow-hidden rounded-lg border border-border bg-surface-1"
+              className="surface bg-surface-1 w-56 overflow-hidden"
             >
               <MenuItem
                 label={menuSession.pinned ? "Unpin" : "Pin"}
@@ -462,7 +470,10 @@ export function SessionList({
         animationType="fade"
         onRequestClose={() => setRenaming(null)}
       >
-        <View className="flex-1 items-center justify-center p-5" style={{ backgroundColor: scrim }}>
+        <Animated.View
+          className="flex-1 items-center justify-center bg-scrim p-5"
+          style={renameLift}
+        >
           <View className="w-full rounded-2xl border border-border bg-surface-1 p-5">
             <Text className="mb-4 font-sans-semibold text-body-lg text-primary-text">
               Rename conversation
@@ -479,24 +490,24 @@ export function SessionList({
             <View className="flex-row gap-2 pt-4">
               <Pressable
                 onPress={() => setRenaming(null)}
-                className="btn btn--secondary flex-1"
+                className="btn btn--secondary active:opacity-80 flex-1"
                 accessibilityRole="button"
                 accessibilityLabel="Cancel rename"
               >
-                <Text className="font-sans text-body-md text-primary">Cancel</Text>
+                <Text className="text-body">Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={() => void saveRename()}
                 disabled={draft.trim() === ""}
-                className="btn btn--primary flex-1"
+                className="btn btn--primary active:opacity-80 flex-1"
                 accessibilityRole="button"
                 accessibilityLabel="Save name"
               >
-                <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
+                <Text className="text-action">Save</Text>
               </Pressable>
             </View>
           </View>
-        </View>
+        </Animated.View>
       </Modal>
     </>
   );
@@ -517,7 +528,7 @@ function MenuItem({
   return (
     <Pressable
       onPress={onPress}
-      className="menu-row"
+      className="menu-row active:bg-surface-3"
       accessibilityRole="menuitem"
       accessibilityLabel={label}
     >

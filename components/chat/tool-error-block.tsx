@@ -16,7 +16,7 @@
 import { Text, View } from "react-native";
 import { AlertTriangle } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors } from "@/themes/tokens.ts";
 
 export function ToolErrorBlock({
   tool,
@@ -31,7 +31,7 @@ export function ToolErrorBlock({
     // `basis-full` so it takes its own line: the sibling chips stay in a
     // wrapping row, and an error must not sit squeezed beside them.
     <View
-      className="basis-full flex-row items-start gap-2 rounded-lg border border-border bg-surface-1 px-3 py-2"
+      className="surface bg-surface-1 basis-full flex-row items-start gap-2 px-3 py-2"
       // polite, not assertive: the turn still completed, so this informs
       // rather than interrupts -- same reasoning as the chat warning.
       accessibilityLiveRegion="polite"
@@ -42,7 +42,7 @@ export function ToolErrorBlock({
           {tool} failed
         </Text>
         {message !== "" && (
-          <Text className="mt-0.5 font-sans text-caption text-secondary-text">
+          <Text className="mt-0.5 text-quiet">
             {message}
           </Text>
         )}

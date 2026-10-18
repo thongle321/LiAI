@@ -11,13 +11,20 @@ import type { KeyValueStorage } from "../services/storage/storage.ts";
 export type MemoryStorage = KeyValueStorage & {
   /** The live contents, for asserting what was persisted. */
   data: Record<string, string>;
+  /** Every `getItem` key, in order, for asserting a read happened once. */
+  reads: string[];
 };
 
 function backing(seed: Record<string, string> = {}): MemoryStorage {
   const data: Record<string, string> = { ...seed };
+  const reads: string[] = [];
   return {
     data,
-    getItem: async (key: string) => data[key] ?? null,
+    reads,
+    getItem: async (key: string) => {
+      reads.push(key);
+      return data[key] ?? null;
+    },
     setItem: async (key: string, value: string) => {
       data[key] = value;
     },

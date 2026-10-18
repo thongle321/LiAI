@@ -15,7 +15,7 @@ export function ResetMenu({ items }: ResetMenuProps) {
         label={
           // PocketPal's trigger: paper text button + trailing chevron.
           <View className="flex-row items-center gap-1 py-2">
-            <Text className="font-sans text-body-md text-primary">Reset</Text>
+            <Text className="text-body">Reset</Text>
             <ChevronDown size={16} color={colors.primary} />
           </View>
         }

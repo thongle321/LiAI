@@ -32,7 +32,7 @@
 import type { StoredTurn } from "./session-store.ts";
 import { newId } from "./messages.ts";
 import { sanitizeBlocks } from "./blocks.ts";
-import type { AgentStep } from "../../types/chat.ts";
+import type { AgentStep } from "@/types/chat.ts";
 
 /** Bounds. Deliberately generous -- these exist to stop a hostile or
  *  corrupt file, not to second-guess a real backup. */

@@ -27,9 +27,9 @@ import { useState, type ReactNode } from "react";
 import { Linking, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { ChevronRight, ExternalLink, Search, Wrench } from "lucide-react-native";
 
-import type { AgentStep } from "../../types/chat.ts";
-import { formatToolMetrics } from "../../utils/format.ts";
-import { colors } from "../../themes/tokens.ts";
+import type { AgentStep } from "@/types/chat.ts";
+import { formatToolMetrics } from "@/utils/format.ts";
+import { colors } from "@/themes/tokens.ts";
 import { HtmlPreviewBubble } from "./html-preview-bubble.tsx";
 
 export interface ToolSurfaceProps {
@@ -61,7 +61,7 @@ export function ToolMetricsLine({
   const text = formatToolMetrics(metrics);
   if (text === null) return null;
   return (
-    <Text className="pb-1 pl-7 font-sans text-caption text-secondary-text">
+    <Text className="pb-1 pl-7 text-quiet">
       {text}
     </Text>
   );
@@ -95,11 +95,11 @@ function TriggerRow({
       >
         <Search size={14} color={colors.secondaryText} />
         {/* Split so a long query truncates but the count never does. */}
-        <Text numberOfLines={1} className="flex-1 font-sans text-caption text-secondary-text">
+        <Text numberOfLines={1} className="flex-1 text-quiet">
           {label}
         </Text>
         {count !== undefined && (
-          <Text numberOfLines={1} className="font-sans text-caption text-secondary-text">
+          <Text numberOfLines={1} className="text-quiet">
             {count}
           </Text>
         )}
@@ -123,7 +123,7 @@ function StaticRow({
     <View className="w-full">
       <View className="min-h-12 w-full flex-row items-center gap-2 rounded-lg px-2 py-1">
         <Wrench size={14} color={colors.secondaryText} />
-        <Text numberOfLines={1} className="flex-1 font-sans text-caption text-secondary-text">
+        <Text numberOfLines={1} className="flex-1 text-quiet">
           {label}
         </Text>
       </View>
@@ -141,13 +141,14 @@ function Sheet({
   onDismiss: () => void;
   children: ReactNode;
 }) {
-  if (!visible) return null;
+  // Mounted always, never early-returned: an unmounted Modal cannot play its
+  // dismissal, so the close was a hard cut while the open slid up (D4-3).
   return (
     // `Modal` takes no className -- on the AGENTS.md exception list. Its
     // children are ordinary components and do.
-    <Modal visible transparent animationType="slide" onRequestClose={onDismiss}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
       <Pressable
-        className="flex-1 justify-end bg-black/60"
+        className="flex-1 justify-end bg-scrim"
         onPress={onDismiss}
         accessibilityRole="button"
         accessibilityLabel="Close results"
@@ -270,7 +271,7 @@ function ReadUrlSurface({ step }: ToolSurfaceProps) {
             Truncated — this is only the start of the page.
           </Text>
         )}
-        <Text className="font-sans text-caption text-secondary-text">{text}</Text>
+        <Text className="text-quiet">{text}</Text>
       </Sheet>
     </>
   );

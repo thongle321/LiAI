@@ -16,38 +16,38 @@ import { FlatList, RefreshControl, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
-import { colors } from "../../themes/tokens.ts";
-import { ScreenHeader } from "../../components/screen-header.tsx";
-import { ContentColumn } from "../../components/content-column.tsx";
-import { useLocalModelImport } from "../../hooks/useLocalModelImport.ts";
-import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
+import { colors } from "@/themes/tokens.ts";
+import { ScreenHeader } from "@/components/screen-header.tsx";
+import { ContentColumn } from "@/components/content-column.tsx";
+import { useLocalModelImport } from "@/hooks/useLocalModelImport.ts";
+import { useLoadGuard } from "@/hooks/useLoadGuard.ts";
 import { useShallow } from "zustand/shallow";
-import { useModelStore } from "../../store/modelStore.ts";
-import { useChatStore } from "../../store/chat.ts";
-import { useModelsUi } from "../../store/modelsUi.ts";
-import { isProviderActive } from "../../services/search/model-providers.ts";
+import { useModelStore } from "@/store/modelStore.ts";
+import { useChatStore } from "@/store/chat.ts";
+import { useModelsUi } from "@/store/modelsUi.ts";
+import { isProviderActive } from "@/services/search/model-providers.ts";
 import {
   buildModelGroups,
   flattenModelGroups,
   type ModelGroup,
   type ModelRow,
-} from "../../services/models/model-groups.ts";
-import { DownloadErrorDialog } from "../../components/models/download-error-dialog.tsx";
-import { ModelsHeaderRight } from "../../components/models/models-header-right.tsx";
-import { FABGroup, FAB_STACK_HEIGHT } from "../../components/models/fab-group.tsx";
-import { ModelAccordion } from "../../components/models/model-accordion.tsx";
-import { PresetModelCard } from "../../components/models/available-models.tsx";
-import { ModelCard, RemoteProviderCard } from "../../components/models/model-card.tsx";
-import { HFModelSearch } from "../../components/models/hf-model-search.tsx";
-import { RemoteModelSheet } from "../../components/models/remote-model-sheet.tsx";
-import { ModelSettingsSheet } from "../../components/models/model-settings-sheet.tsx";
-import { ModelsResetDialog } from "../../components/models/models-reset-dialog.tsx";
-import type { PresetModelFile } from "../../types/models";
+} from "@/services/models/model-groups.ts";
+import { presetPrimaryFile, presetSpecView } from "@/services/models/preset-spec.ts";
+import { DownloadErrorDialog } from "@/components/models/download-error-dialog.tsx";
+import { ModelsHeaderRight } from "@/components/models/models-header-right.tsx";
+import { FABGroup } from "@/components/models/fab-group.tsx";
+import { ModelAccordion } from "@/components/models/model-accordion.tsx";
+import { PresetModelCard } from "@/components/models/available-models.tsx";
+import { ModelCard, RemoteProviderCard } from "@/components/models/model-card.tsx";
+import { HFModelSearch } from "@/components/models/hf-model-search.tsx";
+import { RemoteModelSheet } from "@/components/models/remote-model-sheet.tsx";
+import { ModelSettingsSheet } from "@/components/models/model-settings-sheet.tsx";
+import { ModelsResetDialog } from "@/components/models/models-reset-dialog.tsx";
+import type { ModelSpec, PresetModel, PresetModelFile } from "@/types/models";
 
 export default function ModelsRoute() {
   // Stable selectors: actions never change identity, so each subscribes
   // alone and preset/download writes never re-render this screen.
-  const loadPersisted = useModelStore((s) => s.loadPersisted);
   const startDownload = useModelStore((s) => s.startDownload);
   const clearDownloadError = useModelStore((s) => s.clearDownloadError);
   const retryWithoutToken = useModelStore((s) => s.retryWithoutToken);
@@ -113,13 +113,18 @@ export default function ModelsRoute() {
   );
 
   useEffect(() => {
-    loadPersisted();
+    // No loadPersisted() here: app/index.tsx hydrates the store before any
+    // screen mounts, and the slice is single-flight, so a call from here would
+    // only ever be a no-op (D3-3).
     void loadUi();
   }, []);
 
   const [hfOpen, setHfOpen] = useState(false);
   const [remoteModalOpen, setRemoteModalOpen] = useState(false);
-  const [settingsModelId, setSettingsModelId] = useState<string | null>(null);
+  // The spec itself, not its id: a catalog preset has no store row until it
+  // is downloaded, and its settings sheet still has to open (PocketParity:
+  // the reference's settings gear works on a not-yet-downloaded model).
+  const [settingsModel, setSettingsModel] = useState<ModelSpec | null>(null);
   // PocketParity: the reset lives in its own dialog (ModelsResetDialog), not
   // an inline Alert — its copy is three paragraphs with one bolded word.
   const [resetOpen, setResetOpen] = useState(false);
@@ -165,14 +170,23 @@ export default function ModelsRoute() {
     guard(file.size, () => startDownload(modelId, file));
   }
 
-  function renderItem(item: ModelGroup["items"][number], presetDownload: typeof guardedDownload) {
+  // One card, one Download: presetPrimaryFile is the catalog's own rule for
+  // which file a preset card fetches (services/models/preset-spec.ts).
+  function downloadPresetFile(preset: PresetModel): void {
+    const file = presetPrimaryFile(preset);
+    if (!file) return;
+    guardedDownload(preset.id, file);
+  }
+
+  function renderItem(item: ModelGroup["items"][number]) {
     if (item.kind === "preset") {
       const preset = presetById.get(item.id);
       return preset ? (
         <PresetModelCard
           key={item.id}
           preset={preset}
-          onDownload={presetDownload}
+          onDownload={() => downloadPresetFile(preset)}
+          onSettings={() => setSettingsModel(presetSpecView(preset, models))}
         />
       ) : null;
     }
@@ -185,7 +199,14 @@ export default function ModelsRoute() {
           isActive={isProviderActive(activeModelId, item.id)}
           reachable={remoteCaps[item.id]?.reachable}
           onActivate={() => setActiveRemoteApi(item.id)}
-          onRemove={() => removeRemoteApi(item.id)}
+          onRemove={() => {
+            // removeRemoteApi rejects if SecureStore refuses the delete;
+            // the row is already gone either way, so there is nothing to
+            // put the user back to — log it and let the store stand.
+            void removeRemoteApi(item.id).catch((e: unknown) => {
+              console.warn("[LiAI] failed to remove remote API", e);
+            });
+          }}
         />
       ) : null;
     }
@@ -199,13 +220,15 @@ export default function ModelsRoute() {
           isActive={activeModelId === spec.id}
           onActivate={() => {
             setActiveModel(spec.id, "local");
-            if (autoNavigateToChat) router.push("/chat");
+            // navigate, not push: repeated activations would stack duplicate
+            // /chat entries and make back behave inconsistently.
+            if (autoNavigateToChat) router.navigate("/chat");
           }}
           onDeactivate={() => {
             setActiveModel(null);
             releaseEngine();
           }}
-          onSettings={() => setSettingsModelId(spec.id)}
+          onSettings={() => setSettingsModel(spec)}
         />
       );
     }
@@ -227,7 +250,7 @@ export default function ModelsRoute() {
            neither callback is reachable from a bookmark. */
         onActivate={() => {}}
         onDeactivate={() => {}}
-        onSettings={() => setSettingsModelId(spec.id)}
+        onSettings={() => setSettingsModel(spec)}
       />
     );
   }
@@ -253,7 +276,7 @@ export default function ModelsRoute() {
         />
       );
     }
-    return renderItem(row.item, guardedDownload);
+    return renderItem(row.item);
   };
 
   return (
@@ -304,8 +327,7 @@ export default function ModelsRoute() {
             // the group header above, the runtime FAB reserve below (set
             // inline on the next line, which overrides any class `pb`).
             // A list `pt` would stack a second top inset.
-            contentContainerClassName="px-5"
-            contentContainerStyle={{ paddingBottom: FAB_STACK_HEIGHT }}
+            contentContainerClassName="px-5 pb-[256px]"
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           />
@@ -329,7 +351,10 @@ export default function ModelsRoute() {
 
       <RemoteModelSheet visible={remoteModalOpen} onClose={() => setRemoteModalOpen(false)} />
 
-      <ModelSettingsSheet modelId={settingsModelId} onClose={() => setSettingsModelId(null)} />
+      <ModelSettingsSheet
+        model={settingsModel}
+        onClose={() => setSettingsModel(null)}
+      />
 
       <ModelsResetDialog
         visible={resetOpen}

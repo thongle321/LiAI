@@ -1,13 +1,13 @@
 
 /** Remote BYOK engine: OpenAI-compatible completion. */
 
-import { readSource } from "../../../jest/source";
+import { readSource } from "@/jest/source";
 
 import {
   createRemoteEngine,
   normalizeTimeoutMs,
 } from "../remote-engine";
-import type { RemoteApiProvider } from "../../../types/models";
+import type { RemoteApiProvider } from "@/types/models";
 
 function provider(): RemoteApiProvider {
   return {

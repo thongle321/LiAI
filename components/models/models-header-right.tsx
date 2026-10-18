@@ -23,9 +23,9 @@ import {
   menuEnteringFade,
   menuEnteringZoom,
   menuExiting,
-} from "../../utils/motion.ts";
-import { colors } from "../../themes/tokens.ts";
-import type { ModelsUiFilter } from "../../store/modelsUi.ts";
+} from "@/utils/motion.ts";
+import { colors } from "@/themes/tokens.ts";
+import type { ModelsUiFilter } from "@/store/modelsUi.ts";
 
 function GroupLabel({ label }: { label: string }) {
   return (
@@ -179,7 +179,7 @@ export function ModelsHeaderRight({
               right: anchor?.right ?? 16,
               width: 264,
             }}
-            className="bg-surface-1 border border-border rounded-lg overflow-hidden"
+            className="surface bg-surface-1 overflow-hidden"
           >
             {/* Scale half of the reveal, pinned to the opening corner. No
                 exiting: paper never reverses the scale, only the fade. */}

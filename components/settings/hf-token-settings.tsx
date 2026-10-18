@@ -16,8 +16,9 @@ import {
 } from "react-native";
 import { Eye, EyeOff, ExternalLink } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { useModelStore } from "../../store/modelStore";
+import { colors } from "@/themes/tokens.ts";
+import { cn } from "@/utils/cn.ts";
+import { useModelStore } from "@/store/modelStore";
 import { useSnackbar } from "../snackbar.tsx";
 import { Sheet } from "../sheet.tsx";
 import { ActionRow, SettingsSection, ToggleRow } from "../settings-rows.tsx";
@@ -99,7 +100,7 @@ function HfTokenSheet({ open, onClose }: { open: boolean; onClose: () => void })
               onPress={() => void reset()}
               disabled={busy !== null}
               className={
-                busy !== null ? "btn btn--ghost flex-1 opacity-40" : "btn btn--ghost flex-1"
+                busy !== null ? "btn btn--ghost active:opacity-80 btn--disabled flex-1" : "btn btn--ghost active:opacity-80 flex-1"
               }
               accessibilityRole="button"
               accessibilityLabel="Reset Token"
@@ -107,7 +108,7 @@ function HfTokenSheet({ open, onClose }: { open: boolean; onClose: () => void })
               {busy === "reset" ? (
                 <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Text className="font-sans text-body-md text-primary">Reset Token</Text>
+                <Text className="text-body">Reset Token</Text>
               )}
             </Pressable>
           ) : null}
@@ -116,8 +117,8 @@ function HfTokenSheet({ open, onClose }: { open: boolean; onClose: () => void })
             disabled={!draft.trim() || busy !== null}
 className={
               !draft.trim() || busy !== null
-                ? "btn btn--primary flex-1 opacity-40"
-                : "btn btn--primary flex-1"
+                ? "btn btn--primary active:opacity-80 btn--disabled flex-1"
+                : "btn btn--primary active:opacity-80 flex-1"
             }
             accessibilityRole="button"
             accessibilityLabel="Save Token"
@@ -125,7 +126,7 @@ className={
             {busy === "save" ? (
               <ActivityIndicator size="small" color={colors.surface1} />
             ) : (
-              <Text className="font-sans-semibold text-body-md text-on-primary">Save Token</Text>
+              <Text className="text-action">Save Token</Text>
             )}
           </Pressable>
         </View>
@@ -149,7 +150,7 @@ className={
         ))}
         <Pressable
           onPress={() =>
-            void Linking.openURL("https://huggingface.co/settings/tokens")
+            void Linking.openURL("https://huggingface.co/settings/tokens").catch(() => {})
           }
           className="mt-1 self-start flex-row items-center gap-1"
           accessibilityRole="link"
@@ -173,7 +174,7 @@ className={
           autoCapitalize="none"
           autoCorrect={false}
           spellCheck={false}
-          className="input font-sans text-body-md pr-12"
+          className={cn("input font-sans text-body-md", "pr-12")}
           placeholderTextColor={colors.secondaryText}
           accessibilityLabel="Personal Access Token"
         />
@@ -201,12 +202,7 @@ export function HfTokenSettings() {
   const hfToken = useModelStore((s) => s.hfToken);
   const useHfToken = useModelStore((s) => s.useHfToken);
   const setUseHfToken = useModelStore((s) => s.setUseHfToken);
-  const loadPersisted = useModelStore((s) => s.loadPersisted);
   const [sheetOpen, setSheetOpen] = useState(false);
-
-  useEffect(() => {
-    void loadPersisted();
-  }, []);
 
   return (
     <SettingsSection>

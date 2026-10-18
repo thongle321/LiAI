@@ -27,7 +27,7 @@ export function ScreenHeader({ title, right }: { title: string; right?: ReactNod
       <View className="w-12 flex-row items-center">
         <Pressable
           onPress={() => navigation.openDrawer()}
-          className="h-12 w-12 items-center justify-center"
+          className="icon-btn"
           accessibilityRole="button"
           accessibilityLabel="Open menu"
           hitSlop={4}

@@ -5,8 +5,8 @@ import { Check, Copy } from "lucide-react-native";
 import CodeHighlighter from "react-native-code-highlighter";
 import github from "react-syntax-highlighter/dist/esm/styles/hljs/github";
 
-import { colors, font, typeScale } from "../../themes/tokens.ts";
-import { useCopy } from "../../hooks/useCopy.ts";
+import { colors, font, typeScale } from "@/themes/tokens.ts";
+import { useCopy } from "@/hooks/useCopy.ts";
 
 /** github's own white code background cleared so the Mist card shows through. */
 const CODE_STYLE = {
@@ -24,12 +24,12 @@ export function CodeBlock({
   const { copied, copy } = useCopy();
 
   return (
-    <View className="mt-2 overflow-hidden rounded-card border border-border bg-surface-2">
+    <View className="surface mt-2 overflow-hidden bg-surface-2">
       <View className="flex-row items-center justify-between border-b border-border px-3 py-2">
-        <Text className="font-sans text-caption text-secondary-text">{language}</Text>
+        <Text className="text-quiet">{language}</Text>
         <Pressable
           onPress={() => copy(text)}
-          className="h-12 w-12 items-center justify-center"
+          className="icon-btn"
           hitSlop={4}
           accessibilityRole="button"
           accessibilityLabel={copied ? "Copied" : "Copy code"}

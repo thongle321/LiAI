@@ -19,16 +19,11 @@ import { memo, useState } from "react";
 import Animated from "react-native-reanimated";
 import { CheckCheck, CircleAlert, Wrench } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { formatTime, formatToolMetrics } from "../../utils/format.ts";
-import {
-  MOTION_DURATION_MS,
-  bubbleEntering,
-  fadeExiting,
-} from "../../utils/motion.ts";
-import type { MessageRow } from "../../services/chat/rows.ts";
-import { blocksOf, turnText } from "../../services/chat/blocks.ts";
-import type { AgentStep } from "../../types/chat.ts";
+import { colors } from "@/themes/tokens.ts";
+import { formatTime, formatToolMetrics } from "@/utils/format.ts";
+import type { MessageRow } from "@/services/chat/rows.ts";
+import { blocksOf, turnText } from "@/services/chat/blocks.ts";
+import type { AgentStep } from "@/types/chat.ts";
 import { MarkdownView } from "./markdown-view.tsx";
 import { MessageActions } from "./message-actions.tsx";
 import { LinkPreviewCard } from "./link-preview.tsx";
@@ -37,8 +32,8 @@ import { MessageMenu } from "./message-menu.tsx";
 import { ToolErrorBlock } from "./tool-error-block.tsx";
 import { ToolMetricsLine, toolSurfaceFor } from "./tool-surfaces.tsx";
 import { ImageViewer } from "./image-viewer.tsx";
-import type { PickableModel } from "../../services/chat/models.ts";
-import type { MessageWidths } from "../../services/chat/message-width.ts";
+import type { PickableModel } from "@/services/chat/models.ts";
+import type { MessageWidths } from "@/services/chat/message-width.ts";
 
 /** One tool block, as a SIBLING of the text bubbles — never nested in
  * one. THREE-WAY DISPATCH, in this order (G5):
@@ -77,7 +72,7 @@ function ToolBlock({ step }: { step: AgentStep }) {
   return (
     <View className="flex-row items-center gap-1 self-start rounded-full border border-border bg-surface-2 px-2 py-0.5">
       <Wrench size={11} color={colors.secondaryText} />
-      <Text className="font-sans text-caption text-secondary-text">
+      <Text className="text-quiet">
         {/* PocketPal's chip reads "Used {{name}}" (ToolUsedChip.tsx:53-66),
             so the reader can tell a tool ran from a label that just names
             one. Their metrics suffix is the same " · 1,500 tokens · 35s"
@@ -124,9 +119,11 @@ export const MessageListItem = memo(function MessageListItem({
   contextBannerVisible?: boolean;
 }) {
   const { message, grouped, status } = row;
-  const duration = MOTION_DURATION_MS;
-  const entering = bubbleEntering(duration);
-  const exiting = fadeExiting(duration);
+  // No per-row entering/exiting here. Rows unmount as the render window
+  // moves, so a per-row entrance replays every time the reader scrolls back
+  // through history — offscreen-compositing work on the row they are reading.
+  // The list animates reflow once via FlatList's itemLayoutAnimation
+  // (see message-list.tsx), which is what this replaced (D4-2).
   // Previews and actions target settled turns: a half-streamed URL would
   // trigger a garbage preview fetch, and actions need final text.
   const settled = message.streaming !== true;
@@ -173,8 +170,6 @@ export const MessageListItem = memo(function MessageListItem({
     return (
       <>
         <Animated.View
-          entering={entering}
-          exiting={exiting}
           className={grouped ? "mb-1 self-end items-end" : "mb-4 self-end items-end"}
           style={{ maxWidth: widths.user }}
         >
@@ -213,7 +208,7 @@ export const MessageListItem = memo(function MessageListItem({
               grouped turn is visual noise. */}
           {!grouped && (
             <View className="mt-1 flex-row items-center">
-              <Text className="font-sans text-caption text-secondary-text">
+              <Text className="text-quiet">
                 {formatTime(message.at)}
               </Text>
               {/* Three states, one row. The error icon is the row's own
@@ -244,8 +239,6 @@ export const MessageListItem = memo(function MessageListItem({
     // see services/chat//message-width.ts. Vertical rhythm is PocketPal's
     // (styles.ts:24-32): 4px within a group, 16px between groups.
     <Animated.View
-      entering={entering}
-      exiting={exiting}
       className={grouped ? "mb-1" : "mb-4"}
       style={{ maxWidth: widths.assistant }}
     >

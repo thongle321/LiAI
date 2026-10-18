@@ -27,18 +27,18 @@ import { openSettings } from "expo-linking";
 import { useCameraDevice, useCameraPermission } from "react-native-vision-camera";
 import type { Camera as VisionCameraView } from "react-native-vision-camera";
 
-import { colors } from "../../../themes/tokens.ts";
-import { useKeyboardStore } from "../../../store/keyboard.ts";
-import { VOICE_STATUS_LABEL } from "../../../services/voice/voice-status.ts";
-import { useVisionTurn } from "../../../hooks/useVisionTurn.ts";
-import { useWatchMode } from "../../../hooks/useWatchMode.ts";
-import { useModelReady } from "../../../hooks/useModelReady.ts";
-import { useModelStore } from "../../../store/modelStore";
+import { colors } from "@/themes/tokens.ts";
+import { useKeyboardStore } from "@/store/keyboard.ts";
+import { VOICE_STATUS_LABEL } from "@/services/voice/voice-status.ts";
+import { useVisionTurn } from "@/hooks/useVisionTurn.ts";
+import { useWatchMode } from "@/hooks/useWatchMode.ts";
+import { useModelReady } from "@/hooks/useModelReady.ts";
+import { useModelStore } from "@/store/modelStore";
 import {
   VisionBottomPanel,
   VisionPreview,
   VisionTopFloat,
-} from "../../../components/vision-overlays.tsx";
+} from "@/components/vision/vision-overlays.tsx";
 
 export default function VisionScreen() {
   const [position, setPosition] = useState<"back" | "front">("back");
@@ -100,7 +100,7 @@ export default function VisionScreen() {
     12 + (keyboardVisible ? tabBarHeight + insets.bottom : 0);
   // Two dead ends land on the same system screen: a denied camera and a
   // blocked mic. One handler for both.
-  const goToSettings = () => void openSettings();
+  const goToSettings = () => void openSettings().catch(() => {});
 
   const {
     phase,

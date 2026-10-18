@@ -15,9 +15,8 @@
 
 import { Linking, Modal, Pressable, Text, View } from "react-native";
 
-import { scrim } from "../../themes/tokens.ts";
-import { downloadErrorCopy } from "../../services/models/download-error.ts";
-import type { DownloadErrorCode } from "../../types/models.ts";
+import { downloadErrorCopy } from "@/services/models/download-error.ts";
+import type { DownloadErrorCode } from "@/types/models.ts";
 
 export function DownloadErrorDialog({
   error,
@@ -47,10 +46,7 @@ export function DownloadErrorDialog({
   const showTokenRecovery = errorCode === "authentication" && onRetryWithoutToken !== undefined;
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
-      <View
-        className="flex-1 items-center justify-center p-5"
-        style={{ backgroundColor: scrim }}
-      >
+      <View className="flex-1 items-center justify-center bg-scrim p-5">
         <View className="w-full rounded-2xl border border-border bg-surface-1 p-5">
           <Text
             accessibilityRole="alert"
@@ -77,12 +73,12 @@ export function DownloadErrorDialog({
           )}
           {modelUrl ? (
             <Pressable
-              onPress={() => void Linking.openURL(modelUrl)}
+              onPress={() => void Linking.openURL(modelUrl).catch(() => {})}
               className="mb-2 min-h-12 w-full items-center"
               accessibilityRole="link"
               accessibilityLabel="View this model on Hugging Face"
             >
-              <Text className="font-sans text-body-md text-primary">
+              <Text className="text-body">
                 View on Hugging Face
               </Text>
             </Pressable>
@@ -90,11 +86,11 @@ export function DownloadErrorDialog({
           {showTokenRecovery && (
             <Pressable
               onPress={onRetryWithoutToken}
-              className="btn btn--secondary mb-2 w-full"
+              className="btn btn--secondary active:opacity-80 mb-2 w-full"
               accessibilityRole="button"
               accessibilityLabel="Download again without your Hugging Face token"
             >
-              <Text className="font-sans text-body-md text-primary">
+              <Text className="text-body">
                 Retry without token
               </Text>
             </Pressable>
@@ -102,19 +98,19 @@ export function DownloadErrorDialog({
           <View className="flex-row gap-2">
             <Pressable
               onPress={onDismiss}
-              className="btn btn--secondary flex-1"
+              className="btn btn--secondary active:opacity-80 flex-1"
               accessibilityRole="button"
               accessibilityLabel="Dismiss download error"
             >
-              <Text className="font-sans text-body-md text-primary">Dismiss</Text>
+              <Text className="text-body">Dismiss</Text>
             </Pressable>
             <Pressable
               onPress={onRetry}
-              className="btn btn--primary flex-1"
+              className="btn btn--primary active:opacity-80 flex-1"
               accessibilityRole="button"
               accessibilityLabel="Try the download again"
             >
-              <Text className="font-sans-semibold text-body-md text-on-primary">
+              <Text className="text-action">
                 Try Again
               </Text>
             </Pressable>

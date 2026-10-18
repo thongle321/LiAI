@@ -22,22 +22,26 @@
 import { ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { colors } from "../../themes/tokens.ts";
-import { ScreenHeader } from "../../components/screen-header.tsx";
-import { ContentColumn } from "../../components/content-column.tsx";
+import { colors } from "@/themes/tokens.ts";
+import { ScreenHeader } from "@/components/screen-header.tsx";
+import { ContentColumn } from "@/components/content-column.tsx";
 import {
   MemorySettings,
   ModelInitializationSettings,
   ModelLoadingSettings,
-} from "../../components/settings/inference-settings.tsx";
-import { SearchSettings } from "../../components/settings/search-settings.tsx";
-import { HfTokenSettings } from "../../components/settings/hf-token-settings.tsx";
+} from "@/components/settings/inference-settings.tsx";
+import { SearchSettings } from "@/components/settings/search-settings.tsx";
+import { HfTokenSettings } from "@/components/settings/hf-token-settings.tsx";
 
 export default function SettingsScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
       <ScreenHeader title="Settings" />
-      <ScrollView className="flex-1" contentContainerClassName="w-full">
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="w-full"
+        automaticallyAdjustKeyboardInsets
+        >
         <ContentColumn className="p-5">
           <ModelInitializationSettings />
           <MemorySettings />

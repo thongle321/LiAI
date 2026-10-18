@@ -1,5 +1,6 @@
 import "../global.css";
 import { Stack } from "expo-router";
+import { ThemeProvider, DefaultTheme } from "expo-router/react-navigation";
 import * as SplashScreen from "expo-splash-screen";
 import {
   Inter_400Regular,
@@ -8,11 +9,13 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { Host } from "@expo/ui";
+import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider, useKeyboardState } from "react-native-keyboard-controller";
 import { ScopedVariables, Uniwind } from "uniwind";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { isOnboarded } from "../services/onboarding.ts";
 import { colors } from "../themes/tokens.ts";
 import { SnackbarProvider } from "../components/snackbar.tsx";
 import { useKeyboardStore } from "../store/keyboard.ts";
@@ -49,11 +52,21 @@ function KeyboardVisibilitySync() {
 }
 
 export default function RootLayout() {
-  const [loaded] = useFonts({
+  const [loaded, error] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
   });
+  // First-run gate, held here so the navigator itself enforces it (D1-1).
+  // A deep link to /models or /chat resolves WITHOUT mounting index.tsx,
+  // so a Redirect there cannot stop it — only removing the screens from the
+  // navigator can. Optimistically true (most launches are returning users);
+  // a false flip hides the drawer and the router falls back to index, which
+  // redirects to onboarding.
+  const [onboarded, setOnboarded] = useState(true);
+  useEffect(() => {
+    void isOnboarded().then(setOnboarded);
+  }, []);
   // Release the loaded model when the app is backgrounded, so a multi-GB
   // GGUF is not held resident (Settings > Model Loading).
   useEngineOffload();
@@ -67,21 +80,28 @@ export default function RootLayout() {
   // effect would flash one font-less frame, so it runs on the same
   // render that first returns UI. The ref fires it exactly once — repeat
   // renders must not re-hide (unawaited native call per render).
+  // Font load failure must still release the splash (otherwise the app
+  // hangs on the native splash). On the success path the splash stays up
+  // until the first-run gate in app/index.tsx resolves, so cold start has
+  // no blank frame between splash and first screen (D4-19).
   const splashHidden = useRef(false);
-  if (loaded && !splashHidden.current) {
+  if (error && !splashHidden.current) {
     splashHidden.current = true;
+    console.error("[LiAI] Inter font load failed", error);
     void SplashScreen.hideAsync().catch(() => {});
   }
 
   // Gate first paint on the font resolving so nothing flashes in the
-  // system typeface (DESIGN.md, Single Family Rule).
-  if (!loaded) return null;
+  // system typeface (DESIGN.md, Single Family Rule). On a load failure,
+  // fall through and render with the system font rather than hanging.
+  if (!loaded && !error) return null;
 
   return (
     // One Host for the whole app: it seeds every @expo/ui subtree with
     // Signal Blue and forces the light scheme, so native switches, sheets
     // and pickers land in LiAI's world instead of the platform's default.
     <Host colorScheme="light" seedColor={colors.primary} style={{ flex: 1 }}>
+      <StatusBar style="dark" />
       {/* Fluid Type (DESIGN.md): scoped --text-* overrides so every
           text-* class re-resolves at this device's width (375dp base,
           factor 0.5, clamp [0.9, 1.1]). One wrap, zero call sites. */}
@@ -103,6 +123,7 @@ export default function RootLayout() {
               overlays for a frame or two (the card that still moved). */}
           <KeyboardVisibilitySync />
           <SnackbarProvider>
+          <ThemeProvider value={DefaultTheme}>
           <Stack
             screenOptions={{
               headerShown: false,
@@ -112,10 +133,18 @@ export default function RootLayout() {
             <Stack.Screen name="index" />
             {/* Drawer group owns EVERY destination: (tabs) plus
                 models/settings/voice-settings/about. Tab switches never
-                animate, so the shared bar stays static. */}
-            <Stack.Screen name="(drawer)" options={{ animation: "none" }} />
+                animate, so the shared bar stays static.
+
+                Wrapped in Stack.Protected so a deep link cannot reach these
+                screens before onboarding completes (D1-1): with guard=false
+                the navigator has no drawer to resolve to, so it falls back to
+                the initial route (index), which redirects to onboarding. */}
+            <Stack.Protected guard={onboarded}>
+              <Stack.Screen name="(drawer)" options={{ animation: "none" }} />
+            </Stack.Protected>
             <Stack.Screen name="onboarding" />
           </Stack>
+          </ThemeProvider>
           </SnackbarProvider>
         </KeyboardProvider>
         </GestureHandlerRootView>

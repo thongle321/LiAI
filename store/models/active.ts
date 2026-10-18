@@ -17,10 +17,12 @@ export const createActiveSlice: StateCreator<ModelStore, [], [], ActiveSlice> = 
     // half-torn-down active model. Mirrors the remote deactivate path.
     const nextType = modelId === null ? null : providerType;
     set({ activeModelId: modelId, activeProviderType: nextType });
-    asyncStorage.setItem(
-      ACTIVE_MODEL_KEY,
-      JSON.stringify({ modelId, providerType: nextType }),
-    );
+    void asyncStorage
+      .setItem(
+        ACTIVE_MODEL_KEY,
+        JSON.stringify({ modelId, providerType: nextType }),
+      )
+      .catch(() => {});
   },
 
   getActiveModel: () => {

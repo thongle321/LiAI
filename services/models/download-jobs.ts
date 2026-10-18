@@ -5,8 +5,8 @@
  * a live download. Every lookup goes through here: latest wins.
  */
 
-import type { DownloadJob } from "../../types/models.ts";
-import type { NativeDownloadState } from "../../modules/native-download/src/NativeDownloadModule.ts";
+import type { DownloadJob } from "@/types/models.ts";
+import type { NativeDownloadState } from "@/modules/native-download/src/NativeDownloadModule.ts";
 
 const TERMINAL_STATES: ReadonlySet<NativeDownloadState> = new Set([
   "completed",

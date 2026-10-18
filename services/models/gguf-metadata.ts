@@ -10,7 +10,7 @@
  * services/models//gguf-header.ts.
  */
 
-import { positiveFinite } from "../../utils/guards.ts";
+import { positiveFinite } from "@/utils/guards.ts";
 
 /** A raw GGUF header: `llama.rn`'s `loadLlamaModelInfo` result. */
 export type GgufHeader = Record<string, unknown>;

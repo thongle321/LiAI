@@ -25,21 +25,22 @@ import {
   ChevronDown,
   ChevronRight,
   Lock,
+  RefreshCw,
   Search,
   SlidersHorizontal,
   X,
 } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { useModelStore } from "../../store/modelStore";
+import { colors } from "@/themes/tokens.ts";
+import { useModelStore } from "@/store/modelStore";
 import {
   extractHFModelTitle,
   formatNumber,
   isVisionModel,
   timeAgo,
-} from "../../services/models/hf-format.ts";
+} from "@/services/models/hf-format.ts";
 import { ModelTypeIcon } from "./model-bits.tsx";
-import type { HFModelSearchResult } from "../../types/models";
+import type { HFModelSearchResult } from "@/types/models";
 
 export const SORT_OPTIONS: {
   value: "relevance" | "downloads" | "lastModified" | "likes";
@@ -76,6 +77,8 @@ export function HFSearchView({
   const searchFilters = useModelStore((s) => s.searchFilters);
   const loadMoreModels = useModelStore((s) => s.loadMoreModels);
   const disableHfTokenAndRetry = useModelStore((s) => s.disableHfTokenAndRetry);
+  const searchQuery = useModelStore((s) => s.searchQuery);
+  const retrySearch = useModelStore((s) => s.searchModels);
   // A ref, not state: this runs on scroll and must not re-render the list.
   const lastPageCall = useRef(0);
 
@@ -138,7 +141,7 @@ export function HFSearchView({
             accessibilityRole="button"
             accessibilityLabel="Sort results"
           >
-            <Text className="font-sans text-body-sm text-secondary-text">
+            <Text className="text-quiet">
               {SORT_OPTIONS.find((o) => o.value === searchFilters.sortBy)?.label ?? "Sort"}
             </Text>
             <ChevronDown size={14} color={colors.secondaryText} />
@@ -162,6 +165,18 @@ export function HFSearchView({
               <Text className="font-sans text-body-sm text-primary">
                 Disable Token &amp; Retry
               </Text>
+            </Pressable>
+          ) : searchError.code === "network" ? (
+            /* Offline-shaped error: the only fix is reconnecting, so the
+               affordance is a plain re-run of the same query. */
+            <Pressable
+              onPress={() => void retrySearch(searchQuery)}
+              className="min-h-12 flex-row items-center gap-2 mt-2 self-start rounded-lg border border-border px-4 py-2"
+              accessibilityRole="button"
+              accessibilityLabel="Retry search"
+            >
+              <RefreshCw size={14} color={colors.primary} />
+              <Text className="font-sans text-body-sm text-primary">Retry</Text>
             </Pressable>
           ) : null}
         </View>
@@ -221,7 +236,7 @@ export function HFSearchView({
                 {result.gated ? (
                   <View className="flex-row items-center gap-1 px-2 py-1 bg-surface-2 border border-border rounded">
                     <Lock size={10} color={colors.secondaryText} />
-                    <Text className="font-sans text-caption text-secondary-text">
+                    <Text className="text-quiet">
                       Requires Token
                     </Text>
                   </View>

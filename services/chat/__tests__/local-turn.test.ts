@@ -1,8 +1,8 @@
 /** Local turn: engine + agent + persisted turns. */
 
 import { createTurnRunner } from "../turn.ts";
-import type { CompletionEngine } from "../../inference/engine.ts";
-import type { ChatMessage } from "../../../types/chat.ts";
+import type { CompletionEngine } from "@/services/inference/engine.ts";
+import type { ChatMessage } from "@/types/chat.ts";
 
 function bubble(over: Partial<ChatMessage> = {}): ChatMessage {
   return {
@@ -75,7 +75,7 @@ function deps(over: Record<string, unknown> = {}) {
     getStore: async () => memoryStore(),
     getSearch: async () => null,
     getSystemPrompt: async () => undefined,
-    saveImage: async () => null,
+    resolveImage: async () => null,
     ...over,
   };
 }
@@ -166,12 +166,12 @@ describe("createTurnRunner", () => {
     await await expect(runTurn("hi", { sessionId: null, history: [] }, undefined)).rejects.toThrow(/empty reply/);
   });
 
-  it("removes the saved image files after a successful turn", async () => {
+  it("removes only the files the turn itself wrote (D5-4)", async () => {
     const removed: string[] = [];
     const images = ["data:image/jpeg;base64,AAA", "data:image/jpeg;base64,BB"];
     const runTurn = createTurnRunner({
       ...deps(),
-      saveImage: async (uri: string) => `/tmp/img-${uri.length}.jpg`,
+      resolveImage: async (uri: string) => ({ path: `/tmp/img-${uri.length}.jpg`, owned: true }),
       removeImages: async (paths: string[]) => {
         removed.push(...paths);
       },
@@ -185,6 +185,87 @@ describe("createTurnRunner", () => {
     expect(removed).toEqual(images.map((u) => `/tmp/img-${u.length}.jpg`));
   });
 
+  it("keeps a borrowed attachment: the history still renders that photo", async () => {
+    // The picked file is the message's own attachment, so deleting it
+    // would blank a thumbnail the user can still see (D5-4).
+    const removed: string[] = [];
+    const requests: Array<{ imagePaths?: string[] }> = [];
+    const runTurn = createTurnRunner({
+      ...deps({
+        ensureEngine: async () => ({
+          completion: async (request: { imagePaths?: string[] }) => {
+            requests.push(request);
+            return scriptedEngine("a cat").completion(
+              { messages: [] } as never,
+              { onToken: () => {} },
+            );
+          },
+          stopCompletion: async () => {},
+        }),
+      }),
+      resolveImage: async (value: string) => ({ path: value, owned: false }),
+      removeImages: async (paths: string[]) => {
+        removed.push(...paths);
+      },
+    });
+    const out = await runTurn(
+      "look",
+      { sessionId: "s1", history: [], images: ["file:///cache/a.jpg"] },
+      undefined,
+    );
+    expect(out.reply).toBe("a cat");
+    expect(requests[0].imagePaths).toEqual(["file:///cache/a.jpg"]);
+    expect(removed).toEqual([]);
+  });
+
+  it("never encodes for a local turn, and encodes for a remote one (D5-4)", async () => {
+    // The local engine reads media_paths as they stand; only a remote
+    // server, which cannot see our cache directory, needs a data URI.
+    const requests: Array<Record<string, unknown>> = [];
+    const remote = {
+      kind: "remote",
+      provider: {
+        id: "p1",
+        name: "Test",
+        providerType: "custom_openai",
+        baseUrl: "https://example.test/v1",
+        apiKey: "k",
+        modelName: "gpt-test",
+        isActive: true,
+      },
+    } as const;
+    const capturing = async (request: Record<string, unknown>) => {
+      requests.push(request);
+      return scriptedEngine("ok").completion(
+        { messages: [] } as never,
+        { onToken: () => {} },
+      );
+    };
+    const base = {
+      resolveImage: async (value: string) => ({ path: value, owned: false }),
+      toDataUris: async (images: string[]) => images.map((u) => `encoded(${u})`),
+      ensureEngine: async () => ({
+        completion: capturing,
+        stopCompletion: async () => {},
+      }),
+    };
+    const image = "file:///cache/a.jpg";
+
+    await createTurnRunner({
+      ...deps(base),
+      getEngineSource: async () => ({ kind: "local", fileName: "a.gguf" }) as const,
+    })("look", { sessionId: "s1", history: [], images: [image] }, undefined);
+    expect(requests[0].imageDataUris).toBe(undefined);
+    expect(requests[0].imagePaths).toEqual([image]);
+
+    await createTurnRunner({
+      ...deps(base),
+      getEngineSource: async () => remote,
+    })("look", { sessionId: "s1", history: [], images: [image] }, undefined);
+    expect(requests[1].imageDataUris).toEqual([`encoded(${image})`]);
+    expect(requests[1].imagePaths).toEqual([image]);
+  });
+
   it("removes the saved image files even when the run fails", async () => {
     const removed: string[] = [];
     const runTurn = createTurnRunner({
@@ -195,7 +276,7 @@ describe("createTurnRunner", () => {
         },
         stopCompletion: async () => {},
       }),
-      saveImage: async (uri: string) => `/tmp/img-${uri.length}.jpg`,
+      resolveImage: async (uri: string) => ({ path: `/tmp/img-${uri.length}.jpg`, owned: true }),
       removeImages: async (paths: string[]) => {
         removed.push(...paths);
       },

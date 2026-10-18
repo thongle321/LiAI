@@ -8,17 +8,20 @@
 
 export type ImageSource = "camera" | "gallery";
 
-/** Structural slice of expo-image-picker the seam touches (fakes satisfy it). */
+/** Structural slice of expo-image-picker the seam touches (fakes satisfy it).
+ *
+ * No media-library permission methods: the gallery uses the system photo
+ * picker, which needs no permission (D5-2). */
 export interface ImageLauncher {
-  requestCameraPermissionsAsync(): Promise<{ status: string }>;
-  requestMediaLibraryPermissionsAsync(): Promise<{ status: string }>;
+  getCameraPermissionsAsync(): Promise<{ granted: boolean; canAskAgain: boolean }>;
+  requestCameraPermissionsAsync(): Promise<{ granted: boolean; canAskAgain: boolean }>;
   launchCameraAsync(options: Record<string, unknown>): Promise<ImagePickResult>;
   launchImageLibraryAsync(options: Record<string, unknown>): Promise<ImagePickResult>;
 }
 
 export interface ImagePickResult {
   canceled: boolean;
-  assets?: Array<{ base64?: string; mimeType?: string }>;
+  assets?: Array<{ uri?: string }>;
 }
 
 async function defaultLauncher(): Promise<ImageLauncher> {
@@ -27,45 +30,65 @@ async function defaultLauncher(): Promise<ImageLauncher> {
   return (await import("expo-image-picker")) as unknown as ImageLauncher;
 }
 
-/** Attached photos travel as `data:<mime>;base64,<payload>`. */
-export function toDataUri(base64: string, mime: string | undefined): string {
-  return `data:${mime ?? "image/jpeg"};base64,${base64}`;
-}
-
-/** True when the OS grants photo access (mirrors ensureMicAccess). */
+/** Photo permission gate (mirrors ensureMicAccess): a permanent denial
+ *  never pops up again, so route to Settings instead of silently no-oping.
+ *
+ *  CAMERA ONLY. The gallery never asks: `launchImageLibraryAsync` opens the
+ *  system photo picker on Android 13+ and iOS 14+, which grants scoped
+ *  access to just the chosen photos. Pre-flighting the media-library
+ *  permission asked the OS for `READ_MEDIA_IMAGES`, which this app does
+ *  not declare (the manifest carries only `READ_EXTERNAL_STORAGE
+ *  maxSdkVersion=32`), so on the most common devices the request resolved
+ *  denied with no prompt and attach silently returned nothing (D5-2). */
+export type PhotoAccess = "granted" | "settings" | "unavailable";
 export async function ensurePhotoAccess(
   source: ImageSource,
   launcher: ImageLauncher,
-): Promise<boolean> {
-  const { status } =
-    source === "camera"
-      ? await launcher.requestCameraPermissionsAsync()
-      : await launcher.requestMediaLibraryPermissionsAsync();
-  return status === "granted";
+): Promise<PhotoAccess> {
+  if (source === "gallery") return "granted";
+  try {
+    const current = await launcher.getCameraPermissionsAsync();
+    if (current.granted) return "granted";
+    if (!current.canAskAgain) return "settings";
+    const res = await launcher.requestCameraPermissionsAsync();
+    return res.granted ? "granted" : "settings";
+  } catch {
+    return "unavailable";
+  }
 }
 
-// ponytail: quality 0.7 keeps a 12MP shot in the low single-digit MBs;
-// full-resolution base64 would balloon the JSON chat body.
-const PICKER_OPTS = { mediaTypes: ["images"], base64: true, quality: 0.7 } as const;
+// quality 0.7 keeps a 12MP shot in the low single-digit MBs: it re-encodes
+// the captured file down, so the file we keep is the small one. No
+// `base64` - the platform's cache URI is the attachment from here to the
+// engine and the history bubble, and nothing needs an encoded copy of it
+// (D5-4; PocketParity: pocketpal-ai never asks for base64 either).
+const PICKER_OPTS = { mediaTypes: ["images"], quality: 0.7 } as const;
 
 /** How many photos one turn may carry. PocketPal's gallery
  *  `selectionLimit` (ChatInput.tsx:320). */
 export const MAX_IMAGES = 5;
 
-/** Data-uris for the picked photos; EMPTY (not null) on cancel, denial, or
+/** File URIs for the picked photos; EMPTY (not null) on cancel, denial, or
  *  an empty payload.
  *
- *  The camera yields exactly one shot; the gallery asks for up to
- *  MAX_IMAGES. The list is also truncated HERE rather than trusting the
- *  platform to honour `selectionLimit` -- it is advisory, and an
- *  unbounded attach is a multi-megabyte base64 body the model never
- *  wanted. */
+ *  Each URI is the platform's own cached file, passed through verbatim:
+ *  llama's `media_paths` takes the `file://` form as it stands, and the
+ *  history bubble renders it as-is. The list is truncated HERE rather than
+ *  trusting the platform to honour `selectionLimit` -- it is advisory,
+ *  and an unbounded attach is a body the model never wanted. */
 export async function pickImages(
   source: ImageSource,
   launcher?: ImageLauncher,
 ): Promise<string[]> {
   const mod = launcher ?? (await defaultLauncher());
-  if (!(await ensurePhotoAccess(source, mod))) return [];
+  const access = await ensurePhotoAccess(source, mod);
+  if (access === "settings") {
+    // Permanent denial: the OS won't prompt again, so take the user to
+    // the only place that can unblock them (D5-9).
+    void (await import("expo-linking")).openSettings().catch(() => {});
+    return [];
+  }
+  if (access !== "granted") return [];
   const result =
     source === "camera"
       ? await mod.launchCameraAsync({ ...PICKER_OPTS })
@@ -77,8 +100,8 @@ export async function pickImages(
   const uris: string[] = [];
   for (const asset of result.assets ?? []) {
     if (uris.length >= MAX_IMAGES) break;
-    if (asset.base64 === undefined || asset.base64 === "") continue;
-    uris.push(toDataUri(asset.base64, asset.mimeType));
+    if (asset.uri === undefined || asset.uri === "") continue;
+    uris.push(asset.uri);
   }
   return uris;
 }

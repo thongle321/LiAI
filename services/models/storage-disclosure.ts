@@ -9,7 +9,7 @@
  * this whole change exists to remove.
  */
 
-import { modelFitsOnDevice } from "../../utils/storage-fit.ts";
+import { modelFitsOnDevice } from "@/utils/storage-fit.ts";
 import { formatBytes } from "./progress.ts";
 
 export interface StorageDisclosureInput {

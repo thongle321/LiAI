@@ -47,21 +47,22 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { X, Check } from "lucide-react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
-import { useModelStore } from "../../store/modelStore";
-import { useInference } from "../../store/inference.ts";
+import { useModelStore } from "@/store/modelStore";
+import { useInference } from "@/store/inference.ts";
 import { Sheet } from "../sheet.tsx";
 import { ToggleRow } from "../settings-rows.tsx";
 import { ChatTemplateDialog } from "./chat-template-dialog.tsx";
 import { ModelMultimodalSection } from "./model-multimodal-section.tsx";
-import { DEFAULT_MODEL_SETTINGS } from "../../utils/model-settings";
-import type { ChatTemplatePreset } from "../../utils/chat-templates.ts";
-import { resolveThinking } from "../../services/inference/thinking.ts";
+import { DEFAULT_MODEL_SETTINGS } from "@/utils/model-settings";
+import type { ChatTemplatePreset } from "@/utils/chat-templates.ts";
+import type { ModelSpec } from "@/types/models";
+import { resolveThinking } from "@/services/inference/thinking.ts";
 import {
   DEFAULT_EFFORT_LEVEL,
   EFFORT_LABELS,
   EFFORT_LEVELS,
-} from "../../utils/reasoning-capability.ts";
-import { colors } from "../../themes/tokens.ts";
+} from "@/utils/reasoning-capability.ts";
+import { colors } from "@/themes/tokens.ts";
 
 /** PocketPal's 1px hairline Divider between rows. */
 function Divider() {
@@ -131,20 +132,29 @@ function parseStopWords(text: string): string[] {
 }
 
 export function ModelSettingsSheet({
-  modelId,
+  model,
   onClose,
 }: {
-  modelId: string | null;
+  /** The model being configured — a store row, or a catalog preset that has
+   *  no row yet because it has never been downloaded. */
+  model: ModelSpec | null;
   onClose: () => void;
 }) {
   // Stable selectors: both are stable store functions, so this sheet
   // never re-renders on model-store writes.
   const getModelSettings = useModelStore((s) => s.getModelSettings);
   const updateModelSettings = useModelStore((s) => s.updateModelSettings);
-  // The spec carries origin (remote guard) and the projector candidates.
-  const spec = useModelStore((s) =>
+  const modelId = model?.id ?? null;
+  // The store's own row, when there is one: it carries origin (the remote
+  // guard) and the projector candidates. Stable selector, no prop in it.
+  const stored = useModelStore((s) =>
     modelId === null ? undefined : s.models.find((m) => m.id === modelId),
   );
+  // A catalog preset passes its own view and has no row until it is
+  // downloaded; the store's row takes over the moment the file lands — same
+  // id, so every setting saved here survives the download (PocketParity: the
+  // reference keys per-model settings the same way).
+  const spec = stored ?? model;
   const setThinkingOverride = useInference((s) => s.setThinkingOverride);
   const thinkingOverrides = useInference((s) => s.thinkingOverrides);
   const setEffortOverride = useInference((s) => s.setEffortOverride);
@@ -265,8 +275,9 @@ export function ModelSettingsSheet({
   const effortLevel = modelId === null ? null : (effortOverrides[modelId] ?? null);
   const effortArmed = effortLevel !== null;
 
-  if (modelId === null) return null;
-
+  // The Sheet stays mounted so its dismiss animation plays on close;
+  // `visible` drives show/hide, and the contents render null when
+  // there is no model to configure (D4-1).
   const templatePreview = chatTemplate.trim().slice(0, 30);
 
   return (
@@ -308,7 +319,7 @@ export function ModelSettingsSheet({
           {!isRemote ? (
             <Pressable
               onPress={handleSave}
-              className="btn btn--primary"
+              className="btn btn--primary active:opacity-80"
               accessibilityRole="button"
               accessibilityLabel="Save Changes"
             >
@@ -320,6 +331,8 @@ export function ModelSettingsSheet({
         </View>
       }
     >
+      {modelId !== null && (
+        <>
       {/* Local models only (PocketPal's !isRemote guards). A remote
           endpoint has no GGUF to name, prompt or template — only its
           reasoning posture is ours to configure. */}
@@ -444,13 +457,13 @@ export function ModelSettingsSheet({
                       // arrive holding a long phrase. flex-wrap re-flows the
                       // row BETWEEN chips; it cannot break one chip, whose
                       // width is its content — hence the bound here too.
-                      className="max-w-[70%] font-sans text-body-sm text-secondary-text"
+                      className="max-w-[70%] text-quiet"
                     >
                       {word}
                     </Text>
                     <Pressable
                       onPress={() => setStopWords((prev) => prev.filter((w) => w !== word))}
-                      className="h-12 w-12 items-center justify-center"
+                      className="icon-btn"
                       accessibilityRole="button"
                       accessibilityLabel={`Remove stop word ${word}`}
                     >
@@ -554,6 +567,8 @@ export function ModelSettingsSheet({
         config={templateConfig()}
         onChange={applyTemplateConfig}
       />
+        </>
+      )}
     </Sheet>
   );
 }

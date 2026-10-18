@@ -33,17 +33,17 @@ import {
   X,
 } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { useModelStore } from "../../store/modelStore";
-import { useStorageDisclosure } from "../../hooks/useStorageDisclosure.ts";
-import { parseModelSettings } from "../../utils/model-settings.ts";
-import { cardActions, statusDotState } from "../../services/models/card-actions.ts";
+import { colors } from "@/themes/tokens.ts";
+import { useModelStore } from "@/store/modelStore";
+import { useStorageDisclosure } from "@/hooks/useStorageDisclosure.ts";
+import { parseModelSettings } from "@/utils/model-settings.ts";
+import { cardActions, statusDotState } from "@/services/models/card-actions.ts";
 import {
   MOTION_DURATION_MS,
   fadeEntering,
   fadeExiting,
-} from "../../utils/motion.ts";
-import type { ModelSpec, RemoteApiProvider } from "../../types/models";
+} from "@/utils/motion.ts";
+import type { ModelSpec, RemoteApiProvider } from "@/types/models";
 import {
   Chip,
   CancelDownloadButton,
@@ -60,18 +60,16 @@ import { ModelCardDetails } from "./model-card-details.tsx";
 /** PocketPal's card geometry: 8px radius (DESIGN.md's Default step),
  *  1px outline, no elevation (styles.ts:7-14). The 24px radius this card
  *  used to carry was PocketPal's value, taken wholesale over the design
- *  system's — retired 2026-10-10, see docs/research's card parity record.
- *  The list owns the gutter; the card owns only its own `mb-3`. */
-const CARD =
-  "mb-3 overflow-hidden rounded-lg border border-border bg-surface-1";
+ *  system's - retired 2026-10-10, see docs/research's card parity record.
+ *  The shape now lives once in `.surface` (global.css); the list owns the
+ *  gutter and this card owns only its own `mb-3`. */
+const CARD = "surface bg-surface-1 mb-3 overflow-hidden";
 /** The 16px leading icon inside a 48px target. DESIGN.md l.377: "the visual
  *  circle is 40px; the touch target is 48×48dp minimum. Pad the hit area, not
  *  the circle" — so the icon sits directly in the pressable and there is no
  *  wrapper box around it. PocketPal's `styles.iconButton` is exactly this
- *  (40px, radius 16, transparent); ours keeps the legal target. */
-/** Exported so the preset card's remove button is the same button: one
- *  48dp target, one destructive ground, no drift between the cards. */
-export const ICON_BUTTON = "h-12 w-12 items-center justify-center";
+ *  (40px, radius 16, transparent); ours keeps the legal target. The 48dp floor
+ *  itself lives in the shared `.icon-btn` class in global.css. */
 /** Destructive only — settings and expand stay bare. DESIGN.md calls for
  *  "Destructive: Alert Tint fill, Alert Red Mark icon" (Icon Buttons) and
  *  circles for what you press, so the trash keeps a ground and a circular
@@ -91,6 +89,7 @@ export function ModelCard({
   onDeactivate,
   onSettings,
   onDownload,
+  onRemove,
 }: {
   item: ModelSpec;
   isActive: boolean;
@@ -103,6 +102,10 @@ export function ModelCard({
    *  Download instead of Load/Unload. PocketParity with PocketPal's
    *  not-downloaded ModelCard branch. */
   onDownload?: () => void;
+  /** Replaces the card's own X handler. A catalog preset has no store row to
+   *  remove until it is downloaded — it dismisses from the catalog instead,
+   *  and the caller owns that. */
+  onRemove?: () => void;
 }) {
   // Stable selectors: actions never change identity, so each subscribes
   // alone and no card re-renders on unrelated store writes.
@@ -147,6 +150,14 @@ export function ModelCard({
    *  reference's, because the difference between them is the whole point:
    *  one deletes a file, the other only drops a list entry. */
   function confirmDestructive(): void {
+    // A caller-supplied remove REPLACES the store's own: a catalog preset's X
+    // drops it from the catalog, which is the caller's list surgery. Checked
+    // before the delete branch so a preset can never fall through to
+    // removeModel on an id that is not in the store.
+    if (onRemove) {
+      confirmRemoveModel(onRemove);
+      return;
+    }
     // Read the same thing the glyph and the a11y label read, so the three
     // cannot disagree about what the button does.
     if (!actions.includes("remove")) {
@@ -188,7 +199,7 @@ export function ModelCard({
           // a 10px icon is off this system's scale.
           <View className="flex-row items-center gap-1">
             <Cpu size={12} color={colors.secondaryText} />
-            <Text className="font-sans text-caption text-secondary-text">
+            <Text className="text-quiet">
               {formatBytes(fileBytes)}
             </Text>
           </View>
@@ -255,7 +266,7 @@ export function ModelCard({
             {actions.includes("load") || actions.includes("offload") ? (
               <Pressable
                 onPress={isActive ? onDeactivate : onActivate}
-                className="btn btn--tonal flex-1"
+                className="btn btn--tonal active:opacity-80 flex-1"
                 accessibilityRole="button"
                 accessibilityLabel={isActive ? `Offload ${title}` : `Load ${title}`}
               >
@@ -280,7 +291,7 @@ export function ModelCard({
             {actions.includes("settings") ? (
               <Pressable
                 onPress={onSettings}
-                className={ICON_BUTTON}
+                className="icon-btn"
                 accessibilityRole="button"
                 accessibilityLabel={`Settings for ${title}`}
               >
@@ -295,7 +306,7 @@ export function ModelCard({
             {actions.includes("remove") || actions.includes("delete") ? (
               <Pressable
                 onPress={confirmDestructive}
-                className={`${ICON_BUTTON} ${ICON_DESTRUCTIVE}`}
+                className={`icon-btn ${ICON_DESTRUCTIVE}`}
                 accessibilityRole="button"
                 accessibilityLabel={
                   actions.includes("remove") ? `Remove ${title}` : `Delete ${title}`
@@ -317,7 +328,7 @@ export function ModelCard({
             {actions.includes("expand") ? (
               <Pressable
                 onPress={() => setExpanded((v) => !v)}
-                className={ICON_BUTTON}
+                className="icon-btn"
                 accessibilityRole="button"
                 accessibilityState={{ expanded }}
                 accessibilityLabel={
@@ -368,7 +379,7 @@ export function RemoteProviderCard({
   // "Default radius… buttons, inputs, cards"); the 24px this carried was
   // PocketPal's value, retired 2026-10-10.
   return (
-    <View className="mb-3 overflow-hidden rounded-lg border border-border bg-surface-1">
+    <View className="surface bg-surface-1 mb-3 overflow-hidden">
       <View className="p-5 flex-row items-center justify-between">
         <View className="flex-1">
           <View className="flex-row items-center gap-2">
@@ -398,7 +409,7 @@ export function RemoteProviderCard({
         {!isActive && (
           <Pressable
             onPress={onActivate}
-            className="btn btn--primary min-h-12 px-5 py-2"
+            className="btn btn--primary active:opacity-80 min-h-12 px-5 py-2"
             accessibilityRole="button"
             accessibilityLabel={`Activate ${item.name}`}
           >
@@ -409,7 +420,7 @@ export function RemoteProviderCard({
         )}
         <Pressable
           onPress={onRemove}
-          className={`${ICON_BUTTON} ${ICON_DESTRUCTIVE}`}
+          className={`icon-btn ${ICON_DESTRUCTIVE}`}
           accessibilityRole="button"
           accessibilityLabel={`Remove ${item.name}`}
         >

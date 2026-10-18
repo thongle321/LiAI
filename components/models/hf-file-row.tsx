@@ -16,18 +16,18 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Bookmark, ChevronRight, Eye, Lock, Trash2 } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { useModelStore } from "../../store/modelStore";
-import { hfSpecId } from "../../services/models/huggingface.ts";
-import { visionSizeBreakdown } from "../../services/models/hf-format.ts";
-import { hfFileWarnings } from "../../services/models/hf-warnings.ts";
-import { storageDisclosure } from "../../services/models/storage-disclosure.ts";
-import type { HFWarningCode } from "../../services/models/hf-warnings.ts";
+import { colors } from "@/themes/tokens.ts";
+import { useModelStore } from "@/store/modelStore";
+import { hfSpecId } from "@/services/models/huggingface.ts";
+import { visionSizeBreakdown } from "@/services/models/hf-format.ts";
+import { hfFileWarnings } from "@/services/models/hf-warnings.ts";
+import { storageDisclosure } from "@/services/models/storage-disclosure.ts";
+import type { HFWarningCode } from "@/services/models/hf-warnings.ts";
 import type {
   HFModelFile,
   HFModelSearchResult,
   ModelDownloadStatus,
-} from "../../types/models";
+} from "@/types/models";
 import {
   CancelDownloadButton,
   Chip,
@@ -57,18 +57,14 @@ function WarningChip({ code, label }: { code: HFWarningCode; label: string }) {
             : "flex-row items-center rounded border px-2 py-1 bg-surface-2 border-border"
       }
     >
-      <Text className="font-sans text-caption text-secondary-text">{label}</Text>
+      <Text className="text-quiet">{label}</Text>
     </View>
   );
 }
 
-/** The destructive control's geometry, matching ModelCard's trash: the
- *  48dp floor is binding here (`tests/touch-targets.test.ts`), and the error
- *  ground is what DESIGN.md documents for a destructive icon button. Held
- *  as a literal rather than imported because
- *  `tests/model-card-anatomy.test.ts` pins these class strings in
- *  ModelCard.tsx itself. */
-const ICON_BUTTON = "h-12 w-12 items-center justify-center";
+/** The destructive control's error ground, matching ModelCard's trash — what
+ *  DESIGN.md documents for a destructive icon button. The 48dp floor comes
+ *  from the shared `.icon-btn` class in global.css. */
 const ICON_DESTRUCTIVE = "rounded-full bg-error/10";
 
 export function HFFileRow({
@@ -162,7 +158,7 @@ export function HFFileRow({
             {result.gated ? (
               <View className="flex-row items-center gap-1 rounded bg-surface-2 px-2 py-0.5">
                 <Lock size={10} color={colors.secondaryText} />
-                <Text className="font-sans text-caption text-secondary-text">
+                <Text className="text-quiet">
                   Requires Token
                 </Text>
               </View>
@@ -219,7 +215,7 @@ export function HFFileRow({
                 ? onUnbookmark(file.oid)
                 : bookmarkModel(result, file)
             }
-            className="h-12 w-12 items-center justify-center"
+            className="icon-btn"
             accessibilityRole="button"
             accessibilityLabel={bookmarked ? `Remove bookmark for ${file.name}` : `Bookmark ${file.name}`}
             testID={`hf-bookmark-${file.name}`}
@@ -240,7 +236,7 @@ export function HFFileRow({
               onPress={() =>
                 confirmDeleteModel(() => void removeModel(specId))
               }
-              className={`${ICON_BUTTON} ${ICON_DESTRUCTIVE}`}
+              className={`icon-btn ${ICON_DESTRUCTIVE}`}
               accessibilityRole="button"
               accessibilityLabel={`Delete ${file.name}`}
             >
@@ -299,15 +295,15 @@ export function HFFileRow({
         </>
       ) : null}
 
-      {visionSheetFile !== null ? (
-        <VisionDownloadSheet
-          visible={visionSheetFile !== null}
-          file={visionSheetFile}
-          siblings={siblings}
-          onClose={() => setVisionSheetFile(null)}
-          onConfirm={(chosen, opts) => onDownload(chosen, opts)}
-        />
-      ) : null}
+      {/* Always mounted so the dismiss animation plays on close;
+          `visible` drives show/hide (D4-1). */}
+      <VisionDownloadSheet
+        visible={visionSheetFile !== null}
+        file={visionSheetFile}
+        siblings={siblings}
+        onClose={() => setVisionSheetFile(null)}
+        onConfirm={(chosen, opts) => onDownload(chosen, opts)}
+      />
     </View>
   );
 }

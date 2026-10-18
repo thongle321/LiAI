@@ -1,11 +1,12 @@
 /** Architecture conventions, enforced rather than documented.
  *
  * A doc that says "tests live in __tests__/" stops meaning anything the
- * first time someone adds a test next to the source. These four checks cost
+ * first time someone adds a test next to the source. These five checks cost
  * one directory walk and catch the regressions that actually happen in this
  * codebase: a PascalCase component sneaking back in, a test landing outside
- * a __tests__ folder, a new `tests/` folder reappearing, or a file landing in
- * utils/ while importing a native module.
+ * a __tests__ folder, a new `tests/` folder reappearing, a file landing in
+ * utils/ while importing a native module, or a "../../../" import chain
+ * creeping back in now that "@/" exists.
  *
  * The rules themselves and the reasoning for each divergence live in
  * docs/architecture-divergences.md.
@@ -79,6 +80,27 @@ describe("architecture conventions", () => {
       .map(relative)
       .filter((f) => !EXEMPT.has(f))
       .filter((f) => NATIVE.test(readFileSync(join(ROOT, f), "utf8")));
+    expect(offenders).toEqual([]);
+  });
+
+  it("keeps imports out of ../../ chains", () => {
+    // tsconfig.json maps "@/*" to the repo root and Metro resolves it for
+    // free, so a climbing chain is never necessary: "../../../../store" is a
+    // promise about where this file lives that only a move can keep. Two
+    // directories is the line because one level is a sibling, and a sibling
+    // is already unambiguous.
+    //
+    // Static specifiers only. A dynamic import("...") is exempt because
+    // jest's CJS runtime does not route it through moduleNameMapper, so an
+    // "@/" specifier there would resolve on device and fail in tests. The
+    // regex requires the quote to follow the keyword directly, which is
+    // exactly what keeps import("...") out of the match.
+    const DEEP = /(?:^|[^\w.])from\s+"\.\.\/\.\.\/|(?:^|[^\w.])import\s+"\.\.\/\.\.\//;
+    const offenders = files
+      .filter((f) => /\.tsx?$/.test(f))
+      .map((f) => [relative(f), readFileSync(f, "utf8")] as const)
+      .filter(([, text]) => DEEP.test(text))
+      .map(([rel]) => rel);
     expect(offenders).toEqual([]);
   });
 });

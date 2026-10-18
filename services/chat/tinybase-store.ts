@@ -24,7 +24,7 @@
 
 import { createStore, type Store } from "tinybase";
 
-import type { AgentStep, SessionInfo, TurnBlock } from "../../types/chat.ts";
+import type { AgentStep, SessionInfo, TurnBlock } from "@/types/chat.ts";
 import type {
   SessionStore,
   StoredMessage,

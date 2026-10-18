@@ -9,9 +9,9 @@
 
 import { act, renderHook } from "@testing-library/react-native";
 
-import { useModelStore, type ModelStore } from "../../store/modelStore.ts";
+import { useModelStore, type ModelStore } from "@/store/modelStore.ts";
 import { useMultimodalAvailable } from "../useMultimodalAvailable.ts";
-import type { ModelSpec } from "../../types/models.ts";
+import type { ModelSpec } from "@/types/models.ts";
 
 function visionModel(over: Partial<ModelSpec> = {}): ModelSpec {
   return {

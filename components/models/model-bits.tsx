@@ -1,11 +1,12 @@
 /** Shared models bits: formats, chips, status, progress, download button. */
 
 import { Alert, Pressable, Text, View } from "react-native";
+import * as Haptics from "expo-haptics";
 import { CheckCircle2, Download, Eye, MessageSquare, Pause, Play, X } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { clampPercent, formatBytes, progressCaption } from "../../services/models/progress.ts";
-import type { ModelDownloadStatus, ModelType } from "../../types/models";
+import { colors } from "@/themes/tokens.ts";
+import { clampPercent, formatBytes, progressCaption } from "@/services/models/progress.ts";
+import type { ModelDownloadStatus, ModelType } from "@/types/models";
 
 // Re-exported so the six existing importers keep one import path. The
 // implementation lives in services/models/ now, where it is testable by `jest`
@@ -46,7 +47,7 @@ export function isProgressVisible(status: ModelDownloadStatus): boolean {
 export function Chip({ label }: { label: string }) {
   return (
     <View className="rounded bg-surface-2 px-2 py-0.5">
-      <Text className="font-sans text-caption text-secondary-text">{label}</Text>
+      <Text className="text-quiet">{label}</Text>
     </View>
   );
 }
@@ -72,7 +73,7 @@ export function StatusBadge({ status }: { status: ModelDownloadStatus }) {
   return (
     <View className="flex-row items-center gap-2">
       <StatusDot color={STATUS_DOT_COLOR[status]} />
-      <Text className="font-sans text-body-sm text-secondary-text">
+      <Text className="text-quiet">
         {STATUS_LABEL[status]}
       </Text>
     </View>
@@ -85,8 +86,8 @@ export function StatusBadge({ status }: { status: ModelDownloadStatus }) {
 export function ProgressTrack({ progress }: { progress: number }) {
   const clamped = clampPercent(progress);
   return (
-    <View className="h-2 overflow-hidden rounded-[5px] bg-surface-2">
-      <View className="h-full rounded-[5px] bg-primary" style={{ width: `${clamped}%` }} />
+    <View className="h-2 overflow-hidden rounded bg-surface-2">
+      <View className="h-full rounded bg-primary" style={{ width: `${clamped}%` }} />
     </View>
   );
 }
@@ -109,7 +110,7 @@ export function DownloadProgressBar({
   return (
     <View className="mx-0.5 mb-3 mt-1">
       <ProgressTrack progress={progress} />
-      <Text className="mt-1 text-right font-sans text-caption text-secondary-text">
+      <Text className="mt-1 text-right text-quiet">
         {progressCaption(downloaded, total, speed ?? 0)}
       </Text>
     </View>
@@ -149,7 +150,7 @@ export function confirmDeleteModel(onConfirm: () => void): void {
     "Are you sure you want to delete this downloaded model?",
     [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: onConfirm },
+      { text: "Delete", style: "destructive", onPress: () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onConfirm(); } },
     ],
   );
 }
@@ -165,7 +166,7 @@ export function confirmRemoveModel(onConfirm: () => void): void {
     "Are you sure you want to remove this model from the list?",
     [
       { text: "Cancel", style: "cancel" },
-      { text: "Remove", style: "destructive", onPress: onConfirm },
+      { text: "Remove", style: "destructive", onPress: () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onConfirm(); } },
     ],
   );
 }
@@ -207,7 +208,7 @@ export function DownloadButton({
     return (
       <View className="flex-row items-center rounded-lg bg-surface-2 px-3 py-2">
         <CheckCircle2 size={16} color={colors.success} />
-        <Text className="ml-2 font-sans text-body-sm text-secondary-text">Downloaded</Text>
+        <Text className="ml-2 text-quiet">Downloaded</Text>
       </View>
     );
   }
@@ -254,7 +255,7 @@ export function DownloadButton({
         <Text
           className={
             disabled
-              ? "font-sans text-body-sm text-secondary-text"
+              ? "text-quiet"
               : "font-sans text-body-sm text-success-deep"
           }
         >

@@ -11,7 +11,7 @@
  * and PocketPal gates the same three on its session existing.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Dimensions,
   Keyboard,
@@ -37,21 +37,26 @@ import {
   Download,
 } from "lucide-react-native";
 
-import { useChatStore } from "../../store/chat";
-import { useModelStore } from "../../store/modelStore";
+import { useChatStore } from "@/store/chat";
+import { useModelStore } from "@/store/modelStore";
 import {
   exportFilename,
   toAllSessionsJson,
   toMarkdown,
   toSessionJson,
   type ExportKind,
-} from "../../services/chat/export.ts";
-import { readExportSessions } from "../../services/chat/export-read.ts";
-import { usePressFeedback } from "../../utils/motion.ts";
-import { useChatImport } from "../../hooks/useChatImport.ts";
-import { shareExportedFile } from "../../services/chat/share-export.ts";
-import { pickableModels } from "../../services/chat/models.ts";
-import { colors } from "../../themes/tokens.ts";
+} from "@/services/chat/export.ts";
+import { readExportSessions } from "@/services/chat/export-read.ts";
+import {
+  MENU_DURATION_MS,
+  menuEnteringZoom,
+  menuExiting,
+  usePressFeedback,
+} from "@/utils/motion.ts";
+import { useChatImport } from "@/hooks/useChatImport.ts";
+import { shareExportedFile } from "@/services/chat/share-export.ts";
+import { pickableModels } from "@/services/chat/models.ts";
+import { colors } from "@/themes/tokens.ts";
 
 type Panel = "menu" | "model" | "export" | "rename";
 
@@ -96,7 +101,7 @@ function MenuRow({
       {value !== undefined ? (
         <Text
           numberOfLines={1}
-          className="mr-1 font-sans text-body-sm text-secondary-text"
+          className="mr-1 text-quiet"
         >
           {value}
         </Text>
@@ -117,6 +122,12 @@ export function ChatMenu({
 }) {
   const btnRef = useRef<View | null>(null);
   const [open, setOpen] = useState(false);
+  // The panel unmounts with `open` so `exiting` plays, while the Modal
+  // lingers for exactly the exit duration. Same pairing as the models
+  // filter menu (models-header-right.tsx) — one motion language for the
+  // app's two anchored menus.
+  const [shown, setShown] = useState(false);
+  const menuMs = MENU_DURATION_MS;
   const [panel, setPanel] = useState<Panel>("menu");
   const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
   const [title, setTitle] = useState("");
@@ -159,8 +170,15 @@ export function ChatMenu({
       const screenWidth = Dimensions.get("window").width;
       setAnchor({ top: y + h + 4, right: Math.max(8, screenWidth - (x + w)) });
       setOpen(true);
+      setShown(true);
     });
   }
+
+  useEffect(() => {
+    if (open) return;
+    const t = setTimeout(() => setShown(false), menuMs);
+    return () => clearTimeout(t);
+  }, [open, menuMs]);
 
   function run(fn: () => void): void {
     fn();
@@ -213,7 +231,7 @@ export function ChatMenu({
           onPress={toggle}
           onPressIn={triggerPress.onPressIn}
           onPressOut={triggerPress.onPressOut}
-          className="h-12 w-12 items-center justify-center"
+          className="icon-btn"
           hitSlop={4}
           accessibilityRole="button"
           accessibilityLabel="Chat menu"
@@ -223,21 +241,27 @@ export function ChatMenu({
         </Pressable>
       </Animated.View>
 
-      <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
+      <Modal visible={shown} transparent animationType="none" onRequestClose={close}>
         <Pressable
           className="flex-1"
           onPress={close}
           accessibilityRole="button"
           accessibilityLabel="Close menu"
         >
-          <View
+          {/* The twin menu reveals as fade + scale out of the opening corner,
+              closing on opacity only. ZoomIn carries both halves in one
+              builder, so no extra Animated.View is needed here. */}
+          <Animated.View
+            entering={menuEnteringZoom(menuMs)}
+            exiting={menuExiting(menuMs)}
             style={{
               position: "absolute",
               top: anchor?.top ?? 100,
               right: anchor?.right ?? 16,
               width: 264,
+              transformOrigin: "right top",
             }}
-            className="bg-surface-1 border border-border rounded-lg overflow-hidden"
+            className="surface bg-surface-1 overflow-hidden"
           >
             {panel === "menu" ? (
               <>
@@ -383,12 +407,12 @@ onPress={() => setPanel("export")}
                     }
                     disabled={title.trim() === ""}
                     className={
-                      title.trim() === "" ? "btn btn--primary opacity-40" : "btn btn--primary"
+                      title.trim() === "" ? "btn btn--primary active:opacity-80 btn--disabled" : "btn btn--primary active:opacity-80"
                     }
                     accessibilityRole="button"
                     accessibilityLabel="Save title"
                   >
-                    <Text className="font-sans-semibold text-body-md text-on-primary">
+                    <Text className="text-action">
                       Save
                     </Text>
                   </Pressable>
@@ -409,7 +433,7 @@ onPress={() => setPanel("export")}
                 </Text>
               </View>
             ) : null}
-          </View>
+          </Animated.View>
         </Pressable>
       </Modal>
     </View>

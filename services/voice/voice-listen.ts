@@ -1,7 +1,18 @@
 /** Shared speech-recognition start options (dictation + voice mode). */
 
+// Full BCP-47 locale tag (e.g. "en-US"), not just the primary subtag, so
+// the recognizer gets a complete language tag (D5-8).
+function deviceLocaleTag(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().locale || "en-US";
+  } catch {
+    return "en-US";
+  }
+}
+
 export const VOICE_LISTEN_OPTS = {
-  lang: "en-US",
+  // Derive from the device locale instead of hardcoding en-US (D5-8).
+  lang: deviceLocaleTag(),
   interimResults: true,
   continuous: false,
   // On-device: Google's server was answering ERROR_SERVER ("network"

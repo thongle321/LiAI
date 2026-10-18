@@ -12,7 +12,7 @@
  * this account cannot read, and they need different words.
  */
 
-import type { DownloadErrorCode } from "../../types/models.ts";
+import type { DownloadErrorCode } from "@/types/models.ts";
 
 /** Which failures the UI can offer a real fix for.
  *
@@ -39,9 +39,14 @@ export function isRetryableStatus(status: number): boolean {
 
 /** Case-insensitive header read: expo hands back whatever the platform
  *  lowercased (OkHttp) or preserved (NSURLSession), and `Retry-After` is
- *  spelled both ways in the wild. */
-function header(headers: Record<string, string> | undefined, name: string): string | undefined {
+ *  spelled both ways in the wild. Accepts a plain record or a fetch
+ *  `Headers`, because the two read paths each get one from expo-fetch. */
+function header(
+  headers: Record<string, string> | Headers | undefined,
+  name: string,
+): string | undefined {
   if (!headers) return undefined;
+  if (headers instanceof Headers) return headers.get(name) ?? undefined;
   const wanted = name.toLowerCase();
   for (const [key, value] of Object.entries(headers)) {
     if (key.toLowerCase() === wanted) return value;
@@ -56,7 +61,7 @@ function header(headers: Record<string, string> | undefined, name: string): stri
  * exponential backoff, which is what PocketPal uses when the server has
  * no opinion. */
 export function retryAfterMs(
-  headers: Record<string, string> | undefined,
+  headers: Record<string, string> | Headers | undefined,
   attempt: number,
 ): number {
   const raw = header(headers, "Retry-After")?.trim();

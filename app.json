@@ -9,6 +9,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.liai.app",
       "infoPlist": {
         "NSCameraUsageDescription": "LiAI needs the camera to see what you see."
       }
@@ -33,7 +34,6 @@
     },
     "plugins": [
       "expo-router",
-      "expo-status-bar",
       [
         "react-native-vision-camera",
         {
@@ -76,8 +76,21 @@
         }
       ],
       "expo-sharing",
-      "expo-splash-screen",
-      "expo-sqlite"
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F8FAFC",
+          "image": "./assets/icon.png",
+          "resizeMode": "contain"
+        }
+      ],
+      "expo-sqlite",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "LiAI needs your photo library to attach pictures to a message."
+        }
+      ]
     ],
     "extra": {
       "router": {},

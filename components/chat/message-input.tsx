@@ -20,21 +20,21 @@ import { KeyboardControllerNative } from "react-native-keyboard-controller";
 
 import * as Haptics from "expo-haptics";
 
-import { colors } from "../../themes/tokens.ts";
-import { useChatStore } from "../../store/chat.ts";
-import { useInference } from "../../store/inference.ts";
-import { suspendBackgroundRelease } from "../../services/inference/offload.ts";
-import { useModelReady } from "../../hooks/useModelReady.ts";
-import { useMultimodalAvailable } from "../../hooks/useMultimodalAvailable.ts";
-import { useModelStore } from "../../store/modelStore";
-import { resolveThinking } from "../../services/inference/thinking.ts";
+import { colors } from "@/themes/tokens.ts";
+import { useChatStore } from "@/store/chat.ts";
+import { useInference } from "@/store/inference.ts";
+import { suspendBackgroundRelease } from "@/services/inference/offload.ts";
+import { useModelReady } from "@/hooks/useModelReady.ts";
+import { useMultimodalAvailable } from "@/hooks/useMultimodalAvailable.ts";
+import { useModelStore } from "@/store/modelStore";
+import { resolveThinking } from "@/services/inference/thinking.ts";
 import {
   MAX_IMAGES,
   pickImages,
   type ImageSource,
-} from "../../services/chat/attachments.ts";
-import { usePressFeedback } from "../../utils/motion.ts";
-import { useKeyboardLift } from "../../hooks/useKeyboardLift.ts";
+} from "@/services/chat/attachments.ts";
+import { usePressFeedback } from "@/utils/motion.ts";
+import { useKeyboardLift } from "@/hooks/useKeyboardLift.ts";
 
 export function MessageInput({
   sending,
@@ -296,12 +296,12 @@ export function MessageInput({
           {editing === true && (
             <View className="flex-row items-center gap-2 border-b border-border px-4 py-1">
               <Pencil size={14} color={colors.secondaryText} />
-              <Text className="flex-1 font-sans text-body-sm text-secondary-text">
+              <Text className="flex-1 text-quiet">
                 Editing message — sending replaces this turn and everything after it
               </Text>
               <Pressable
                 onPress={() => onCancelEdit?.()}
-                className="h-12 w-12 items-center justify-center"
+                className="icon-btn"
                 hitSlop={4}
                 accessibilityRole="button"
                 accessibilityLabel="Cancel editing"
@@ -359,7 +359,7 @@ export function MessageInput({
                 // Anchored to the plus button's wrapper and extending right into
                 // the empty composer space — the plus is leftmost, so w-48 fits
                 // without clipping. (right-0 here would squash it to 48px.)
-                <View className="absolute bottom-12 left-0 w-48 rounded-lg border border-border bg-surface-1 py-1">
+                <View className="surface bg-surface-1 absolute bottom-12 left-0 w-48 py-1">
                   <PlusItem
                     Icon={Camera}
                     label="Take photo"
@@ -415,7 +415,7 @@ export function MessageInput({
                     className={
                       thinkingEnabled
                         ? "font-sans text-caption text-primary-text"
-                        : "font-sans text-caption text-secondary-text"
+                        : "text-quiet"
                     }
                   >
                     Think
@@ -454,6 +454,7 @@ export function MessageInput({
                         setBlockedNote("Load a model to send this message.");
                         return;
                       }
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       void handleSend();
                     }}
                     onPressIn={sendPress.onPressIn}

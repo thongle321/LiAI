@@ -15,26 +15,26 @@ import * as FileSystem from "expo-file-system/legacy";
 import { ExternalLink, ImageOff } from "lucide-react-native";
 
 import { useShallow } from "zustand/shallow";
-import { useInference } from "../../store/inference.ts";
-import { useModelStore } from "../../store/modelStore";
-import { useChatStore } from "../../store/chat";
-import { resolveLocalFile } from "../../services/inference/engine.ts";
-import { formatParams } from "../../services/search/model-providers.ts";
-import { readTotalMemory } from "../../services/models/device-tiers.ts";
+import { useInference } from "@/store/inference.ts";
+import { useModelStore } from "@/store/modelStore";
+import { useChatStore } from "@/store/chat";
+import { resolveLocalFile } from "@/services/inference/engine.ts";
+import { formatParams } from "@/services/search/model-providers.ts";
+import { readTotalMemory } from "@/services/models/device-tiers.ts";
 import {
   projectorStatus,
   visionActive,
-} from "../../services/models/vision-pairing.ts";
-import { colors } from "../../themes/tokens.ts";
+} from "@/services/models/vision-pairing.ts";
+import { colors } from "@/themes/tokens.ts";
 import {
   estimateModelMemory,
   toMemoryMetadata,
-} from "../../services/models/memoryEstimator.ts";
+} from "@/services/models/memoryEstimator.ts";
 import {
   checkModelFileIntegrity,
   type IntegrityResult,
-} from "../../services/models/modelIntegrity.ts";
-import type { ModelSpec } from "../../types/models";
+} from "@/services/models/modelIntegrity.ts";
+import type { ModelSpec } from "@/types/models";
 import { Chip, formatBytes } from "./model-bits.tsx";
 import { ToggleRow } from "../settings-rows.tsx";
 import { ProjectorSelectorSheet } from "./projector-selector-sheet.tsx";
@@ -43,7 +43,7 @@ import { ProjectorSelectorSheet } from "./projector-selector-sheet.tsx";
 function DetailCell({ label, value }: { label: string; value: string }) {
   return (
     <View className="min-w-[45%] flex-1 rounded-lg bg-surface-2 p-3">
-      <Text className="font-sans text-body-sm text-secondary-text">{label}</Text>
+      <Text className="text-quiet">{label}</Text>
       <Text className="font-sans-semibold text-body-md text-primary-text">
         {value}
       </Text>
@@ -82,6 +82,18 @@ export function ModelCardDetails({
   const startProjectorDownload = useModelStore((s) => s.startProjectorDownload);
   const activeModelId = useModelStore((s) => s.activeModelId);
   const releaseEngine = useChatStore((s) => s.releaseEngine);
+  // PocketParity: the reference's expanded panel describes a model that is
+  // on disk. Its MemoryRequirement (ModelCard.tsx:820-900) renders only when
+  // `isDownloaded && !isRemote`, and nothing here is remote — so a card with
+  // no file yet shows the catalog facts and says nothing about this device.
+  const isDownloaded = item.downloadStatus === "completed";
+  // What integrity is a statement ABOUT is the files on disk, so the effect
+  // keys on their signature — not on the spec object's identity. A catalog
+  // preset's view is rebuilt on every progress tick (presetSpecView returns a
+  // fresh object), and an identity dep would re-stat the same path on each
+  // one; a redownload still changes the signature when a file's name or
+  // size does.
+  const fileKey = item.files.map((f) => `${f.name}:${f.size}`).join("|");
   useEffect(() => {
     let live = true;
     void readTotalMemory().then((v) => {
@@ -92,6 +104,12 @@ export function ModelCardDetails({
     };
   }, []);
   useEffect(() => {
+    // No file, nothing to verify: checking a preset that was never fetched
+    // stats a path that cannot exist and reports a corrupt download.
+    if (!isDownloaded) {
+      setIntegrity(null);
+      return;
+    }
     let live = true;
     void (async () => {
       const base = FileSystem.documentDirectory ?? "";
@@ -123,7 +141,7 @@ export function ModelCardDetails({
     return () => {
       live = false;
     };
-  }, [item]);
+  }, [fileKey, isDownloaded]);
 
   const estimate = estimateModelMemory(
     { size: fileBytes, gguf: toMemoryMetadata(item.ggufMetadata) },
@@ -188,26 +206,33 @@ export function ModelCardDetails({
 
   return (
     <View>
-      <Text className="font-sans text-body-sm text-secondary-text">
-        Model name
-      </Text>
-      <Text
-        selectable
-        className="font-sans text-body-md text-primary-text"
-      >
-        {item.name}
-      </Text>
-
-      <Text className="mt-3 font-sans text-body-md text-primary-text">
-        Estimated memory: ~{formatBytes(estimate)}
-      </Text>
-      <Text className="font-sans text-body-sm text-secondary-text">
-        Weights + context cache at your current settings.
-      </Text>
-      {totalMemory !== null && estimate > totalMemory * 0.9 ? (
-        <Text className="mt-2 font-sans text-body-md text-error">
-          This model needs more RAM than this device has. It may fail to load.
+      {/* PocketPal's full-name box (ModelCard.tsx:820-900): the model name in
+          the same soft sub-card the detail grid uses, so the expanded panel
+          opens on one full-width fact rather than loose text. */}
+      <View className="rounded-lg bg-surface-2 p-3">
+        <Text className="text-quiet">Model name</Text>
+        <Text
+          selectable
+          className="font-sans text-body-md text-primary-text"
+        >
+          {item.name}
         </Text>
+      </View>
+
+      {isDownloaded ? (
+        <View className="mt-3">
+          <Text className="font-sans text-body-md text-primary-text">
+            Estimated memory: ~{formatBytes(estimate)}
+          </Text>
+          <Text className="text-quiet">
+            Weights + context cache at your current settings.
+          </Text>
+          {totalMemory !== null && estimate > totalMemory * 0.9 ? (
+            <Text className="mt-2 font-sans text-body-md text-error">
+              This model needs more RAM than this device has. It may fail to load.
+            </Text>
+          ) : null}
+        </View>
       ) : null}
 
       {item.capabilities && item.capabilities.length > 0 ? (
@@ -232,7 +257,7 @@ export function ModelCardDetails({
             onPress={() => toggleVision(!visionOn)}
           />
           {!visionOn ? (
-            <Text className="font-sans text-body-sm text-secondary-text">
+            <Text className="text-quiet">
               Vision is off — this model answers text only.
             </Text>
           ) : null}
@@ -266,7 +291,7 @@ export function ModelCardDetails({
                       ? `Projection model: ${item.projector.name}`
                       : "Choose a projection model"}
                   </Text>
-                  <Text className="font-sans text-body-sm text-secondary-text">
+                  <Text className="text-quiet">
                     {visionReady ? "Ready" : "Not set"}
                   </Text>
                 </Pressable>
@@ -302,15 +327,21 @@ export function ModelCardDetails({
       ) : null}
 
       {item.hfUrl ? (
+        /* PocketParity: the reference's hfLinkButton (ModelCard.tsx
+           :990-1024) is a button with the external-link glyph and the words
+           "View Model Card on Hugging Face" — not a bare link. `.btn
+           --secondary` is this system's outlined button (DESIGN.md
+           "Outline": Signal Mark border), so the outline is the design
+           system's rather than a hand-lifted `border-border`. */
         <Pressable
-          onPress={() => void Linking.openURL(item.hfUrl as string)}
-          className="mt-3 min-h-12 flex-row items-center gap-2"
+          onPress={() => void Linking.openURL(item.hfUrl as string).catch(() => {})}
+          className="btn btn--secondary active:opacity-80 mt-3 self-start gap-2"
           accessibilityRole="link"
-          accessibilityLabel="Open on Hugging Face"
+          accessibilityLabel="View Model Card on Hugging Face"
         >
           <ExternalLink size={14} color={colors.primary} />
-          <Text className="font-sans text-body-md text-primary">
-            View on Hugging Face
+          <Text className="font-sans text-body-sm text-primary">
+            View Model Card on Hugging Face
           </Text>
         </Pressable>
       ) : null}

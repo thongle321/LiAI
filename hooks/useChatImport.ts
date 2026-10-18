@@ -30,8 +30,15 @@ export function useChatImport(): () => Promise<void> {
     });
     if (res.canceled || res.assets?.[0] === undefined) return;
 
+    const asset = res.assets[0];
+    // Guard the size before reading the whole file into memory (D5-13).
+    if (typeof asset.size === "number" && asset.size > 50 * 1024 * 1024) {
+      showSnackbar("That file is too large to import.", { type: "error" });
+      return;
+    }
+
     try {
-      const raw = await LegacyFileSystem.readAsStringAsync(res.assets[0].uri);
+      const raw = await LegacyFileSystem.readAsStringAsync(asset.uri);
       const out = await importSessions(raw);
       if (!out.ok) {
         showSnackbar(out.error ?? "Couldn't import that file.", { type: "error" });

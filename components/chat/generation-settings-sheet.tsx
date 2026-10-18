@@ -34,11 +34,11 @@ import {
   DEFAULT_SAMPLER,
   resolveSampler,
   type SamplerParams,
-} from "../../services/inference/sampler.ts";
+} from "@/services/inference/sampler.ts";
 import { useShallow } from "zustand/shallow";
-import { useInference } from "../../store/inference.ts";
-import { useModelStore } from "../../store/modelStore.ts";
-import { useChatStore, defaultGetStore } from "../../store/chat";
+import { useInference } from "@/store/inference.ts";
+import { useModelStore } from "@/store/modelStore.ts";
+import { useChatStore, defaultGetStore } from "@/store/chat";
 import { SamplerRows } from "./sampler-rows.tsx";
 import { Sheet } from "../sheet.tsx";
 import { ResetMenu } from "../reset-menu.tsx";
@@ -265,7 +265,7 @@ export function GenerationSettingsSheet({
               accessibilityRole="button"
               accessibilityLabel="Reset to System Defaults"
             >
-              <Text className="font-sans text-body-md text-primary">
+              <Text className="text-body">
                 Reset to System Defaults
               </Text>
             </Pressable>
@@ -274,20 +274,20 @@ export function GenerationSettingsSheet({
             {isSession ? (
               <Pressable
                 onPress={handleSaveAsPreset}
-                className="btn btn--secondary"
+                className="btn btn--secondary active:opacity-80"
                 accessibilityRole="button"
                 accessibilityLabel="Save as preset"
               >
-                <Text className="font-sans text-body-md text-primary">Save as preset</Text>
+                <Text className="text-body">Save as preset</Text>
               </Pressable>
             ) : null}
             <Pressable
               onPress={handleSave}
-              className="btn btn--primary"
+              className="btn btn--primary active:opacity-80"
               accessibilityRole="button"
               accessibilityLabel="Save"
             >
-              <Text className="font-sans-semibold text-body-md text-on-primary">Save</Text>
+              <Text className="text-action">Save</Text>
             </Pressable>
           </View>
         </View>
@@ -314,7 +314,7 @@ export function GenerationSettingsSheet({
         </RowSizeProvider>
       </View>
       {serverDefaultsNote !== null ? (
-        <Text className="px-1 pb-2 font-sans text-caption text-secondary-text">
+        <Text className="px-1 pb-2 text-quiet">
           {serverDefaultsNote}
         </Text>
       ) : null}

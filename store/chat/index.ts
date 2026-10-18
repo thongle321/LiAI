@@ -11,41 +11,47 @@
 
 import { create } from "zustand";
 
-import type { SearchAuth } from "../../types/api.ts";
+import type { SearchAuth } from "@/types/api.ts";
 import { useSearch } from "../search.ts";
 import { createSendSlice, multimodalAvailable } from "./send.ts";
 import { createSessionsSlice } from "./sessions.ts";
 import { createDraftSlice } from "./draft.ts";
 import type { ChatCtx, ChatDeps, ChatState, TurnRunner } from "./types.ts";
-import { createToolTokenCounter } from "../../services/chat/tool-token-count.ts";
-import { selectEngineSource, type EngineSource } from "../../services/inference/engine.ts";
-import { EngineManager } from "../../services/inference/manager.ts";
-import type { LlamaInitParams } from "../../services/inference/local-engine.ts";
-import { projectorPathForFileName } from "../../services/inference/mmproj.ts";
-import { resolveSampler, type SamplerParams } from "../../services/inference/sampler.ts";
-import { resolveThinking } from "../../services/inference/thinking.ts";
+import { createToolTokenCounter } from "@/services/chat/tool-token-count.ts";
+import { selectEngineSource, type EngineSource } from "@/services/inference/engine.ts";
+import { EngineManager } from "@/services/inference/manager.ts";
+import type { LlamaInitParams } from "@/services/inference/local-engine.ts";
+import { projectorPathForFileName } from "@/services/inference/mmproj.ts";
+import { resolveSampler, type SamplerParams } from "@/services/inference/sampler.ts";
+import { resolveThinking } from "@/services/inference/thinking.ts";
 import {
   resolveEffort,
   type EffortLevel,
-} from "../../utils/reasoning-capability.ts";
-import type { ThinkingChatProbe } from "../../services/inference/thinking-detection.ts";
+} from "@/utils/reasoning-capability.ts";
+import type { ThinkingChatProbe } from "@/services/inference/thinking-detection.ts";
 import {
   getAvailableDevices,
   resolveComputeDevices,
-} from "../../services/inference/deviceSelection.ts";
-import { createRemoteEngine } from "../../services/inference/remote-engine.ts";
-import { createTurnRunner } from "../../services/chat/turn.ts";
-import { holdScreen, releaseScreen } from "../../services/chat/keep-awake.ts";
-import type { SessionStore } from "../../services/chat/session-store.ts";
+} from "@/services/inference/deviceSelection.ts";
+import { createRemoteEngine } from "@/services/inference/remote-engine.ts";
+import { resolveImage } from "@/services/storage/images.ts";
+import { createTurnRunner } from "@/services/chat/turn.ts";
+import { holdScreen, releaseScreen } from "@/services/chat/keep-awake.ts";
+import type { SessionStore } from "@/services/chat/session-store.ts";
 
 /** Default BYOK resolver: consent-gated key from SecureStore, never KV.
  * Short-circuits before touching SecureStore when consent is absent. */
 async function defaultSearchAuth(): Promise<SearchAuth | null> {
   const search = useSearch.getState();
-  if (!search.hasConsented) return null;
-  const key = await search.getProviderKey(search.activeProviderId);
+  // Self-heal: the startup gate hydrates this, but a deep link can reach a
+  // turn without it, and consent is persisted - reading the default `false`
+  // would tell the user search is off when they turned it on.
+  if (!search.loaded) await search.load();
+  if (!useSearch.getState().hasConsented) return null;
+  const { activeProviderId, getProviderKey, resultCount } = useSearch.getState();
+  const key = await getProviderKey(activeProviderId);
   if (!key) return null;
-  return { provider: search.activeProviderId, key, count: search.resultCount };
+  return { provider: activeProviderId, key, count: resultCount };
 }
 
 /** Default engine source: live models store (no keys needed to pick). */
@@ -265,27 +271,6 @@ async function recordThinkingCapability(
   }
 }
 
-/** Data-uri JPEG → temp file for multimodal turns; null = text-only. */
-async function defaultSaveImage(dataUri: string): Promise<string | null> {
-  try {
-    const match = /^data:image\/\w+;base64,(.*)$/.exec(dataUri);
-    if (!match) return null;
-    const FS = await import("expo-file-system/legacy");
-    const dir = `${FS.documentDirectory ?? ""}chat-images/`;
-    await FS.makeDirectoryAsync(dir, { intermediates: true });
-    const path = `${dir}${Date.now()}.jpg`;
-    type WriteOptions = Parameters<typeof FS.writeAsStringAsync>[2];
-    // SAFETY: "base64" is the legacy EncodingType.Base64 literal; the
-    // options bag is structural so the literal needs only this bridge.
-    await FS.writeAsStringAsync(path, match[1], {
-      encoding: "base64",
-    } as WriteOptions);
-    return path;
-  } catch {
-    return null;
-  }
-}
-
 /** Resolved thinking state for the ACTIVE model (C6): a user
  *  override, then the spec's detected capability, then the global
  *  preference. An unclassified model gets the global flag, exactly as
@@ -472,7 +457,10 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
       getEffort: () => defaultEffort(),
       getJinja: () => defaultJinja(),
       getSampler: (sid) => defaultSampler(sid),
-      saveImage: (uri: string) => defaultSaveImage(uri),
+      // Attachment → file for the engine. Lives in services/storage/images
+      // so the borrowed-path pass-through and the legacy data-uri decode
+      // have one owner (D5-4).
+      resolveImage,
     });
     return runTurn(text, paths, onToken, onReasoning, onToolStart, onToolDelta);
   };

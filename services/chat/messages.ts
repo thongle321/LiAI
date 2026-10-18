@@ -10,7 +10,7 @@ import type {
   ChatMessage,
   ChatSession,
   SessionInfo,
-} from "../../types/chat.ts";
+} from "@/types/chat.ts";
 import type { StoredMessage } from "./session-store.ts";
 
 let nextId = 0;

@@ -14,7 +14,7 @@
 
 import { Modal, Pressable, Text, View } from "react-native";
 
-import { scrim } from "../../themes/tokens.ts";
+
 
 export function ModelsResetDialog({
   visible,
@@ -34,12 +34,10 @@ export function ModelsResetDialog({
     >
       {/* A plain scrim, not a button: a full-screen labelled control is the
           first thing a screen reader lands on and announces as a giant
-          "Dismiss, button". The inline backgroundColor is the documented
-          Modal exception — same shape as DownloadErrorDialog's scrim, and
-          `scrim` is a token value no class can carry. */}
+          "Dismiss, button". Scrim is now expressed via the bg-scrim class
+          (D2-11). */}
       <Pressable
-        className="flex-1 items-center justify-center px-6"
-        style={{ backgroundColor: scrim }}
+        className="flex-1 items-center justify-center bg-scrim px-6"
         onPress={onCancel}
       >
         {/* The empty handler claims the responder so a tap on the card does
@@ -66,15 +64,15 @@ export function ModelsResetDialog({
           <View className="mt-5 flex-row items-center justify-end gap-2">
             <Pressable
               onPress={onCancel}
-              className="btn btn--secondary"
+              className="btn btn--secondary active:opacity-80"
               accessibilityRole="button"
               accessibilityLabel="Cancel"
             >
-              <Text className="font-sans text-body-md text-primary">Cancel</Text>
+              <Text className="text-body">Cancel</Text>
             </Pressable>
             <Pressable
               onPress={onConfirm}
-              className="btn btn--primary"
+              className="btn btn--primary active:opacity-80"
               accessibilityRole="button"
               accessibilityLabel="Proceed with Reset"
             >

@@ -10,7 +10,7 @@
  * and the whole thing runs in plain node tests.
  */
 
-import type { ChatSession } from "../../types/chat.ts";
+import type { ChatSession } from "@/types/chat.ts";
 
 const DAY = 86_400_000;
 

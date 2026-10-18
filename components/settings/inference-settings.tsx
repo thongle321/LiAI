@@ -26,15 +26,15 @@ import {
   useInference,
   type CacheType,
   type FlashAttn,
-} from "../../store/inference.ts";
+} from "@/store/inference.ts";
 import { useShallow } from "zustand/shallow";
-import { useModelStore } from "../../store/modelStore";
-import { useModelsUi } from "../../store/modelsUi.ts";
-import { colors } from "../../themes/tokens.ts";
+import { useModelStore } from "@/store/modelStore";
+import { useModelsUi } from "@/store/modelsUi.ts";
+import { colors } from "@/themes/tokens.ts";
 import {
   getAvailableDevices,
   getDeviceAvailability,
-} from "../../services/inference/deviceSelection.ts";
+} from "@/services/inference/deviceSelection.ts";
 import {
   AdvancedGroup,
   PickerRow,
@@ -209,7 +209,7 @@ export function ModelInitializationSettings() {
             {/* Slate + underline, not blue: DESIGN's Ink-and-Slate Rule
                 holds for links too — the underline marks it tappable. */}
             <Pressable
-              onPress={() => void Linking.openURL(OPENCL_DOCS_URL)}
+              onPress={() => void Linking.openURL(OPENCL_DOCS_URL).catch(() => {})}
               accessibilityRole="link"
               accessibilityLabel="llama.cpp OpenCL docs"
               className="mt-1 flex-row items-center gap-1"
@@ -406,7 +406,7 @@ export function MemorySettings() {
         </View>
       ) : null}
       <View className="row">
-        <Text className="font-sans text-body-sm text-secondary-text">
+        <Text className="text-quiet">
           Model reload needed for changes to take effect.
         </Text>
       </View>

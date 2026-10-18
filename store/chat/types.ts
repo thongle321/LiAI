@@ -2,12 +2,12 @@
 
 import type { StoreApi } from "zustand";
 
-import type { SearchAuth } from "../../types/api.ts";
-import type { EngineSource } from "../../services/inference/engine.ts";
-import type { SessionStore } from "../../services/chat/session-store.ts";
-import type { ImportResult } from "../../services/chat/import.ts";
-import type { AgentStep, ChatMessage, ChatSession, TurnBlock, TurnOutcomeFlags } from "../../types/chat.ts";
-import type { ToolTokenCounter } from "../../services/chat/tool-token-count.ts";
+import type { SearchAuth } from "@/types/api.ts";
+import type { EngineSource } from "@/services/inference/engine.ts";
+import type { SessionStore } from "@/services/chat/session-store.ts";
+import type { ImportResult } from "@/services/chat/import.ts";
+import type { AgentStep, ChatMessage, ChatSession, TurnBlock, TurnOutcomeFlags } from "@/types/chat.ts";
+import type { ToolTokenCounter } from "@/services/chat/tool-token-count.ts";
 
 export type Connection = "unknown" | "up" | "down";
 

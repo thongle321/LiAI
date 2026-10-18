@@ -50,14 +50,11 @@ export function SnackbarOverlay({ ref }: { ref?: Ref<SnackbarOverlayHandle> }) {
   );
 
   return (
-    // Inline offsets, not a className: className offsets on an
-    // overlay wrapper have failed to resolve on device before
-    // (see FABGroup). Zero-size while idle (matchContents), so it
-    // intercepts no touches until a snackbar is showing.
-    <View
-      pointerEvents="box-none"
-      style={{ position: "absolute", left: 16, right: 16, bottom: 16, zIndex: 9999 }}
-    >
+    // The iOS copy of this overlay proves className offsets resolve here
+    // (snackbar-overlay.ios.tsx:90), so this one is className too — two
+    // platforms reading one styling language. Zero-size while idle
+    // (matchContents), so it intercepts no touches until a snackbar shows.
+    <View pointerEvents="box-none" className="absolute left-4 right-4 bottom-4 z-[9999]">
       {/* matchContents + ignoreSafeArea="keyboard": a zero-size host
           whose content never competes with the app's own keyboard
           handling (expo-ui tip 1 — the host otherwise shifts small

@@ -17,15 +17,16 @@ import {
 } from "react-native";
 import { Eye, EyeOff } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
+import { colors } from "@/themes/tokens.ts";
+import { cn } from "@/utils/cn.ts";
 import {
   MAX_RESULT_COUNT,
   MIN_RESULT_COUNT,
   SEARCH_PROVIDERS,
   type SearchProviderId,
-} from "../../services/search/search-providers.ts";
+} from "@/services/search/search-providers.ts";
 import { useShallow } from "zustand/shallow";
-import { useSearch } from "../../store/search.ts";
+import { useSearch } from "@/store/search.ts";
 import { Sheet } from "../sheet.tsx";
 import {
   ActionRow,
@@ -142,7 +143,7 @@ function ProviderKeySheet({
               onPress={() => void clear()}
               disabled={busy !== null}
               className={
-                busy !== null ? "btn btn--ghost flex-1 opacity-40" : "btn btn--ghost flex-1"
+                busy !== null ? "btn btn--ghost active:opacity-80 btn--disabled flex-1" : "btn btn--ghost active:opacity-80 flex-1"
               }
               accessibilityRole="button"
               accessibilityLabel="Clear Key"
@@ -150,7 +151,7 @@ function ProviderKeySheet({
               {busy === "clear" ? (
                 <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Text className="font-sans text-body-md text-primary">Clear Key</Text>
+                <Text className="text-body">Clear Key</Text>
               )}
             </Pressable>
           ) : null}
@@ -159,8 +160,8 @@ function ProviderKeySheet({
             disabled={!draft.trim() || busy !== null}
             className={
               !draft.trim() || busy !== null
-                ? "btn btn--primary flex-1 opacity-40"
-                : "btn btn--primary flex-1"
+                ? "btn btn--primary active:opacity-80 btn--disabled flex-1"
+                : "btn btn--primary active:opacity-80 flex-1"
             }
             accessibilityRole="button"
             accessibilityLabel="Set Key"
@@ -168,7 +169,7 @@ function ProviderKeySheet({
             {busy === "save" ? (
               <ActivityIndicator size="small" color={colors.surface1} />
             ) : (
-              <Text className="font-sans-semibold text-body-md text-on-primary">Set Key</Text>
+              <Text className="text-action">Set Key</Text>
             )}
           </Pressable>
         </View>
@@ -190,7 +191,7 @@ function ProviderKeySheet({
           autoCapitalize="none"
           autoCorrect={false}
           spellCheck={false}
-          className="input font-sans text-body-md pr-12"
+          className={cn("input font-sans text-body-md", "pr-12")}
           placeholderTextColor={colors.secondaryText}
           accessibilityLabel={`${providerId ?? ""} API key`}
         />

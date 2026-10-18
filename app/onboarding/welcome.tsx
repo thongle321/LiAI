@@ -5,8 +5,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Eye, MessageCircle, Mic, type LucideIcon } from "lucide-react-native";
 
-import { colors } from "../../themes/tokens.ts";
-import { APP_NAME } from "../../constants/app.ts";
+import { colors } from "@/themes/tokens.ts";
+import { APP_NAME } from "@/constants/app.ts";
 
 const ROWS: { Icon: LucideIcon; title: string; body: string }[] = [
   { Icon: Eye, title: "See", body: "Point. Ask. Learn." },
@@ -36,7 +36,7 @@ export default function WelcomeStep() {
                 <Text className="font-sans-semibold text-body-md text-primary-text">
                   {r.title}
                 </Text>
-                <Text className="font-sans text-body-sm text-secondary-text">
+                <Text className="text-quiet">
                   {r.body}
                 </Text>
               </View>
@@ -44,8 +44,8 @@ export default function WelcomeStep() {
           ))}
         </View>
         <Pressable
-          onPress={() => router.push("/onboarding/model")}
-          className="btn btn--primary mt-8"
+          onPress={() => router.replace("/onboarding/model")}
+          className="btn btn--primary active:opacity-80 mt-8"
           accessibilityRole="button"
           accessibilityLabel="Continue to model setup"
         >

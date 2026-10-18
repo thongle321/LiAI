@@ -11,7 +11,7 @@
  * so the banner measures nothing new.
  */
 
-import { positiveFinite } from "../../utils/guards.ts";
+import { positiveFinite } from "@/utils/guards.ts";
 
 /** PocketPal's WARNING_THRESHOLD (bannerVariantResolver.ts:3): the fill
  *  percent at which the soft warning fires, before a turn can fail. */

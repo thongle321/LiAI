@@ -9,7 +9,7 @@
 import { render, screen } from "@testing-library/react-native";
 
 import { PendingIndicator } from "../pending-indicator.tsx";
-import { useChatStore } from "../../../store/chat.ts";
+import { useChatStore } from "@/store/chat.ts";
 
 function seed(over: Record<string, unknown> = {}): void {
   useChatStore.setState({

@@ -28,6 +28,9 @@ module.exports = {
     'node_modules/@react-native/babel-preset/',
   ],
   moduleNameMapper: {
+    // Mirrors tsconfig.json's "paths": { "@/*": ["./*"] }. Metro resolves
+    // those itself; jest has to be told. First so it wins over anything below.
+    '^@/(.*)$': '<rootDir>/$1',
     '\\.css$': '<rootDir>/jest/styleMock.js',
     'react-native/setup-env': '<rootDir>/jest/react-native-setup-env.js',
     'llama.rn': '<rootDir>/__mocks__/external/llama.rn.ts',
@@ -37,6 +40,13 @@ module.exports = {
       '@lodev09/react-native-true-sheet/mock',
     'react-native-reanimated':
       '<rootDir>/jest/react-native-reanimated-mock.js',
+    // lucide is ESM-only under jest-expo's resolver, and the preset never
+    // transforms `.mjs`. Same icons, loadable form — see the shim.
+    '^lucide-react-native$': '<rootDir>/jest/lucide-react-native.js',
+    // Loads the native worklets unpacker at import time, so any test that
+    // reaches a scheduleOnRN call dies before its first assertion. Reanimated's
+    // mock above does not cover this package's surface.
+    '^react-native-worklets$': '<rootDir>/jest/react-native-worklets-mock.js',
     '@dr.pogodin/react-native-fs':
       '<rootDir>/__mocks__/external/@dr.pogodin/react-native-fs.js',
     'react-native-marked':

@@ -9,23 +9,25 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
-import { colors } from "../../themes/tokens.ts";
-import { ContentColumn } from "../../components/content-column.tsx";
+import { colors } from "@/themes/tokens.ts";
+import { ContentColumn } from "@/components/content-column.tsx";
 import {
   matchTier,
   parseTiers,
   readTotalMemory,
-} from "../../services/models/device-tiers.ts";
-import tiersJson from "../../assets/device-tiers.json";
+} from "@/services/models/device-tiers.ts";
+import tiersJson from "@/assets/device-tiers.json";
 
 // Parsed once: the bundle can't change at runtime, and every render
 // re-parsing would be pure waste.
 const TIERS = parseTiers(tiersJson);
-import { TierCard } from "../../components/onboarding/tier-card.tsx";
-import { PresetModelCard } from "../../components/models/available-models.tsx";
-import { useLoadGuard } from "../../hooks/useLoadGuard.ts";
-import { useModelStore } from "../../store/modelStore";
-import type { PresetModelFile } from "../../types/models";
+import { TierCard } from "@/components/onboarding/tier-card.tsx";
+import { PresetModelCard } from "@/components/models/available-models.tsx";
+import { ModelSettingsSheet } from "@/components/models/model-settings-sheet.tsx";
+import { presetPrimaryFile, presetSpecView } from "@/services/models/preset-spec.ts";
+import { useLoadGuard } from "@/hooks/useLoadGuard.ts";
+import { useModelStore } from "@/store/modelStore";
+import type { ModelSpec, PresetModel } from "@/types/models";
 
 export default function ModelStep() {
   const tiers = TIERS;
@@ -33,13 +35,18 @@ export default function ModelStep() {
   const [ramUnknown, setRamUnknown] = useState(false);
   // Stable selectors plus one useShallow read: actions subscribe alone,
   // the preset list re-renders only when presets themselves change.
-  const loadPersisted = useModelStore((s) => s.loadPersisted);
   const startDownload = useModelStore((s) => s.startDownload);
   const presets = useModelStore((s) => s.presets);
+  // The same card as the models screen, so it needs the same store rows.
+  const models = useModelStore((s) => s.models);
   const guard = useLoadGuard();
+  // The card carries a settings gear (PocketPal parity), so the gear works
+  // here too rather than being a dead button in a short flow.
+  const [settingsModel, setSettingsModel] = useState<ModelSpec | null>(null);
 
   useEffect(() => {
-    void loadPersisted();
+    // Hydration already happened in app/index.tsx before onboarding was
+    // routed to, so the preset list below is populated (D3-3).
     void readTotalMemory().then((bytes) => {
       if (bytes === null) {
         setRamUnknown(true);
@@ -53,25 +60,32 @@ export default function ModelStep() {
   const tier = tiers.find((t) => t.id === selectedId) ?? tiers[0];
   const tierPresets = presets.filter((p) => tier.presetIds.includes(p.id));
 
-  function onDownload(modelId: string, file: PresetModelFile): void {
-    guard(file.size, () => void startDownload(modelId, file));
+  // The card's one Download button fetches presetPrimaryFile — the catalog's
+  // own rule, shared with the models screen.
+  function downloadPreset(preset: PresetModel): void {
+    const file = presetPrimaryFile(preset);
+    if (!file) return;
+    guard(file.size, () => void startDownload(preset.id, file));
   }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
-      <ScrollView contentContainerClassName="w-full">
+      <ScrollView
+        contentContainerClassName="w-full"
+        automaticallyAdjustKeyboardInsets
+        >
         <ContentColumn className="p-5">
         <Text className="font-sans-semibold text-h2 text-primary-text">
           Pick your model
         </Text>
         {/* On-device is the product's core claim (ADR-0008) — the old copy
             said models "run on LiAI's server", which is simply not true. */}
-        <Text className="mt-2 font-sans text-body-sm text-secondary-text">
+        <Text className="mt-2 text-quiet">
           Your model runs entirely on this phone. Bigger is smarter and slower —
           start with the highlighted tier.
         </Text>
         {ramUnknown && (
-          <Text className="mt-2 font-sans text-body-sm text-secondary-text">
+          <Text className="mt-2 text-quiet">
             Couldn't read this phone's memory — showing the lightest tier.
           </Text>
         )}
@@ -90,21 +104,27 @@ export default function ModelStep() {
           <PresetModelCard
             key={preset.id}
             preset={preset}
-            onDownload={onDownload}
+            onDownload={() => downloadPreset(preset)}
+            onSettings={() => setSettingsModel(presetSpecView(preset, models))}
           />
         ))}
         <Pressable
-          onPress={() => router.push("/onboarding/done")}
-          className="btn btn--primary mt-4"
+          onPress={() => router.replace("/onboarding/done")}
+          className="btn btn--primary active:opacity-80 mt-4"
           accessibilityRole="button"
           accessibilityLabel="Continue"
         >
-          <Text className="text-center font-sans-semibold text-body-md text-on-primary">
+          <Text className="text-center text-action">
             Continue
           </Text>
         </Pressable>
         </ContentColumn>
       </ScrollView>
+
+      <ModelSettingsSheet
+        model={settingsModel}
+        onClose={() => setSettingsModel(null)}
+      />
     </SafeAreaView>
   );
 }

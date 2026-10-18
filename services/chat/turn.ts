@@ -58,11 +58,17 @@ export interface TurnOutcome {
   blocks?: TurnBlock[];
 }
 
-export interface TurnDeps {
+export interface EngineDeps {
   ensureEngine(source: EngineSource): Promise<CompletionEngine>;
   getEngineSource(): Promise<EngineSource | null>;
+}
+
+export interface StoreDeps {
   getStore(): Promise<TurnSessionStore | null>;
   getSearch(): Promise<TalentSearchAuth | null>;
+}
+
+export interface PromptDeps {
   getSystemPrompt?(sessionId: string): Promise<string | undefined>;
   /** Pact allowlist for THIS session — the talent names its companion
    *  declares. Empty/absent = no tools at all (a chat with no companion sends
@@ -90,6 +96,13 @@ export interface TurnDeps {
   getChatTemplate?: () => Promise<string>;
   /** Per-model generation-prompt override; undefined keeps default. */
   getAddGenerationPrompt?: () => Promise<boolean | undefined>;
+  /** Consolidated turn-input resolver (Phase 1.2). When present, the
+   *  runner calls it once per turn instead of the individual get* deps;
+   *  individual deps remain the fallback for tests that inject them. */
+  getTurnInputs?(sessionId: string): Promise<TurnInputs>;
+}
+
+export interface MediaDeps {
   /** Resolve a stored attachment into a file the engine can read.
    *  null = unusable, so the turn goes out as text only. */
   resolveImage(value: string): Promise<{ path: string; owned: boolean } | null>;
@@ -101,10 +114,13 @@ export interface TurnDeps {
    *  them. Optional so existing test deps stay valid; the default is the
    *  real file deletion (see removeOwnedImages). */
   removeImages?(paths: string[]): Promise<void>;
-  /** Consolidated turn-input resolver (Phase 1.2). When present, the
-   *  runner calls it once per turn instead of the individual get* deps;
-   *  individual deps remain the fallback for tests that inject them. */
-  getTurnInputs?(sessionId: string): Promise<TurnInputs>;
+}
+
+export interface TurnDeps {
+  engine: EngineDeps;
+  store: StoreDeps;
+  prompt: PromptDeps;
+  media: MediaDeps;
 }
 
 /** Everything a turn needs from the world, resolved in one pass. */
@@ -193,10 +209,10 @@ export function createTurnRunner(deps: TurnDeps) {
   ): Promise<TurnOutcome> => {
     const trimmed = text.trim();
     if (trimmed === "") throw new Error("empty message");
-    const source = await deps.getEngineSource();
+    const source = await deps.engine.getEngineSource();
     if (!source) throw new Error("no model active");
-    const engine = await deps.ensureEngine(source);
-    const store = await deps.getStore().catch(() => null);
+    const engine = await deps.engine.ensureEngine(source);
+    const store = await deps.store.getStore().catch(() => null);
     const sid = paths.sessionId ?? (await store?.create().catch(() => null)) ?? null;
     const sessionId = sid ?? `local-${Date.now().toString(36)}`;
     // Birth binding: the staged companion lands on the freshly minted row
@@ -215,30 +231,30 @@ export function createTurnRunner(deps: TurnDeps) {
 
     // Phase 1.2: prefer the consolidated resolver when provided; fall
     // back to the individual deps so existing tests keep working.
-    const inputs = deps.getTurnInputs
-      ? await deps.getTurnInputs(sessionId).catch(() => undefined)
+    const inputs = deps.prompt.getTurnInputs
+      ? await deps.prompt.getTurnInputs(sessionId).catch(() => undefined)
       : undefined;
     const search =
-      inputs?.search ?? (await deps.getSearch().catch(() => null));
+      inputs?.search ?? (await deps.store.getSearch().catch(() => null));
     const systemPrompt =
-      inputs?.systemPrompt ?? (await deps.getSystemPrompt?.(sessionId).catch(() => undefined));
+      inputs?.systemPrompt ?? (await deps.prompt.getSystemPrompt?.(sessionId).catch(() => undefined));
     const talentNames =
-      inputs?.talentNames ?? ((await deps.getTalentNames?.(sessionId).catch(() => [])) ?? []);
+      inputs?.talentNames ?? ((await deps.prompt.getTalentNames?.(sessionId).catch(() => [])) ?? []);
     const thinking =
-      inputs?.thinking ?? (await deps.getThinking?.(sessionId).catch(() => undefined));
+      inputs?.thinking ?? (await deps.prompt.getThinking?.(sessionId).catch(() => undefined));
     const effort =
-      inputs?.effort ?? (await deps.getEffort?.(sessionId).catch(() => undefined));
+      inputs?.effort ?? (await deps.prompt.getEffort?.(sessionId).catch(() => undefined));
     const jinja =
-      inputs?.jinja ?? (await deps.getJinja?.().catch(() => undefined));
+      inputs?.jinja ?? (await deps.prompt.getJinja?.().catch(() => undefined));
     const sampler =
-      inputs?.sampler ?? (await deps.getSampler?.(sessionId).catch(() => null));
+      inputs?.sampler ?? (await deps.prompt.getSampler?.(sessionId).catch(() => null));
     const stopWords =
-      inputs?.stopWords ?? ((await deps.getStopWords?.().catch(() => [])) ?? []);
+      inputs?.stopWords ?? ((await deps.prompt.getStopWords?.().catch(() => [])) ?? []);
     const chatTemplate =
-      inputs?.chatTemplate ?? ((await deps.getChatTemplate?.().catch(() => "")) ?? "");
+      inputs?.chatTemplate ?? ((await deps.prompt.getChatTemplate?.().catch(() => "")) ?? "");
     const addGenerationPrompt =
       inputs?.addGenerationPrompt ??
-      (await deps.getAddGenerationPrompt?.().catch(() => undefined));
+      (await deps.prompt.getAddGenerationPrompt?.().catch(() => undefined));
 // G8: every attached photo becomes a media path. One that cannot be
     // resolved is dropped rather than failing the turn -- the text still
     // went, and losing a photo is better than losing the message.
@@ -247,7 +263,7 @@ export function createTurnRunner(deps: TurnDeps) {
     if (paths.images !== undefined && paths.images.length > 0) {
       const saved: string[] = [];
       for (const image of paths.images) {
-        const resolved = await deps.resolveImage(image).catch(() => null);
+        const resolved = await deps.media.resolveImage(image).catch(() => null);
         if (resolved === null) continue;
         saved.push(resolved.path);
         if (resolved.owned) ownedPaths.push(resolved.path);
@@ -261,7 +277,7 @@ export function createTurnRunner(deps: TurnDeps) {
     // off every local turn.
     const remoteDataUris =
       source.kind === "remote" && paths.images !== undefined && paths.images.length > 0
-        ? await (deps.toDataUris ?? toDataUris)(paths.images).catch(() => undefined)
+        ? await ((deps.media.toDataUris ?? toDataUris)(paths.images)).catch(() => undefined)
         : undefined;
 
     let result: Awaited<ReturnType<typeof runLocalAgent>>;
@@ -320,7 +336,7 @@ export function createTurnRunner(deps: TurnDeps) {
       // (success or failure). Only the ones this turn wrote go; a
       // picked photo or camera frame outlives the turn because the
       // message history still shows it.
-      await (deps.removeImages ?? removeOwnedImages)(ownedPaths);
+      await ((deps.media.removeImages ?? removeOwnedImages)(ownedPaths));
     }
     // Backend parity: an empty reply with no tool provenance is a failed
     // turn (error bubble), never a persisted empty assistant message.

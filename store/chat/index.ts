@@ -521,31 +521,39 @@ async function resolveTurnInputs(sessionId: string | null): Promise<import("@/se
 function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner {
   return (text, paths, onToken, onReasoning, onToolStart, onToolDelta) => {
     const runTurn = createTurnRunner({
-      ensureEngine: async (source: EngineSource) =>
-        // The projector rides the same resolution the image gate uses
-        // (services/inference//mmproj.ts): the slot key includes it, so a model
-        // whose pair arrived mid-session cannot reuse the blind context.
-        getManager().ensure(
-          source,
-          source.kind === "local"
-            ? await projectorPathForFileName(source.fileName)
-            : undefined,
-          // Same resolver as the loader: a settings change makes a new
-          // key, the warm context misses, and the next turn reloads at
-          // the settings the user just chose (finding 1).
-          source.kind === "local" ? await resolveInit() : undefined,
-        ),
-      getEngineSource: () => defaultEngineSource(),
-      getStore: () => defaultGetStore(),
-      getSearch: async () => {
-        const auth = await getSearch().catch(() => null);
-        return auth ? { provider: auth.provider, key: auth.key, count: auth.count } : null;
+      engine: {
+        ensureEngine: async (source: EngineSource) =>
+          // The projector rides the same resolution the image gate uses
+          // (services/inference//mmproj.ts): the slot key includes it, so a model
+          // whose pair arrived mid-session cannot reuse the blind context.
+          getManager().ensure(
+            source,
+            source.kind === "local"
+              ? await projectorPathForFileName(source.fileName)
+              : undefined,
+            // Same resolver as the loader: a settings change makes a new
+            // key, the warm context misses, and the next turn reloads at
+            // the settings the user just chose (finding 1).
+            source.kind === "local" ? await resolveInit() : undefined,
+          ),
+        getEngineSource: () => defaultEngineSource(),
       },
-      getTurnInputs: (sid) => resolveTurnInputs(sid),
-      // Attachment → file for the engine. Lives in services/storage/images
-      // so the borrowed-path pass-through and the legacy data-uri decode
-      // have one owner (D5-4).
-      resolveImage,
+      store: {
+        getStore: () => defaultGetStore(),
+        getSearch: async () => {
+          const auth = await getSearch().catch(() => null);
+          return auth ? { provider: auth.provider, key: auth.key, count: auth.count } : null;
+        },
+      },
+      prompt: {
+        getTurnInputs: (sid) => resolveTurnInputs(sid),
+      },
+      media: {
+        // Attachment → file for the engine. Lives in services/storage/images
+        // so the borrowed-path pass-through and the legacy data-uri decode
+        // have one owner (D5-4).
+        resolveImage,
+      },
     });
     return runTurn(text, paths, onToken, onReasoning, onToolStart, onToolDelta);
   };

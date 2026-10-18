@@ -39,6 +39,8 @@ import { useKeyboardStore } from "@/store/keyboard.ts";
 import { useModelStore } from "@/store/modelStore";
 import { useInference } from "@/store/inference.ts";
 import { useKeyboardLift } from "@/hooks/useKeyboardLift.ts";
+import { useChatSessionLoader } from "@/hooks/useChatSessionLoader.ts";
+import { useChatHealth } from "@/hooks/useChatHealth.ts";
 import { MessageListItem } from "@/components/chat/message-list-item.tsx";
 import { ChatEmptyPlaceholder } from "@/components/chat/chat-empty-placeholder.tsx";
 import { PendingIndicator } from "@/components/chat/pending-indicator.tsx";
@@ -105,8 +107,6 @@ export default function ChatRoute() {
   const connection = useChatStore((s) => s.connection);
   const sending = useChatStore((s) => s.sending);
   const stopping = useChatStore((s) => s.stopping);
-  const loadSession = useChatStore((s) => s.loadSession);
-  const checkHealth = useChatStore((s) => s.checkHealth);
   const send = useChatStore((s) => s.send);
   const retry = useChatStore((s) => s.retry);
   // The failed turn's own retry, which used to live on the card this screen
@@ -222,16 +222,8 @@ export default function ChatRoute() {
       ? `${visible.length} of ${messages.length}`
       : null;
 
-  useEffect(() => {
-    void loadSession().then(() => checkHealth());
-  }, [loadSession, checkHealth]);
-
-  // Activation happens on the Models screen while chat stays mounted:
-  // re-resolve readiness so the prompt chips and the no-model affordance
-  // appear and vanish on their own.
-  useEffect(() => {
-    void checkHealth();
-  }, [activeModelId, checkHealth]);
+  useChatSessionLoader();
+  useChatHealth();
 
   // PocketPal parity: the composer is always visible. With no model the send
   // button disables and the field's placeholder names it. There is

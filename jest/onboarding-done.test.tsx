@@ -33,23 +33,11 @@ import { useOnboardingGate } from "@/hooks/useOnboardingGate.ts";
 import { useOnboardingStore } from "@/store/onboarding.ts";
 import DoneStep from "@/app/onboarding/done.tsx";
 
+import { route } from "./route-cast.ts";
+
 jest.mock("@react-native-async-storage/async-storage", () =>
   require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
 );
-
-// The global harness pins `usePathname` to "/" because most suites never
-// navigate. This one navigates, and the hook's "the destination is spent
-// when the path matches" check needs the REAL pathname — so the real
-// implementation is put back for this file.
-jest.mock("expo-router", () => {
-  const actual = jest.requireActual("expo-router");
-  return { ...actual, usePathname: () => actual.usePathname() };
-});
-
-/** The inline tree below is not part of the app's generated route union
- *  (expo-router types `href` from `.expo/types`), so its names have to be
- *  cast. Same trick as jest/route-smoke.test.tsx. */
-const route = (name: string) => name as never;
 
 /** Mirrors app/_layout.tsx: the drawer group lives behind `Stack.Protected`,
  *  the onboarding flow outside it. */

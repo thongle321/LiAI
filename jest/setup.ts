@@ -39,7 +39,9 @@ jest.mock("expo-router", () => {
     useRouter: () => mockRouter,
     useLocalSearchParams: () => ({}),
     useGlobalSearchParams: () => ({}),
-    usePathname: () => "/",
+    // usePathname is NOT pinned: the real one reads the router store, which
+    // answers "/" when there is no router — the same value a pin gave, and
+    // the real one keeps working in the suites that DO navigate.
     useSegments: () => [],
   };
 });

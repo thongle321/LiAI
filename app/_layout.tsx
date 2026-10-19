@@ -64,10 +64,9 @@ export default function RootLayout() {
   // a false flip hides the drawer and the router falls back to index, which
   // redirects to onboarding.
   //
-  // LIVE state, not a value read once at mount: the drawer is OUT of the
-  // navigator while the gate is closed, so completing onboarding has to be
-  // able to put it back — and the navigation to the chosen destination has
-  // to wait until the navigator has. The hook owns both halves.
+  // The hook owns the gate AND the navigation that follows it; why the
+  // navigation waits for the navigator, and not for the button press, is
+  // in hooks/useOnboardingGate.ts.
   const { onboarded } = useOnboardingGate();
   // Release the loaded model when the app is backgrounded, so a multi-GB
   // GGUF is not held resident (Settings > Model Loading).

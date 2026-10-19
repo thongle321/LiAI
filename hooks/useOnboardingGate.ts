@@ -12,14 +12,24 @@
  * button press would be before it. (The full account is in
  * store/onboarding.ts.)
  *
- * The destination is cleared on OBSERVED arrival, not on dispatch: a
+ * The destination is spent on OBSERVED arrival, not on dispatch: a
  * navigator that drops the action must not erase where the user was going.
+ * The rule is utils/onboarding-exit.ts; this hook only acts on it.
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { router, usePathname } from "expo-router";
 
+import { decideOnboardingExit } from "../utils/onboarding-exit.ts";
 import { useOnboardingStore } from "../store/onboarding.ts";
+
+/** A replace that lands nowhere is re-issued on a tick, this long after
+ * the last attempt, up to this many times. The navigator re-admits the
+ * drawer in a layout effect, so the first attempt normally lands; the
+ * retry covers the case where it does not, and the bound stops a
+ * permanently unreachable destination from spinning forever. */
+const RETRY_MS = 150;
+const MAX_ATTEMPTS = 8;
 
 export function useOnboardingGate(): { onboarded: boolean } {
   const onboarded = useOnboardingStore((s) => s.onboarded);
@@ -28,19 +38,40 @@ export function useOnboardingGate(): { onboarded: boolean } {
   const clearExit = useOnboardingStore((s) => s.clearExit);
   const pathname = usePathname();
 
+  // The retry budget lives in a ref: it changes on every attempt, and
+  // only the tick below has to force a re-render.
+  const attempts = useRef(0);
+  const armed = useRef<string | null>(null);
+  const [tick, setTick] = useState(0);
+
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
 
   useEffect(() => {
-    if (exitTo === null) return;
-    // Arrived: the path matches the destination, so the intent is spent.
-    if (pathname === exitTo) {
+    if (exitTo === null) {
+      // Nothing armed: the next intent starts with a fresh budget.
+      armed.current = null;
+      attempts.current = 0;
+      return;
+    }
+    if (armed.current !== exitTo) {
+      armed.current = exitTo;
+      attempts.current = 0;
+    }
+    if (decideOnboardingExit(pathname, exitTo) !== "replace") {
+      // Arrived, or the user left the onboarding flow. Either way the
+      // intent is spent — a stale one must never hijack a later
+      // navigation.
       clearExit();
       return;
     }
     router.replace(exitTo);
-  }, [exitTo, pathname, clearExit]);
+    if (attempts.current >= MAX_ATTEMPTS) return;
+    attempts.current += 1;
+    const timer = setTimeout(() => setTick((t) => t + 1), RETRY_MS);
+    return () => clearTimeout(timer);
+  }, [exitTo, pathname, clearExit, tick]);
 
   return { onboarded };
 }

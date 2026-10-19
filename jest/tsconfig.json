@@ -7,7 +7,7 @@
     "types": ["node", "jest"]
   },
   "//exclude": "The base config excludes 'tests' (the old harness home). Inherited unchanged, that wiped out this config's own include, so `tsc -p jest` type-checked ZERO files while reporting success. An empty array overrides the inherited list; the paths below are what this project deliberately re-checks. The old `legacy/**/*` entry went with the Node `--test` suite (ticket 08): the retired guards it pointed at live on as follow-up tickets under `.scratch/jest-test-migration/issues/`.",
-  "//onboarding-done": "This config is a NODE program (nodenext, no custom conditions), so React Native's types resolve WITHOUT the `react-native` condition and uniwind's `className` prop does not exist. onboarding-done.test.tsx renders a real app screen, so it belongs to the APP program: the root tsconfig (module preserve, customConditions ['react-native']) already type-checks every **/*.tsx including this one. Excluding it here keeps it out of the node program instead of weakening either.",
-  "exclude": ["./onboarding-done.test.tsx"],
+  "//tsx-suites": "This config is a NODE program (nodenext, no custom conditions), so React Native's types resolve WITHOUT the `react-native` condition and uniwind's `className` prop does not exist. A `.tsx` suite renders real app screens, so it belongs to the APP program: the root tsconfig (module preserve, customConditions ['react-native']) already type-checks every **/*.tsx including these. Excluding them by pattern keeps them out of the node program instead of weakening either, and keeps the list from growing one file at a time.",
+  "exclude": ["./*.test.tsx"],
   "include": ["./**/*", "../services/**/*", "../utils/**/*", "../store/**/*", "../types/**/*"]
 }

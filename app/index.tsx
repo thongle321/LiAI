@@ -36,7 +36,13 @@ import { useSearch } from "../store/search";
 import { useVoice } from "../store/voice";
 
 export default function IndexGate() {
-  const [onboarded, setOnboarded] = useState<boolean | null>(null);
+  // The first-run gate is SUBSCRIBED, not snapshotted: the root layout
+  // guards the drawer with the same value, and two readers of one flag
+  // can disagree about whether the app is provisioned. `ready` is this
+  // screen's own wait (the other stores); `hydrated` is the store's.
+  const [ready, setReady] = useState(false);
+  const onboarded = useOnboardingStore((s) => s.onboarded);
+  const hydrated = useOnboardingStore((s) => s.hydrated);
   const loadPersisted = useModelStore((s) => s.loadPersisted);
   const loadInference = useInference((s) => s.load);
   const loadSearch = useSearch((s) => s.load);
@@ -69,12 +75,12 @@ export default function IndexGate() {
       // layout guards the drawer with the same value, and two readers of
       // one flag can disagree about whether the app is provisioned.
       await hydrateOnboarding();
-      setOnboarded(useOnboardingStore.getState().onboarded);
+      setReady(true);
       void SplashScreen.hideAsync().catch(() => {});
     })();
   }, [loadPersisted, loadInference, loadSearch, loadVoice, hydrateOnboarding]);
 
-  if (onboarded === null) return null;
+  if (!ready || !hydrated) return null;
   return onboarded ? (
     <Redirect href="/chat" />
   ) : (

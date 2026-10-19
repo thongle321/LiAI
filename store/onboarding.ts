@@ -74,7 +74,11 @@ export function createOnboardingStore(flag: OnboardingFlag) {
     hydrate: () => {
       if (get().hydrated) return Promise.resolve();
       hydrating ??= (async () => {
-        const value = await flag.read();
+        // A rejected read is treated as "not onboarded" — the same answer
+        // services/onboarding.ts gives for a failed read. The catch keeps
+        // `void hydrate()` from turning a broken port into an unhandled
+        // rejection.
+        const value = await flag.read().catch(() => false);
         // `complete()` may have landed while the read was in flight. It
         // knows the answer (true), so a late read must not close the gate
         // the user just opened.

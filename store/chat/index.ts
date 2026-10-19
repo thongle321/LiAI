@@ -40,6 +40,8 @@ import { resolveImage } from "@/services/storage/images.ts";
 import { createTurnRunner } from "@/services/chat/turn.ts";
 import { holdScreen, releaseScreen } from "@/services/chat/keep-awake.ts";
 import type { SessionStore, SessionOverride } from "@/services/chat/session-store.ts";
+import type { ModelStore } from "../modelStore.ts";
+import type { ModelSpec } from "@/types/models.ts";
 import type { Companion } from "@/types/companion.ts";
 import { generateFinalSystemPrompt } from "@/utils/companion-template.ts";
 
@@ -245,6 +247,24 @@ function getManager(): EngineManager {
   return manager;
 }
 
+/** The model row a freshly loaded file belongs to, and the store that owns it.
+ *
+ *  Both capability probes (thinking, tool support) answer the same two
+ *  questions first: which model is this file, and where do I write the
+ *  verdict. The answer is the same for both, so it lives here once.
+ *
+ *  The model store is reached by dynamic import, like everywhere else in
+ *  this file: it pulls in native pieces a plain-Node test cannot resolve. */
+async function modelForFile(
+  fileName: string,
+): Promise<{ m: ModelStore; spec: ModelSpec } | null> {
+  const { useModelStore } = await import("../modelStore.ts");
+  const m = useModelStore.getState();
+  const spec = m.models.find((model) => model.files[0]?.name === fileName);
+  if (!spec) return null;
+  return { m, spec };
+}
+
 /** Probe a freshly loaded context for thinking support and record it
  *  (PocketParity: `updateModelThinkingCapabilities`, ModelStore.ts:3280).
  *
@@ -261,19 +281,18 @@ async function recordThinkingCapability(
   ctx: { getFormattedChat?: ThinkingChatProbe["getFormattedChat"] },
 ): Promise<void> {
   try {
-    const [{ detectThinkingCapability }, { useModelStore }, { useInference }] =
-      await Promise.all([
-        import("../../services/inference/thinking-detection.ts"),
-        import("../modelStore.ts"),
-        import("../inference.ts"),
-      ]);
+    const { detectThinkingCapability } = await import(
+      "../../services/inference/thinking-detection.ts"
+    );
     const verdict = await detectThinkingCapability(ctx);
     if (verdict === undefined) return;
-    const m = useModelStore.getState();
-    const spec = m.models.find((model) => model.files[0]?.name === fileName);
-    if (!spec) return;
-    if (useInference.getState().thinkingOverrides[spec.id] !== undefined) return;
-    m.updateModel(spec.id, { reasoning: verdict });
+    const found = await modelForFile(fileName);
+    if (!found) return;
+    const { useInference } = await import("../inference.ts");
+    if (useInference.getState().thinkingOverrides[found.spec.id] !== undefined)
+      return;
+    if (found.spec.reasoning === verdict) return;
+    found.m.updateModel(found.spec.id, { reasoning: verdict });
   } catch {
     // Detection is a nicety; the model works without it.
   }
@@ -299,17 +318,15 @@ async function recordToolSupport(
   ctx: { model?: ToolSupportProbe["model"] },
 ): Promise<void> {
   try {
-    const [{ hasToolSupport }, { useModelStore }] = await Promise.all([
-      import("../../services/inference/tool-support.ts"),
-      import("../modelStore.ts"),
-    ]);
+    const { hasToolSupport } = await import(
+      "../../services/inference/tool-support.ts"
+    );
     const verdict = hasToolSupport(ctx);
     if (verdict === undefined) return;
-    const m = useModelStore.getState();
-    const spec = m.models.find((model) => model.files[0]?.name === fileName);
-    if (!spec) return;
-    if (spec.supportsTools === verdict) return;
-    m.updateModel(spec.id, { supportsTools: verdict });
+    const found = await modelForFile(fileName);
+    if (!found) return;
+    if (found.spec.supportsTools === verdict) return;
+    found.m.updateModel(found.spec.id, { supportsTools: verdict });
   } catch {
     // Detection is a nicety; the model works without it.
   }

@@ -177,4 +177,66 @@ describe("useToolCompatWarning", () => {
       expect(useChatStore.getState().chatWarning).toBeNull(),
     );
   });
+
+  it("keeps the notice up after recording the model", async () => {
+    // The notice is raised and the model is recorded in the same pass. The
+    // next run must not read "already warned" and take the notice down —
+    // it would flash for a frame and be gone.
+    setModelState({});
+    const { rerender } = renderHook(
+      ({ pal }: { pal: Companion }) => useToolCompatWarning(pal),
+      { initialProps: { pal: companion(["web_search"]) } },
+    );
+
+    await waitFor(() =>
+      expect(useChatStore.getState().chatWarning).not.toBeNull(),
+    );
+    const raised = useChatStore.getState().chatWarning;
+
+    // A new companion object re-runs the effect with the same facts.
+    rerender({ pal: companion(["web_search"]) });
+
+    expect(useChatStore.getState().chatWarning).toBe(raised);
+  });
+
+  it("takes the notice down when the model changes under it", async () => {
+    setModelState({});
+    renderHook(() => useToolCompatWarning(companion(["web_search"])));
+
+    await waitFor(() =>
+      expect(useChatStore.getState().chatWarning).not.toBeNull(),
+    );
+
+    // A model that supports tools: the notice was about the old one.
+    act(() => {
+      useModelStore.setState({
+        activeModelId: "model-2",
+        models: [spec({ id: "model-2", supportsTools: true })],
+      } as never);
+    });
+
+    await waitFor(() =>
+      expect(useChatStore.getState().chatWarning).toBeNull(),
+    );
+  });
+
+  it("leaves another notice's warning alone", async () => {
+    // The chat's warning slot is shared. A notice this hook did not raise
+    // is not ours to take down.
+    setModelState({});
+    useChatStore.setState({
+      chatWarning: {
+        message: "the context is full",
+        severity: "warning",
+        recoverable: false,
+      },
+    } as never);
+    renderHook(() => useToolCompatWarning(companion(["web_search"])));
+
+    await waitFor(() =>
+      expect(useChatStore.getState().chatWarning?.message).toBe(
+        TOOL_COMPAT_WARNING,
+      ),
+    );
+  });
 });

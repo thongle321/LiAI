@@ -20,8 +20,9 @@ import { useEffect, useMemo } from "react";
 import { useChatStore } from "@/store/chat.ts";
 import { useModelStore } from "@/store/modelStore.ts";
 import {
+  TOOL_COMPAT_CODE,
   TOOL_COMPAT_WARNING,
-  shouldWarnToolCompat,
+  toolCompatMismatch,
 } from "@/services/chat/tool-compat.ts";
 import type { Companion } from "@/types/companion.ts";
 
@@ -36,6 +37,7 @@ export function useToolCompatWarning(companion: Companion | undefined): void {
   );
   const hasWarnedToolCompat = useModelStore((s) => s.hasWarnedToolCompat);
   const markToolCompatWarned = useModelStore((s) => s.markToolCompatWarned);
+  const chatWarning = useChatStore((s) => s.chatWarning);
   const setChatWarning = useChatStore((s) => s.setChatWarning);
 
   // Stable across renders: a fresh array here would re-run the effect on
@@ -46,18 +48,39 @@ export function useToolCompatWarning(companion: Companion | undefined): void {
   );
 
   useEffect(() => {
-    if (activeModelId === null) return;
-    const warn = shouldWarnToolCompat({
+    // Is the notice on screen OURS? Two notices share the slot, and only
+    // the owner may take it down.
+    const ours = chatWarning?.code === TOOL_COMPAT_CODE;
+    // The CONDITION, not the verdict on raising it: the warned-set says
+    // whether the user has been told, not whether the pair mismatches. A
+    // notice that was raised and recorded would otherwise look "already
+    // warned" on the next run and take itself down.
+    const mismatch = toolCompatMismatch({
       providerType: activeProviderType,
       talentNames,
       supportsTools,
-      alreadyWarned: hasWarnedToolCompat(activeModelId),
     });
-    if (!warn) return;
+    if (!mismatch) {
+      // The model changed under a notice that is still up: it was about the
+      // old model, so it goes. A notice we never raised is not ours to
+      // touch.
+      if (ours) setChatWarning(null);
+      return;
+    }
+    // Already on screen: setting it again would restart the snackbar's
+    // dwell and keep the notice from ever expiring.
+    if (ours) return;
+    // The user has been told about this model already.
+    if (activeModelId === null) return;
+    if (hasWarnedToolCompat(activeModelId)) return;
     // `recoverable: false` on purpose: the snackbar shows a Retry button
     // for a recoverable warning, and retrying the last turn is no answer
     // to "this model cannot call tools".
     setChatWarning({
+      code: TOOL_COMPAT_CODE,
+      // A model notice, not a turn notice: it is about the model, so it
+      // stays true in the next conversation.
+      scope: "model",
       message: TOOL_COMPAT_WARNING,
       severity: "warning",
       recoverable: false,
@@ -68,6 +91,7 @@ export function useToolCompatWarning(companion: Companion | undefined): void {
   }, [
     activeModelId,
     activeProviderType,
+    chatWarning,
     talentNames,
     supportsTools,
     hasWarnedToolCompat,

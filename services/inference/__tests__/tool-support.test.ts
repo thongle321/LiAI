@@ -57,7 +57,10 @@ describe("hasToolSupport", () => {
     ).toBe(true);
   });
 
-  it("reports no support when the tool_use variant exists but caps nothing", () => {
+  it("takes a model that ships a tool_use template at its word", () => {
+    // PocketPal reads the PRESENCE of the "tool_use" caps, not their inner
+    // flags (ChatScreen.tsx:180): a model that ships a tool-calling template
+    // is capable, whatever that template reports about its own tools.
     expect(
       hasToolSupport(
         ctx({
@@ -65,6 +68,14 @@ describe("hasToolSupport", () => {
           toolUse: false,
           toolUseCaps: { tools: false, toolCalls: false },
         }),
+      ),
+    ).toBe(true);
+  });
+
+  it("reports no support when nothing in the template mentions tools", () => {
+    expect(
+      hasToolSupport(
+        ctx({ defaultCaps: { tools: false, toolCalls: false }, toolUse: false }),
       ),
     ).toBe(false);
   });

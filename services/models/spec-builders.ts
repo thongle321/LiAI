@@ -8,6 +8,7 @@ import type {
 } from "@/types/models";
 import { mmprojSiblings } from "./vision-pairing.ts";
 import { isVisionModel } from "./hf-format.ts";
+import { isDraftOnlyFilename } from "@/utils/draft-only.ts";
 
 const HF_HUB_BASE = "https://huggingface.co";
 
@@ -96,15 +97,24 @@ export function buildHfModelSpec(ref: HFModelRef, file: HFModelFile): ModelSpec 
   // the downloader all read the same answer instead of re-deriving it (the
   // old filename-derived `type` misses repos like `gemma-3-4b-it`).
   const siblings = ref.siblings;
+  // Vision is decided per repo, but a speculative draft that merely lives
+  // alongside an mmproj cannot use one — it would pull the projector down
+  // for nothing and offer image attach on a model that never loads.
+  // PocketPal parity: hfAsModel (pocketpal-ai/src/utils/index.ts:430).
+  const isDraftOnly = isDraftOnlyFilename(file.name);
   const supportsVision =
-    siblings !== undefined
+    siblings !== undefined && !isDraftOnly
       ? isVisionModel(ref.tags ?? [], siblings.map((f) => f.name))
       : false;
-  const projectorCandidates = mmprojSiblings(siblings ?? []).map((f) => ({
-    name: f.name,
-    size: f.size,
-    downloadUrl: f.downloadUrl,
-  }));
+  // The projector candidates follow the answer: a model that cannot see
+  // images has no projector to choose.
+  const projectorCandidates = supportsVision
+    ? mmprojSiblings(siblings ?? []).map((f) => ({
+        name: f.name,
+        size: f.size,
+        downloadUrl: f.downloadUrl,
+      }))
+    : [];
   return {
     id: hfSpecId(ref.modelId, file.name),
     name: `${ref.name} (${file.name})`,

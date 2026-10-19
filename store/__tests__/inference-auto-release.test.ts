@@ -29,13 +29,26 @@ describe("the auto-released model id", () => {
     const storage = memoryStorage();
     const useStore = createInferenceStore(storage);
 
-    useStore.getState().setAutoReleasedModelId("hf-model-1");
-    await Promise.resolve();
+    await useStore.getState().setAutoReleasedModelId("hf-model-1");
 
     const reopened = createInferenceStore(storage);
     await reopened.getState().load();
 
     expect(reopened.getState().autoReleasedModelId).toEqual("hf-model-1");
+  });
+
+  it("is on disk when the setter resolves", async () => {
+    // The record has to reach the disk before the engine is freed: the
+    // process can be killed the moment the app is backgrounded. So the
+    // setter hands back the write instead of firing it.
+    const storage = memoryStorage();
+    const useStore = createInferenceStore(storage);
+
+    await useStore.getState().setAutoReleasedModelId("hf-model-1");
+
+    expect(JSON.parse(storage.data[INFERENCE_KEY]).autoReleasedModelId).toEqual(
+      "hf-model-1",
+    );
   });
 
   it("defaults to null when the stored payload has no such field", async () => {
@@ -64,9 +77,8 @@ describe("the auto-released model id", () => {
     const storage = memoryStorage();
     const useStore = createInferenceStore(storage);
 
-    useStore.getState().setAutoReleasedModelId("hf-model-1");
-    useStore.getState().setAutoReleasedModelId(null);
-    await Promise.resolve();
+    await useStore.getState().setAutoReleasedModelId("hf-model-1");
+    await useStore.getState().setAutoReleasedModelId(null);
 
     const reopened = createInferenceStore(storage);
     await reopened.getState().load();

@@ -99,6 +99,23 @@ describe("isDraftOnlySpec", () => {
     ).toBe(false);
   });
 
+  it("does not fall back to the filename when the header says nothing", () => {
+    // A header we read but could not classify is not an invitation to
+    // guess: the filename would only decide the pre-download case.
+    expect(
+      isDraftOnlySpec({
+        ggufMetadata: { context_length: 4096 },
+        files: [{ name: "mtp-Qwen3-30B-A3B.gguf" }],
+      }),
+    ).toBe(false);
+    expect(
+      isDraftOnlySpec({
+        ggufMetadata: { architecture: "" },
+        files: [{ name: "mtp-Qwen3-30B-A3B.gguf" }],
+      }),
+    ).toBe(false);
+  });
+
   it("falls back to the filename before a download", () => {
     // ggml-org publishes a draft as "mtp-<target>".
     expect(

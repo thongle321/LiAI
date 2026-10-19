@@ -115,8 +115,12 @@ export interface InferenceState extends InferenceParams {
   setImageMaxTokens: (n: number) => void;
   setDraftModelId: (id: string | null) => void;
   setAutoOffload: (on: boolean) => void;
-  /** Record (or clear) the model this app auto-released. */
-  setAutoReleasedModelId: (id: string | null) => void;
+  /** Record (or clear) the model this app auto-released.
+   *
+   *  Unlike the other setters this one returns the write: the record is
+   *  what lets the next launch warm the model up, and the engine is freed
+   *  right behind it, so the caller has to know the record landed. */
+  setAutoReleasedModelId: (id: string | null) => Promise<void>;
 }
 
 export const DEFAULT_INFERENCE: InferenceParams = {
@@ -439,7 +443,7 @@ export function createInferenceStore(storage: KeyValueStorage) {
       },
       setAutoReleasedModelId: (id) => {
         set({ autoReleasedModelId: id });
-        void persist();
+        return persist();
       },
     };
   });

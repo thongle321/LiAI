@@ -48,11 +48,17 @@ export function hasToolSupport(ctx: ToolSupportProbe): boolean | undefined {
   // metadata: the default template's caps, the "tool_use" variant's
   // validity flag, and that variant's own caps. Any one is sufficient;
   // only warn when all of them are absent.
+  //
+  // The fourth place is the PRESENCE of the "tool_use" caps, exactly as
+  // PocketPal reads it (ChatScreen.tsx:180): a model that ships a
+  // tool-calling template is taken at its word. Reading the caps' inner
+  // flags instead would call a model with a tool template incapable
+  // whenever that template reports no tools of its own, and that verdict
+  // would be persisted.
   return (
     jinja.defaultCaps?.tools === true ||
     jinja.defaultCaps?.toolCalls === true ||
     jinja.toolUse === true ||
-    jinja.toolUseCaps?.tools === true ||
-    jinja.toolUseCaps?.toolCalls === true
+    jinja.toolUseCaps !== undefined
   );
 }

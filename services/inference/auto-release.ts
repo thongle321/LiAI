@@ -8,8 +8,8 @@
  * (ModelStore.ts:1127 markAutoReleased, :1140 clearAutoReleaseFlags, :1148
  * checkAndReloadAutoReleasedModel) and reloads the model on the next launch
  * (ModelStore.ts:850). Ours keeps ONE id instead of two flags — a null id IS
- * "nothing was auto-released" — and clears it on the first launch that sees
- * it, exactly like PocketPal's unconditional `clearAutoReleaseFlags()`.
+ * "nothing was auto-released" — and clears it once the model is back, like
+ * PocketPal's `clearAutoReleaseFlags()` after a successful load.
  *
  * The decision is a pure function and the effectful wrappers take their
  * collaborators as parameters, so the rules can be read and tested without
@@ -23,6 +23,14 @@
  * bounded: the load keeps running, the app opens anyway, and the first
  * message finds a warm engine if it got there in time. */
 export const AUTO_RELEASE_RELOAD_TIMEOUT_MS = 120_000;
+
+/** How long the record may hold the free of the engine.
+ *
+ * The record has to reach the disk before the process can be killed, but the
+ * free is what keeps a multi-gigabyte model from being a memory problem in
+ * the background. So the record is written, and the free happens as soon as
+ * the write settles — or after this bound, if the storage never answers. */
+export const AUTO_RELEASE_RECORD_TIMEOUT_MS = 250;
 
 /** The model the app would load right now. */
 export interface AutoReleaseActive {
@@ -73,45 +81,94 @@ export interface AutoReleaseDeps {
 /** Record the model we are about to free.
  *
  * A remote provider is skipped: there is no local engine to restore, so a
- * flag naming it would only produce a pointless load attempt later. */
-export async function markAutoReleased(deps: AutoReleaseDeps): Promise<void> {
-  const active = await deps.readActive();
-  if (active.providerType !== "local") return;
-  if (!active.modelId) return;
-  await deps.writeReleasedModelId(active.modelId);
+ * flag naming it would only produce a pointless load attempt later.
+ *
+ * Never rejects, and bounded: the caller frees the engine as soon as this
+ * settles, and a storage that never answers must not keep a multi-GB model
+ * alive in the background. */
+export async function markAutoReleased(
+  deps: AutoReleaseDeps,
+  timeoutMs: number = AUTO_RELEASE_RECORD_TIMEOUT_MS,
+): Promise<void> {
+  try {
+    const active = await deps.readActive();
+    if (active.providerType !== "local") return;
+    if (!active.modelId) return;
+    await settleWithin(deps.writeReleasedModelId(active.modelId), timeoutMs);
+  } catch (e) {
+    console.warn("[auto-release] could not record the release:", e);
+  }
 }
 
-/** Forget the auto-release: the model is back, or it was never ours. */
+/** Forget the auto-release: the model is back, or it was never ours.
+ *
+ * Never rejects: the flag is a convenience, and a failed write must not
+ * break the restore it belongs to. */
 export async function clearAutoReleased(deps: AutoReleaseDeps): Promise<void> {
-  await deps.writeReleasedModelId(null);
+  try {
+    await deps.writeReleasedModelId(null);
+  } catch (e) {
+    console.warn("[auto-release] could not clear the auto-release record:", e);
+  }
 }
 
 /** Warm the model back up after a restart.
  *
  * Never rejects: a failed load is the next turn's problem, and the app must
- * open either way. The flag is cleared in every case, so a launch is the one
- * chance this model gets to be warmed. */
+ * open either way.
+ *
+ * The flag survives a load that FAILED — the failure may be transient (a
+ * locked file, a busy GPU) and the next launch gets another try, which is
+ * what PocketPal does too: its `clearAutoReleaseFlags()` sits after the
+ * load, so a throw skips it (ModelStore.ts:1148). A load that merely ran out
+ * of time does clear it: the app opened without the model, and the next
+ * launch must not hold the splash for the same wait again. */
 export async function restoreAutoReleasedModel(
   deps: AutoReleaseDeps,
   timeoutMs: number = AUTO_RELEASE_RELOAD_TIMEOUT_MS,
 ): Promise<void> {
-  const releasedModelId = await deps.readReleasedModelId();
-  if (!releasedModelId) return;
+  let releasedModelId: string | null = null;
   try {
-    const active = await deps.readActive();
-    if (decideAutoRelease({ releasedModelId, active }) === "reload") {
-      const settled = await settleWithin(deps.reloadEngine(), timeoutMs);
-      if (!settled) {
-        console.warn(
-          "[auto-release] the warm-up load did not finish in time; the app opens anyway",
-        );
-      }
-    }
+    releasedModelId = await deps.readReleasedModelId();
   } catch (e) {
-    console.warn("[auto-release] warm-up load failed:", e);
-  } finally {
-    await deps.writeReleasedModelId(null);
+    console.warn("[auto-release] could not read the auto-release record:", e);
+    return;
   }
+  if (!releasedModelId) return;
+
+  let decision: AutoReleaseDecision;
+  try {
+    decision = decideAutoRelease({
+      releasedModelId,
+      active: await deps.readActive(),
+    });
+  } catch (e) {
+    console.warn("[auto-release] could not read the active model:", e);
+    return;
+  }
+  // The flag cannot be honoured: the model is gone, another one is active,
+  // or the provider is remote. Drop it without loading.
+  if (decision === "clear") {
+    await clearAutoReleased(deps);
+    return;
+  }
+  if (decision !== "reload") return;
+
+  let settled: boolean;
+  try {
+    settled = await settleWithin(deps.reloadEngine(), timeoutMs);
+  } catch (e) {
+    // The load failed. The flag stays: the next launch gets another try.
+    console.warn("[auto-release] warm-up load failed:", e);
+    return;
+  }
+  if (!settled) {
+    console.warn(
+      "[auto-release] the warm-up load did not finish in time; the app opens anyway",
+    );
+  }
+  // The model is back, so the flag has done its job.
+  await clearAutoReleased(deps);
 }
 
 /** Await `promise`, but give up after `ms`.
@@ -151,7 +208,9 @@ export function createAutoRelease(): AutoReleaseDeps {
     },
     writeReleasedModelId: async (id) => {
       const { useInference } = await import("../../store/inference.ts");
-      useInference.getState().setAutoReleasedModelId(id);
+      // The setter returns the write: the record has to be on disk before
+      // the engine is freed, or the process can be killed without it.
+      await useInference.getState().setAutoReleasedModelId(id);
     },
     readActive: async () => {
       const { useModelStore } = await import("../../store/modelStore.ts");

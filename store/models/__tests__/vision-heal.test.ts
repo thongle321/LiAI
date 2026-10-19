@@ -360,4 +360,41 @@ describe("the vision heal slice", () => {
 
     expect(deps.stored).toEqual(["[]"]);
   });
+
+  it("writes the queue BEFORE the catalog, so a kill cannot orphan a file", async () => {
+    // A file with no owner and no queue entry is never cleaned up again.
+    // With the queue written first, the worst a kill can do is leave a
+    // queue entry whose model still has its pairing — and the next launch
+    // re-runs the heal, which heals the model and keeps the entry.
+    const timeline: string[] = [];
+    const deps = fakeDeps({
+      storage: {
+        getItem: async () => null,
+        setItem: async () => {
+          timeline.push("queue");
+        },
+        removeItem: async () => undefined,
+      },
+    });
+    const store = makeStore(deps, {
+      models: [
+        spec({
+          supportsVision: true,
+          projector: {
+            name: "mmproj.gguf",
+            size: 1,
+            downloadUrl: "https://x/mmproj.gguf",
+          },
+          ggufMetadata: { architecture: "qwen3-mtp" },
+        }),
+      ],
+      saveModels: jest.fn(async () => {
+        timeline.push("models");
+      }),
+    });
+
+    await store.healDraftVisionClassification();
+
+    expect(timeline).toEqual(["queue", "models"]);
+  });
 });

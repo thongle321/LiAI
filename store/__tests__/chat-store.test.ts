@@ -843,6 +843,35 @@ describe("chat warnings (G7)", () => {
     );
     expect(useStore.getState().chatWarning).toBe(null);
   });
+
+  it("keeps a MODEL-scoped notice across a conversation change", async () => {
+    // The tool-compat notice is about the MODEL, not the turn. The screen
+    // mounts, the hook raises the notice, and the session load then resets
+    // the conversation a tick later — so a turn-scoped rule would wipe a
+    // notice the user never got to read.
+    const { getStore, runTurn } = storeWith(
+      [
+        { id: "s1", title: "One" },
+        { id: "s2", title: "Two" },
+      ],
+      "s1",
+    );
+    const useStore = createChatStore({ getStore, runTurn });
+    await useStore.getState().loadSession();
+    useStore.getState().setChatWarning({
+      code: "tool-compat",
+      scope: "model",
+      message: "This model may not support tool calling.",
+      severity: "warning",
+      recoverable: false,
+    });
+
+    expect(await useStore.getState().switchSession("s2")).toBe(true);
+
+    expect(useStore.getState().chatWarning?.message).toBe(
+      "This model may not support tool calling.",
+    );
+  });
 });
 
 describe("multimodal warning (G12)", () => {

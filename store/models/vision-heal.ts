@@ -38,9 +38,17 @@ export interface ProjectionCleanupDeps {
   storage: KeyValueStorage;
 }
 
-/** Every downloaded projector lives in the models directory. */
-function projectorPath(fs: { documentDirectory?: string | null }, name: string) {
-  return `${fs.documentDirectory ?? ""}models/${name}`;
+/** Every downloaded projector lives in the models directory.
+ *
+ *  Throws when there is no document directory: a relative path would point
+ *  at the wrong place, and deleting by a relative path is not a thing this
+ *  app may do. The drain catches it and keeps the file queued. */
+function projectorPath(fs: { documentDirectory?: string | null }, name: string): string {
+  const root = fs.documentDirectory;
+  if (!root) {
+    throw new Error("No document directory: the projector cannot be located.");
+  }
+  return `${root}models/${name}`;
 }
 
 /** The production dependencies.
@@ -48,7 +56,8 @@ function projectorPath(fs: { documentDirectory?: string | null }, name: string) 
  *  The file system and the download service are reached by DYNAMIC import,
  *  for the reason store/models/catalog.ts loads its file system on demand:
  *  a native module at the top level makes the slice unloadable outside a
- *  device, and Jest cannot resolve a dynamic import at all. */
+ *  device, and Jest's CommonJS runtime cannot execute a dynamic import at
+ *  all. */
 export const defaultVisionHealDeps: ProjectionCleanupDeps = {
   deleteProjectorFile: async (name) => {
     const fs = await import("expo-file-system/legacy");
@@ -181,14 +190,17 @@ export function createVisionHealSlice(
         models: plan.models,
         pendingProjectionCleanup: [...queue],
       });
-      // One write for the catalog, one for the queue. The pairing is gone
-      // from the model row and the file it left behind is on the list, in
-      // that order — the drain must never see a pairing it has not undone.
+      // One write for the queue, one for the catalog — in THAT order.
       //
-      // Awaited, not fired: the drain writes the queue again once it has
-      // deleted what it could, and the two writes must land in this order.
-      await get().saveModels();
+      // The queue first, because a kill between the two writes must not
+      // orphan a file: a file with no owner and no queue entry is never
+      // cleaned up again. With the queue written first, the worst case is
+      // a queue entry whose model still has its pairing — and the next
+      // launch re-runs the heal, which heals the model and keeps the
+      // entry. The drain runs after both writes, so it never sees a
+      // pairing the heal has not undone.
       await get().savePendingProjectionCleanup();
+      await get().saveModels();
     },
 
     drainPendingProjectionCleanup: async () => {

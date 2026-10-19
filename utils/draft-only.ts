@@ -35,13 +35,19 @@ export function isDraftOnlyFilename(filename?: string): boolean {
  *
  * The GGUF header is AUTHORITATIVE: a filename convention must never
  * override a valid chat architecture. The filename decides only
- * pre-download, where the Hub search has no header to consult. */
+ * pre-download, where the Hub search has no header to consult.
+ *
+ * A header that names no architecture cannot classify the model at all,
+ * and the filename must not stand in for it: the header was read, and what
+ * it said was "I cannot tell". */
 export function isDraftOnlySpec(spec: {
   ggufMetadata?: Record<string, unknown>;
   files?: { name: string }[];
 }): boolean {
-  const architecture = spec.ggufMetadata?.architecture;
-  if (typeof architecture === "string" && architecture !== "") {
+  const metadata = spec.ggufMetadata;
+  if (metadata !== undefined) {
+    const architecture = metadata.architecture;
+    if (typeof architecture !== "string" || architecture === "") return false;
     return isDraftOnlyArch(architecture);
   }
   return isDraftOnlyFilename(spec.files?.[0]?.name);

@@ -30,9 +30,13 @@ export function useEngineOffload(): void {
       release: () => {
         // Record BEFORE the free: the flag is what lets the next launch warm
         // the model up, and the OS may kill the process the moment the app
-        // is backgrounded (PocketParity: ModelStore.ts:1127).
-        void markAutoReleased(autoRelease);
-        useChatStore.getState().releaseEngine();
+        // is backgrounded (PocketParity: ModelStore.ts:1127). The record is
+        // bounded and never rejects, so the free always happens — it is the
+        // free that keeps a multi-gigabyte model from being a memory
+        // problem while the app sits in the background.
+        void markAutoReleased(autoRelease).finally(() => {
+          useChatStore.getState().releaseEngine();
+        });
       },
       // Reload what we just released, while the user is reading rather
       // than waiting on a reply (PocketPal ModelStore.ts:1163). Swallowed
@@ -40,9 +44,11 @@ export function useEngineOffload(): void {
       // foreground preload has nobody to report to — the next send runs
       // the same path and surfaces it properly.
       restore: () => {
-        void reloadLocalEngine().catch(() => {});
-        // The model is back, so the flag has done its job.
-        void clearAutoReleased(autoRelease);
+        // The flag is cleared only once the model is really back: a failed
+        // reload keeps it, and the next launch warms the model instead.
+        void reloadLocalEngine()
+          .then(() => clearAutoReleased(autoRelease))
+          .catch(() => {});
       },
     });
   }, []);

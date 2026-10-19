@@ -115,6 +115,27 @@ export interface ChatWarning {
   severity: "warning" | "error";
   /** Offers a Retry action, as PocketPal's does for recoverable faults. */
   recoverable: boolean;
+  /** Which notice this is.
+   *
+   *  Two notices share the slot, and they do not have the same lifetime: a
+   *  TURN notice describes what just happened ("the image was dropped") and
+   *  dies with the conversation, while a MODEL notice describes the model
+   *  ("this model may not support tool calling") and stays true in the
+   *  next conversation. Without the distinction the session switch would
+   *  wipe a notice that is still true. */
+  code?: string;
+  /** How long the notice lives. Absent means `turn`. */
+  scope?: "turn" | "model";
+}
+
+/** The notice that survives a change of conversation.
+ *
+ *  A turn notice must not follow the user into the next conversation — it
+ *  is only ever true of the turn that raised it. A model notice is about
+ *  the model, so it stays until the model changes (its owner clears it
+ *  then). */
+export function keepModelWarning(warning: ChatWarning | null): ChatWarning | null {
+  return warning?.scope === "model" ? warning : null;
 }
 
 export interface ChatState {

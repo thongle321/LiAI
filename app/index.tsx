@@ -60,9 +60,10 @@ export default function IndexGate() {
       // warmed up HERE, while the splash still covers the wait: the first
       // message then finds a warm engine instead of paying for a
       // multi-gigabyte read (PocketParity: checkAndReloadAutoReleasedModel,
-      // ModelStore.ts:1148). Bounded, and it never rejects — a failed load
-      // must not keep the app closed.
-      await restoreAutoReleasedModel(createAutoRelease());
+      // ModelStore.ts:1148). Bounded, and it never rejects — but the splash
+      // is the app's first frame, so nothing may keep it up: a failure
+      // opens the app without the model.
+      await restoreAutoReleasedModel(createAutoRelease()).catch(() => {});
       setOnboarded(await isOnboarded());
       void SplashScreen.hideAsync().catch(() => {});
     })();

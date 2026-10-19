@@ -4,6 +4,7 @@ import { toMessages, toSession } from "@/services/chat/messages.ts";
 import type { SessionStore } from "@/services/chat/session-store.ts";
 import { parseImport } from "@/services/chat/import.ts";
 import { readDraftFor } from "./draft.ts";
+import { keepModelWarning } from "./types.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 import { useVoice } from "../voice.ts";
 
@@ -217,7 +218,7 @@ export function createSessionsSlice(
         messages: [],
         sending: false,
         turnStartedAt: null,
-        chatWarning: null,
+        chatWarning: keepModelWarning(get().chatWarning),
         draft: await readDraftFor(ctx, null),
       });
     },
@@ -240,7 +241,7 @@ export function createSessionsSlice(
           sessionCompanionId: companionId,
           messages: toMessages(turns),
           draft: await readDraftFor(ctx, id),
-          chatWarning: null,
+          chatWarning: keepModelWarning(get().chatWarning),
         });
         return true;
       } catch {
@@ -267,7 +268,7 @@ export function createSessionsSlice(
           messages: [],
           sending: false,
           turnStartedAt: null,
-          chatWarning: null,
+          chatWarning: keepModelWarning(get().chatWarning),
           draft: await readDraftFor(ctx, null),
         });
       }
@@ -315,7 +316,7 @@ export function createSessionsSlice(
       draft: await readDraftFor(ctx, copyId),
       sending: false,
       turnStartedAt: null,
-      chatWarning: null,
+      chatWarning: keepModelWarning(get().chatWarning),
     });
     await quiet(get().refreshSessions());
     return true;

@@ -5,8 +5,9 @@
  * goes to the background. Without a record of that, the next launch starts
  * cold and the first message pays for the whole load. These lock the
  * rules PocketPal's `checkAndReloadAutoReleasedModel` (ModelStore.ts:1148)
- * encodes: only the ACTIVE model can be warmed, the flag is cleared on the
- * first launch that sees it, and a failed load must not keep the app shut.
+ * encodes: only the ACTIVE model can be warmed, the flag is cleared once
+ * the model is back, a load that FAILED keeps the flag for the next
+ * attempt, and a failed load must not keep the app shut.
  */
 
 import {
@@ -131,6 +132,28 @@ describe("markAutoReleased", () => {
 
     expect(state.releasedModelId).toBeNull();
   });
+
+  it("gives up on a write that never lands, so the engine is still freed", async () => {
+    // The record has to reach the disk before the process can be killed, but
+    // the free is what keeps a multi-GB model from being a memory problem in
+    // the background. A storage that never answers must not hold the model.
+    const { deps } = world({
+      writeReleasedModelId: () => new Promise<void>(() => {}),
+    });
+
+    await expect(markAutoReleased(deps, 10)).resolves.toBeUndefined();
+  });
+
+  it("never rejects when the write fails", async () => {
+    const { deps } = world({
+      writeReleasedModelId: async () => {
+        throw new Error("storage unavailable");
+      },
+    });
+
+    await expect(markAutoReleased(deps)).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalled();
+  });
 });
 
 describe("clearAutoReleased", () => {
@@ -141,6 +164,16 @@ describe("clearAutoReleased", () => {
     await clearAutoReleased(deps);
 
     expect(state.releasedModelId).toBeNull();
+  });
+
+  it("never rejects when the write fails", async () => {
+    const { deps } = world({
+      writeReleasedModelId: async () => {
+        throw new Error("storage unavailable");
+      },
+    });
+
+    await expect(clearAutoReleased(deps)).resolves.toBeUndefined();
   });
 });
 
@@ -186,7 +219,11 @@ describe("restoreAutoReleasedModel", () => {
     expect(state.releasedModelId).toBeNull();
   });
 
-  it("never rejects when the load fails, and still clears the flag", async () => {
+  it("never rejects when the load fails, and KEEPS the flag for the next try", async () => {
+    // PocketPal's `clearAutoReleaseFlags()` sits AFTER the load
+    // (ModelStore.ts:1148), so a throw skips it. The failure may be
+    // transient — a locked file, a busy GPU — and the next launch gets
+    // another try.
     const { state, deps } = world({
       reloadEngine: async () => {
         throw new Error("out of memory");
@@ -196,7 +233,17 @@ describe("restoreAutoReleasedModel", () => {
 
     await expect(restoreAutoReleasedModel(deps)).resolves.toBeUndefined();
 
-    expect(state.releasedModelId).toBeNull();
+    expect(state.releasedModelId).toEqual("m1");
+  });
+
+  it("never rejects when the flag cannot even be read", async () => {
+    const { deps } = world({
+      readReleasedModelId: async () => {
+        throw new Error("storage unavailable");
+      },
+    });
+
+    await expect(restoreAutoReleasedModel(deps)).resolves.toBeUndefined();
   });
 
   it("gives up on a load that never settles, so the app still opens", async () => {
@@ -207,6 +254,8 @@ describe("restoreAutoReleasedModel", () => {
 
     await restoreAutoReleasedModel(deps, 10);
 
+    // The app opened without the model: the next launch must not hold the
+    // splash for the same wait again.
     expect(state.releasedModelId).toBeNull();
     expect(warn).toHaveBeenCalled();
   });

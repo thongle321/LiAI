@@ -26,8 +26,21 @@ export const DEFAULT_SEARCH_FILTERS: HFSearchFilters = {
   sortBy: "relevance",
 };
 
-/** The persisted slice of the model store. */
-export interface PersistedModelState {
+/** A model as it goes to disk.
+ *
+ *  The apiKey never goes to disk — it lives in SecureStore. Neither do the
+ *  transfer counters: they are live download state. An in-flight download
+ *  re-derives its progress from the native downloader at launch, and a
+ *  finished download does not need them — the size on screen comes from the
+ *  model's file list. Leaving them in would make every progress tick a write
+ *  of the whole catalog. */
+export type PersistedModel = Omit<
+  ModelSpec,
+  "downloadProgress" | "downloadedBytes" | "totalBytes" | "speedBytesPerSec"
+>;
+
+/** The state the persisted slice is built from: the live store state. */
+export interface ModelStateSource {
   models: ModelSpec[];
   remoteApis: RemoteApiProvider[];
   activeModelId: string | null;
@@ -42,22 +55,21 @@ export interface PersistedModelState {
   searchFilters: HFSearchFilters;
 }
 
-/** A model as it goes to disk.
- *
- *  The apiKey never goes to disk — it lives in SecureStore. The byte
- *  counters do not either: they are live transfer state, re-derived from
- *  the native downloader at launch (resume reads the partial file, not
- *  these fields). Leaving them in would make every progress tick a write
- *  of the whole catalog. */
-export function persistedModel(model: ModelSpec): ModelSpec {
-  return {
-    ...model,
-    apiKey: undefined,
-    downloadProgress: 0,
-    downloadedBytes: 0,
-    totalBytes: 0,
-    speedBytesPerSec: undefined,
-  };
+/** The persisted slice of the model store. */
+export type PersistedModelState = Omit<ModelStateSource, "models"> & {
+  models: PersistedModel[];
+};
+
+/** A model as it goes to disk: metadata only, no key, no transfer counters. */
+export function persistedModel(model: ModelSpec): PersistedModel {
+  const {
+    downloadProgress,
+    downloadedBytes,
+    totalBytes,
+    speedBytesPerSec,
+    ...rest
+  } = model;
+  return { ...rest, apiKey: undefined };
 }
 
 /** A remote provider as it goes to disk: metadata only, never the key. */
@@ -71,7 +83,7 @@ export function persistedRemoteApi(
  *  fields. The store satisfies it structurally; so does a state rebuilt by
  *  the legacy migration. */
 export function persistedState(
-  state: PersistedModelState,
+  state: ModelStateSource,
 ): PersistedModelState {
   return {
     models: state.models.map(persistedModel),

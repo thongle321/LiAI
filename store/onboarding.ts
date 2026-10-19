@@ -3,11 +3,9 @@ import { persist, createJSONStorage } from "zustand/middleware";
 
 import type { KeyValueStorage } from "@/services/storage/storage";
 import { toStateStorage, gatedStorage } from "@/services/storage/persist-helpers";
-import { onboardingStorage } from "@/services/onboarding.ts";
+import { onboardingStorage, ONBOARDING_KEY, LEGACY_ONBOARDED_KEY } from "@/services/onboarding.ts";
 
 export type OnboardingExit = "/chat" | "/models";
-export const ONBOARDING_KEY = "liai_onboarding";
-export const LEGACY_ONBOARDED_KEY = "liai_onboarded";
 export interface OnboardingState {
   onboarded: boolean; hydrated: boolean; exitTo: OnboardingExit | null;
   hydrate: () => Promise<void>; complete: (to: OnboardingExit) => Promise<void>; clearExit: () => void;

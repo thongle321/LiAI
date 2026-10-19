@@ -9,7 +9,6 @@
  * is touched and every decision is exact. */
 
 import type { ModelSpec } from "@/types/models";
-import type { KeyValueStorage } from "@/services/storage/storage";
 import {
   createVisionHealSlice,
   drainProjectionCleanup,
@@ -39,13 +38,11 @@ function spec(overrides: Partial<ModelSpec> = {}): ModelSpec {
 /** The recorded calls of a fake device. */
 function fakeDeps(
   overrides: Partial<ProjectionCleanupDeps> = {},
-): ProjectionCleanupDeps & { deleted: string[]; stored: string[]; onDisk: Set<string> } {
+): ProjectionCleanupDeps & { deleted: string[]; onDisk: Set<string> } {
   const deleted: string[] = [];
-  const stored: string[] = [];
   const onDisk = new Set<string>();
   return {
     deleted,
-    stored,
     onDisk,
     deleteProjectorFile: async (name) => {
       deleted.push(name);

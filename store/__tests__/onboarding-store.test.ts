@@ -4,7 +4,8 @@
  * under ONBOARDING_KEY as `{ state: { onboarded }, version }`.
  */
 
-import { createOnboardingStore, ONBOARDING_KEY } from "../onboarding";
+import { createOnboardingStore } from "../onboarding";
+import { ONBOARDING_KEY } from "@/services/onboarding.ts";
 import type { KeyValueStorage } from "@/services/storage/storage";
 
 function fakeStorage(): KeyValueStorage & { data: Map<string, string> } {

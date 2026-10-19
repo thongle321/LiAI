@@ -9,7 +9,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "../services/storage/storage";
-import { toStateStorage } from "@/services/storage/persist-helpers";
+import { dedupedStorage, toStateStorage } from "@/services/storage/persist-helpers";
 import {
   DEFAULT_PROVIDER,
   DEFAULT_RESULT_COUNT,
@@ -44,6 +44,7 @@ export interface SearchState {
 interface SearchStoreApi {
   persist: { rehydrate: () => void | Promise<void> };
   getState: () => SearchState;
+  setState: (partial: Partial<SearchState>) => void;
 }
 
 function normalizeSearchSettings(raw: unknown): {
@@ -143,7 +144,9 @@ export function createSearchStore(storage: KeyValueStorage, secure: SecureAdapte
       },
       {
         name: SEARCH_KEY,
-        storage: createJSONStorage(() => toStateStorage(storage)),
+        // Deduped: publishing `loaded` writes the same bytes the middleware
+        // just wrote, and the middleware writes on every state change.
+        storage: createJSONStorage(() => toStateStorage(dedupedStorage(storage))),
         skipHydration: true,
         partialize: (state) => ({
           activeProviderId: state.activeProviderId,
@@ -159,7 +162,9 @@ export function createSearchStore(storage: KeyValueStorage, secure: SecureAdapte
           };
         },
         onRehydrateStorage: () => (state) => {
-          if (state) state.loaded = true;
+          // Published through the store so subscribers re-render; an in-place
+          // mutation would leave them on a stale `loaded`.
+          if (state) api?.setState({ loaded: true });
         },
       },
     ),

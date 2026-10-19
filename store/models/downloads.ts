@@ -29,7 +29,7 @@ import { resumeDataForPartial, classifyFileOnDisk } from "@/services/models/resu
 import { findProjectorFile, pairDownloadStep } from "@/services/models/vision-pairing.ts";
 import { readGgufMetadata } from "@/services/models/gguf-header.ts";
 import { modelFitsOnDevice } from "@/utils/storage-fit.ts";
-import { asyncStorage, MEMORY_GUARD_KEY, generateId } from "./storage";
+import { generateId } from "./storage";
 
 /** Injectable download driver (Phase 2.2). Defaults to the platform driver;
  *  tests override via setDownloadService. */

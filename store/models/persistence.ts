@@ -32,7 +32,7 @@ import { parseProjectionCleanupQueue } from "./vision-heal";
 import {
   DEFAULT_SEARCH_FILTERS,
   persistedState,
-  type PersistedModelState,
+  type ModelStateSource,
 } from "./persist-shape";
 
 /** The legacy keys this store used to write, one per field. They are read
@@ -253,7 +253,7 @@ async function migrateLegacyIfNeeded(storage: KeyValueStorage): Promise<void> {
     }
   }
 
-  const state: PersistedModelState = {
+  const state: ModelStateSource = {
     models: upgradeModelList(models),
     remoteApis: upgradeRemoteApis(apis),
     activeModelId,

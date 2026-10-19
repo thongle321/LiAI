@@ -82,6 +82,29 @@ class ResumableDownloadService {
     completeCallback: DownloadCompleteCallback;
   }> = new Map();
 
+  /** Per-job subscribers, keyed by job id. The store subscribes once and
+   *  receives every update for that job. */
+  private subscribers = new Map<string, Set<(job: DownloadJob) => void>>();
+
+  subscribe(jobId: string, callback: (job: DownloadJob) => void): () => void {
+    let set = this.subscribers.get(jobId);
+    if (!set) {
+      set = new Set();
+      this.subscribers.set(jobId, set);
+    }
+    set.add(callback);
+    return () => {
+      set.delete(callback);
+      if (set.size === 0) this.subscribers.delete(jobId);
+    };
+  }
+
+  private notifySubscribers(job: DownloadJob): void {
+    const set = this.subscribers.get(job.id);
+    if (!set) return;
+    for (const cb of set) cb(job);
+  }
+
   /** Last progress mark per job: speed is bytes/dt, refreshed ≥500ms apart. */
   private speedMarks = new Map<string, { at: number; bytes: number; speed: number }>();
 
@@ -188,6 +211,7 @@ class ResumableDownloadService {
     });
     const entry = this.activeDownloads.get(job.id);
     entry?.completeCallback(job, success);
+    this.notifySubscribers(job);
   }
 
   /** Terminal failure that keeps the partial on disk, for the cases where
@@ -211,6 +235,7 @@ class ResumableDownloadService {
     this.activeDownloads.set(jobId, { ...entry, job: failedJob, task: null });
     entry.progressCallback(failedJob);
     entry.completeCallback(failedJob, false);
+    this.notifySubscribers(failedJob);
     this.announceOutcome(failedJob, false);
     this.stopSpaceWatchIfIdle();
     // Cleared only AFTER the terminal event is published: whichever order the
@@ -254,6 +279,7 @@ class ResumableDownloadService {
       });
       onProgress(failedJob);
       onComplete(failedJob, false);
+      this.notifySubscribers(failedJob);
       this.announceOutcome(failedJob, false);
       this.stopSpaceWatchIfIdle();
       throw new Error(message);
@@ -308,6 +334,7 @@ class ResumableDownloadService {
           completeCallback: onComplete,
         });
         onProgress(updatedJob);
+        this.notifySubscribers(updatedJob);
       };
 
       const startTask = (resume?: string): DownloadResumable => {
@@ -369,6 +396,7 @@ class ResumableDownloadService {
           completeCallback: onComplete,
         });
         onProgress(pausedJob);
+        this.notifySubscribers(pausedJob);
         this.stopSpaceWatchIfIdle();
       };
 
@@ -467,6 +495,7 @@ class ResumableDownloadService {
       });
       onProgress(completedJob);
       onComplete(completedJob, true);
+      this.notifySubscribers(completedJob);
       this.announceOutcome(completedJob, true);
       this.stopSpaceWatchIfIdle();
     } catch (error) {
@@ -494,6 +523,7 @@ class ResumableDownloadService {
     });
 
     entry.progressCallback(pausedJob);
+    this.notifySubscribers(pausedJob);
     return pausedJob;
   }
 
@@ -512,6 +542,7 @@ class ResumableDownloadService {
 
     if (entry.job.status === "completed") {
       entry.progressCallback(entry.job);
+      this.notifySubscribers(entry.job);
       this.announceOutcome(entry.job, true);
       return;
     }
@@ -536,6 +567,7 @@ class ResumableDownloadService {
     });
 
     entry.progressCallback(resumedJob);
+    this.notifySubscribers(resumedJob);
     this.startSpaceWatch();
 
     try {
@@ -545,6 +577,7 @@ class ResumableDownloadService {
         const pausedJob: DownloadJob = { ...entry.job, status: "paused" };
         this.activeDownloads.set(jobId, { ...entry, job: pausedJob });
         entry.progressCallback(pausedJob);
+        this.notifySubscribers(pausedJob);
         return;
       }
 
@@ -599,6 +632,7 @@ class ResumableDownloadService {
       });
 
       entry.progressCallback(completedJob);
+      this.notifySubscribers(completedJob);
       this.announceOutcome(completedJob, true);
       this.stopSpaceWatchIfIdle();
     } catch (error) {
@@ -615,6 +649,7 @@ class ResumableDownloadService {
       });
 
       entry.progressCallback(failedJob);
+      this.notifySubscribers(failedJob);
       this.announceOutcome(failedJob, false);
 
       throw error;
@@ -661,6 +696,7 @@ class ResumableDownloadService {
     this.stopSpaceWatchIfIdle();
     entry?.progressCallback(cancelledJob);
     entry?.completeCallback(cancelledJob, false);
+    this.notifySubscribers(cancelledJob);
   }
 
   /** Get current job status */
@@ -683,6 +719,7 @@ class ResumableDownloadService {
   removeJob(jobId: string): void {
     this.forget(jobId);
     this.activeDownloads.delete(jobId);
+    this.subscribers.delete(jobId);
     this.stopSpaceWatchIfIdle();
   }
 }
@@ -716,6 +753,10 @@ export type DownloadDriver = {
   getJob(jobId: string): DownloadJob | null;
   getAllJobs(): DownloadJob[];
   removeJob(jobId: string): void;
+  /** Subscribe to all updates for a specific job. Returns an unsubscribe
+   *  function. The store uses this instead of passing callbacks at start
+   *  time, so concurrent downloads never clobber each other. */
+  subscribe(jobId: string, callback: (job: DownloadJob) => void): () => void;
   /** Adopt whatever the native side is still running. Android-only: iOS has
    *  no such notion, because a background NSURLSession there resolves its
    *  own promise when JS returns. */

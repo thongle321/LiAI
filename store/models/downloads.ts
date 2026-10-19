@@ -271,10 +271,10 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
       error: undefined,
     });
 
-    // Per-job subscribers (Phase 2.1): each download carries its own
-    // progress/completion handler, so concurrent downloads no longer
-    // clobber each other through a shared global callback.
-    const onProgress = (downloadJob: DownloadJob) => {
+    // Per-job subscribers (Phase 2.1): the store subscribes to this job's
+    // updates by id, so concurrent downloads never clobber each other through
+    // a shared global callback.
+    const unsubscribe = downloadService.subscribe(job.id, (downloadJob) => {
       const prevStatus = get().getModel(downloadJob.modelId)?.downloadStatus;
       if (prevStatus !== downloadJob.status) {
         get().updateModel(downloadJob.modelId, {
@@ -288,22 +288,20 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
         totalBytes: downloadJob.totalBytes,
         speedBytesPerSec: downloadJob.speedBytesPerSec,
       });
-    };
-    const onComplete = (downloadJob: DownloadJob, success: boolean) => {
-      const specNow = get().getModel(downloadJob.modelId);
-      if (
-        success &&
-        specNow?.projector !== undefined &&
-        downloadJob.fileName === specNow?.files[0]?.name
-      ) {
-        void get().startSpecDownload(
-          specNow,
-          specNow.files[0],
-          get().activeHfToken() ?? undefined,
-        );
-        return;
-      }
-      if (success) {
+
+      if (downloadJob.status === "completed") {
+        const specNow = get().getModel(downloadJob.modelId);
+        if (
+          specNow?.projector !== undefined &&
+          downloadJob.fileName === specNow?.files[0]?.name
+        ) {
+          void get().startSpecDownload(
+            specNow,
+            specNow.files[0],
+            get().activeHfToken() ?? undefined,
+          );
+          return;
+        }
         const mainFile = specNow?.files[0];
         const mainSize = mainFile?.size ?? downloadJob.totalBytes;
         get().updateModel(downloadJob.modelId, {
@@ -320,7 +318,8 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
           set({ largestSuccessfulBytes: mainSize });
           void get().saveMemoryGuard();
         }
-      } else if (downloadJob.status !== "cancelled") {
+      } else if (downloadJob.status === "failed") {
+        const specNow = get().getModel(downloadJob.modelId);
         const message =
           specNow?.projector !== undefined &&
           downloadJob.fileName === specNow?.projector?.name
@@ -332,11 +331,13 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
           errorCode: downloadJob.errorCode,
         });
       }
-    };
+    });
 
     try {
-      await downloadService.startDownload(job, onProgress, onComplete, resume ?? undefined);
+      await downloadService.startDownload(job, undefined, undefined, resume ?? undefined);
+      unsubscribe();
     } catch (error) {
+      unsubscribe();
       get().updateModel(specId, {
         downloadStatus: "failed",
         error: error instanceof Error ? error.message : "Download failed",

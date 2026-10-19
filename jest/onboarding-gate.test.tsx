@@ -35,8 +35,8 @@ describe("first-run gate (D1-1)", () => {
     // the layout holds LIVE state, because a value read once at mount cannot
     // re-open the gate when onboarding completes (the drawer would stay
     // removed from the navigator and the navigation would be dropped).
-    expect(store).toMatch(/isOnboarded/);
-    expect(store).toMatch(/setOnboarded/);
+    expect(store).toMatch(/getItem/);
+    expect(store).toMatch(/ONBOARDING_KEY/);
   });
 
   it("keeps the index screen as the fallback the router resolves to", () => {

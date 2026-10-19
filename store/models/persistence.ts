@@ -30,7 +30,6 @@ import { parseWarnedModelIds } from "./warnings";
 import { parseProjectionCleanupQueue } from "./vision-heal";
 
 let hydrating: Promise<void> | null = null;
-let storeApi: { persist: { rehydrate: () => void | Promise<void> } } | null = null;
 
 export const createPersistenceSlice: StateCreator<
   ModelStore,
@@ -38,14 +37,14 @@ export const createPersistenceSlice: StateCreator<
   [],
   PersistenceSlice
 > = (set, get, api) => {
-  storeApi = api as unknown as typeof storeApi;
+  const storeApi = api as unknown as { persist: { rehydrate: () => void | Promise<void> } };
   return {
     hydrated: false,
     loadPersisted: async () => {
       if (get().hydrated) return;
       hydrating ??= (async () => {
         try {
-          await hydrate(set, get);
+          await hydrate(set, get, storeApi);
         } finally {
           set({ hydrated: true });
         }
@@ -255,6 +254,7 @@ async function migrateLegacyIfNeeded(): Promise<void> {
 async function hydrate(
   set: (partial: Partial<ModelStore>) => void,
   get: () => ModelStore,
+  storeApi: { persist: { rehydrate: () => void | Promise<void> } },
 ): Promise<void> {
   try {
     await migrateLegacyIfNeeded();
@@ -263,7 +263,7 @@ async function hydrate(
     // The store's api reference is captured in persistence.ts? We need api.
     // We'll reach it via a global set during index.ts. Instead, use get().loadPersisted? circular.
     // Approach: persistence slice doesn't have api. We'll call rehydrate through a stored ref.
-    if (storeApi) await storeApi.persist.rehydrate();
+    await storeApi.persist.rehydrate();
 
     // Cleanup queue lands in store before models are parsed (via rehydrate).
     // Secrets: hydrate remote model keys from SecureStore.

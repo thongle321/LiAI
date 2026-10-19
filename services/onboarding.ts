@@ -4,6 +4,7 @@
  */
 
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
+import type { KeyValueStorage } from "@/services/storage/storage";
 
 export const ONBOARDED_KEY = "liai_onboarded";
 
@@ -29,3 +30,31 @@ export async function setOnboarded(): Promise<void> {
     // Non-critical: the worst case is seeing onboarding once more.
   }
 }
+
+/** Lazy AsyncStorage adapter for the onboarding store (KeyValueStorage shape). */
+export const onboardingStorage: KeyValueStorage = {
+  getItem: async (key) => {
+    try {
+      const s = await rnStorage();
+      return await s.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: async (key, value) => {
+    try {
+      const s = await rnStorage();
+      await s.setItem(key, value);
+    } catch {
+      // best effort
+    }
+  },
+  removeItem: async (key) => {
+    try {
+      const s = await rnStorage();
+      await s.removeItem(key);
+    } catch {
+      // best effort
+    }
+  },
+};

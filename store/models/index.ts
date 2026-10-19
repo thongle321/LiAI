@@ -9,7 +9,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 import type { KeyValueStorage } from "@/services/storage/storage";
-import { toStateStorage } from "@/services/storage/persist-helpers";
+import { toStateStorage, gatedStorage } from "@/services/storage/persist-helpers";
 
 import type { ModelStore } from "./types";
 import type { HFSearchFilters } from "./types";
@@ -30,12 +30,7 @@ export type { ModelStore } from "./types";
 export function createModelStore(storage: KeyValueStorage) {
   let persistEnabled = false;
 
-  const gatedStorage = {
-    getItem: (key: string) => storage.getItem(key),
-    setItem: (key: string, value: string) =>
-      persistEnabled ? storage.setItem(key, value) : Promise.resolve(),
-    removeItem: (key: string) => storage.removeItem(key),
-  };
+  const gated = gatedStorage(storage, () => persistEnabled);
 
   const created = create<ModelStore>()(
     persist(
@@ -51,7 +46,7 @@ export function createModelStore(storage: KeyValueStorage) {
       }),
       {
         name: STORAGE_KEY,
-        storage: createJSONStorage(() => toStateStorage(gatedStorage)),
+        storage: createJSONStorage(() => toStateStorage(gated)),
         skipHydration: true,
         partialize: (state: ModelStore) => ({
           models: state.models.map((m) => ({ ...m, apiKey: undefined })),

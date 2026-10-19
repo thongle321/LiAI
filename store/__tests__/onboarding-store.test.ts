@@ -4,7 +4,7 @@
  * under ONBOARDING_KEY as `{ state: { onboarded }, version }`.
  */
 
-import { createOnboardingStore, ONBOARDING_KEY, type OnboardingFlag } from "../onboarding";
+import { createOnboardingStore, ONBOARDING_KEY } from "../onboarding";
 import type { KeyValueStorage } from "@/services/storage/storage";
 
 function fakeStorage(): KeyValueStorage & { data: Map<string, string> } {
@@ -67,16 +67,16 @@ describe("the first-run gate", () => {
     let release: () => void = () => {};
     const storage: KeyValueStorage & { data: Map<string, string> } = {
       data: new Map(),
-      getItem: async (key) => (storage as any).data.get(key) ?? null,
+      getItem: async (key) => storage.data.get(key) ?? null,
       setItem: (key, value) =>
         new Promise<void>((resolve) => {
           release = () => {
-            (storage as any).data.set(key, value);
+            storage.data.set(key, value);
             resolve();
           };
         }),
       removeItem: async (key) => {
-        (storage as any).data.delete(key);
+        storage.data.delete(key);
       },
     };
     const store = createOnboardingStore(storage);

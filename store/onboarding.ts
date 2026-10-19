@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 import type { KeyValueStorage } from "@/services/storage/storage";
-import { toStateStorage } from "@/services/storage/persist-helpers";
+import { toStateStorage, gatedStorage } from "@/services/storage/persist-helpers";
 import { onboardingStorage } from "@/services/onboarding.ts";
 
 export type OnboardingExit = "/chat" | "/models";
@@ -17,15 +17,20 @@ interface OnboardingStoreApi { persist: { rehydrate: () => void | Promise<void> 
 export function createOnboardingStore(storage: KeyValueStorage) {
   const ctx = { getState: null as null | (() => OnboardingState), writesEnabled: false };
 
-  const gated = {
-    getItem: (key: string) => storage.getItem(key),
-    setItem: async (key: string, value: string) => {
-      if (!ctx.writesEnabled) return;
-      if (ctx.getState && !ctx.getState().hydrated) return;
+  /** The onboarding flag is best effort: a failed write must not break the
+   *  flow, and nothing may be written before the store has hydrated. */
+  const bestEffort: KeyValueStorage = {
+    getItem: (key) => storage.getItem(key),
+    setItem: async (key, value) => {
       try { await storage.setItem(key, value); } catch { /* best effort */ }
     },
-    removeItem: (key: string) => storage.removeItem(key),
+    removeItem: (key) => storage.removeItem(key),
   };
+
+  const gated = gatedStorage(
+    bestEffort,
+    () => ctx.writesEnabled && !!ctx.getState?.().hydrated,
+  );
 
   let api: OnboardingStoreApi | null = null;
   let hydrating: Promise<void> | null = null;
@@ -68,7 +73,7 @@ export function createOnboardingStore(storage: KeyValueStorage) {
       }),
       {
         name: ONBOARDING_KEY,
-        storage: createJSONStorage(() => toStateStorage(gated as KeyValueStorage)),
+        storage: createJSONStorage(() => toStateStorage(gated)),
         skipHydration: true,
         partialize: (state: OnboardingState) => ({ onboarded: state.onboarded }),
         merge: (persistedState, currentState) => {

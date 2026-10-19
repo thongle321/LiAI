@@ -9,7 +9,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "../services/storage/storage";
-import { toStateStorage } from "@/services/storage/persist-helpers";
+import { dedupedStorage, toStateStorage } from "@/services/storage/persist-helpers";
 import {
   DEFAULT_SAMPLER,
   parseSampler,
@@ -242,6 +242,7 @@ export function parseInferenceParams(raw: string | null): InferenceParams {
 interface InferenceStoreApi {
   persist: { rehydrate: () => void | Promise<void> };
   getState: () => InferenceState;
+  setState: (partial: Partial<InferenceState>) => void;
 }
 
 const PARAM_KEYS: (keyof InferenceParams)[] = [
@@ -387,7 +388,9 @@ export function createInferenceStore(storage: KeyValueStorage) {
       },
       {
         name: INFERENCE_KEY,
-        storage: createJSONStorage(() => toStateStorage(storage)),
+        // Deduped: the middleware writes on every state change, and publishing
+        // `loaded` writes the same bytes it just wrote.
+        storage: createJSONStorage(() => toStateStorage(dedupedStorage(storage))),
         skipHydration: true,
         partialize: (state: InferenceState) => {
           const out: Record<string, unknown> = {};
@@ -405,7 +408,9 @@ export function createInferenceStore(storage: KeyValueStorage) {
           };
         },
         onRehydrateStorage: () => (state, error) => {
-          if (state && !error) state.loaded = true;
+          // Published through the store so subscribers re-render; an in-place
+          // mutation would leave them on a stale `loaded`.
+          if (state && !error) api?.setState({ loaded: true });
         },
       },
     ),

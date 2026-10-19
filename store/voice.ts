@@ -24,9 +24,10 @@
  */
 
 import { create } from "zustand";
-import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "../services/storage/storage.ts";
+import { gatedStorage, toStateStorage } from "@/services/storage/persist-helpers";
 import { DEVICE_DEFAULT_VOICE, type NeuralEngineId, type Voice } from "../services/tts/types.ts";
 import { ENGINE_ORDER, NEURAL_ENGINE_META } from "../services/tts/engineMeta.ts";
 import { ttsDownloads, type TtsModelStatus } from "../services/tts/download.ts";
@@ -196,14 +197,6 @@ interface VoiceStoreApi {
   getState: () => VoiceState;
 }
 
-function toStateStorage(storage: KeyValueStorage): StateStorage {
-  return {
-    getItem: (key) => storage.getItem(key),
-    setItem: (key, value) => storage.setItem(key, value),
-    removeItem: (key) => storage.removeItem(key),
-  };
-}
-
 export function createVoiceStore(storage: KeyValueStorage) {
   /** In-flight hydration, so concurrent `load()` callers share one read
    *  (the startup gate and the voice settings screen both call it). */
@@ -211,12 +204,7 @@ export function createVoiceStore(storage: KeyValueStorage) {
   let api: VoiceStoreApi | null = null;
   let persistEnabled = false;
 
-  const gatedStorage: KeyValueStorage = {
-    getItem: (key) => storage.getItem(key),
-    setItem: (key, value) =>
-      persistEnabled ? storage.setItem(key, value) : Promise.resolve(),
-    removeItem: (key) => storage.removeItem(key),
-  };
+  const gated = gatedStorage(storage, () => persistEnabled);
 
   const created = create<VoiceState>()(
     persist(
@@ -411,7 +399,7 @@ export function createVoiceStore(storage: KeyValueStorage) {
   },
   {
     name: VOICE_KEY,
-    storage: createJSONStorage(() => toStateStorage(gatedStorage)),
+    storage: createJSONStorage(() => toStateStorage(gated)),
     skipHydration: true,
     partialize: (state: VoiceState) => ({
       currentVoice: state.currentVoice,

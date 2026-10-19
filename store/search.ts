@@ -6,9 +6,10 @@
  */
 
 import { create } from "zustand";
-import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "../services/storage/storage";
+import { toStateStorage } from "@/services/storage/persist-helpers";
 import {
   DEFAULT_PROVIDER,
   DEFAULT_RESULT_COUNT,
@@ -78,14 +79,6 @@ function parseSearchSettings(raw: string | null): ReturnType<typeof normalizeSea
   } catch {
     return fallback;
   }
-}
-
-function toStateStorage(storage: KeyValueStorage): StateStorage {
-  return {
-    getItem: (key) => storage.getItem(key),
-    setItem: (key, value) => storage.setItem(key, value),
-    removeItem: (key) => storage.removeItem(key),
-  };
 }
 
 export function createSearchStore(storage: KeyValueStorage, secure: SecureAdapter) {

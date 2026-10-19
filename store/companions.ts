@@ -7,9 +7,10 @@
  */
 
 import { create } from "zustand";
-import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 import type { KeyValueStorage } from "@/services/storage/storage.ts";
+import { toStateStorage } from "@/services/storage/persist-helpers";
 import type { Companion, CompanionUpdate } from "@/types/companion.ts";
 import type { CompanionRepository } from "@/services/companions/repository.ts";
 import { PIP_COMPANION } from "@/services/companions/builtins.ts";
@@ -46,14 +47,6 @@ export interface CompanionsState {
 interface CompanionsStoreApi {
   persist: { rehydrate: () => void | Promise<void> };
   getState: () => CompanionsState;
-}
-
-function toStateStorage(storage: KeyValueStorage): StateStorage {
-  return {
-    getItem: (key) => storage.getItem(key),
-    setItem: (key, value) => storage.setItem(key, value),
-    removeItem: (key) => storage.removeItem(key),
-  };
 }
 
 export function createCompanionsStore(

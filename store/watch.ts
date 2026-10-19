@@ -7,9 +7,10 @@
  */
 
 import { create } from "zustand";
-import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "../services/storage/storage.ts";
+import { dedupedStorage, toStateStorage } from "@/services/storage/persist-helpers";
 import { clampWatchInterval, WATCH_INTERVAL_DEFAULT_MS } from "../services/vision/vision-watch.ts";
 
 export const WATCH_KEY = "liai_watch";
@@ -24,14 +25,7 @@ export interface WatchState {
 interface WatchStoreApi {
   persist: { rehydrate: () => void | Promise<void> };
   getState: () => WatchState;
-}
-
-function toStateStorage(storage: KeyValueStorage): StateStorage {
-  return {
-    getItem: (key) => storage.getItem(key),
-    setItem: (key, value) => storage.setItem(key, value),
-    removeItem: (key) => storage.removeItem(key),
-  };
+  setState: (partial: Partial<WatchState>) => void;
 }
 
 export function createWatchStore(storage: KeyValueStorage) {
@@ -53,7 +47,9 @@ export function createWatchStore(storage: KeyValueStorage) {
       }),
       {
         name: WATCH_KEY,
-        storage: createJSONStorage(() => toStateStorage(storage)),
+        // Deduped: publishing `loaded` writes the same bytes the middleware
+        // just wrote, and the middleware writes on every state change.
+        storage: createJSONStorage(() => toStateStorage(dedupedStorage(storage))),
         skipHydration: true,
         partialize: (state) => ({ watchIntervalMs: state.watchIntervalMs }),
         merge: (persistedState, currentState) => {
@@ -65,7 +61,9 @@ export function createWatchStore(storage: KeyValueStorage) {
           return { ...currentState, watchIntervalMs: clamped, loaded: currentState.loaded };
         },
         onRehydrateStorage: () => (state) => {
-          if (state) state.loaded = true;
+          // Published through the store so subscribers re-render; an in-place
+          // mutation would leave them on a stale `loaded`.
+          if (state) api?.setState({ loaded: true });
         },
       },
     ),

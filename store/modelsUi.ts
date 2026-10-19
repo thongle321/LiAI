@@ -6,9 +6,10 @@
  */
 
 import { create } from "zustand";
-import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "../services/storage/storage";
+import { toStateStorage } from "@/services/storage/persist-helpers";
 import {
   AVAILABLE_TO_DOWNLOAD,
   READY_TO_USE,
@@ -119,14 +120,6 @@ function parseUiState(raw: string | null): ReturnType<typeof normalizeUiState> {
   } catch {
     return { ...DEFAULTS, expandedGroups: { ...DEFAULT_EXPANDED } };
   }
-}
-
-function toStateStorage(storage: KeyValueStorage): StateStorage {
-  return {
-    getItem: (key) => storage.getItem(key),
-    setItem: (key, value) => storage.setItem(key, value),
-    removeItem: (key) => storage.removeItem(key),
-  };
 }
 
 export function createModelsUiStore(storage: KeyValueStorage) {

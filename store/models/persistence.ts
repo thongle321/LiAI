@@ -17,6 +17,7 @@ import {
   HF_TOKEN_USE_KEY,
   MEMORY_GUARD_KEY,
   MODEL_SETTINGS_KEY,
+  PENDING_PROJECTION_CLEANUP_KEY,
   REMOTE_APIS_KEY,
   REMOTE_CAPS_KEY,
   STORAGE_KEY,
@@ -26,6 +27,7 @@ import {
   writeSecret,
 } from "./storage";
 import { parseWarnedModelIds } from "./warnings";
+import { parseProjectionCleanupQueue } from "./vision-heal";
 
 /** The in-flight hydration, if any. Module scope because the slice is created
  * once per store while `loadPersisted` is called from four different screens. */
@@ -41,7 +43,7 @@ export const createPersistenceSlice: StateCreator<
   loadPersisted: async () => {
     // Single-flight, and it has to be. Four screens hydrate on mount (the
     // startup gate, Models, onboarding's model step, the token settings card),
-    // so an unguarded read re-read eight KV keys plus SecureStore on each -
+    // so an unguarded read re-read ten KV keys plus SecureStore on each -
     // and, worse, replaced the in-memory `models` array with the persisted
     // snapshot on every visit, clobbering live `setModelProgress` values and
     // re-running the native reconcile. The store is the source of truth once
@@ -82,6 +84,7 @@ async function hydrate(
       capsRaw,
       useTokenRaw,
       warnedRaw,
+      cleanupRaw,
     ] = await Promise.all([
       asyncStorage.getItem(STORAGE_KEY),
       asyncStorage.getItem(REMOTE_APIS_KEY),
@@ -92,7 +95,13 @@ async function hydrate(
       asyncStorage.getItem(REMOTE_CAPS_KEY),
       asyncStorage.getItem(HF_TOKEN_USE_KEY),
       asyncStorage.getItem(TOOL_COMPAT_WARNED_KEY),
+      asyncStorage.getItem(PENDING_PROJECTION_CLEANUP_KEY),
     ]);
+
+    // The cleanup queue lands in the store before the models are even
+    // parsed, so the drain below sees both the persisted queue and what
+    // the heal queues now.
+    set({ pendingProjectionCleanup: parseProjectionCleanupQueue(cleanupRaw) });
 
   if (modelsRaw) {
       let models: ReturnType<typeof upgradeModelList> | null = null;
@@ -142,6 +151,21 @@ async function hydrate(
           set({ models });
         }
       }
+    }
+
+    // The vision heal, then the cleanup drain — PocketPal's order
+    // (ModelStore.ts:772). The heal re-derives the vision classification of
+    // a draft model and queues the projector its misclassification
+    // downloaded; the drain deletes that file. The drain runs AFTER the
+    // download state is synced above, so an in-flight mmproj download is
+    // visible and waits instead of being deleted out from under itself.
+    try {
+      await get().healDraftVisionClassification();
+      await get().drainPendingProjectionCleanup();
+    } catch (e) {
+      // A failed heal or drain retries next launch; it must not abort the
+      // rest of the hydration.
+      console.warn("Vision heal / projection cleanup failed:", e);
     }
 
     if (apisRaw) {

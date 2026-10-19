@@ -2,7 +2,7 @@
  *
  * `loadPersisted()` used to be unguarded, and four screens call it on mount
  * (the startup gate, Models, onboarding's model step, the token settings
- * card). Each call re-read nine KV keys plus SecureStore, replaced the
+ * card). Each call re-read ten KV keys plus SecureStore, replaced the
  * in-memory `models` array with the persisted snapshot — clobbering any live
  * `setModelProgress` values — and re-ran the native download reconcile. These
  * lock the guard and the flag the app's startup gate waits on.
@@ -60,9 +60,9 @@ describe("model hydration", () => {
 
     await Promise.all([load(), load(), load(), load()]);
 
-    // One pass over the nine metadata keys, not four.
-    expect(new Set(mockReads).size).toEqual(9);
-    expect(mockReads.length).toEqual(9);
+    // One pass over the ten metadata keys, not four.
+    expect(new Set(mockReads).size).toEqual(10);
+    expect(mockReads.length).toEqual(10);
   });
 
   it("reports hydrated so the startup gate can stop holding the splash", async () => {
@@ -78,8 +78,8 @@ describe("model hydration", () => {
     await useModelStore.getState().loadPersisted();
     await useModelStore.getState().loadPersisted();
 
-    expect(afterFirst).toEqual(9);
-    expect(mockReads.length).toEqual(9);
+    expect(afterFirst).toEqual(10);
+    expect(mockReads.length).toEqual(10);
   });
 
   it("stays hydrated when a read fails, so a cold start cannot hang forever", async () => {

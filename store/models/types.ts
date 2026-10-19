@@ -211,6 +211,20 @@ export interface PersistenceSlice {
   loadPersisted: () => Promise<void>;
 }
 
+export interface VisionHealSlice {
+  /** Projector files the vision heal orphaned: the pairing that downloaded
+   *  them is gone, the files are not. File NAMES, not model ids — LiAI's
+   *  projector is an inline record on the model, not a model row. */
+  pendingProjectionCleanup: string[];
+  /** Re-derive the vision classification of a draft model (PocketPal's
+   *  healDraftVisionClassification). */
+  healDraftVisionClassification: () => Promise<void>;
+  /** Delete the projector files the heal orphaned. */
+  drainPendingProjectionCleanup: () => Promise<void>;
+  /** Persist the queue. */
+  savePendingProjectionCleanup: () => Promise<void>;
+}
+
 export interface WarningsSlice {
   /** Model ids the tool-compat notice has already been shown for.
    *  Persisted, so the notice stays a one-time thing across restarts
@@ -229,4 +243,5 @@ export type ModelStore = CatalogSlice &
   SettingsSlice &
   ActiveSlice &
   WarningsSlice &
+  VisionHealSlice &
   PersistenceSlice;

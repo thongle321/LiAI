@@ -45,7 +45,7 @@ it("seeds Pip once, with all five talents", async () => {
     "read_url",
     "render_html",
   ]);
-  expect(storage.data.get(COMPANIONS_PIP_SEEDED_KEY)).toEqual("true");
+  expect(JSON.parse(storage.data.get(COMPANIONS_PIP_SEEDED_KEY)!).state.pipSeeded).toEqual(true);
 });
 
 it("keeps a user's Pip rename across restarts (shared repo + storage)", async () => {

@@ -1,17 +1,12 @@
 /** Models-screen UI state: group expansion + filters, persisted.
  *
- * Factory takes storage so tests inject memory (see chat.ts pattern).
- * Persist-only-what-exists: filters and expansions that already render.
- *
- * Expansion is keyed by GROUP KEY, not by a fixed pair of sections
- * (PocketParity: PocketPal stores `expandedGroups: Record<type, boolean>`
- * in uiStore and keys it by group key — ModelsScreen.tsx:336-344,
- * UIStore.ts:28-30 — so `grouped` mode can produce a group per model
- * type and each still remembers whether it was open). Only the Ready
- * group starts open, as in the reference.
+ * Persisted with Zustand's `persist` middleware over AsyncStorage.
+ * `skipHydration` keeps cold-start discipline (manual `rehydrate()`).
+ * No version/migrate: breaking changes bump UI_STATE_KEY.
  */
 
 import { create } from "zustand";
+import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "../services/storage/storage";
 import {
@@ -68,85 +63,124 @@ function isBool(v: unknown): v is boolean {
   return typeof v === "boolean";
 }
 
-function parseUiState(raw: string | null): typeof DEFAULTS {
+interface ModelsUiStoreApi {
+  persist: { rehydrate: () => void | Promise<void> };
+  getState: () => ModelsUiState;
+}
+
+/** Normalize a persisted/raw value into a validated slice. Shared by the
+ *  legacy string parser and the persist `merge`. */
+function normalizeUiState(raw: unknown): {
+  expandedGroups: Record<string, boolean>;
+  downloadedOnly: boolean;
+  hfOnly: boolean;
+  grouped: boolean;
+  autoNavigateToChat: boolean;
+} {
+  const fallback = {
+    expandedGroups: { ...DEFAULT_EXPANDED },
+    downloadedOnly: false,
+    hfOnly: false,
+    grouped: false,
+    autoNavigateToChat: true,
+  };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return fallback;
+  const r = raw as Record<string, unknown>;
+  const flag = (k: string, dflt: boolean) => (isBool(r[k]) ? r[k] : dflt);
+  // Old payloads named two fixed sections. Map them onto the group keys
+  // so a user's collapse survives the migration; anything older still
+  // falls back to the default expansion.
+  const legacyGroups: Record<string, boolean> = {};
+  if (isBool(r.readyOpen)) legacyGroups[READY_TO_USE] = r.readyOpen;
+  if (isBool(r.availableOpen)) {
+    legacyGroups[AVAILABLE_TO_DOWNLOAD] = r.availableOpen;
+  }
+  const rawGroups =
+    r.expandedGroups && typeof r.expandedGroups === "object" && !Array.isArray(r.expandedGroups)
+      ? (r.expandedGroups as Record<string, unknown>)
+      : legacyGroups;
+  const expandedGroups: Record<string, boolean> = {};
+  for (const [key, open] of Object.entries(rawGroups)) {
+    if (isBool(open)) expandedGroups[key] = open;
+  }
+  return {
+    expandedGroups,
+    downloadedOnly: flag("downloadedOnly", false),
+    hfOnly: flag("hfOnly", false),
+    grouped: flag("grouped", false),
+    autoNavigateToChat: flag("autoNavigateToChat", true),
+  };
+}
+
+function parseUiState(raw: string | null): ReturnType<typeof normalizeUiState> {
   if (!raw) return { ...DEFAULTS, expandedGroups: { ...DEFAULT_EXPANDED } };
   try {
-    const v: unknown = JSON.parse(raw);
-    if (!v || typeof v !== "object" || Array.isArray(v)) {
-      return { ...DEFAULTS, expandedGroups: { ...DEFAULT_EXPANDED } };
-    }
-    const r = v as Record<string, unknown>;
-    const flag = (k: string, dflt: boolean) => (isBool(r[k]) ? r[k] : dflt);
-    // Old payloads named two fixed sections. Map them onto the group keys
-    // so a user's collapse survives the migration; anything older still
-    // falls back to the default expansion.
-    const legacyGroups: Record<string, boolean> = {};
-    if (isBool(r.readyOpen)) legacyGroups[READY_TO_USE] = r.readyOpen;
-    if (isBool(r.availableOpen)) {
-      legacyGroups[AVAILABLE_TO_DOWNLOAD] = r.availableOpen;
-    }
-    const rawGroups =
-      r.expandedGroups && typeof r.expandedGroups === "object" && !Array.isArray(r.expandedGroups)
-        ? (r.expandedGroups as Record<string, unknown>)
-        : legacyGroups;
-    const expandedGroups: Record<string, boolean> = {};
-    for (const [key, open] of Object.entries(rawGroups)) {
-      if (isBool(open)) expandedGroups[key] = open;
-    }
-    return {
-      expandedGroups,
-      downloadedOnly: flag("downloadedOnly", false),
-      hfOnly: flag("hfOnly", false),
-      grouped: flag("grouped", false),
-      autoNavigateToChat: flag("autoNavigateToChat", true),
-    };
+    return normalizeUiState(JSON.parse(raw));
   } catch {
     return { ...DEFAULTS, expandedGroups: { ...DEFAULT_EXPANDED } };
   }
 }
 
-export function createModelsUiStore(storage: KeyValueStorage) {
-  return create<ModelsUiState>()((set, get) => {
-    async function persist(): Promise<void> {
-      const { expandedGroups, downloadedOnly, hfOnly, grouped, autoNavigateToChat } =
-        get();
-      try {
-        await storage.setItem(
-          UI_STATE_KEY,
-          JSON.stringify({
-            expandedGroups,
-            downloadedOnly,
-            hfOnly,
-            grouped,
-            autoNavigateToChat,
-          }),
-        );
-      } catch {
-        // Ignore persistence failures; UI state is non-critical.
-      }
-    }
+function toStateStorage(storage: KeyValueStorage): StateStorage {
+  return {
+    getItem: (key) => storage.getItem(key),
+    setItem: (key, value) => storage.setItem(key, value),
+    removeItem: (key) => storage.removeItem(key),
+  };
+}
 
-    return {
-      ...DEFAULTS,
-      expandedGroups: { ...DEFAULT_EXPANDED },
-      loaded: false,
-      load: async () => {
-        set({ ...parseUiState(await storage.getItem(UI_STATE_KEY)), loaded: true });
+export function createModelsUiStore(storage: KeyValueStorage) {
+  let api: ModelsUiStoreApi | null = null;
+
+  const created = create<ModelsUiState>()(
+    persist(
+      (set, get) => ({
+        ...DEFAULTS,
+        expandedGroups: { ...DEFAULT_EXPANDED },
+        loaded: false,
+        load: async () => {
+          if (get().loaded) return;
+          if (!api) return;
+          await api.persist.rehydrate();
+        },
+        toggleGroup: (key, open) => {
+          set({ expandedGroups: { ...get().expandedGroups, [key]: open } });
+        },
+        setFilter: (filter, value) => {
+          set({ [filter]: value } as Partial<ModelsUiState>);
+        },
+        setAutoNavigateToChat: (value) => {
+          set({ autoNavigateToChat: value });
+        },
+      }),
+      {
+        name: UI_STATE_KEY,
+        storage: createJSONStorage(() => toStateStorage(storage)),
+        skipHydration: true,
+        partialize: (state) => ({
+          expandedGroups: state.expandedGroups,
+          downloadedOnly: state.downloadedOnly,
+          hfOnly: state.hfOnly,
+          grouped: state.grouped,
+          autoNavigateToChat: state.autoNavigateToChat,
+        }),
+        merge: (persistedState, currentState) => {
+          const validated = normalizeUiState(persistedState);
+          return {
+            ...currentState,
+            ...validated,
+            loaded: currentState.loaded,
+          };
+        },
+        onRehydrateStorage: () => (state) => {
+          if (state) state.loaded = true;
+        },
       },
-      toggleGroup: (key, open) => {
-        set({ expandedGroups: { ...get().expandedGroups, [key]: open } });
-        void persist();
-      },
-      setFilter: (filter, value) => {
-        set({ [filter]: value });
-        void persist();
-      },
-      setAutoNavigateToChat: (value) => {
-        set({ autoNavigateToChat: value });
-        void persist();
-      },
-    };
-  });
+    ),
+  );
+
+  api = created as unknown as ModelsUiStoreApi;
+  return created;
 }
 
 async function rnStorage(): Promise<AsyncStorageStatic> {

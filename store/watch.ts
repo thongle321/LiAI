@@ -1,12 +1,13 @@
 /** Vision watch-mode capture interval — a USER setting.
  *
- * Moved out of store/voice.ts during the v2 voice clean break: it was never
- * a voice setting, it was squatting in the voice blob. Starts at the default
- * (the old value was discarded with the rest of `liai_voice_v1`) and
- * persists from here on under its own key.
+ * Persisted with Zustand's `persist` middleware over AsyncStorage.
+ * `skipHydration` keeps cold-start discipline (manual `rehydrate()`); the
+ * interval is non-critical, so a stale/missing blob just falls back to the
+ * default. No version/migrate: breaking changes bump WATCH_KEY.
  */
 
 import { create } from "zustand";
+import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "../services/storage/storage.ts";
 import { clampWatchInterval, WATCH_INTERVAL_DEFAULT_MS } from "../services/vision/vision-watch.ts";
@@ -20,40 +21,58 @@ export interface WatchState {
   setWatchIntervalMs: (ms: number) => void;
 }
 
-export function createWatchStore(storage: KeyValueStorage) {
-  return create<WatchState>()((set, get) => {
-    async function persist(): Promise<void> {
-      try {
-        await storage.setItem(WATCH_KEY, JSON.stringify({ watchIntervalMs: get().watchIntervalMs }));
-      } catch {
-        // Ignore persistence failures; this preference is non-critical.
-      }
-    }
+interface WatchStoreApi {
+  persist: { rehydrate: () => void | Promise<void> };
+  getState: () => WatchState;
+}
 
-    return {
-      watchIntervalMs: WATCH_INTERVAL_DEFAULT_MS,
-      loaded: false,
-      load: async () => {
-        let parsed = WATCH_INTERVAL_DEFAULT_MS;
-        try {
-          const raw = await storage.getItem(WATCH_KEY);
-          if (raw) {
-            const v: unknown = JSON.parse(raw);
-            if (v && typeof v === "object" && !Array.isArray(v)) {
-              parsed = clampWatchInterval((v as Record<string, unknown>).watchIntervalMs as number);
-            }
-          }
-        } catch {
-          // Corrupt blob: keep the default rather than blocking the screen.
-        }
-        set({ watchIntervalMs: parsed, loaded: true });
+function toStateStorage(storage: KeyValueStorage): StateStorage {
+  return {
+    getItem: (key) => storage.getItem(key),
+    setItem: (key, value) => storage.setItem(key, value),
+    removeItem: (key) => storage.removeItem(key),
+  };
+}
+
+export function createWatchStore(storage: KeyValueStorage) {
+  let api: WatchStoreApi | null = null;
+
+  const created = create<WatchState>()(
+    persist(
+      (set, get) => ({
+        watchIntervalMs: WATCH_INTERVAL_DEFAULT_MS,
+        loaded: false,
+        load: async () => {
+          if (get().loaded) return;
+          if (!api) return;
+          await api.persist.rehydrate();
+        },
+        setWatchIntervalMs: (ms) => {
+          set({ watchIntervalMs: clampWatchInterval(ms) });
+        },
+      }),
+      {
+        name: WATCH_KEY,
+        storage: createJSONStorage(() => toStateStorage(storage)),
+        skipHydration: true,
+        partialize: (state) => ({ watchIntervalMs: state.watchIntervalMs }),
+        merge: (persistedState, currentState) => {
+          const persisted = persistedState as { watchIntervalMs?: unknown } | null;
+          const clamped =
+            typeof persisted?.watchIntervalMs === "number"
+              ? clampWatchInterval(persisted.watchIntervalMs)
+              : currentState.watchIntervalMs;
+          return { ...currentState, watchIntervalMs: clamped, loaded: currentState.loaded };
+        },
+        onRehydrateStorage: () => (state) => {
+          if (state) state.loaded = true;
+        },
       },
-      setWatchIntervalMs: (ms) => {
-        set({ watchIntervalMs: clampWatchInterval(ms) });
-        void persist();
-      },
-    };
-  });
+    ),
+  );
+
+  api = created as unknown as WatchStoreApi;
+  return created;
 }
 
 async function rnStorage(): Promise<AsyncStorageStatic> {

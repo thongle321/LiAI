@@ -1,18 +1,13 @@
 /** Companions store: installed companions, CRUD, once-only builtin seeding.
  *
- * The mirror of PocketPal's PalStore on LiAI's stack: companions live in the
- * local TinyBase `companions` table (through the CompanionRepository port), this
- * store holds the in-memory list the UI renders, and `load()` is the
- * single hydrate + seed entry point. Pip is seeded ONCE behind a flag
- * key — after the first launch records it, deletions and renames
- * survive (PocketPal's PIP_SEEDED_KEY semantics).
- *
- * Factory + singleton, like the inference/voice/search stores: tests
- * inject the repo and a storage fake; production lazily resolves the
- * device repo (expo-sqlite must stay out of plain-Node tests).
+ * Persisted with Zustand's `persist` middleware over AsyncStorage: only the
+ * "Pip seeded" flag survives (companions live in TinyBase). `skipHydration`
+ * keeps cold-start discipline (manual `rehydrate()`). No version/migrate:
+ * breaking changes bump COMPANIONS_PIP_SEEDED_KEY.
  */
 
 import { create } from "zustand";
+import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 
 import type { KeyValueStorage } from "@/services/storage/storage.ts";
 import type { Companion, CompanionUpdate } from "@/types/companion.ts";
@@ -25,6 +20,8 @@ export const COMPANIONS_PIP_SEEDED_KEY = "liai_companions_pip_seeded";
 export interface CompanionsState {
   companions: Companion[];
   loaded: boolean;
+  /** Whether Pip has already been seeded (once-only). */
+  pipSeeded: boolean;
   /** Hydrate from storage and seed Pip once. Safe to call repeatedly
    *  (the flag makes seeding idempotent); resolves false when storage
    *  is unavailable. */
@@ -46,111 +43,131 @@ export interface CompanionsState {
   getCompanion: (id: string | null | undefined) => Companion | undefined;
 }
 
+interface CompanionsStoreApi {
+  persist: { rehydrate: () => void | Promise<void> };
+  getState: () => CompanionsState;
+}
+
+function toStateStorage(storage: KeyValueStorage): StateStorage {
+  return {
+    getItem: (key) => storage.getItem(key),
+    setItem: (key, value) => storage.setItem(key, value),
+    removeItem: (key) => storage.removeItem(key),
+  };
+}
+
 export function createCompanionsStore(
   getRepo: () => Promise<CompanionRepository | null>,
   storage: KeyValueStorage,
 ) {
-  return create<CompanionsState>()((set, get) => ({
-    companions: [],
-    loaded: false,
+  let api: CompanionsStoreApi | null = null;
 
-    load: async () => {
-      const repo = await getRepo().catch(() => null);
-      if (!repo) {
-        // Hydration ATTEMPT finished — `loaded` means "no spinner", not
-        // "storage worked". Screens surface the empty grid themselves.
-        set({ loaded: true });
-        return false;
-      }
-      try {
-        let companions = await repo.list();
-        // Seed Pip once. After the flag is recorded, a deleted or
-        // renamed Pip stays deleted/renamed — the flag is the whole
-        // "seeded once" contract.
-        const seeded = await storage.getItem(COMPANIONS_PIP_SEEDED_KEY).catch(() => null);
-        if (seeded !== "true") {
-          const existing = companions.find((p) => p.name === "Pip");
-          if (existing) {
-            await storage.setItem(COMPANIONS_PIP_SEEDED_KEY, "true").catch(() => {});
-          } else {
-            const created = await repo.create(PIP_COMPANION).catch(() => null);
-            if (created) companions = [...companions, created];
-            await storage.setItem(COMPANIONS_PIP_SEEDED_KEY, "true").catch(() => {});
+  const created = create<CompanionsState>()(
+    persist(
+      (set, get) => ({
+        companions: [],
+        loaded: false,
+        pipSeeded: false,
+
+        load: async () => {
+          const repo = await getRepo().catch(() => null);
+          if (!repo) {
+            set({ loaded: true });
+            return false;
           }
-        }
-        set({ companions, loaded: true });
-        return true;
-      } catch {
-        // Storage failed: the grid shows what it has (nothing) and the
-        // screens surface their own error state.
-        set({ loaded: true });
-        return false;
-      }
-    },
+          try {
+            if (api) await api.persist.rehydrate();
+            let companions = await repo.list();
+            if (!get().pipSeeded) {
+              const existing = companions.find((p) => p.name === "Pip");
+              if (existing) {
+                set({ pipSeeded: true });
+              } else {
+                const createdCompanion = await repo.create(PIP_COMPANION).catch(() => null);
+                if (createdCompanion) companions = [...companions, createdCompanion];
+                set({ pipSeeded: true });
+              }
+            }
+            set({ companions, loaded: true });
+            return true;
+          } catch {
+            set({ loaded: true });
+            return false;
+          }
+        },
 
-    createCompanion: async (data) => {
-      const repo = await getRepo().catch(() => null);
-      if (!repo) return null;
-      try {
-        const companion = await repo.create(data);
-        set((s) => ({ companions: [...s.companions, companion] }));
-        return companion;
-      } catch {
-        return null;
-      }
-    },
+        createCompanion: async (data) => {
+          const repo = await getRepo().catch(() => null);
+          if (!repo) return null;
+          try {
+            const companion = await repo.create(data);
+            set((s) => ({ companions: [...s.companions, companion] }));
+            return companion;
+          } catch {
+            return null;
+          }
+        },
 
-    updateCompanion: async (id, patch) => {
-      const repo = await getRepo().catch(() => null);
-      if (!repo) return null;
-      try {
-        const companion = await repo.update(id, patch);
-        set((s) => ({ companions: s.companions.map((p) => (p.id === id ? companion : p)) }));
-        return companion;
-      } catch {
-        return null;
-      }
-    },
+        updateCompanion: async (id, patch) => {
+          const repo = await getRepo().catch(() => null);
+          if (!repo) return null;
+          try {
+            const companion = await repo.update(id, patch);
+            set((s) => ({ companions: s.companions.map((p) => (p.id === id ? companion : p)) }));
+            return companion;
+          } catch {
+            return null;
+          }
+        },
 
-    deleteCompanion: async (id) => {
-      const repo = await getRepo().catch(() => null);
-      if (!repo) return false;
-      try {
-        const ok = await repo.remove(id);
-        if (ok) set((s) => ({ companions: s.companions.filter((p) => p.id !== id) }));
-        return ok;
-      } catch {
-        return false;
-      }
-    },
+        deleteCompanion: async (id) => {
+          const repo = await getRepo().catch(() => null);
+          if (!repo) return false;
+          try {
+            const ok = await repo.remove(id);
+            if (ok) set((s) => ({ companions: s.companions.filter((p) => p.id !== id) }));
+            return ok;
+          } catch {
+            return false;
+          }
+        },
 
-    importCompanions: async (raw) => {
-      const parsed = parseCompanionsJson(raw);
-      if ("error" in parsed) return { imported: 0, skipped: 0, error: parsed.error };
-      const repo = await getRepo().catch(() => null);
-      if (!repo) {
-        return { imported: 0, skipped: 0, error: "Storage isn't ready." };
-      }
-      let imported = 0;
-      let skipped = parsed.skipped;
-      const added: Companion[] = [];
-      for (const seed of parsed.companions) {
-        // No quiet(): a failed create would leave an import that looks
-        // complete but dropped companions, so the partial count stays honest.
-        try {
-          added.push(await repo.create(seed));
-          imported += 1;
-        } catch {
-          skipped += 1;
-        }
-      }
-      if (added.length > 0) set((s) => ({ companions: [...s.companions, ...added] }));
-      return { imported, skipped };
-    },
+        importCompanions: async (raw) => {
+          const parsed = parseCompanionsJson(raw);
+          if ("error" in parsed) return { imported: 0, skipped: 0, error: parsed.error };
+          const repo = await getRepo().catch(() => null);
+          if (!repo) {
+            return { imported: 0, skipped: 0, error: "Storage isn't ready." };
+          }
+          let imported = 0;
+          let skipped = parsed.skipped;
+          const added: Companion[] = [];
+          for (const seed of parsed.companions) {
+            try {
+              added.push(await repo.create(seed));
+              imported += 1;
+            } catch {
+              skipped += 1;
+            }
+          }
+          if (added.length > 0) set((s) => ({ companions: [...s.companions, ...added] }));
+          return { imported, skipped };
+        },
 
-    getCompanion: (id) =>
-      id === null || id === undefined ? undefined : get().companions.find((p) => p.id === id),
-  }));
+        getCompanion: (id) =>
+          id === null || id === undefined ? undefined : get().companions.find((p) => p.id === id),
+      }),
+      {
+        name: COMPANIONS_PIP_SEEDED_KEY,
+        storage: createJSONStorage(() => toStateStorage(storage)),
+        skipHydration: true,
+        partialize: (state) => ({ pipSeeded: state.pipSeeded }),
+      },
+    ),
+  );
+
+  api = created as unknown as CompanionsStoreApi;
+  return created;
 }
 
 /** Default repo: the device TinyBase store, lazily imported so

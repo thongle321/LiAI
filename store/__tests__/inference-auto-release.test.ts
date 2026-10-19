@@ -46,14 +46,14 @@ describe("the auto-released model id", () => {
 
     await useStore.getState().setAutoReleasedModelId("hf-model-1");
 
-    expect(JSON.parse(storage.data[INFERENCE_KEY]).autoReleasedModelId).toEqual(
+    expect(JSON.parse(storage.data[INFERENCE_KEY]).state.autoReleasedModelId).toEqual(
       "hf-model-1",
     );
   });
 
   it("defaults to null when the stored payload has no such field", async () => {
     const storage = memoryStorage({
-      [INFERENCE_KEY]: JSON.stringify({ nCtx: 8192 }),
+      [INFERENCE_KEY]: JSON.stringify({ state: { nCtx: 8192 }, version: 0 }),
     });
     const useStore = createInferenceStore(storage);
 
@@ -64,7 +64,7 @@ describe("the auto-released model id", () => {
 
   it("ignores a corrupt value instead of storing it", async () => {
     const storage = memoryStorage({
-      [INFERENCE_KEY]: JSON.stringify({ autoReleasedModelId: 42 }),
+      [INFERENCE_KEY]: JSON.stringify({ state: { autoReleasedModelId: 42 }, version: 0 }),
     });
     const useStore = createInferenceStore(storage);
 

@@ -26,6 +26,10 @@ import * as SplashScreen from "expo-splash-screen";
 import { Redirect } from "expo-router";
 
 import { isOnboarded } from "../services/onboarding.ts";
+import {
+  createAutoRelease,
+  restoreAutoReleasedModel,
+} from "../services/inference/auto-release.ts";
 import { useInference } from "../store/inference";
 import { useModelStore } from "../store/modelStore";
 import { useSearch } from "../store/search";
@@ -52,6 +56,13 @@ export default function IndexGate() {
       // hydration. Unhydrated it reads `false`, so the voice chip is hidden,
       // `canSpeak` is false and auto-speak never fires (D3-4).
       await Promise.all([loadPersisted(), loadInference(), loadSearch(), loadVoice()]);
+      // The model this app auto-released when it was last backgrounded is
+      // warmed up HERE, while the splash still covers the wait: the first
+      // message then finds a warm engine instead of paying for a
+      // multi-gigabyte read (PocketParity: checkAndReloadAutoReleasedModel,
+      // ModelStore.ts:1148). Bounded, and it never rejects — a failed load
+      // must not keep the app closed.
+      await restoreAutoReleasedModel(createAutoRelease());
       setOnboarded(await isOnboarded());
       void SplashScreen.hideAsync().catch(() => {});
     })();

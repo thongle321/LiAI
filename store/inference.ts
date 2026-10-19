@@ -78,6 +78,11 @@ export interface InferenceParams {
    *  and a phone that re-loads a model on the next message is fine while
    *  one that never releases it gets killed for memory. */
   autoOffload: boolean;
+  /** The local model this app auto-released when it backgrounded, or null.
+   *  Persisted so the next launch can warm it back up before the first
+   *  message (PocketParity: wasAutoReleased + lastAutoReleasedModelId,
+   *  ModelStore.ts:1127). A null id IS "nothing was auto-released". */
+  autoReleasedModelId: string | null;
 }
 
 export interface InferenceState extends InferenceParams {
@@ -110,6 +115,8 @@ export interface InferenceState extends InferenceParams {
   setImageMaxTokens: (n: number) => void;
   setDraftModelId: (id: string | null) => void;
   setAutoOffload: (on: boolean) => void;
+  /** Record (or clear) the model this app auto-released. */
+  setAutoReleasedModelId: (id: string | null) => void;
 }
 
 export const DEFAULT_INFERENCE: InferenceParams = {
@@ -139,6 +146,7 @@ export const DEFAULT_INFERENCE: InferenceParams = {
   imageMaxTokens: 512,
   draftModelId: null,
   autoOffload: true,
+  autoReleasedModelId: null,
 };
 
 /** Single clamp every numeric param flows through (persist/restore + setters). */
@@ -216,6 +224,8 @@ function asParams(value: unknown): InferenceParams {
     ),
     draftModelId: typeof v.draftModelId === "string" ? v.draftModelId : null,
     autoOffload: flag("autoOffload", DEFAULT_INFERENCE.autoOffload),
+    autoReleasedModelId:
+      typeof v.autoReleasedModelId === "string" ? v.autoReleasedModelId : null,
   };
 }
 
@@ -254,6 +264,7 @@ export function createInferenceStore(storage: KeyValueStorage) {
         imageMaxTokens,
         draftModelId,
         autoOffload,
+        autoReleasedModelId,
         thinkingOverrides,
         effortOverrides,
       } = get();
@@ -283,6 +294,7 @@ export function createInferenceStore(storage: KeyValueStorage) {
             imageMaxTokens,
             draftModelId,
             autoOffload,
+            autoReleasedModelId,
             thinkingOverrides,
             effortOverrides,
           }),
@@ -423,6 +435,10 @@ export function createInferenceStore(storage: KeyValueStorage) {
       },
       setAutoOffload: (on) => {
         set({ autoOffload: on });
+        void persist();
+      },
+      setAutoReleasedModelId: (id) => {
+        set({ autoReleasedModelId: id });
         void persist();
       },
     };

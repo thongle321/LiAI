@@ -2,7 +2,7 @@
  *
  * Public API is unchanged: import { useModelStore } from "../store/modelStore"
  * (that path re-exports this). Slices: catalog, downloads, remote, settings,
- * active, persistence.
+ * active, warnings, persistence.
  */
 
 import { create } from "zustand";
@@ -14,6 +14,7 @@ import { createDownloadsSlice } from "./downloads";
 import { createPersistenceSlice } from "./persistence";
 import { createRemoteSlice } from "./remote";
 import { createSettingsSlice } from "./settings";
+import { createWarningsSlice } from "./warnings";
 
 export type { ModelStore } from "./types";
 
@@ -23,5 +24,6 @@ export const useModelStore = create<ModelStore>()((...a) => ({
   ...createRemoteSlice(...a),
   ...createSettingsSlice(...a),
   ...createActiveSlice(...a),
+  ...createWarningsSlice()(...a),
   ...createPersistenceSlice(...a),
 }));

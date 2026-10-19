@@ -211,9 +211,22 @@ export interface PersistenceSlice {
   loadPersisted: () => Promise<void>;
 }
 
+export interface WarningsSlice {
+  /** Model ids the tool-compat notice has already been shown for.
+   *  Persisted, so the notice stays a one-time thing across restarts
+   *  (PocketPal parity: UIStore's `toolCompatWarnedModels`). */
+  toolCompatWarnedModels: string[];
+  /** Has this model already been warned about? */
+  hasWarnedToolCompat: (modelId: string) => boolean;
+  /** Record the warning and persist the set. Idempotent. */
+  markToolCompatWarned: (modelId: string) => void;
+  saveToolCompatWarned: () => Promise<void>;
+}
+
 export type ModelStore = CatalogSlice &
   DownloadsSlice &
   RemoteSlice &
   SettingsSlice &
   ActiveSlice &
+  WarningsSlice &
   PersistenceSlice;

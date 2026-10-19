@@ -75,6 +75,12 @@ export interface ModelSpec {
    *  free-form `capabilities` above. User overrides live in the
    *  inference store's thinkingOverrides, not here. */
   reasoning?: boolean;
+  /** Whether this model can call tools at all (PocketPal parity): true =
+   *  known tool-capable, false = known NOT, absent = unknown — probed
+   *  from llama.rn's jinja metadata when the model loads. A model that
+   *  was never probed stays absent, because "never asked" is not the
+   *  same claim as "asked and found wanting". */
+  supportsTools?: boolean;
   ggufMetadata?: Record<string, unknown>;
 }
 

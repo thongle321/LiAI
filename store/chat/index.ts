@@ -30,6 +30,7 @@ import {
   type EffortLevel,
 } from "@/utils/reasoning-capability.ts";
 import type { ThinkingChatProbe } from "@/services/inference/thinking-detection.ts";
+import type { ToolSupportProbe } from "@/services/inference/tool-support.ts";
 import {
   getAvailableDevices,
   resolveComputeDevices,
@@ -214,6 +215,10 @@ function getManager(): EngineManager {
             // ModelStore.ts:3280): probe once per load and persist the verdict.
             // Off the critical path — never delays the first turn.
             void recordThinkingCapability(fileName, ctx);
+          // Tool support, same shape and same reason: the verdict is read
+          // HERE because the manager keeps only the CompletionEngine, not
+          // the raw context this probe needs.
+          void recordToolSupport(fileName, ctx);
           return {
             engine: local.createLocalEngine(ctx),
             release: () => local.releaseLocalEngine(ctx),
@@ -269,6 +274,42 @@ async function recordThinkingCapability(
     if (!spec) return;
     if (useInference.getState().thinkingOverrides[spec.id] !== undefined) return;
     m.updateModel(spec.id, { reasoning: verdict });
+  } catch {
+    // Detection is a nicety; the model works without it.
+  }
+}
+
+/** Probe a freshly loaded context for tool support and record it.
+ *
+ *  PocketPal parity: `pocketpal-ai/src/screens/ChatScreen/ChatScreen.tsx:148`
+ *  reads `model.chatTemplates.jinja` off the live context to decide
+ *  whether a companion's talents can be called at all.
+ *
+ *  Runs ONCE per load, off the critical path, and only writes when the
+ *  verdict CHANGES: the probe runs on every load, and a load that
+ *  rewrites the catalog to disk is a load that thrashes AsyncStorage.
+ *
+ *  "Could not tell" writes nothing — a context that reported no model
+ *  must not permanently mark a tool-capable model as incapable.
+ *
+ *  Local models only: `loadLocal` is the local loader, and a remote
+ *  provider's tool support is the server's business (we never probe it). */
+async function recordToolSupport(
+  fileName: string,
+  ctx: { model?: ToolSupportProbe["model"] },
+): Promise<void> {
+  try {
+    const [{ hasToolSupport }, { useModelStore }] = await Promise.all([
+      import("../../services/inference/tool-support.ts"),
+      import("../modelStore.ts"),
+    ]);
+    const verdict = hasToolSupport(ctx);
+    if (verdict === undefined) return;
+    const m = useModelStore.getState();
+    const spec = m.models.find((model) => model.files[0]?.name === fileName);
+    if (!spec) return;
+    if (spec.supportsTools === verdict) return;
+    m.updateModel(spec.id, { supportsTools: verdict });
   } catch {
     // Detection is a nicety; the model works without it.
   }

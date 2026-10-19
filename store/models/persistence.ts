@@ -20,10 +20,12 @@ import {
   REMOTE_APIS_KEY,
   REMOTE_CAPS_KEY,
   STORAGE_KEY,
+  TOOL_COMPAT_WARNED_KEY,
   asyncStorage,
   readSecret,
   writeSecret,
 } from "./storage";
+import { parseWarnedModelIds } from "./warnings";
 
 /** The in-flight hydration, if any. Module scope because the slice is created
  * once per store while `loadPersisted` is called from four different screens. */
@@ -78,17 +80,19 @@ async function hydrate(
       settingsRaw,
       guardRaw,
       capsRaw,
-    useTokenRaw,
-  ] = await Promise.all([
-    asyncStorage.getItem(STORAGE_KEY),
-    asyncStorage.getItem(REMOTE_APIS_KEY),
-    asyncStorage.getItem(HF_TOKEN_KEY),
-    asyncStorage.getItem(ACTIVE_MODEL_KEY),
-    asyncStorage.getItem(MODEL_SETTINGS_KEY),
-    asyncStorage.getItem(MEMORY_GUARD_KEY),
-    asyncStorage.getItem(REMOTE_CAPS_KEY),
-    asyncStorage.getItem(HF_TOKEN_USE_KEY),
-  ]);
+      useTokenRaw,
+      warnedRaw,
+    ] = await Promise.all([
+      asyncStorage.getItem(STORAGE_KEY),
+      asyncStorage.getItem(REMOTE_APIS_KEY),
+      asyncStorage.getItem(HF_TOKEN_KEY),
+      asyncStorage.getItem(ACTIVE_MODEL_KEY),
+      asyncStorage.getItem(MODEL_SETTINGS_KEY),
+      asyncStorage.getItem(MEMORY_GUARD_KEY),
+      asyncStorage.getItem(REMOTE_CAPS_KEY),
+      asyncStorage.getItem(HF_TOKEN_USE_KEY),
+      asyncStorage.getItem(TOOL_COMPAT_WARNED_KEY),
+    ]);
 
   if (modelsRaw) {
       let models: ReturnType<typeof upgradeModelList> | null = null;
@@ -204,6 +208,11 @@ async function hydrate(
     }
 
     set({ modelSettings: parseModelSettingsMap(settingsRaw) });
+
+    // The warned-set: which models the tool-compat notice already fired
+    // for. A corrupt payload is an empty set, not a crash — the notice is
+    // a nicety, and losing it costs one duplicate, never the app.
+    set({ toolCompatWarnedModels: parseWarnedModelIds(warnedRaw) });
 
     try {
       const guard = guardRaw ? JSON.parse(guardRaw) : 0;

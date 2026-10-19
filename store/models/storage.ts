@@ -16,6 +16,7 @@ export const MODEL_SETTINGS_KEY = "liai_model_settings";
 export const HF_SEARCH_FILTERS_KEY = "liai_hf_search_filters"; // author + sort, per the HF search sheet
 export const MEMORY_GUARD_KEY = "liai_memory_guard";
 export const REMOTE_CAPS_KEY = "liai_remote_caps";
+export const TOOL_COMPAT_WARNED_KEY = "liai_tool_compat_warned"; // models already warned about, so the notice is a one-time thing
 
 async function secureStore(): Promise<typeof import("expo-secure-store")> {
   return await import("expo-secure-store");

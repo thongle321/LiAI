@@ -41,6 +41,7 @@ import { useInference } from "@/store/inference.ts";
 import { useKeyboardLift } from "@/hooks/useKeyboardLift.ts";
 import { useChatSessionLoader } from "@/hooks/useChatSessionLoader.ts";
 import { useChatHealth } from "@/hooks/useChatHealth.ts";
+import { useToolCompatWarning } from "@/hooks/useToolCompatWarning.ts";
 import { MessageListItem } from "@/components/chat/message-list-item.tsx";
 import { ChatEmptyPlaceholder } from "@/components/chat/chat-empty-placeholder.tsx";
 import { PendingIndicator } from "@/components/chat/pending-indicator.tsx";
@@ -260,6 +261,10 @@ export default function ChatRoute() {
   const activeCompanion = useCompanions((s) =>
     effectiveCompanionId === null ? undefined : s.companions.find((p) => p.id === effectiveCompanionId),
   );
+  // One notice per model when a companion's talents meet a model that
+  // cannot call them (PocketPal parity). The screen resolves the
+  // companion; the hook owns the decision and the warned-set.
+  useToolCompatWarning(activeCompanion);
   // Greeting only with a loaded model and an EMPTY, unsearched thread —
   // exactly PocketPal's render predicate. Never persisted.
   const greeting =

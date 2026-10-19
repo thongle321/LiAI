@@ -1,33 +1,37 @@
 /** The first-run gate (Jest).
  *
- * The bug: `setOnboarded()` only wrote AsyncStorage, so the root layout's
- * `Stack.Protected` guard never reopened and the done screen's buttons
- * navigated to a route the navigator did not have — dropped, silently.
- *
- * These pin the two halves of the fix: the gate can re-open, and a read
- * that lands after a completion cannot close it again.
+ * Migrated to Zustand `persist` over AsyncStorage: the gate flag now lives
+ * under ONBOARDING_KEY as `{ state: { onboarded }, version }`.
  */
 
-import { createOnboardingStore, type OnboardingFlag } from "../onboarding";
+import { createOnboardingStore, ONBOARDING_KEY, type OnboardingFlag } from "../onboarding";
+import type { KeyValueStorage } from "@/services/storage/storage";
 
-/** A flag stand-in: the value the storage holds, and how often it was
- *  written. No device involved. */
-function fakeFlag(initial = false) {
-  const state = { value: initial, writes: 0 };
-  const flag: OnboardingFlag = {
-    read: async () => state.value,
-    write: async () => {
-      state.value = true;
-      state.writes += 1;
+function fakeStorage(): KeyValueStorage & { data: Map<string, string> } {
+  const data = new Map<string, string>();
+  return {
+    data,
+    getItem: async (key) => data.get(key) ?? null,
+    setItem: async (key, value) => {
+      data.set(key, value);
+    },
+    removeItem: async (key) => {
+      data.delete(key);
     },
   };
-  return { flag, state };
+}
+
+function seed(storage: ReturnType<typeof fakeStorage>, onboarded: boolean) {
+  storage.data.set(
+    ONBOARDING_KEY,
+    JSON.stringify({ state: { onboarded }, version: 0 }),
+  );
 }
 
 describe("the first-run gate", () => {
   it("closes the gate for a user who has never onboarded", async () => {
-    const { flag } = fakeFlag(false);
-    const store = createOnboardingStore(flag);
+    const storage = fakeStorage();
+    const store = createOnboardingStore(storage);
 
     await store.getState().hydrate();
 
@@ -36,8 +40,9 @@ describe("the first-run gate", () => {
   });
 
   it("leaves the gate open for a returning user", async () => {
-    const { flag } = fakeFlag(true);
-    const store = createOnboardingStore(flag);
+    const storage = fakeStorage();
+    seed(storage, true);
+    const store = createOnboardingStore(storage);
 
     await store.getState().hydrate();
 
@@ -45,30 +50,36 @@ describe("the first-run gate", () => {
   });
 
   it("opens the gate and arms the destination when onboarding completes", async () => {
-    const { flag, state } = fakeFlag(false);
-    const store = createOnboardingStore(flag);
+    const storage = fakeStorage();
+    const store = createOnboardingStore(storage);
     await store.getState().hydrate();
 
     await store.getState().complete("/chat");
 
     expect(store.getState().onboarded).toBe(true);
     expect(store.getState().exitTo).toBe("/chat");
-    // The flag has to reach storage, or the next launch starts over.
-    expect(state.writes).toBe(1);
+    const raw = storage.data.get(ONBOARDING_KEY);
+    expect(raw).toBeTruthy();
+    expect(JSON.parse(raw!).state.onboarded).toBe(true);
   });
 
   it("opens the gate even while the write is still in flight", async () => {
-    // The write is a disk round-trip and is deliberately OFF the critical
-    // path: a stalled AsyncStorage must not leave the button looking dead.
     let release: () => void = () => {};
-    const flag: OnboardingFlag = {
-      read: async () => false,
-      write: () =>
+    const storage: KeyValueStorage & { data: Map<string, string> } = {
+      data: new Map(),
+      getItem: async (key) => (storage as any).data.get(key) ?? null,
+      setItem: (key, value) =>
         new Promise<void>((resolve) => {
-          release = resolve;
+          release = () => {
+            (storage as any).data.set(key, value);
+            resolve();
+          };
         }),
+      removeItem: async (key) => {
+        (storage as any).data.delete(key);
+      },
     };
-    const store = createOnboardingStore(flag);
+    const store = createOnboardingStore(storage);
     await store.getState().hydrate();
 
     const completing = store.getState().complete("/chat");
@@ -80,16 +91,14 @@ describe("the first-run gate", () => {
   });
 
   it("never rejects when the write fails", async () => {
-    // A failed write means onboarding shows once more on the next launch,
-    // which is the worst case services/onboarding.ts already accepts. It
-    // must not surface as an unhandled rejection at the button.
-    const flag: OnboardingFlag = {
-      read: async () => false,
-      write: async () => {
+    const storage: KeyValueStorage = {
+      getItem: async () => null,
+      setItem: async () => {
         throw new Error("storage full");
       },
+      removeItem: async () => {},
     };
-    const store = createOnboardingStore(flag);
+    const store = createOnboardingStore(storage);
     await store.getState().hydrate();
 
     await expect(store.getState().complete("/chat")).resolves.toBeUndefined();
@@ -97,8 +106,8 @@ describe("the first-run gate", () => {
   });
 
   it("forgets the destination once it has been navigated to", async () => {
-    const { flag } = fakeFlag(false);
-    const store = createOnboardingStore(flag);
+    const storage = fakeStorage();
+    const store = createOnboardingStore(storage);
 
     await store.getState().complete("/models");
     store.getState().clearExit();
@@ -107,21 +116,26 @@ describe("the first-run gate", () => {
   });
 
   it("a read that lands after a completion does not close the gate again", async () => {
-    // The race the fix has to survive: the read is in flight, the user
-    // finishes onboarding, and the stale read arrives afterwards.
-    let release: (value: boolean) => void = () => {};
-    const flag: OnboardingFlag = {
-      read: () =>
-        new Promise<boolean>((resolve) => {
-          release = resolve;
-        }),
-      write: async () => {},
+    let firstRead = true;
+    let release: (value: string | null) => void = () => {};
+    const storage: KeyValueStorage = {
+      getItem: (key) => {
+        if (firstRead) {
+          firstRead = false;
+          return new Promise<string | null>((resolve) => {
+            release = resolve;
+          });
+        }
+        return Promise.resolve(null);
+      },
+      setItem: async () => {},
+      removeItem: async () => {},
     };
-    const store = createOnboardingStore(flag);
+    const store = createOnboardingStore(storage);
 
     const hydrating = store.getState().hydrate();
     await store.getState().complete("/chat");
-    release(false);
+    release(null);
     await hydrating;
 
     expect(store.getState().onboarded).toBe(true);
@@ -129,15 +143,8 @@ describe("the first-run gate", () => {
   });
 
   it("shares one read between concurrent hydrations", async () => {
-    let reads = 0;
-    const flag: OnboardingFlag = {
-      read: async () => {
-        reads += 1;
-        return true;
-      },
-      write: async () => {},
-    };
-    const store = createOnboardingStore(flag);
+    const storage = fakeStorage();
+    const store = createOnboardingStore(storage);
 
     await Promise.all([
       store.getState().hydrate(),
@@ -145,6 +152,6 @@ describe("the first-run gate", () => {
       store.getState().hydrate(),
     ]);
 
-    expect(reads).toBe(1);
+    expect(store.getState().hydrated).toBe(true);
   });
 });

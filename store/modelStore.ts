@@ -1,8 +1,8 @@
-/** Public entry for the model store.
- *
- * The implementation is split into focused slices under `./models/`; this
- * path stays stable so consumers import `useModelStore` from one place.
- */
+/** Public entry for the model store. */
 
-export { useModelStore } from "./models";
+import { asyncStorage } from "./models/storage";
+
+import { createModelStore } from "./models";
+
+export const useModelStore = createModelStore(asyncStorage);
 export type { ModelStore } from "./models";

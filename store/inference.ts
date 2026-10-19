@@ -9,6 +9,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "../services/storage/storage";
+import { toStateStorage } from "@/services/storage/persist-helpers";
 import {
   DEFAULT_SAMPLER,
   parseSampler,
@@ -243,14 +244,6 @@ interface InferenceStoreApi {
   getState: () => InferenceState;
 }
 
-function toStateStorage(storage: KeyValueStorage): StateStorage {
-  return {
-    getItem: (key) => storage.getItem(key),
-    setItem: (key, value) => storage.setItem(key, value),
-    removeItem: (key) => storage.removeItem(key),
-  };
-}
-
 const PARAM_KEYS: (keyof InferenceParams)[] = [
   "nCtx",
   "nGpuLayers",
@@ -383,8 +376,8 @@ export function createInferenceStore(storage: KeyValueStorage) {
             // Ensure the record lands on disk before the caller frees the engine.
             try {
               const state: Record<string, unknown> = {};
-              const cur = get() as unknown as Record<string, unknown>;
-              for (const k of PARAM_KEYS) state[k as string] = cur[k as string];
+              const cur = get();
+              for (const k of PARAM_KEYS) state[k] = cur[k];
               await storage.setItem(INFERENCE_KEY, JSON.stringify({ state, version: 0 }));
             } catch {
               // best effort
@@ -399,9 +392,9 @@ export function createInferenceStore(storage: KeyValueStorage) {
         partialize: (state: InferenceState) => {
           const out: Record<string, unknown> = {};
           for (const k of PARAM_KEYS) {
-            out[k as string] = (state as unknown as Record<string, unknown>)[k as string];
+            out[k] = state[k];
           }
-          return out as unknown as InferenceParams;
+          return out;
         },
         merge: (persistedState, currentState) => {
           const validated = asParams(persistedState);

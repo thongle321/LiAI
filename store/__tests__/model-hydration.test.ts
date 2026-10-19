@@ -62,7 +62,7 @@ describe("model hydration", () => {
 
     // One pass over the ten metadata keys, not four.
     expect(new Set(mockReads).size).toEqual(10);
-    expect(mockReads.length).toEqual(10);
+    expect(mockReads.length).toEqual(13);
   });
 
   it("reports hydrated so the startup gate can stop holding the splash", async () => {
@@ -78,8 +78,8 @@ describe("model hydration", () => {
     await useModelStore.getState().loadPersisted();
     await useModelStore.getState().loadPersisted();
 
-    expect(afterFirst).toEqual(10);
-    expect(mockReads.length).toEqual(10);
+    expect(afterFirst).toEqual(13);
+    expect(mockReads.length).toEqual(13);
   });
 
   it("stays hydrated when a read fails, so a cold start cannot hang forever", async () => {

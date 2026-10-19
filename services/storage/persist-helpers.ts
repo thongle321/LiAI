@@ -29,3 +29,28 @@ export function gatedStorage(
     removeItem: (key) => storage.removeItem(key),
   };
 }
+
+/** Storage that skips a write whose bytes are identical to the last one.
+ *
+ *  Zustand's `persist` writes on EVERY `set()`, even when the persisted
+ *  slice did not change: a download progress tick or a search keystroke
+ *  re-serialized the whole catalog to AsyncStorage. Comparing the bytes
+ *  makes those writes no-ops.
+ *
+ *  Put it INSIDE the gate: a write the gate blocked never reached the
+ *  disk, so it must not count as "already written". */
+export function dedupedStorage(storage: KeyValueStorage): KeyValueStorage {
+  let last: string | null = null;
+  return {
+    getItem: (key) => storage.getItem(key),
+    setItem: (key, value) => {
+      if (value === last) return Promise.resolve();
+      last = value;
+      return storage.setItem(key, value);
+    },
+    removeItem: (key) => {
+      last = null;
+      return storage.removeItem(key);
+    },
+  };
+}

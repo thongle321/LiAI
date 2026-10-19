@@ -6,7 +6,7 @@ import type { ModelStore, SettingsSlice } from "./types";
 import { parseModelSettings } from "@/utils/model-settings";
 import { activeHfToken } from "@/services/auth/hf-token";
 import { HF_TOKEN_SS_KEY } from "@/services/auth/secrets";
-import { asyncStorage, HF_TOKEN_USE_KEY, MODEL_SETTINGS_KEY, deleteSecret, writeSecret } from "./storage";
+import { deleteSecret, writeSecret } from "./storage";
 
 export const createSettingsSlice: StateCreator<ModelStore, [], [], SettingsSlice> = (
   set,
@@ -15,17 +15,6 @@ export const createSettingsSlice: StateCreator<ModelStore, [], [], SettingsSlice
   hfToken: null,
   useHfToken: true,
   modelSettings: {},
-
-  saveModelSettings: async () => {
-    try {
-      await asyncStorage.setItem(
-        MODEL_SETTINGS_KEY,
-        JSON.stringify(get().modelSettings),
-      );
-    } catch (e) {
-      console.warn("Failed to save model settings:", e);
-    }
-  },
 
   setHfToken: async (token) => {
     // Persist FIRST, then flip the store: a failed write must not leave
@@ -40,12 +29,8 @@ export const createSettingsSlice: StateCreator<ModelStore, [], [], SettingsSlice
   },
 
   setUseHfToken: async (on) => {
+    // The persist middleware owns the disk; this only moves the state.
     set({ useHfToken: on });
-    try {
-      await asyncStorage.setItem(HF_TOKEN_USE_KEY, on ? "true" : "false");
-    } catch (e) {
-      console.warn("Failed to save Hugging Face token preference:", e);
-    }
   },
 
   // The one place a token becomes a header: every caller that attaches one
@@ -57,7 +42,6 @@ export const createSettingsSlice: StateCreator<ModelStore, [], [], SettingsSlice
 
   resetModelSettings: async () => {
     set({ modelSettings: {} });
-    await get().saveModelSettings();
     // PocketPal's reset re-merges the catalog, so a preset dismissed this
     // session comes back (ModelStore.ts:3078-3089).
     set({ dismissedPresetIds: [] });
@@ -76,6 +60,5 @@ export const createSettingsSlice: StateCreator<ModelStore, [], [], SettingsSlice
         }),
       },
     }));
-    get().saveModelSettings();
   },
 });

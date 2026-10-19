@@ -5,14 +5,7 @@ import type { StateCreator } from "zustand";
 import type { ModelStore, RemoteSlice } from "./types";
 import { buildRemoteModelSpec, mergeRemoteCaps, probeRemoteCaps, stripMeasuredCaps, validateRemoteApi } from "@/services/models/remote-api.ts";
 import { providerKeySS } from "@/services/auth/secrets.ts";
-import {
-  ACTIVE_MODEL_KEY,
-  asyncStorage,
-  REMOTE_APIS_KEY,
-  REMOTE_CAPS_KEY,
-  deleteSecret,
-  writeSecret,
-} from "./storage.ts";
+import { deleteSecret, writeSecret } from "./storage.ts";
 
 export const createRemoteSlice: StateCreator<ModelStore, [], [], RemoteSlice> = (
   set,
@@ -22,30 +15,6 @@ export const createRemoteSlice: StateCreator<ModelStore, [], [], RemoteSlice> = 
   remoteCaps: {},
   privacyAcknowledged: false,
 
-  saveRemoteApis: async () => {
-    try {
-      // ponytail: apiKeys live in SecureStore — persist metadata only.
-      const scrubbed = get().remoteApis.map((p) => ({ ...p, apiKey: "" }));
-      await asyncStorage.setItem(REMOTE_APIS_KEY, JSON.stringify(scrubbed));
-    } catch (e) {
-      console.warn("Failed to save remote APIs:", e);
-    }
-  },
-
-  saveRemoteCaps: async () => {
-    try {
-      await asyncStorage.setItem(
-        REMOTE_CAPS_KEY,
-        JSON.stringify({
-          caps: get().remoteCaps,
-          privacyAcknowledged: get().privacyAcknowledged,
-        }),
-      );
-    } catch (e) {
-      console.warn("Failed to save remote caps:", e);
-    }
-  },
-
   addRemoteApi: async (provider) => {
     set((state) => ({
       remoteApis: [...state.remoteApis.filter((p) => p.id !== provider.id), provider],
@@ -53,7 +22,6 @@ export const createRemoteSlice: StateCreator<ModelStore, [], [], RemoteSlice> = 
     if (provider.apiKey !== "") {
       await writeSecret(providerKeySS(provider.id), provider.apiKey);
     }
-    get().saveRemoteApis();
   },
 
   removeRemoteApi: async (providerId) => {
@@ -68,7 +36,6 @@ export const createRemoteSlice: StateCreator<ModelStore, [], [], RemoteSlice> = 
         state.activeModelId === activeId ? null : state.activeProviderType,
     }));
     await deleteSecret(providerKeySS(providerId));
-    get().saveRemoteApis();
   },
 
   updateRemoteApi: async (providerId, updates) => {
@@ -101,7 +68,6 @@ export const createRemoteSlice: StateCreator<ModelStore, [], [], RemoteSlice> = 
       // ponytail: blanking the key must wipe SecureStore or it rehydrates.
       await deleteSecret(providerKeySS(providerId));
     }
-    get().saveRemoteApis();
   },
 
   setActiveRemoteApi: (providerId) => {
@@ -115,7 +81,6 @@ export const createRemoteSlice: StateCreator<ModelStore, [], [], RemoteSlice> = 
       get().setActiveModel(modelSpec.id, "remote");
     } else {
       set({ activeModelId: null, activeProviderType: null });
-      void asyncStorage.removeItem(ACTIVE_MODEL_KEY).catch(() => {});
     }
   },
 
@@ -142,12 +107,11 @@ export const createRemoteSlice: StateCreator<ModelStore, [], [], RemoteSlice> = 
         }),
       },
     }));
-    void get().saveRemoteCaps();
     return ok;
   },
 
   acknowledgePrivacy: () => {
+    // The persist middleware owns the disk; this only moves the state.
     set({ privacyAcknowledged: true });
-    void get().saveRemoteCaps();
   },
 });

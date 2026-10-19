@@ -50,7 +50,6 @@ export interface CatalogSlice {
   loadPresets: () => Promise<void>;
   /** Drop a preset from "Available to Download" until restart or reset. */
   dismissPreset: (presetId: string) => void;
-  loadSearchFilters: () => Promise<void>;
   /** Runs the search for `query` with the current filters, replacing the
    *  results. An empty query is a real search (PocketParity): the Hub
    *  answers with its default relevance listing. */
@@ -91,14 +90,12 @@ export interface CatalogSlice {
   setModelProgress: (modelId: string, progress: Partial<ModelSpec>) => void;
   getModel: (modelId: string) => ModelSpec | undefined;
   addLocalModel: (sourceUri: string, fileName: string, size: number) => Promise<void>;
-  saveModels: () => Promise<void>;
 }
 
 export interface DownloadsSlice {
   /** Load-guard learned ceiling (PocketPal largestSuccessfulLoad parity) */
   largestSuccessfulBytes: number;
 
-  saveMemoryGuard: () => Promise<void>;
   /** Dismiss the failure dialog: clears the stored reason WITHOUT
    *  touching downloadStatus — the row keeps offering Retry (C1) —
    *  and a re-failure writes a fresh reason, reopening the dialog. */
@@ -154,8 +151,6 @@ export interface RemoteSlice {
   remoteCaps: Record<string, RemoteCaps>;
   privacyAcknowledged: boolean;
 
-  saveRemoteApis: () => Promise<void>;
-  saveRemoteCaps: () => Promise<void>;
   addRemoteApi: (provider: RemoteApiProvider) => Promise<void>;
   removeRemoteApi: (providerId: string) => Promise<void>;
   updateRemoteApi: (
@@ -175,7 +170,6 @@ export interface SettingsSlice {
   useHfToken: boolean;
   modelSettings: Record<string, ModelSettings>;
 
-  saveModelSettings: () => Promise<void>;
   /** Drop every per-model override (name/prompt/stop words) — PocketPal's
    *  resetModels restores each model's default settings; ours are stored
    *  centrally, so resetting = clearing the map. */
@@ -221,8 +215,6 @@ export interface VisionHealSlice {
   healDraftVisionClassification: () => Promise<void>;
   /** Delete the projector files the heal orphaned. */
   drainPendingProjectionCleanup: () => Promise<void>;
-  /** Persist the queue. */
-  savePendingProjectionCleanup: () => Promise<void>;
 }
 
 export interface WarningsSlice {
@@ -234,7 +226,6 @@ export interface WarningsSlice {
   hasWarnedToolCompat: (modelId: string) => boolean;
   /** Record the warning and persist the set. Idempotent. */
   markToolCompatWarned: (modelId: string) => void;
-  saveToolCompatWarned: () => Promise<void>;
 }
 
 export type ModelStore = CatalogSlice &

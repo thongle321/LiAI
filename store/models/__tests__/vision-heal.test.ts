@@ -43,18 +43,10 @@ function fakeDeps(
   const deleted: string[] = [];
   const stored: string[] = [];
   const onDisk = new Set<string>();
-  const storage: KeyValueStorage = {
-    getItem: async () => null,
-    setItem: async (_key, value) => {
-      stored.push(value);
-    },
-    removeItem: async () => undefined,
-  };
   return {
     deleted,
     stored,
     onDisk,
-    storage,
     deleteProjectorFile: async (name) => {
       deleted.push(name);
       onDisk.delete(name);
@@ -69,7 +61,6 @@ function fakeDeps(
 function makeStore(deps: ProjectionCleanupDeps, initial: Partial<ModelStoreShape> = {}) {
   const state = {
     models: [] as ModelSpec[],
-    saveModels: jest.fn(async () => undefined),
   } as unknown as ModelStoreShape;
   const set = (partial: unknown) => {
     const patch =
@@ -91,10 +82,8 @@ function makeStore(deps: ProjectionCleanupDeps, initial: Partial<ModelStoreShape
 type ModelStoreShape = {
   models: ModelSpec[];
   pendingProjectionCleanup: string[];
-  saveModels: () => Promise<void>;
   healDraftVisionClassification: () => void;
   drainPendingProjectionCleanup: () => Promise<void>;
-  savePendingProjectionCleanup: () => Promise<void>;
 };
 
 describe("planVisionHeal", () => {
@@ -298,7 +287,6 @@ describe("the vision heal slice", () => {
 
     expect(store.models[0].supportsVision).toBe(false);
     expect(store.pendingProjectionCleanup).toEqual(["mmproj.gguf"]);
-    expect(store.saveModels).toHaveBeenCalled();
   });
 
   it("keeps what is already queued and adds the new names", async () => {
@@ -334,11 +322,10 @@ describe("the vision heal slice", () => {
 
     await store.healDraftVisionClassification();
 
-    expect(store.saveModels).not.toHaveBeenCalled();
     expect(store.pendingProjectionCleanup).toEqual([]);
   });
 
-  it("drains the queue and persists what is left", async () => {
+  it("drains the queue and leaves what it could not delete", async () => {
     const deps = fakeDeps();
     deps.onDisk.add("mmproj.gguf");
     const store = makeStore(deps, {
@@ -349,33 +336,29 @@ describe("the vision heal slice", () => {
 
     expect(deps.deleted).toEqual(["mmproj.gguf"]);
     expect(store.pendingProjectionCleanup).toEqual([]);
-    expect(deps.stored).toEqual(["[]"]);
   });
 
-  it("persists the queue the heal built", () => {
-    const deps = fakeDeps();
-    const store = makeStore(deps);
-
-    store.savePendingProjectionCleanup();
-
-    expect(deps.stored).toEqual(["[]"]);
-  });
-
-  it("writes the queue BEFORE the catalog, so a kill cannot orphan a file", async () => {
-    // A file with no owner and no queue entry is never cleaned up again.
-    // With the queue written first, the worst a kill can do is leave a
-    // queue entry whose model still has its pairing — and the next launch
-    // re-runs the heal, which heals the model and keeps the entry.
-    const timeline: string[] = [];
+  it("keeps a queue entry whose file could not be deleted", async () => {
     const deps = fakeDeps({
-      storage: {
-        getItem: async () => null,
-        setItem: async () => {
-          timeline.push("queue");
-        },
-        removeItem: async () => undefined,
+      deleteProjectorFile: async () => {
+        throw new Error("file is busy");
       },
     });
+    deps.onDisk.add("mmproj.gguf");
+    const store = makeStore(deps, {
+      pendingProjectionCleanup: ["mmproj.gguf"],
+    });
+
+    await store.drainPendingProjectionCleanup();
+
+    expect(store.pendingProjectionCleanup).toEqual(["mmproj.gguf"]);
+  });
+
+  it("heals the catalog and the queue in one state update, so a kill cannot orphan a file", async () => {
+    // A file with no owner and no queue entry is never cleaned up again.
+    // One write carries both, so the disk never holds a healed catalog
+    // without the queue that goes with it.
+    const deps = fakeDeps();
     const store = makeStore(deps, {
       models: [
         spec({
@@ -388,13 +371,12 @@ describe("the vision heal slice", () => {
           ggufMetadata: { architecture: "qwen3-mtp" },
         }),
       ],
-      saveModels: jest.fn(async () => {
-        timeline.push("models");
-      }),
     });
 
     await store.healDraftVisionClassification();
 
-    expect(timeline).toEqual(["queue", "models"]);
+    // Both landed in the same state, so one persist write carries them.
+    expect(store.models[0].supportsVision).toBe(false);
+    expect(store.pendingProjectionCleanup).toEqual(["mmproj.gguf"]);
   });
 });

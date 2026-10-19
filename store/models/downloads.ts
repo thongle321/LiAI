@@ -60,17 +60,6 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
 ) => ({
   largestSuccessfulBytes: 0,
 
-  saveMemoryGuard: async () => {
-    try {
-      await asyncStorage.setItem(
-        MEMORY_GUARD_KEY,
-        JSON.stringify(get().largestSuccessfulBytes),
-      );
-    } catch (e) {
-      console.warn("Failed to save memory guard:", e);
-    }
-  },
-
   clearDownloadError: (specId) => {
     // The reason only — the failed state stays, so the row still says
     // Retry after the dialog is dismissed (C1).
@@ -315,8 +304,8 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
         });
         void get().refreshGgufMetadata(downloadJob.modelId);
         if (mainSize > get().largestSuccessfulBytes) {
+          // The persist middleware owns the disk; this only moves the state.
           set({ largestSuccessfulBytes: mainSize });
-          void get().saveMemoryGuard();
         }
       } else if (downloadJob.status === "failed") {
         const specNow = get().getModel(downloadJob.modelId);

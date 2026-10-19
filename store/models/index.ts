@@ -9,7 +9,11 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 import type { KeyValueStorage } from "@/services/storage/storage";
-import { toStateStorage, gatedStorage } from "@/services/storage/persist-helpers";
+import {
+  toStateStorage,
+  gatedStorage,
+  dedupedStorage,
+} from "@/services/storage/persist-helpers";
 
 import type { ModelStore } from "./types";
 import type { HFSearchFilters } from "./types";
@@ -23,6 +27,7 @@ import { createSettingsSlice } from "./settings";
 import { createWarningsSlice } from "./warnings";
 import { createVisionHealSlice } from "./vision-heal";
 import { STORAGE_KEY } from "./storage";
+import { persistedState } from "./persist-shape";
 import { upgradeModelList, upgradeRemoteApis, upgradeRemoteCaps } from "@/utils/model-upgrade";
 
 export type { ModelStore } from "./types";
@@ -30,7 +35,9 @@ export type { ModelStore } from "./types";
 export function createModelStore(storage: KeyValueStorage) {
   let persistEnabled = false;
 
-  const gated = gatedStorage(storage, () => persistEnabled);
+  // Gate outside, dedupe inside: a write the gate blocked never reached
+  // the disk, so it must not count as "already written".
+  const gated = gatedStorage(dedupedStorage(storage), () => persistEnabled);
 
   const created = create<ModelStore>()(
     persist(
@@ -42,26 +49,13 @@ export function createModelStore(storage: KeyValueStorage) {
         ...createActiveSlice(...a),
         ...createWarningsSlice()(...a),
         ...createVisionHealSlice()(...a),
-        ...createPersistenceSlice(...a),
+        ...createPersistenceSlice(storage)(...a),
       }),
       {
         name: STORAGE_KEY,
         storage: createJSONStorage(() => toStateStorage(gated)),
         skipHydration: true,
-        partialize: (state: ModelStore) => ({
-          models: state.models.map((m) => ({ ...m, apiKey: undefined })),
-          remoteApis: state.remoteApis.map((p) => ({ ...p, apiKey: "" })),
-          activeModelId: state.activeModelId,
-          activeProviderType: state.activeProviderType,
-          modelSettings: state.modelSettings,
-          largestSuccessfulBytes: state.largestSuccessfulBytes,
-          remoteCaps: state.remoteCaps,
-          privacyAcknowledged: state.privacyAcknowledged,
-          useHfToken: state.useHfToken,
-          toolCompatWarnedModels: state.toolCompatWarnedModels,
-          pendingProjectionCleanup: state.pendingProjectionCleanup,
-          searchFilters: state.searchFilters,
-        }),
+        partialize: (state: ModelStore) => persistedState(state),
         merge: (persistedState, currentState) => {
           const r =
             persistedState && typeof persistedState === "object" && !Array.isArray(persistedState)

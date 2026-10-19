@@ -1,19 +1,19 @@
-/** The tool-compat warned-set: once per model, and it survives a restart.
+/** The tool-compat warned-set: once per model.
  *
  * The set is what makes the notice a warning rather than noise. It is
- * persisted, so a model warned about last week is not warned about again
- * today (PocketPal parity: UIStore's `toolCompatWarnedModels`).
+ * persisted — by the store's persist middleware, not by this slice — so a
+ * model warned about last week is not warned about again today (PocketPal
+ * parity: UIStore's `toolCompatWarnedModels`). The round-trip across a
+ * restart is covered by the store-level persistence test.
  */
 
 import { createWarningsSlice, parseWarnedModelIds } from "../warnings";
-import { TOOL_COMPAT_WARNED_KEY } from "../storage";
 import type { ModelStore, WarningsSlice } from "../types";
-import type { KeyValueStorage } from "@/services/storage/storage";
 
 /** A slice in isolation: the store is a composition, and this slice owns
- *  only its own set and its own key. */
-function makeSlice(storage: KeyValueStorage) {
-  const creator = createWarningsSlice(storage);
+ *  only its own set. */
+function makeSlice() {
+  const creator = createWarningsSlice();
   let state: WarningsSlice = {} as WarningsSlice;
   const set = (partial: unknown) => {
     const patch =
@@ -31,30 +31,15 @@ function makeSlice(storage: KeyValueStorage) {
   };
 }
 
-function memoryStorage(seed: Record<string, string> = {}) {
-  const data = { ...seed };
-  const storage: KeyValueStorage & { data: Record<string, string> } = {
-    data,
-    getItem: async (k: string) => data[k] ?? null,
-    setItem: async (k: string, v: string) => {
-      data[k] = v;
-    },
-    removeItem: async (k: string) => {
-      delete data[k];
-    },
-  };
-  return storage;
-}
-
 describe("the tool-compat warned-set", () => {
   it("starts empty", () => {
-    const slice = makeSlice(memoryStorage());
+    const slice = makeSlice();
     expect(slice.state.toolCompatWarnedModels).toEqual([]);
     expect(slice.state.hasWarnedToolCompat("model-a")).toBe(false);
   });
 
   it("records a model and reports it as warned", () => {
-    const slice = makeSlice(memoryStorage());
+    const slice = makeSlice();
 
     slice.state.markToolCompatWarned("model-a");
 
@@ -63,25 +48,12 @@ describe("the tool-compat warned-set", () => {
   });
 
   it("does not record the same model twice", () => {
-    const slice = makeSlice(memoryStorage());
+    const slice = makeSlice();
 
     slice.state.markToolCompatWarned("model-a");
     slice.state.markToolCompatWarned("model-a");
 
     expect(slice.state.toolCompatWarnedModels).toEqual(["model-a"]);
-  });
-
-  it("persists the set under its own key", async () => {
-    const storage = memoryStorage();
-    const slice = makeSlice(storage);
-
-    slice.state.markToolCompatWarned("model-a");
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(JSON.parse(storage.data[TOOL_COMPAT_WARNED_KEY] ?? "[]")).toEqual([
-      "model-a",
-    ]);
   });
 
   it("reads a persisted set back", () => {

@@ -2,6 +2,7 @@
 
 import type { StateCreator } from "zustand";
 
+import type { KeyValueStorage } from "@/services/storage/storage";
 import type { ModelStore, PersistenceSlice } from "./types";
 import { parseModelSettingsMap } from "@/utils/model-settings";
 import { platformDownloadService } from "@/services/downloads/download-service";
@@ -13,6 +14,7 @@ import {
 } from "@/utils/model-upgrade";
 import {
   ACTIVE_MODEL_KEY,
+  HF_SEARCH_FILTERS_KEY,
   HF_TOKEN_KEY,
   HF_TOKEN_USE_KEY,
   MEMORY_GUARD_KEY,
@@ -22,45 +24,72 @@ import {
   REMOTE_CAPS_KEY,
   STORAGE_KEY,
   TOOL_COMPAT_WARNED_KEY,
-  asyncStorage,
   readSecret,
   writeSecret,
 } from "./storage";
 import { parseWarnedModelIds } from "./warnings";
 import { parseProjectionCleanupQueue } from "./vision-heal";
+import {
+  DEFAULT_SEARCH_FILTERS,
+  persistedState,
+  type PersistedModelState,
+} from "./persist-shape";
 
-let hydrating: Promise<void> | null = null;
+/** The legacy keys this store used to write, one per field. They are read
+ *  once, carried into the consolidated blob, and never written again. */
+const LEGACY_KEYS = [
+  REMOTE_APIS_KEY,
+  ACTIVE_MODEL_KEY,
+  MODEL_SETTINGS_KEY,
+  MEMORY_GUARD_KEY,
+  REMOTE_CAPS_KEY,
+  HF_TOKEN_USE_KEY,
+  TOOL_COMPAT_WARNED_KEY,
+  PENDING_PROJECTION_CLEANUP_KEY,
+  HF_SEARCH_FILTERS_KEY,
+];
 
-export const createPersistenceSlice: StateCreator<
-  ModelStore,
-  [],
-  [],
-  PersistenceSlice
-> = (set, get, api) => {
-  const storeApi = api as unknown as { persist: { rehydrate: () => void | Promise<void> } };
-  return {
-    hydrated: false,
-    loadPersisted: async () => {
-      if (get().hydrated) return;
-      hydrating ??= (async () => {
-        try {
-          await hydrate(set, get, storeApi);
-        } finally {
-          set({ hydrated: true });
-        }
-      })().finally(() => {
-        hydrating = null;
-      });
-      await hydrating;
-    },
+export function createPersistenceSlice(
+  storage: KeyValueStorage,
+): StateCreator<ModelStore, [], [], PersistenceSlice> {
+  // Per store instance, not per module: two stores (a second one in a
+  // test) must not share a flight.
+  let hydrating: Promise<void> | null = null;
+
+  return (set, get, api) => {
+    const storeApi = api as unknown as {
+      persist: { rehydrate: () => void | Promise<void> };
+    };
+    return {
+      hydrated: false,
+      loadPersisted: async () => {
+        if (get().hydrated) return;
+        hydrating ??= (async () => {
+          try {
+            await hydrate(set, get, storeApi, storage);
+          } finally {
+            set({ hydrated: true });
+          }
+        })().finally(() => {
+          hydrating = null;
+        });
+        await hydrating;
+      },
+    };
   };
-};
+}
 
-/** Migrate the legacy multi-key storage into the consolidated STORAGE_KEY
- *  blob (one-time). After this runs, STORAGE_KEY holds the new format and
- *  the legacy keys are cleared. */
-async function migrateLegacyIfNeeded(): Promise<void> {
-  const existing = await asyncStorage.getItem(STORAGE_KEY);
+/** Carry an old install forward, once.
+ *
+ *  The consolidated blob is the healthy shape: an object with a `state`.
+ *  Anything else under STORAGE_KEY is either an old install or the bare
+ *  array the catalog slice used to write over the blob — and both are
+ *  rebuilt from the legacy keys and written back as the blob.
+ *
+ *  The legacy keys are read and cleared, never written again: the store
+ *  has exactly one writer from here on. */
+async function migrateLegacyIfNeeded(storage: KeyValueStorage): Promise<void> {
+  const existing = await storage.getItem(STORAGE_KEY);
   if (existing) {
     try {
       const parsed = JSON.parse(existing);
@@ -89,17 +118,19 @@ async function migrateLegacyIfNeeded(): Promise<void> {
     useTokenRaw,
     warnedRaw,
     cleanupRaw,
+    filtersRaw,
   ] = await Promise.all([
-    asyncStorage.getItem(STORAGE_KEY), // old: models array (if array-shaped)
-    asyncStorage.getItem(REMOTE_APIS_KEY),
-    asyncStorage.getItem(HF_TOKEN_KEY),
-    asyncStorage.getItem(ACTIVE_MODEL_KEY),
-    asyncStorage.getItem(MODEL_SETTINGS_KEY),
-    asyncStorage.getItem(MEMORY_GUARD_KEY),
-    asyncStorage.getItem(REMOTE_CAPS_KEY),
-    asyncStorage.getItem(HF_TOKEN_USE_KEY),
-    asyncStorage.getItem(TOOL_COMPAT_WARNED_KEY),
-    asyncStorage.getItem(PENDING_PROJECTION_CLEANUP_KEY),
+    storage.getItem(STORAGE_KEY), // old: models array (if array-shaped)
+    storage.getItem(REMOTE_APIS_KEY),
+    storage.getItem(HF_TOKEN_KEY),
+    storage.getItem(ACTIVE_MODEL_KEY),
+    storage.getItem(MODEL_SETTINGS_KEY),
+    storage.getItem(MEMORY_GUARD_KEY),
+    storage.getItem(REMOTE_CAPS_KEY),
+    storage.getItem(HF_TOKEN_USE_KEY),
+    storage.getItem(TOOL_COMPAT_WARNED_KEY),
+    storage.getItem(PENDING_PROJECTION_CLEANUP_KEY),
+    storage.getItem(HF_SEARCH_FILTERS_KEY),
   ]);
 
   // Nothing to migrate.
@@ -113,7 +144,8 @@ async function migrateLegacyIfNeeded(): Promise<void> {
     capsRaw ||
     useTokenRaw ||
     warnedRaw ||
-    cleanupRaw;
+    cleanupRaw ||
+    filtersRaw;
   if (!hasAnything) return;
 
   // Models: old STORAGE_KEY was a JSON array.
@@ -203,19 +235,25 @@ async function migrateLegacyIfNeeded(): Promise<void> {
 
   const useHfToken = useTokenRaw === null ? true : useTokenRaw === "true";
 
-  let toolCompatWarnedModels: string[] = [];
-  if (warnedRaw) {
-    try {
-      toolCompatWarnedModels = JSON.parse(warnedRaw) ?? [];
-      if (!Array.isArray(toolCompatWarnedModels)) toolCompatWarnedModels = [];
-    } catch {
-      toolCompatWarnedModels = [];
-    }
-  }
+  const toolCompatWarnedModels = parseWarnedModelIds(warnedRaw);
 
   const pendingProjectionCleanup = parseProjectionCleanupQueue(cleanupRaw);
 
-  const state = {
+  // The saved Hub search filters, when the old install had them.
+  let searchFilters = { ...DEFAULT_SEARCH_FILTERS };
+  if (filtersRaw) {
+    try {
+      const parsed = JSON.parse(filtersRaw) as Partial<typeof searchFilters>;
+      searchFilters = {
+        author: typeof parsed.author === "string" ? parsed.author : "",
+        sortBy: parsed.sortBy ?? DEFAULT_SEARCH_FILTERS.sortBy,
+      };
+    } catch {
+      // A corrupt filter blob must not block the upgrade.
+    }
+  }
+
+  const state: PersistedModelState = {
     models: upgradeModelList(models),
     remoteApis: upgradeRemoteApis(apis),
     activeModelId,
@@ -227,27 +265,17 @@ async function migrateLegacyIfNeeded(): Promise<void> {
     useHfToken,
     toolCompatWarnedModels,
     pendingProjectionCleanup,
-    searchFilters: { author: "", sortBy: "downloads" },
+    searchFilters,
   };
 
-  // Scrub apiKeys from persisted models/remoteApis.
-  state.models = state.models.map((m) => ({ ...m, apiKey: undefined }));
-  state.remoteApis = state.remoteApis.map((p) => ({ ...p, apiKey: "" }));
+  await storage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({ state: persistedState(state), version: 0 }),
+  );
 
-  await asyncStorage.setItem(STORAGE_KEY, JSON.stringify({ state, version: 0 }));
-
-  // Clear legacy keys (best-effort).
-  for (const k of [
-    REMOTE_APIS_KEY,
-    ACTIVE_MODEL_KEY,
-    MODEL_SETTINGS_KEY,
-    MEMORY_GUARD_KEY,
-    REMOTE_CAPS_KEY,
-    HF_TOKEN_USE_KEY,
-    TOOL_COMPAT_WARNED_KEY,
-    PENDING_PROJECTION_CLEANUP_KEY,
-  ]) {
-    await asyncStorage.removeItem(k).catch(() => {});
+  // Clear the legacy keys (best-effort). They are read-only from here on.
+  for (const k of LEGACY_KEYS) {
+    await storage.removeItem(k).catch(() => {});
   }
 }
 
@@ -255,14 +283,12 @@ async function hydrate(
   set: (partial: Partial<ModelStore>) => void,
   get: () => ModelStore,
   storeApi: { persist: { rehydrate: () => void | Promise<void> } },
+  storage: KeyValueStorage,
 ): Promise<void> {
   try {
-    await migrateLegacyIfNeeded();
+    await migrateLegacyIfNeeded(storage);
 
     // Rehydrate persisted fields via middleware.
-    // The store's api reference is captured in persistence.ts? We need api.
-    // We'll reach it via a global set during index.ts. Instead, use get().loadPersisted? circular.
-    // Approach: persistence slice doesn't have api. We'll call rehydrate through a stored ref.
     await storeApi.persist.rehydrate();
 
     // Cleanup queue lands in store before models are parsed (via rehydrate).
@@ -276,7 +302,6 @@ async function hydrate(
         }
       }
       set({ models });
-      await get().saveModels();
       await get().reconcileInterrupted();
       const adopted = await platformDownloadService.reconcileWithNative?.();
       for (const modelId of adopted ?? []) {
@@ -321,7 +346,6 @@ async function hydrate(
         else p.apiKey = "";
       }
       set({ remoteApis: apis });
-      await get().saveRemoteApis();
     }
 
     // HF token: SecureStore first, legacy AsyncStorage migrates once.
@@ -329,11 +353,11 @@ async function hydrate(
     if (ssToken) {
       set({ hfToken: ssToken });
     } else {
-      const legacyTokenRaw = await asyncStorage.getItem(HF_TOKEN_KEY).catch(() => null);
+      const legacyTokenRaw = await storage.getItem(HF_TOKEN_KEY).catch(() => null);
       if (legacyTokenRaw) {
         try {
           await writeSecret(HF_TOKEN_SS_KEY, legacyTokenRaw);
-          await asyncStorage.removeItem(HF_TOKEN_KEY);
+          await storage.removeItem(HF_TOKEN_KEY);
           set({ hfToken: legacyTokenRaw });
         } catch {
           // legacy copy stays put

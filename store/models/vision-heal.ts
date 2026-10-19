@@ -19,10 +19,8 @@
 import type { StateCreator } from "zustand";
 
 import type { ModelSpec } from "@/types/models";
-import type { KeyValueStorage } from "@/services/storage/storage";
 import { isDraftOnlySpec } from "@/utils/draft-only.ts";
 import { modelsUsingProjector } from "@/services/models/vision-pairing.ts";
-import { asyncStorage, PENDING_PROJECTION_CLEANUP_KEY } from "./storage.ts";
 import type { ModelStore, VisionHealSlice } from "./types.ts";
 
 /** The device operations the cleanup needs, injected so the slice is
@@ -34,8 +32,6 @@ export interface ProjectionCleanupDeps {
   projectorFileExists: (name: string) => Promise<boolean>;
   /** Is a download of that file in flight right now? */
   isDownloading: (name: string) => Promise<boolean>;
-  /** Where the queue is persisted. */
-  storage: KeyValueStorage;
 }
 
 /** Every downloaded projector lives in the models directory.
@@ -74,7 +70,6 @@ export const defaultVisionHealDeps: ProjectionCleanupDeps = {
       .getAllJobs()
       .some((job) => job.fileName === name && job.status === "downloading");
   },
-  storage: asyncStorage,
 };
 
 /** Does this spec need healing?
@@ -190,17 +185,9 @@ export function createVisionHealSlice(
         models: plan.models,
         pendingProjectionCleanup: [...queue],
       });
-      // One write for the queue, one for the catalog — in THAT order.
-      //
-      // The queue first, because a kill between the two writes must not
-      // orphan a file: a file with no owner and no queue entry is never
-      // cleaned up again. With the queue written first, the worst case is
-      // a queue entry whose model still has its pairing — and the next
-      // launch re-runs the heal, which heals the model and keeps the
-      // entry. The drain runs after both writes, so it never sees a
-      // pairing the heal has not undone.
-      await get().savePendingProjectionCleanup();
-      await get().saveModels();
+      // One write carries both the healed catalog and the queue: the
+      // persist middleware writes the whole persisted slice, so a kill
+      // cannot leave a queue entry without the pairing it undoes.
     },
 
     drainPendingProjectionCleanup: async () => {
@@ -212,18 +199,6 @@ export function createVisionHealSlice(
         deps,
       );
       set({ pendingProjectionCleanup: remaining });
-      await get().savePendingProjectionCleanup();
-    },
-
-    savePendingProjectionCleanup: async () => {
-      try {
-        await deps.storage.setItem(
-          PENDING_PROJECTION_CLEANUP_KEY,
-          JSON.stringify(get().pendingProjectionCleanup),
-        );
-      } catch (e) {
-        console.warn("Failed to save the projection cleanup queue:", e);
-      }
     },
   });
 }

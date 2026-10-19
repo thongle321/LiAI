@@ -17,7 +17,7 @@
  * the list's scroll).
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import { CheckCircle2 } from "lucide-react-native";
@@ -153,7 +153,6 @@ export function HFModelSearch({
   // keeps the re-rendering subscriptions isolated — a bookmark toggle must
   // not rebuild the search list.
   const searchModels = useModelStore((s) => s.searchModels);
-  const loadSearchFilters = useModelStore((s) => s.loadSearchFilters);
   const setSearchFilters = useModelStore((s) => s.setSearchFilters);
   const getModelFiles = useModelStore((s) => s.getModelFiles);
   const searchQuery = useModelStore((s) => s.searchQuery);
@@ -171,28 +170,18 @@ export function HFModelSearch({
   // Bumped by the filter sheets so the debounce effect re-runs: the store
   // holds the filters, and its identity never changes.
   const [filtersVersion, setFiltersVersion] = useState(0);
-  // Filters hydrate from storage once per open, BEFORE the first search,
-  // or a returning user's sort would be ignored by that request.
-  const hydrated = useRef(false);
 
   useEffect(() => {
     if (!visible) {
-      hydrated.current = false;
       setSelected(null);
       return;
     }
     // ponytail: debounce, PocketParity's 500ms.
     const t = setTimeout(() => {
-      void (async () => {
-        if (!hydrated.current) {
-          hydrated.current = true;
-          await loadSearchFilters();
-        }
-        await searchModels(query);
-      })();
+      void searchModels(query);
     }, 500);
     return () => clearTimeout(t);
-  }, [query, visible, filtersVersion, loadSearchFilters, searchModels]);
+  }, [query, visible, filtersVersion, searchModels]);
 
   const applyFilters = (patch: Parameters<typeof setSearchFilters>[0]) => {
     setSearchFilters(patch);

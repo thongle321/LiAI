@@ -24,6 +24,7 @@
  */
 
 import { create } from "zustand";
+import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "../services/storage/storage.ts";
 import { DEVICE_DEFAULT_VOICE, type NeuralEngineId, type Voice } from "../services/tts/types.ts";
@@ -190,12 +191,36 @@ export function restoreVoice(stashed: string, engine: NeuralEngineId): Voice | n
   return NEURAL_ENGINE_META[engine].voices.find((v) => v.id === stashed) ?? null;
 }
 
+interface VoiceStoreApi {
+  persist: { rehydrate: () => void | Promise<void> };
+  getState: () => VoiceState;
+}
+
+function toStateStorage(storage: KeyValueStorage): StateStorage {
+  return {
+    getItem: (key) => storage.getItem(key),
+    setItem: (key, value) => storage.setItem(key, value),
+    removeItem: (key) => storage.removeItem(key),
+  };
+}
+
 export function createVoiceStore(storage: KeyValueStorage) {
   /** In-flight hydration, so concurrent `load()` callers share one read
    *  (the startup gate and the voice settings screen both call it). */
   let hydrating: Promise<void> | null = null;
+  let api: VoiceStoreApi | null = null;
+  let persistEnabled = false;
 
-  return create<VoiceState>()((set, get) => {
+  const gatedStorage: KeyValueStorage = {
+    getItem: (key) => storage.getItem(key),
+    setItem: (key, value) =>
+      persistEnabled ? storage.setItem(key, value) : Promise.resolve(),
+    removeItem: (key) => storage.removeItem(key),
+  };
+
+  const created = create<VoiceState>()(
+    persist(
+      (set, get) => {
     /** Record one engine's status, and restore the voice stashed for it
      *  when its model finishes downloading (PocketPal's
      *  restore-after-re-download). Shared by download and resume. */
@@ -212,25 +237,6 @@ export function createVoiceStore(storage: KeyValueStorage) {
       const restored = restoreVoice(stashed, engineId);
       if (restored !== null) set({ currentVoice: restored });
     }
-    async function persist(): Promise<void> {
-      // Refuse to write before hydration. `persist` serialises the CURRENT
-      // state, and an unhydrated store still holds the defaults
-      // `{currentVoice: null, autoSpeak: false, userTTSOverride: null}` —
-      // so a setter fired on a cold start (the voice chip toggling auto-speak
-      // before voice-settings has mounted) overwrote the user's saved voice
-      // with nulls. `load()` is called by the startup gate before any screen
-      // mounts, so this is a backstop, not the primary guard (D3-4).
-      if (!get().loaded) return;
-      const { currentVoice, autoSpeak, userTTSOverride } = get();
-      try {
-        await storage.setItem(
-          VOICE_KEY,
-          JSON.stringify({ currentVoice, autoSpeak, userTTSOverride }),
-        );
-      } catch {
-        // Ignore persistence failures; voice settings are non-critical.
-      }
-    }
 
     /** Reads persisted voice prefs, then reconciles what the disk says
      *  against what the TTS engines actually have installed.
@@ -243,8 +249,7 @@ export function createVoiceStore(storage: KeyValueStorage) {
       get: () => VoiceState,
     ): Promise<void> {
       try {
-        const parsed = parseVoiceState(await storage.getItem(VOICE_KEY));
-        set({ ...parsed });
+        if (api) await api.persist.rehydrate();
         // Reconcile every engine's download state from disk (spec Q14).
         // The native module is absent in node — a failed reconcile simply
         // leaves that engine's entry null.
@@ -256,7 +261,7 @@ export function createVoiceStore(storage: KeyValueStorage) {
             downloads[id] = null;
           }
         }
-        const reconciled = reconcileVoice(parsed.currentVoice, downloads);
+        const reconciled = reconcileVoice(get().currentVoice, downloads);
         set({
           downloads,
           currentVoice: reconciled.voice,
@@ -286,6 +291,7 @@ export function createVoiceStore(storage: KeyValueStorage) {
           set({ deviceMeetsMemory: false });
         }
       } finally {
+        persistEnabled = true;
         set({ loaded: true });
       }
     }
@@ -322,15 +328,12 @@ export function createVoiceStore(storage: KeyValueStorage) {
 
       setCurrentVoice: (voice) => {
         set({ currentVoice: voice });
-        void persist();
       },
       setAutoSpeak: (autoSpeak) => {
         set({ autoSpeak });
-        void persist();
       },
       setUserTTSOverride: (userTTSOverride) => {
         set({ userTTSOverride });
-        void persist();
       },
       markSpoken: (messageId) => {
         set({ lastSpokenMessageId: messageId });
@@ -405,7 +408,45 @@ export function createVoiceStore(storage: KeyValueStorage) {
         }));
       },
     };
-  });
+  },
+  {
+    name: VOICE_KEY,
+    storage: createJSONStorage(() => toStateStorage(gatedStorage)),
+    skipHydration: true,
+    partialize: (state: VoiceState) => ({
+      currentVoice: state.currentVoice,
+      autoSpeak: state.autoSpeak,
+      userTTSOverride: state.userTTSOverride,
+    }),
+    merge: (persistedState, currentState) => {
+      const r =
+        persistedState && typeof persistedState === "object" && !Array.isArray(persistedState)
+          ? (persistedState as Record<string, unknown>)
+          : {};
+      const hasVoice =
+        r.currentVoice !== undefined ||
+        (typeof r.voiceId === "string" && r.voiceId.length > 0);
+      const currentVoice = hasVoice
+        ? sanitizeVoice(
+            r.currentVoice !== undefined
+              ? toVoice(r.currentVoice)
+              : DEVICE_DEFAULT_VOICE,
+          )
+        : currentState.currentVoice;
+      return {
+        ...currentState,
+        currentVoice,
+        autoSpeak:
+          typeof r.autoSpeak === "boolean" ? r.autoSpeak : currentState.autoSpeak,
+        userTTSOverride:
+          typeof r.userTTSOverride === "boolean" ? r.userTTSOverride : currentState.userTTSOverride,
+        loaded: currentState.loaded,
+      };
+    },
+  },
+  ));
+  api = created as unknown as VoiceStoreApi;
+  return created;
 }
 
 async function rnStorage(): Promise<AsyncStorageStatic> {

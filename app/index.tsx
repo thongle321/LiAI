@@ -25,13 +25,13 @@ import { useEffect, useState } from "react";
 import * as SplashScreen from "expo-splash-screen";
 import { Redirect } from "expo-router";
 
-import { isOnboarded } from "../services/onboarding.ts";
 import {
   createAutoRelease,
   restoreAutoReleasedModel,
 } from "../services/inference/auto-release.ts";
 import { useInference } from "../store/inference";
 import { useModelStore } from "../store/modelStore";
+import { useOnboardingStore } from "../store/onboarding";
 import { useSearch } from "../store/search";
 import { useVoice } from "../store/voice";
 
@@ -41,6 +41,7 @@ export default function IndexGate() {
   const loadInference = useInference((s) => s.load);
   const loadSearch = useSearch((s) => s.load);
   const loadVoice = useVoice((s) => s.load);
+  const hydrateOnboarding = useOnboardingStore((s) => s.hydrate);
 
   useEffect(() => {
     void (async () => {
@@ -64,10 +65,14 @@ export default function IndexGate() {
       // is the app's first frame, so nothing may keep it up: a failure
       // opens the app without the model.
       await restoreAutoReleasedModel(createAutoRelease()).catch(() => {});
-      setOnboarded(await isOnboarded());
+      // The first-run gate is the STORE's, not a private read: the root
+      // layout guards the drawer with the same value, and two readers of
+      // one flag can disagree about whether the app is provisioned.
+      await hydrateOnboarding();
+      setOnboarded(useOnboardingStore.getState().onboarded);
       void SplashScreen.hideAsync().catch(() => {});
     })();
-  }, [loadPersisted, loadInference, loadSearch, loadVoice]);
+  }, [loadPersisted, loadInference, loadSearch, loadVoice, hydrateOnboarding]);
 
   if (onboarded === null) return null;
   return onboarded ? (

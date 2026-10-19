@@ -14,12 +14,12 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider, useKeyboardState } from "react-native-keyboard-controller";
 import { ScopedVariables, Uniwind } from "uniwind";
 
-import { useEffect, useRef, useState } from "react";
-import { isOnboarded } from "../services/onboarding.ts";
+import { useEffect, useRef } from "react";
 import { colors } from "../themes/tokens.ts";
 import { SnackbarProvider } from "../components/snackbar.tsx";
 import { useKeyboardStore } from "../store/keyboard.ts";
 import { useEngineOffload } from "../hooks/useEngineOffload.ts";
+import { useOnboardingGate } from "../hooks/useOnboardingGate.ts";
 import { useVoiceOffload } from "../hooks/useVoiceOffload.ts";
 import { useFluidTextVariables } from "../hooks/useFluidTextScale.ts";
 
@@ -63,10 +63,12 @@ export default function RootLayout() {
   // navigator can. Optimistically true (most launches are returning users);
   // a false flip hides the drawer and the router falls back to index, which
   // redirects to onboarding.
-  const [onboarded, setOnboarded] = useState(true);
-  useEffect(() => {
-    void isOnboarded().then(setOnboarded);
-  }, []);
+  //
+  // LIVE state, not a value read once at mount: the drawer is OUT of the
+  // navigator while the gate is closed, so completing onboarding has to be
+  // able to put it back — and the navigation to the chosen destination has
+  // to wait until the navigator has. The hook owns both halves.
+  const { onboarded } = useOnboardingGate();
   // Release the loaded model when the app is backgrounded, so a multi-GB
   // GGUF is not held resident (Settings > Model Loading).
   useEngineOffload();

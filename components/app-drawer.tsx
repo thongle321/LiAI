@@ -20,7 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react-native";
 
-import { colors } from "../themes/tokens.ts";
+import { useColors } from "../themes/tokens.ts";
 import { useChatStore } from "../store/chat.ts";
 import {
   exportFilename,
@@ -33,6 +33,7 @@ import { SessionList } from "./chat/session-list.tsx";
 const VERSION = Constants.expoConfig?.version ?? "0.1.0";
 
 export function AppDrawerContent() {
+  const colors = useColors();
   const sessionId = useChatStore((s) => s.sessionId);
   const sessions = useChatStore((s) => s.sessions);
   const newConversation = useChatStore((s) => s.newConversation);
@@ -163,6 +164,7 @@ function DrawerItem({
   label: string;
   onPress: () => void;
 }) {
+  const colors = useColors();
   return (
     <Pressable
       onPress={onPress}

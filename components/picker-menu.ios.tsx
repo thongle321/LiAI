@@ -11,7 +11,9 @@ import { Host } from "@expo/ui";
 import { Button, Menu } from "@expo/ui/swift-ui";
 import { ChevronDown } from "lucide-react-native";
 
-import { colors } from "../themes/tokens.ts";
+import { useUniwind } from "uniwind";
+
+import { useColors } from "../themes/tokens.ts";
 import type { PickerMenuProps } from "./picker-menu";
 
 export function PickerMenu<T extends string>({
@@ -21,6 +23,8 @@ export function PickerMenu<T extends string>({
   onChange,
   show,
 }: PickerMenuProps<T>) {
+  const colors = useColors();
+  const scheme = useUniwind().theme === "dark" ? "dark" : "light";
   return (
     <View
       className="min-h-12 flex-row items-center justify-end gap-1"
@@ -28,7 +32,7 @@ export function PickerMenu<T extends string>({
       accessibilityLabel={`${label}: ${show(value)}`}
       accessibilityHint="Opens a list of choices"
     >
-      <Host matchContents ignoreSafeArea="keyboard" colorScheme="light" seedColor={colors.primary}>
+      <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
         <Menu label={show(value)}>
           {options.map((option) => (
             <Button

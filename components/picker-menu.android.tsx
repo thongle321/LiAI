@@ -23,7 +23,9 @@ import {
 import { defaultMinSize, menuAnchor } from "@expo/ui/jetpack-compose/modifiers";
 import { ChevronDown } from "lucide-react-native";
 
-import { colors, typeScale } from "../themes/tokens.ts";
+import { useUniwind } from "uniwind";
+
+import { useColors, typeScale } from "../themes/tokens.ts";
 import type { PickerMenuProps } from "./picker-menu";
 
 export function PickerMenu<T extends string>({
@@ -33,6 +35,8 @@ export function PickerMenu<T extends string>({
   onChange,
   show,
 }: PickerMenuProps<T>) {
+  const colors = useColors();
+  const scheme = useUniwind().theme === "dark" ? "dark" : "light";
   const [open, setOpen] = useState(false);
   return (
     <Pressable
@@ -43,7 +47,7 @@ export function PickerMenu<T extends string>({
       accessibilityHint="Opens a list of choices"
       accessibilityState={{ expanded: open }}
     >
-      <Host matchContents ignoreSafeArea="keyboard" colorScheme="light" seedColor={colors.primary}>
+      <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
         <ExposedDropdownMenuBox expanded={open} onExpandedChange={setOpen}>
           {/* The anchor the popup positions against, and the only thing
               Compose draws in the row. */}

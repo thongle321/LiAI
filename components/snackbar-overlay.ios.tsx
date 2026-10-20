@@ -12,7 +12,7 @@ import { Pressable, Text, View } from "react-native";
 import Animated, { FadeInDown, FadeInUp, FadeOutDown, FadeOutUp } from "react-native-reanimated";
 import { X } from "lucide-react-native";
 
-import { colors } from "../themes/tokens.ts";
+import { colors, useColors } from "../themes/tokens.ts";
 import type {
   SnackbarOptions,
   SnackbarOverlayHandle,
@@ -39,6 +39,7 @@ const DEFAULT_DURATION = 4000;
 const EXIT_DELAY_MS = 250;
 
 export function SnackbarOverlay({ ref }: { ref?: Ref<SnackbarOverlayHandle> }) {
+  const colors = useColors();
   const [current, setCurrent] = useState<SnackbarItem | null>(null);
   const [queue, setQueue] = useState<SnackbarItem[]>([]);
   const idRef = useRef(0);

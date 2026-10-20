@@ -27,7 +27,7 @@ import { openSettings } from "expo-linking";
 import { useCameraDevice, useCameraPermission } from "react-native-vision-camera";
 import type { Camera as VisionCameraView } from "react-native-vision-camera";
 
-import { colors } from "@/themes/tokens.ts";
+import { colors, useColors } from "@/themes/tokens.ts";
 import { useKeyboardStore } from "@/store/keyboard.ts";
 import { VOICE_STATUS_LABEL } from "@/services/voice/voice-status.ts";
 import { useVisionTurn } from "@/hooks/useVisionTurn.ts";
@@ -41,6 +41,7 @@ import {
 } from "@/components/vision/vision-overlays.tsx";
 
 export default function VisionScreen() {
+  const colors = useColors();
   const [position, setPosition] = useState<"back" | "front">("back");
   const [camLive, setCamLive] = useState(false);
   const [camProblem, setCamProblem] = useState<string | null>(null);

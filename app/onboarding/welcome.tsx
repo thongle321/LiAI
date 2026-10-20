@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Eye, MessageCircle, Mic, type LucideIcon } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { colors, useColors } from "@/themes/tokens.ts";
 import { APP_NAME } from "@/constants/app.ts";
 
 const ROWS: { Icon: LucideIcon; title: string; body: string }[] = [
@@ -15,6 +15,7 @@ const ROWS: { Icon: LucideIcon; title: string; body: string }[] = [
 ];
 
 export default function WelcomeStep() {
+  const colors = useColors();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
       <View className="flex-1 justify-center px-8">

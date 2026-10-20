@@ -16,7 +16,7 @@ import { FlatList, RefreshControl, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
-import { colors } from "@/themes/tokens.ts";
+import { colors, useColors } from "@/themes/tokens.ts";
 import { ScreenHeader } from "@/components/screen-header.tsx";
 import { ContentColumn } from "@/components/content-column.tsx";
 import { useLocalModelImport } from "@/hooks/useLocalModelImport.ts";
@@ -46,6 +46,7 @@ import { ModelsResetDialog } from "@/components/models/models-reset-dialog.tsx";
 import type { ModelSpec, PresetModel, PresetModelFile } from "@/types/models";
 
 export default function ModelsRoute() {
+  const colors = useColors();
   // Stable selectors: actions never change identity, so each subscribes
   // alone and preset/download writes never re-render this screen.
   const startDownload = useModelStore((s) => s.startDownload);

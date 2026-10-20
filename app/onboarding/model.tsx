@@ -9,7 +9,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
-import { colors } from "@/themes/tokens.ts";
+import { colors, useColors } from "@/themes/tokens.ts";
 import { ContentColumn } from "@/components/content-column.tsx";
 import {
   matchTier,
@@ -30,6 +30,7 @@ import { useModelStore } from "@/store/modelStore";
 import type { ModelSpec, PresetModel } from "@/types/models";
 
 export default function ModelStep() {
+  const colors = useColors();
   const tiers = TIERS;
   const [selectedId, setSelectedId] = useState(tiers[0].id);
   const [ramUnknown, setRamUnknown] = useState(false);

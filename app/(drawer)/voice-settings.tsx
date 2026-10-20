@@ -6,12 +6,13 @@
 import { ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { colors } from "@/themes/tokens.ts";
+import { colors, useColors } from "@/themes/tokens.ts";
 import { ScreenHeader } from "@/components/screen-header.tsx";
 import { ContentColumn } from "@/components/content-column.tsx";
 import { VoiceSettings } from "@/components/settings/voice-settings.tsx";
 
 export default function VoiceSettingsScreen() {
+  const colors = useColors();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
       <ScreenHeader title="Voice" />

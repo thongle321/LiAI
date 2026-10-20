@@ -26,7 +26,7 @@ import {
 import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
 import { ChevronDown } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { colors, useColors } from "@/themes/tokens.ts";
 import { filterMessages } from "@/services/chat/filter.ts";
 import { buildRows, type ChatRow } from "@/services/chat/rows.ts";
 import {
@@ -69,6 +69,7 @@ import { useCompanions } from "@/store/companions.ts";
 import { recommendedContextTokens } from "@/services/agent/registry.ts";
 
 export default function ChatRoute() {
+  const colors = useColors();
   const messages = useChatStore((s) => s.messages);
   // The header names the conversation and the model answering it; both
   // live here (G11 — the active model was otherwise invisible on this

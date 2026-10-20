@@ -3,10 +3,11 @@
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { colors } from "@/themes/tokens.ts";
+import { colors, useColors } from "@/themes/tokens.ts";
 import { useOnboardingStore } from "@/store/onboarding.ts";
 
 export default function DoneStep() {
+  const colors = useColors();
   // The gate is a live store, and the navigator is the only thing that can
   // put the drawer back — so the button records WHERE to go and the root
   // layout (hooks/useOnboardingGate.ts) does the navigating, once the

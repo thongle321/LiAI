@@ -10,7 +10,7 @@
 import { Pressable, Text, View } from "react-native";
 import { Check } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { Sheet } from "@/components/sheet.tsx";
 import { useActivateCompanion } from "@/hooks/useActivateCompanion.ts";
 import { useChatStore } from "@/store/chat.ts";
@@ -24,6 +24,7 @@ export function CompanionsSheet({
   visible: boolean;
   onClose: () => void;
 }) {
+  const colors = useColors();
   const companions = useCompanions((s) => s.companions);
   const sessionId = useChatStore((s) => s.sessionId);
   const sessionCompanionId = useChatStore((s) => s.sessionCompanionId);

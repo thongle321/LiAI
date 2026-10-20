@@ -47,7 +47,7 @@ import {
   Trash2,
 } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { motionLayout } from "@/utils/motion.ts";
 import type { NeuralEngineId } from "@/services/tts/types.ts";
 import { downloadLine } from "@/services/tts/voiceUi.ts";
@@ -114,9 +114,9 @@ function Action({
 }
 
 export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
+  const colors = useColors();
   const c = useEngineCardController(engineId);
   const meta = c.meta;
-  const downloads = c.downloads;
   const currentVoice = c.currentVoice;
   const { expanded, setExpanded, previewingId, errorNote, setErrorNote } = c;
   const { installable, lowDisk, freeBytes, ringProgress, sizeMb } = c;

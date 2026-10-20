@@ -16,7 +16,7 @@ import { Alert, FlatList, Pressable, Text, View, useWindowDimensions } from "rea
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Plus, FolderOpen } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { ScreenHeader } from "@/components/screen-header.tsx";
 import { CompanionCard } from "@/components/companions/companion-card.tsx";
 import { useActivateCompanion } from "@/hooks/useActivateCompanion.ts";
@@ -42,6 +42,7 @@ export function CompanionsScreen({
   /** Open the editor for a fresh template. */
   onCreate: (template: Partial<Companion>) => void;
 }) {
+  const colors = useColors();
   const companions = useCompanions((s) => s.companions);
   const loaded = useCompanions((s) => s.loaded);
   const importCompanions = useCompanions((s) => s.importCompanions);

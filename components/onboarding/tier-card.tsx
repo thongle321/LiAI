@@ -3,7 +3,7 @@
 import { Pressable, Text, View } from "react-native";
 import { CheckCircle2, Circle } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import type { DeviceTier } from "@/services/models/device-tiers.ts";
 
 export function formatRamFloor(minRamMb: number): string {
@@ -23,6 +23,7 @@ export function TierCard({
   recommended: boolean;
   onSelect: () => void;
 }) {
+  const colors = useColors();
   return (
     <Pressable
       onPress={onSelect}

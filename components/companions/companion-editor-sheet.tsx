@@ -20,7 +20,7 @@ import {
   View,
 } from "react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { Sheet } from "@/components/sheet.tsx";
 import {
   ActionRow,
@@ -71,6 +71,7 @@ function CompanionTextRow({
   multiline?: boolean;
   onChangeText: (text: string) => void;
 }) {
+  const colors = useColors();
   return (
     <View className="mb-5">
       <RowLabel label={label} description={description} />

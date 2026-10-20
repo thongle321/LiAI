@@ -15,7 +15,7 @@ import {
   useCameraFormat,
 } from "react-native-vision-camera";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import * as Haptics from "expo-haptics";
 import { useKeyboardLift } from "@/hooks/useKeyboardLift.ts";
 import { usePressFeedback } from "@/utils/motion.ts";
@@ -99,12 +99,13 @@ export function VisionPreview({
  */
 export function VisionActiveFrame({
   side = 28,
-  color = colors.primary,
+  color,
 }: {
   /** Length of each bracket arm, in px. */
   side?: number;
   color?: string;
 }) {
+  const colors = useColors();
   const CORNERS = [
     { key: "topLeft", top: true, left: true },
     { key: "topRight", top: true, left: false },
@@ -122,7 +123,7 @@ export function VisionActiveFrame({
             ...(left ? { left: 0 } : { right: 0 }),
             width: side,
             height: side,
-            borderColor: color,
+            borderColor: color ?? colors.primary,
             borderTopWidth: top ? 2 : 0,
             borderBottomWidth: top ? 0 : 2,
             borderLeftWidth: left ? 2 : 0,
@@ -152,6 +153,7 @@ export function VisionTopFloat({
   intervalMs: number;
   onIntervalStep: (deltaMs: number) => void;
 }) {
+  const colors = useColors();
   const exitPress = usePressFeedback();
   const flipPress = usePressFeedback();
   const watchPress = usePressFeedback();
@@ -272,6 +274,7 @@ export function VisionBottomPanel({
   /** No active model: talk + type are disabled and greyed. */
   modelReady: boolean;
 }) {
+  const colors = useColors();
   const retryPress = usePressFeedback();
   const settingsPress = usePressFeedback();
   const sendPress = usePressFeedback();

@@ -30,7 +30,7 @@ import {
 import { useShallow } from "zustand/react/shallow";
 import { useModelStore } from "@/store/modelStore";
 import { useModelsUi } from "@/store/modelsUi.ts";
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import {
   getAvailableDevices,
   getDeviceAvailability,
@@ -53,6 +53,7 @@ const OPENCL_DOCS_URL =
   "https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/OPENCL.md#model-preparation";
 
 export function ModelInitializationSettings() {
+  const colors = useColors();
   // One useShallow unit: all 31 fields render here, so the section
   // re-renders only when one of them changes — never on memory/loading
   // writes owned by the sibling sections below.

@@ -8,7 +8,7 @@
 
 import { Pressable, Text, View } from "react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import type { Companion } from "@/types/companion.ts";
 
 export function CompanionCard({
@@ -22,6 +22,7 @@ export function CompanionCard({
   /** Activate for chat (bind + model check + navigate). */
   onUse: () => void;
 }) {
+  const colors = useColors();
   const tools = companion.pact?.talents.length ?? 0;
   return (
     <Pressable

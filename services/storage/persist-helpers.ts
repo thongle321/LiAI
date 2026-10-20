@@ -46,8 +46,10 @@ export function dedupedStorage(storage: KeyValueStorage): KeyValueStorage {
     getItem: (key) => storage.getItem(key),
     setItem: (key, value) => {
       if (lastWritten.get(key) === value) return Promise.resolve();
-      lastWritten.set(key, value);
-      return storage.setItem(key, value);
+      return storage.setItem(key, value).then((result) => {
+        lastWritten.set(key, value);
+        return result;
+      });
     },
     removeItem: (key) => {
       lastWritten.delete(key);

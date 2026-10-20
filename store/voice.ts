@@ -27,7 +27,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "../services/storage/storage.ts";
-import { gatedStorage, toStateStorage } from "@/services/storage/persist-helpers";
+import { dedupedStorage, gatedStorage, toStateStorage } from "@/services/storage/persist-helpers";
 import { DEVICE_DEFAULT_VOICE, type NeuralEngineId, type Voice } from "../services/tts/types.ts";
 import { ENGINE_ORDER, NEURAL_ENGINE_META } from "../services/tts/engineMeta.ts";
 import { ttsDownloads, type TtsModelStatus } from "../services/tts/download.ts";
@@ -204,7 +204,7 @@ export function createVoiceStore(storage: KeyValueStorage) {
   let api: VoiceStoreApi | null = null;
   let persistEnabled = false;
 
-  const gated = gatedStorage(storage, () => persistEnabled);
+  const gated = gatedStorage(dedupedStorage(storage), () => persistEnabled);
 
   const created = create<VoiceState>()(
     persist(

@@ -36,7 +36,9 @@ import {
 } from "./persist-shape";
 
 /** The legacy keys this store used to write, one per field. They are read
- *  once, carried into the consolidated blob, and never written again. */
+ *  once, carried into the consolidated blob, and never written again.
+ *  HF_TOKEN_KEY is deliberately absent: it holds the plaintext HuggingFace
+ *  token, which is migrated to SecureStore separately (see hydrate()). */
 const LEGACY_KEYS = [
   REMOTE_APIS_KEY,
   ACTIVE_MODEL_KEY,
@@ -102,8 +104,12 @@ async function migrateLegacyIfNeeded(storage: KeyValueStorage): Promise<void> {
       ) {
         return; // already consolidated
       }
+      // Only the bare-array (broken build) shape is a migration candidate.
+      // Anything else that is not consolidated (corrupt, foreign) is left
+      // alone rather than overwritten with a rebuilt state.
+      if (!Array.isArray(parsed)) return;
     } catch {
-      // fall through to migration
+      return; // corrupt: don't overwrite
     }
   }
 
@@ -120,7 +126,7 @@ async function migrateLegacyIfNeeded(storage: KeyValueStorage): Promise<void> {
     cleanupRaw,
     filtersRaw,
   ] = await Promise.all([
-    storage.getItem(STORAGE_KEY), // old: models array (if array-shaped)
+    existing, // old: models array (if array-shaped)
     storage.getItem(REMOTE_APIS_KEY),
     storage.getItem(HF_TOKEN_KEY),
     storage.getItem(ACTIVE_MODEL_KEY),

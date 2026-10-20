@@ -10,7 +10,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 import type { KeyValueStorage } from "@/services/storage/storage.ts";
-import { toStateStorage } from "@/services/storage/persist-helpers";
+import { dedupedStorage, toStateStorage } from "@/services/storage/persist-helpers";
 import type { Companion, CompanionUpdate } from "@/types/companion.ts";
 import type { CompanionRepository } from "@/services/companions/repository.ts";
 import { PIP_COMPANION } from "@/services/companions/builtins.ts";
@@ -152,7 +152,7 @@ export function createCompanionsStore(
       }),
       {
         name: COMPANIONS_PIP_SEEDED_KEY,
-        storage: createJSONStorage(() => toStateStorage(storage)),
+        storage: createJSONStorage(() => toStateStorage(dedupedStorage(storage))),
         skipHydration: true,
         partialize: (state) => ({ pipSeeded: state.pipSeeded }),
       },

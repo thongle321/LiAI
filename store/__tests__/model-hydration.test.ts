@@ -28,7 +28,7 @@ jest.mock("../models/storage", () => {
   };
 });
 
-jest.mock("../../services/downloads/download-service", () => ({
+jest.mock("@/services/downloads/download-service", () => ({
   platformDownloadService: {
     reconcileWithNative: jest.fn(async () => []),
     getAllJobs: jest.fn(() => []),

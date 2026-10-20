@@ -6,6 +6,14 @@ import { toStateStorage, gatedStorage } from "@/services/storage/persist-helpers
 import { onboardingStorage, ONBOARDING_KEY, LEGACY_ONBOARDED_KEY } from "@/services/onboarding.ts";
 
 export type OnboardingExit = "/chat" | "/models";
+
+/** The consolidated shape a first-time legacy install is carried into, so the
+ *  middleware's rehydrate picks it up. One writer, one shape. */
+const SEEDED_ONBOARDING_BLOB = JSON.stringify({
+  state: { onboarded: true },
+  version: 0,
+});
+
 export interface OnboardingState {
   onboarded: boolean; hydrated: boolean; exitTo: OnboardingExit | null;
   hydrate: () => Promise<void>; complete: (to: OnboardingExit) => Promise<void>; clearExit: () => void;
@@ -45,7 +53,7 @@ export function createOnboardingStore(storage: KeyValueStorage) {
               if (!hadPersisted) {
                 const legacy = await storage.getItem(LEGACY_ONBOARDED_KEY).catch(() => null);
                 if (legacy === "1") {
-                  await storage.setItem(ONBOARDING_KEY, JSON.stringify({ state: { onboarded: true }, version: 0 }));
+                  await storage.setItem(ONBOARDING_KEY, SEEDED_ONBOARDING_BLOB);
                   hadPersisted = true;
                 }
               }
@@ -63,9 +71,10 @@ export function createOnboardingStore(storage: KeyValueStorage) {
           return hydrating;
         },
         complete: async (to) => {
-          set({ onboarded: true, hydrated: true, exitTo: to });
+          // Enable writes before the set(), so the middleware's own write
+          // lands (the gate blocks writes while `writesEnabled` is false).
           ctx.writesEnabled = true;
-          try { await storage.setItem(ONBOARDING_KEY, JSON.stringify({ state: { onboarded: true }, version: 0 })); } catch {}
+          set({ onboarded: true, hydrated: true, exitTo: to });
         },
         clearExit: () => set({ exitTo: null }),
       }),

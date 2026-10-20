@@ -13,14 +13,12 @@ import {
 import { defaultMinSize, menuAnchor } from "@expo/ui/jetpack-compose/modifiers";
 import { ChevronDown } from "lucide-react-native";
 
-import { useUniwind } from "uniwind";
-
-import { useColors, typeScale } from "../themes/tokens.ts";
+import { useColors, useColorScheme, typeScale } from "../themes/tokens.ts";
 import type { ResetMenuProps } from "./reset-menu";
 
 export function ResetMenu({ items }: ResetMenuProps) {
   const colors = useColors();
-  const scheme = useUniwind().theme === "dark" ? "dark" : "light";
+  const scheme = useColorScheme();
   const [open, setOpen] = useState(false);
   return (
     <Pressable

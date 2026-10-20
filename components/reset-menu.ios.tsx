@@ -5,14 +5,12 @@ import { Host } from "@expo/ui";
 import { Button, Menu } from "@expo/ui/swift-ui";
 import { ChevronDown } from "lucide-react-native";
 
-import { useUniwind } from "uniwind";
-
-import { useColors } from "../themes/tokens.ts";
+import { useColors, useColorScheme } from "../themes/tokens.ts";
 import type { ResetMenuProps } from "./reset-menu";
 
 export function ResetMenu({ items }: ResetMenuProps) {
   const colors = useColors();
-  const scheme = useUniwind().theme === "dark" ? "dark" : "light";
+  const scheme = useColorScheme();
   return (
     <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
       <Menu

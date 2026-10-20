@@ -11,9 +11,7 @@ import { Host } from "@expo/ui";
 import { Button, Menu } from "@expo/ui/swift-ui";
 import { ChevronDown } from "lucide-react-native";
 
-import { useUniwind } from "uniwind";
-
-import { useColors } from "../themes/tokens.ts";
+import { useColors, useColorScheme } from "../themes/tokens.ts";
 import type { PickerMenuProps } from "./picker-menu";
 
 export function PickerMenu<T extends string>({
@@ -24,7 +22,7 @@ export function PickerMenu<T extends string>({
   show,
 }: PickerMenuProps<T>) {
   const colors = useColors();
-  const scheme = useUniwind().theme === "dark" ? "dark" : "light";
+  const scheme = useColorScheme();
   return (
     <View
       className="min-h-12 flex-row items-center justify-end gap-1"

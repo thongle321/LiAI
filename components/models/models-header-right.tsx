@@ -24,7 +24,7 @@ import {
   menuEnteringZoom,
   menuExiting,
 } from "@/utils/motion.ts";
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import type { ModelsUiFilter } from "@/store/modelsUi.ts";
 
 function GroupLabel({ label }: { label: string }) {
@@ -49,6 +49,7 @@ function ToggleRow({
   onPress: () => void;
   icon?: ReactNode;
 }) {
+  const colors = useColors();
   return (
     <Pressable
       onPress={onPress}
@@ -92,6 +93,7 @@ export function ModelsHeaderRight({
   onToggleFilter: (filter: ModelsUiFilter) => void;
   onResetModels?: () => void;
 }) {
+  const colors = useColors();
   const [open, setOpen] = useState(false);
   // RN tears a modal down the instant `visible` flips false, which would
   // swallow the closing fade; `shown` outlives `open` by exactly the exit

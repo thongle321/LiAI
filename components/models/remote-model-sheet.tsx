@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { CheckCircle2, Circle } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { useModelStore } from "@/store/modelStore";
 import { Sheet } from "../sheet.tsx";
 import {
@@ -30,6 +30,7 @@ export function RemoteModelSheet({
   visible: boolean;
   onClose: () => void;
 }) {
+  const colors = useColors();
   // Stable selectors: actions plus one boolean flag, each subscribing
   // alone so unrelated store writes never touch this form.
   const addRemoteApi = useModelStore((s) => s.addRemoteApi);

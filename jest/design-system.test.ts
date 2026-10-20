@@ -85,7 +85,8 @@ describe("surface shape", () => {
     const body = bodyOf(".surface");
     expect(body).toContain("border-width: 1px;");
     expect(body).toContain("border-style: solid;");
-    expect(body).toContain("border-color: #e2e8f0;");
+    // Token reference, not a hex: the hairline changes with the theme.
+    expect(body).toContain("border-color: var(--color-border);");
     expect(body).toContain("border-radius: 8px;");
     // The plane and the padding are the call site's choices; baking either in
     // is what pushed every other call site back to raw utilities.
@@ -123,6 +124,53 @@ describe("surface shape", () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("theme parity", () => {
+  // Uniwind rule: every variable defined for light MUST be defined for dark
+  // (mismatched variables crash at runtime). Parses the two @variant blocks
+  // out of global.css and diffs the --color-* names.
+  const css = readFileSync(join(ROOT, "global.css"), "utf8");
+
+  function variantTokens(variant: string): string[] {
+    const start = css.indexOf(`@variant ${variant} {`);
+    if (start === -1) return [];
+    // Brace-count from the opening brace: lazy regexes stop at the wrong
+    // nesting level once comments or inner blocks are present.
+    let i = css.indexOf("{", start);
+    let depth = 1;
+    i += 1;
+    while (depth > 0 && i < css.length) {
+      if (css[i] === "{") depth += 1;
+      else if (css[i] === "}") depth -= 1;
+      i += 1;
+    }
+    const block = css.slice(css.indexOf("{", start) + 1, i - 1);
+    return [...block.matchAll(/(--color-[\w-]+)\s*:/g)].map((m) => m[1]).sort();
+  }
+
+  it("declares the same --color-* tokens for light and dark", () => {
+    expect(variantTokens("dark")).toEqual(variantTokens("light"));
+    expect(variantTokens("light").length).toBeGreaterThan(10);
+  });
+
+  it("BEM blocks reference tokens, never baked hexes", () => {
+    // Any remaining hardcoded colour in a BEM block is a light-only leak:
+    // the block will not follow the theme switch.
+    const colorRules = [
+      ".btn--primary", ".btn--secondary", ".btn--tonal", ".btn--ghost",
+      ".input", ".surface", ".card", ".rows", ".row", ".section-title",
+      ".seg", ".seg--active", ".seg-label", ".seg-label--active",
+      ".text-body", ".text-quiet", ".text-action",
+      ".voice-card", ".voice-card--active", ".voice-card__title",
+      ".voice-card__spec", ".voice-action--primary", ".voice-action--secondary",
+      ".voice-action--disabled", ".voice-badge", ".voice-badge__text",
+      ".voice-badge--warm", ".storage-warning",
+    ];
+    for (const selector of colorRules) {
+      expect(bodyOf(selector)).not.toMatch(/#[0-9a-f]{3,8}/i);
+    }
   });
 });
 

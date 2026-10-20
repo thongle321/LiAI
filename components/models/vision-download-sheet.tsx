@@ -15,7 +15,7 @@ import { CheckCircle2 } from "lucide-react-native";
 
 import { Sheet } from "../sheet.tsx";
 import { ToggleRow } from "../settings-rows.tsx";
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { mmprojSiblings } from "@/services/models/vision-pairing.ts";
 import type { HFModelFile, ModelFile } from "@/types/models";
 import { formatBytes } from "./model-bits.tsx";
@@ -42,6 +42,7 @@ export function VisionDownloadSheet({
   onClose: () => void;
   onConfirm: (file: HFModelFile, opts: VisionDownloadChoice) => void;
 }) {
+  const colors = useColors();
   const [visionEnabled, setVisionEnabled] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
 

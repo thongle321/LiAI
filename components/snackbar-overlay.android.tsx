@@ -15,9 +15,7 @@ import {
   type SnackbarHostRef,
 } from "@expo/ui/jetpack-compose";
 
-import { useUniwind } from "uniwind";
-
-import { useColors } from "../themes/tokens.ts";
+import { useColors, useColorScheme } from "../themes/tokens.ts";
 import type { SnackbarOptions, SnackbarOverlayHandle } from "./snackbar-overlay";
 
 const DEFAULT_DURATION = 4000;
@@ -30,7 +28,7 @@ function toNativeDuration(ms: number): "short" | "long" {
 
 export function SnackbarOverlay({ ref }: { ref?: Ref<SnackbarOverlayHandle> }) {
   const colors = useColors();
-  const scheme = useUniwind().theme === "dark" ? "dark" : "light";
+  const scheme = useColorScheme();
   const nativeHostRef = useRef<SnackbarHostRef | null>(null);
 
   useImperativeHandle(

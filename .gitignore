@@ -40,7 +40,7 @@ skills-lock.json
 /pocketpal-ai/
 
 # Scratch material for prompts
-/prompt_material/
+
 
 # Local issue tracker (see docs/agents/issue-tracker.md) — local by design
 /.scratch/

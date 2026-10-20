@@ -12,7 +12,7 @@ import { Pressable, Text, View } from "react-native";
 import Animated, { FadeInDown, FadeInUp, FadeOutDown, FadeOutUp } from "react-native-reanimated";
 import { X } from "lucide-react-native";
 
-import { colors, useColors } from "../themes/tokens.ts";
+import { useColors, type Colors } from "../themes/tokens.ts";
 import type {
   SnackbarOptions,
   SnackbarOverlayHandle,
@@ -28,15 +28,19 @@ interface SnackbarItem {
   position: "top" | "bottom";
 }
 
-const TYPE_COLORS: Record<SnackbarType, string> = {
-  info: colors.primary,
-  success: colors.success,
-  warning: colors.warning,
-  error: colors.error,
-};
-
 const DEFAULT_DURATION = 4000;
 const EXIT_DELAY_MS = 250;
+
+/** Snackbar type dot + action colour, from the ACTIVE palette. A module-
+ *  scope map would freeze the light values at import time. */
+function typeColorFor(colors: Colors, type: SnackbarType): string {
+  switch (type) {
+    case "info": return colors.primary;
+    case "success": return colors.success;
+    case "warning": return colors.warning;
+    case "error": return colors.error;
+  }
+}
 
 export function SnackbarOverlay({ ref }: { ref?: Ref<SnackbarOverlayHandle> }) {
   const colors = useColors();
@@ -79,7 +83,7 @@ export function SnackbarOverlay({ ref }: { ref?: Ref<SnackbarOverlayHandle> }) {
 
   if (!current) return null;
 
-  const typeColor = TYPE_COLORS[current.type];
+  const typeColor = typeColorFor(colors, current.type);
   const Entering = current.position === "top" ? FadeInDown : FadeInUp;
   const Exiting = current.position === "top" ? FadeOutUp : FadeOutDown;
 

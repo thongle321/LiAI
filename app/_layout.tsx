@@ -15,7 +15,8 @@ import { KeyboardProvider, useKeyboardState } from "react-native-keyboard-contro
 import { ScopedVariables, Uniwind } from "uniwind";
 
 import { useEffect, useRef } from "react";
-import { colors } from "../themes/tokens.ts";
+import { useColors, useColorScheme } from "../themes/tokens.ts";
+import { readStoredTheme } from "../services/storage/theme.ts";
 import { SnackbarProvider } from "../components/snackbar.tsx";
 import { useKeyboardStore } from "../store/keyboard.ts";
 import { useEngineOffload } from "../hooks/useEngineOffload.ts";
@@ -23,9 +24,15 @@ import { useOnboardingGate } from "../hooks/useOnboardingGate.ts";
 import { useVoiceOffload } from "../hooks/useVoiceOffload.ts";
 import { useFluidTextVariables } from "../hooks/useFluidTextScale.ts";
 
-// Light-locked (DESIGN.md): one theme, and it is the light one —
-// device dark mode must not invent a second world.
-Uniwind.setTheme("light");
+// Seed the persisted appearance (Settings > App Settings > Dark mode)
+// before the first paint. Fire-and-forget: the default "system" theme
+// renders until the read resolves, then switches if the stored choice
+// differs. readStoredTheme owns the storage call AND its failure path
+// (returns null rather than throwing), so a storage error can't surface
+// as an unhandled rejection here.
+void readStoredTheme().then((stored) => {
+  if (stored !== null) Uniwind.setTheme(stored);
+});
 
 // Keep the native splash visible until the Inter files resolve, so cold
 // start never flashes a blank white frame before the font gate below.
@@ -52,6 +59,10 @@ function KeyboardVisibilitySync() {
 }
 
 export default function RootLayout() {
+  // Reactive to the theme so the Host seed, the status bar and the stack's
+  // content background follow the App Settings toggle.
+  const colors = useColors();
+  const scheme = useColorScheme();
   const [loaded, error] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -99,10 +110,13 @@ export default function RootLayout() {
 
   return (
     // One Host for the whole app: it seeds every @expo/ui subtree with
-    // Signal Blue and forces the light scheme, so native switches, sheets
+    // Signal Blue and the app's OWN scheme, so native switches, sheets
     // and pickers land in LiAI's world instead of the platform's default.
-    <Host colorScheme="light" seedColor={colors.primary} style={{ flex: 1 }}>
-      <StatusBar style="dark" />
+    // The scheme must be passed explicitly: leaving it unset makes the
+    // Host follow the DEVICE scheme, so a stored "light" on a dark device
+    // renders the native subtrees dark against a light JS tree.
+    <Host colorScheme={scheme} seedColor={colors.primary} style={{ flex: 1 }}>
+      <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       {/* Fluid Type (DESIGN.md): scoped --text-* overrides so every
           text-* class re-resolves at this device's width (375dp base,
           factor 0.5, clamp [0.9, 1.1]). One wrap, zero call sites. */}

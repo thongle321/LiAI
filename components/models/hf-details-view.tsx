@@ -22,7 +22,7 @@ import {
 } from "react-native";
 import { ArrowLeft, Flame } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { useSnackbar } from "../snackbar.tsx";
 import { useFreeSpacePoll } from "@/hooks/useStorageDisclosure.ts";
 import { useLoadGuard } from "@/hooks/useLoadGuard.ts";
@@ -46,6 +46,7 @@ function StatChip({
   label: string;
   trending?: boolean;
 }) {
+  const colors = useColors();
   return (
     <View className="flex-row items-center gap-1 rounded bg-surface-2 px-2 py-1">
       {trending ? <Flame size={11} color={colors.primary} /> : null}
@@ -100,6 +101,7 @@ export function HFDetailsView({
    *  the learned ceiling, so it owns the warning and the guard too. */
   onStartDownload: (file: HFModelFile, opts?: VisionDownloadChoice) => void;
 }) {
+  const colors = useColors();
   const { freeBytes, checked } = useFreeSpacePoll(true);
   const largestSuccessfulBytes = useModelStore((s) => s.largestSuccessfulBytes);
   const getModelByOid = useModelStore((s) => s.getModelByOid);

@@ -26,7 +26,7 @@ import {
 
 import { isOpenableUrl } from "@/services/chat/links.ts";
 import { useChatStore } from "@/store/chat";
-import { embeddedText, font, typeScale, useColors, type Colors } from "@/themes/tokens.ts";
+import { embeddedText, font, typeScale, useColors, useColorScheme, type Colors } from "@/themes/tokens.ts";
 import { CodeBlock } from "./code-block.tsx";
 
 /** One guarded open shared by both link overrides: Linking, then the
@@ -232,11 +232,13 @@ export function MarkdownView({
   maxWidth?: number;
 }) {
   const colors = useColors();
+  const scheme = useColorScheme();
   const body = dense ? denseTextFor(colors) : baseTextFor(colors);
   const elements = useMarkdown(text === "" ? " " : text, {
-    // The app is light-locked; leaving this on "dark" made the library
-    // inject its dark-scheme defaults into a light conversation.
-    colorScheme: "light",
+    // The library injects scheme-flavoured defaults for any key the styles
+    // object below does not override, so this must track the app's own
+    // theme — pinned to one scheme left those defaults wrong half the time.
+    colorScheme: scheme,
     renderer,
     styles: {
       text: body,

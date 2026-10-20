@@ -2,76 +2,14 @@
 @import "uniwind";
 
 /* LiAI design system — "The Quiet Instrument" (see DESIGN.md, authority;
-   board: prompt_material/minimal_design_system.png v1.0).
+   board: prompt_material/minimal_design_system.png v1.0 for light,
+   prompt_material/dark_mode_design_system.png for dark).
    TS mirror: themes/tokens.ts (keep in sync). Families below must match
    the expo-font names loaded in app/_layout.tsx exactly (no fallbacks
-   on native). Light-locked: one theme, no switcher. */
+   on native). Two themes: light and dark, switched by the App Settings
+   toggle (Uniwind.setTheme). */
 
 @theme {
-  /* One signal. Signal Blue marks the single live/selected/primary element.
-   *
-   * ROLE SPLIT (contrast). The board's Signal Blue #3882F6 measures 3.69:1
-   * on white — legal as a MARK (icons, borders, focus rings, dots, which
-   * clear the 3:1 non-text floor) but illegal as TEXT and as a fill under a
-   * white label, which need 4.5:1. So the hue is carried by two steps of the
-   * same colour, never two hues:
-   *   primary      #2563EB  text, icon+label fills, anything read
-   *   primary-mark #3882F6  borders, focus rings, non-text marks
-   * Using one value for both roles is what put 88 `text-primary` sites and
-   * every primary button below AA. */
-  --color-primary: #2563eb;
-  --color-primary-mark: #3882f6;
-  --color-primary-hover: #1d4ed8;
-  --color-primary-pressed: #1d4ed8;
-  --color-on-primary: #ffffff;
-  /* Warm accent for tier badges (Kitten's warm ramp). */
-  --color-warm-accent: #c2410c;
-  /* Coolant cyan is reserved for machine-in-the-loop states (thinking, vision, streaming). */
-  --color-info: #06b6d4;
-  --color-success: #10b981;
-  /* The download button's green, in the same two-step shape as the signal
-     and the reds: `success-fill` the tonal ground, `success-mark` the 3:1
-     border step, `success-deep` the 4.5:1 label step. `success` above stays
-     the Jade icon colour and never carries text. Derivation lives in
-     DESIGN.md › Buttons (the download green); mirrored in themes/tokens.ts. */
-  --color-success-fill: #ecfdf5;
-  --color-success-mark: #059669;
-  --color-success-deep: #047857;
-  --color-warning: #f59e0b;
-  /* Same split as the signal: #ef4444 is a mark (3.76:1, clears the 3:1
-     non-text floor on borders and dots); #b91c1c is the step that carries
-     text and fills — it is the only one of the three reds that clears 4.5:1
-     on every surface, including Mist (5.91) and Surface Tint (5.95), which
-     #dc2626 failed at 4.41 and 4.44. */
-  --color-error: #b91c1c;
-  --color-error-mark: #ef4444;
-
-  /* The three-plane depth model: paper is the page, white is raised,
-     mist is recessed. No shadows, no glow, no gradients. */
-  --color-base: #f8fafc;
-  --color-surface-1: #ffffff;
-  --color-surface-2: #f1f5f9;
-  /* Surface tint — a ground for selected elements only, never a border. */
-  --color-surface-3: #eff6ff;
-  --color-border: #e2e8f0;
-  /* Scrim for modal/sheet backdrops (ticket 024 / D2-11). */
-  --color-scrim: rgb(15 23 42 / 0.6);
-
-  /* Slate for anything merely counted. One step darker than the board's
-     #64748b, which passed on white (4.76) but failed on the two recessed
-     grounds — 4.34 on Mist and 4.37 on Surface Tint. */
-  --color-secondary-text: #475569;
-  /* The quiet step, for text that should recede but is still READ.
-     Chosen by measurement, not by eye: 70% alpha over Slate was the habit
-     it replaces, and that composites to (126,136,150) = 3.59:1 on white —
-     under the 4.5:1 floor for 14px reading text. This clears all four
-     grounds and is held there by the text-role test in
-     tests/color-contrast.test.ts. An alpha modifier on a text class can
-     never be verified that way, which is why it is banned outright. */
-  --color-secondary-text-muted: #5f6b7c;
-  --color-primary-text: #0f172a;
-  --color-inverse-text: #ffffff;
-
   --font-sans: 'Inter_400Regular';
   --font-sans-medium: 'Inter_500Medium';
   --font-sans-semibold: 'Inter_600SemiBold';
@@ -110,15 +48,111 @@
   --radius-card: 8px;
 }
 
-/* Light-locked app: one theme, and it is the light one. Device dark mode
-   must not invent a second world. (The previous @layer theme block was a
-   latent trap: it redeclared `--color-danger: #ef4444`, the non-AA red
-   that global.css documents as illegal for text. Removed per D2-9.) */
+/* Colour tokens live per-VARIANT, not in @theme: the same variable names,
+   two sets of values, and every utility (bg-base, text-primary-text…)
+   re-resolves on switch. Every variable defined for light MUST be defined
+   for dark (Uniwind rule). Both palettes are mirrored in themes/tokens.ts;
+   the ROLE of each token is documented there. */
+
+@layer theme {
+  :root {
+    @variant light {
+      /* One signal. Signal Blue marks the single live/selected/primary element.
+       *
+       * ROLE SPLIT (contrast). #3882F6 measures 3.69:1 on white — legal as a
+       * MARK (icons, borders, focus rings, dots, the 3:1 non-text floor) but
+       * illegal as TEXT and as a fill under a white label (4.5:1). Two steps
+       * of ONE hue carry the roles, never two hues. */
+      --color-primary: #2563eb;
+      --color-primary-mark: #3882f6;
+      --color-primary-hover: #1d4ed8;
+      --color-primary-pressed: #1d4ed8;
+      --color-on-primary: #ffffff;
+      /* Warm accent for tier badges (Kitten's warm ramp). */
+      --color-warm-accent: #c2410c;
+      --color-warm-surface: #ffedd5;
+      /* Coolant cyan is reserved for machine-in-the-loop states (thinking,
+         vision, streaming). */
+      --color-info: #06b6d4;
+      --color-success: #10b981;
+      --color-success-fill: #ecfdf5;
+      --color-success-mark: #059669;
+      --color-success-deep: #047857;
+      --color-warning: #f59e0b;
+      --color-error: #b91c1c;
+      --color-error-mark: #ef4444;
+
+      /* The three-plane depth model: paper is the page, white is raised,
+         mist is recessed. No shadows, no glow. */
+      --color-base: #f8fafc;
+      --color-surface-1: #ffffff;
+      --color-surface-2: #f1f5f9;
+      /* Surface tint — a ground for selected elements only, never a border. */
+      --color-surface-3: #eff6ff;
+      --color-border: #e2e8f0;
+      /* Scrim for modal/sheet backdrops. */
+      --color-scrim: rgb(15 23 42 / 0.6);
+
+      /* Slate for anything merely counted. */
+      --color-secondary-text: #475569;
+      --color-secondary-text-muted: #5f6b7c;
+      --color-primary-text: #0f172a;
+      --color-inverse-text: #ffffff;
+    }
+
+    @variant dark {
+      /* Dark board (prompt_material/dark_mode_design_system.png).
+       * The same role split, inverted grounds: #5B8CFF is the mark step on
+       * dark (it clears 3:1 on #0B0C10/#1E1E24); text and label fills read
+       * through the same variable names. */
+      --color-primary: #5b8cff;
+      --color-primary-mark: #5b8cff;
+      --color-primary-hover: #4e7ff0;
+      --color-primary-pressed: #3f6fe0;
+      --color-on-primary: #ffffff;
+      /* Teal is the dark board's accent — machine-in-the-loop states keep
+         the role, take the hue. */
+      --color-warm-accent: #fb923c;
+      --color-warm-surface: #40301f;
+      --color-info: #00d1b2;
+      --color-success: #22c55e;
+      --color-success-fill: #22c55e1a;
+      --color-success-mark: #22c55e;
+      --color-success-deep: #22c55e;
+      --color-warning: #f59e0b;
+      /* Same two-step shape as the light reds, inverted for a dark ground:
+         #ef4444 is only ~4.3:1 on Surface 1 — a legal mark (error-mark,
+         3:1) but under the 4.5:1 text floor. error is the lighter step that
+         carries text/fills and clears 4.5:1 on every dark surface. */
+      --color-error: #f87171;
+      --color-error-mark: #ef4444;
+
+      /* Background #0B0C10 is the page; Surface 1 #1E1E24 raised, Surface 2
+         #23252C recessed; the tint step takes Primary Soft #2A3A56 (the
+         board's own selected-element ground). */
+      --color-base: #0b0c10;
+      --color-surface-1: #1e1e24;
+      --color-surface-2: #23252c;
+      --color-surface-3: #2a3a56;
+      --color-border: #2a2e35;
+      /* The board's Overlay #00000080 (~50% black). */
+      --color-scrim: rgb(0 0 0 / 0.5);
+
+      /* Text ramp from the board: primary #F8FAFC, secondary #C8D5E1,
+         quiet/tertiary #94A3B8. Inverse lands on the background colour. */
+      --color-secondary-text: #c8d5e1;
+      --color-secondary-text-muted: #94a3b8;
+      --color-primary-text: #f8fafc;
+      --color-inverse-text: #0b0c10;
+    }
+  }
+}
 
 /* BEM bundles — multi-property patterns reused across screens.
  * Flat selectors only. For property conflicts with Tailwind
  * utilities, wrap usage with cn(). No box-shadow anywhere: depth is a
- * 1px hairline or one step between the three surfaces. */
+ * 1px hairline or one step between the three surfaces. Every colour is a
+ * token reference, so a BEM block themes itself with no dark: variant. */
 
 /* Buttons: .btn + .btn--primary | --secondary | --destructive | --ghost */
 .btn {
@@ -133,32 +167,31 @@
   min-height: 48px;
 }
 .btn--primary {
-  background-color: #2563eb;
-  color: #ffffff;
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
 }
 .btn--secondary {
-  background-color: #ffffff;
+  background-color: var(--color-surface-1);
   border-width: 1px;
   border-style: solid;
-  /* Border is a mark: Signal Blue clears the 3:1 non-text floor at 3.69. */
-  border-color: #3882f6;
-  color: #2563eb;
+  /* Border is a mark: the primary mark clears the 3:1 non-text floor. */
+  border-color: var(--color-primary-mark);
+  color: var(--color-primary);
 }
-/* Tonal — PocketPal's btnPrimary trio (#eff6ff ground / #bfdbff border /
-   #1447e6 label), carried by LiAI's own tokens: Surface Tint ground, Signal
-   Mark border, Signal label. The reference's Load/Offload button, and the
-   one place Surface Tint is used as a button ground rather than a selected
-   element's. */
+/* Tonal — PocketPal's btnPrimary trio, carried by LiAI's own tokens:
+   Surface Tint ground, Signal Mark border, Signal label. The reference's
+   Load/Offload button, and the one place Surface Tint is used as a button
+   ground rather than a selected element's. */
 .btn--tonal {
-  background-color: #eff6ff;
+  background-color: var(--color-surface-3);
   border-width: 1px;
   border-style: solid;
-  border-color: #3882f6;
-  color: #2563eb;
+  border-color: var(--color-primary-mark);
+  color: var(--color-primary);
 }
 .btn--ghost {
   background-color: transparent;
-  color: #2563eb;
+  color: var(--color-primary);
 }
 /* Disabled buttons: opacity 0.4 is the chosen rule (the voice-action fill
    is a special case for that screen). Apply alongside a .btn variant. */
@@ -180,16 +213,16 @@
    and a focus border, so it states the shape rather than joining `.surface`
    below (D2-12). */
 .input {
-  background-color: #ffffff;
+  background-color: var(--color-surface-1);
   border-width: 1px;
   border-style: solid;
-  border-color: #e2e8f0;
+  border-color: var(--color-border);
   border-radius: 8px;
   padding-left: 16px;
   padding-right: 16px;
   padding-top: 12px;
   padding-bottom: 12px;
-  color: #0f172a;
+  color: var(--color-primary-text);
 }
 /* .input--error removed per D2-10: no call site in app/ or components/. */
 
@@ -214,12 +247,12 @@
 .rows {
   border-width: 1px;
   border-style: solid;
-  border-color: #e2e8f0;
+  border-color: var(--color-border);
   border-radius: 8px;
 }
 
 .card {
-  background-color: #ffffff;
+  background-color: var(--color-surface-1);
   padding: 20px;
 }
 
@@ -237,7 +270,7 @@
    edge to edge — the shape comes from the group above); .row is one row
    inside it. */
 .rows {
-  background-color: #ffffff;
+  background-color: var(--color-surface-1);
   overflow: hidden;
 }
 /* Modifier: parameter cards (pocketpal's CompletionSettings shape) carry
@@ -261,7 +294,7 @@
   justify-content: center;
   border-bottom-width: 1px;
   border-bottom-style: solid;
-  border-bottom-color: #e2e8f0;
+  border-bottom-color: var(--color-border);
 }
 .row--last {
   border-bottom-width: 0;
@@ -274,7 +307,7 @@
   font-family: var(--font-sans-semibold);
   font-size: 20px;
   line-height: 28px;
-  color: #0f172a;
+  color: var(--color-primary-text);
 }
 
 /* Segmented pickers: .seg + .seg--active | .seg-label + .seg-label--active */
@@ -286,7 +319,7 @@
   min-height: 48px;
   border-width: 1px;
   border-style: solid;
-  border-color: #e2e8f0;
+  border-color: var(--color-border);
   border-radius: 8px;
   padding-top: 8px;
   padding-bottom: 8px;
@@ -305,12 +338,10 @@
 }
 
 .seg--active {
-  background-color: #eff6ff;
-  border-color: #3882f6;
+  background-color: var(--color-surface-3);
+  border-color: var(--color-primary-mark);
 }
-/* The label colour rides the token, not a copied hex: the board's slate
-   (#64748b) was rejected precisely because it measured 4.37:1 on the Surface
-   Tint that `.seg--active` paints behind this label. */
+/* The label colour rides the token, not a copied hex. */
 .seg-label {
   font-family: var(--font-sans);
   font-size: 14px;
@@ -328,14 +359,14 @@
    beside it is meant to recede, and nothing stopped 92 call sites from
    answering that question slightly differently.
 
-   Every property is referenced through its token, so a role can never drift
+   Every property is referenced through its token, so a role cannot drift
    off the scale the way a copied hex does (see .seg-label below).
 
    Colours are part of the role, never a second utility beside it. These
    blocks are unlayered and Tailwind's utilities are not, so a leftover
    `text-primary` on a `.text-quiet` would lose silently - the overlap
-   AGENTS.md warns about. If a call site needs a different colour it needs a
-   different role. */
+   AGENTS.md warns about. If a call site needs a different colour it needs
+   a different role. */
 .text-body {
   font-family: var(--font-sans);
   font-size: var(--text-body-md);
@@ -370,10 +401,10 @@
    to the Tint Rule — see DESIGN.md § Colors. */
 /* The System card, and the frame every engine card sits in. */
 .voice-card {
-  background-color: #ffffff;
+  background-color: var(--color-surface-1);
   border-width: 1px;
   border-style: solid;
-  border-color: #e2e8f0;
+  border-color: var(--color-border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -381,8 +412,8 @@
    needed" against the plain engine cards below it. Aligned to DESIGN.md's
    Selection ground: surface-tint fill + primary-mark border. */
 .voice-card--active {
-  background-color: #eff6ff;
-  border-color: #3882f6;
+  background-color: var(--color-surface-3);
+  border-color: var(--color-primary-mark);
 }
 .voice-card__header {
   flex-direction: row;
@@ -403,14 +434,14 @@
   font-family: var(--font-sans-semibold);
   font-size: 16px;
   line-height: 24px;
-  color: #0f172a;
+  color: var(--color-primary-text);
 }
 .voice-card__spec {
   font-family: var(--font-sans);
   /* Body-Small floor: DESIGN.md bars text below 14px for anything read. */
   font-size: 14px;
   line-height: 20px;
-  color: #475569;
+  color: var(--color-secondary-text);
 }
 
 /* The full-width action inside an expanded engine card: Install, Retry,
@@ -426,19 +457,19 @@
   border-radius: 8px;
 }
 .voice-action--primary {
-  background-color: #2563eb;
+  background-color: var(--color-primary);
 }
 .voice-action--secondary {
-  background-color: #ffffff;
+  background-color: var(--color-surface-1);
   border-width: 1px;
   border-style: solid;
-  border-color: #3882f6;
+  border-color: var(--color-primary-mark);
 }
 .voice-action--disabled {
-  background-color: #f1f5f9;
+  background-color: var(--color-surface-2);
   border-width: 1px;
   border-style: solid;
-  border-color: #e2e8f0;
+  border-color: var(--color-border);
 }
 /* Tier chip (LIGHTWEIGHT / NATURAL / FAST START). */
 .voice-badge {
@@ -448,18 +479,18 @@
   padding-right: 8px;
   padding-top: 2px;
   padding-bottom: 2px;
-  background-color: #eff6ff;
+  background-color: var(--color-surface-3);
 }
 .voice-badge__text {
   font-family: var(--font-sans-semibold);
   font-size: 11px;
   line-height: 16px;
   letter-spacing: 0.4px;
-  color: #2563eb;
+  color: var(--color-primary);
 }
 /* Modifier: Kitten's tier chip carries the warm ramp, so the pack a
    low-end device reaches for is the one that shouts. Kokoro and Supertonic
    read in Signal Blue. */
 .voice-badge--warm {
-  background-color: #ffedd5;
+  background-color: var(--color-warm-surface);
 }

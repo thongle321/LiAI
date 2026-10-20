@@ -17,7 +17,7 @@ import {
   fadeEntering,
   fadeExiting,
 } from "@/utils/motion.ts";
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 
 // Reanimated ships no animated Pressable; the backdrop needs to be one so
 // its fade and its tap-to-dismiss live on the same view.
@@ -36,6 +36,7 @@ function FabAction({
   entering: BaseAnimationBuilder;
   exiting: BaseAnimationBuilder;
 }) {
+  const colors = useColors();
   // One row, one reveal: the pill and the circle rise and fade together.
   // `entering` fires on mount and `exiting` plays on unmount, so the motion
   // cannot start before the row exists.
@@ -76,6 +77,7 @@ export function FABGroup({
   onAddLocalModel: () => void;
   onAddRemoteModel: () => void;
 }) {
+  const colors = useColors();
   const [open, setOpen] = useState(false);
 
   // Android Back consumes the INNERMOST transient layer first. Without this

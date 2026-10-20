@@ -22,7 +22,7 @@ import {
   getChatTemplate,
   type ChatTemplatePreset,
 } from "@/utils/chat-templates.ts";
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 
 export function ChatTemplateDialog({
   visible,
@@ -37,6 +37,7 @@ export function ChatTemplateDialog({
   /** Write the edited config back into the parent's temp state. */
   onChange: (next: ChatTemplatePreset) => void;
 }) {
+  const colors = useColors();
   return (
     <Sheet
       visible={visible}

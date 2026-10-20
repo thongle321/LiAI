@@ -25,7 +25,7 @@ import {
   projectorStatus,
   visionActive,
 } from "@/services/models/vision-pairing.ts";
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import {
   estimateModelMemory,
   toMemoryMetadata,
@@ -59,6 +59,7 @@ export function ModelCardDetails({
   /** Summed by the card (single owner) so the two never disagree. */
   fileBytes: number;
 }) {
+  const colors = useColors();
   // One useShallow unit: the estimate reads exactly these six, so
   // unrelated inference writes never rebuild this card.
   const { nCtx, cacheK, cacheV, nUbatch, specDraftCacheK, specDraftCacheV } =

@@ -16,7 +16,7 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Bookmark, ChevronRight, Eye, Lock, Trash2 } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { useModelStore } from "@/store/modelStore";
 import { hfSpecId } from "@/services/models/huggingface.ts";
 import { visionSizeBreakdown } from "@/services/models/hf-format.ts";
@@ -91,6 +91,7 @@ export function HFFileRow({
   /** The full warning list, for the snackbar the chip opens. */
   onWarn: (messages: string[]) => void;
 }) {
+  const colors = useColors();
   // Stable selectors: actions never change identity, so each subscribes
   // alone.
   const bookmarkModel = useModelStore((s) => s.bookmarkModel);

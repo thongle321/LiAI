@@ -24,7 +24,7 @@ import { CheckCircle2 } from "lucide-react-native";
 
 import { Sheet } from "../sheet.tsx";
 import { useSnackbar } from "../snackbar.tsx";
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { useModelStore } from "@/store/modelStore";
 import { extractHFModelTitle } from "@/services/models/hf-format.ts";
 import { HFDetailsView } from "./hf-details-view.tsx";
@@ -62,6 +62,7 @@ function SortSheet({
   onPick: (value: "relevance" | "downloads" | "lastModified" | "likes") => void;
   onClose: () => void;
 }) {
+  const colors = useColors();
   return (
     <Sheet visible={visible} onClose={onClose} title="Sort by" testID="hf-sort-sheet">
       {SORT_OPTIONS.map((option) => (
@@ -97,6 +98,7 @@ function AuthorSheet({
   onApply: (author: string) => void;
   onClose: () => void;
 }) {
+  const colors = useColors();
   const [draft, setDraft] = useState(author);
   useEffect(() => {
     if (visible) setDraft(author);

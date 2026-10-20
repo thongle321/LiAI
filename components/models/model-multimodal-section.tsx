@@ -23,11 +23,12 @@ import { CheckCircle2, Download, Trash2 } from "lucide-react-native";
 
 import { useModelStore } from "@/store/modelStore";
 import { useChatStore } from "@/store/chat";
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { formatBytes, progressCaption } from "./model-bits.tsx";
 import type { ModelFile, ModelSpec } from "@/types/models";
 
 export function ModelMultimodalSection({ model }: { model: ModelSpec }) {
+  const colors = useColors();
   const setProjector = useModelStore((s) => s.setProjector);
   const detachProjector = useModelStore((s) => s.detachProjector);
   const startProjectorDownload = useModelStore((s) => s.startProjectorDownload);

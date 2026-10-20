@@ -33,7 +33,7 @@ import {
   X,
 } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { useModelStore } from "@/store/modelStore";
 import { useStorageDisclosure } from "@/hooks/useStorageDisclosure.ts";
 import { parseModelSettings } from "@/utils/model-settings.ts";
@@ -107,6 +107,7 @@ export function ModelCard({
    *  and the caller owns that. */
   onRemove?: () => void;
 }) {
+  const colors = useColors();
   // Stable selectors: actions never change identity, so each subscribes
   // alone and no card re-renders on unrelated store writes.
   const removeModel = useModelStore((s) => s.removeModel);
@@ -375,6 +376,7 @@ export function RemoteProviderCard({
   onActivate: () => void;
   onRemove: () => void;
 }) {
+  const colors = useColors();
   // Same Default 8px step and hairline as every other card (DESIGN.md
   // "Default radius… buttons, inputs, cards"); the 24px this carried was
   // PocketPal's value, retired 2026-10-10.

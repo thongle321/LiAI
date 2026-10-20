@@ -9,7 +9,7 @@ import { Pressable, Text, View } from "react-native";
 import { Menu, SquarePen, Users } from "lucide-react-native";
 import Animated from "react-native-reanimated";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { APP_NAME } from "@/constants/app.ts";
 import { usePressFeedback } from "@/utils/motion.ts";
 import { ChatMenu } from "./chat-menu.tsx";
@@ -33,6 +33,7 @@ export function ChatHeader({
   onOpenSearch: () => void;
   onOpenCompanions: () => void;
 }) {
+  const colors = useColors();
   const menuPress = usePressFeedback();
   const penPress = usePressFeedback();
 

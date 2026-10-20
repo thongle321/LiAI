@@ -16,7 +16,7 @@ import { Image, Modal, Pressable, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { X } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 
 export function ImageViewer({
   uri,
@@ -26,6 +26,7 @@ export function ImageViewer({
   uri: string | null;
   onClose: () => void;
 }) {
+  const colors = useColors();
   // The Modal stays mounted so its fade-out animation plays on close;
   // `visible` drives show/hide, and the contents render null when
   // there is no photo to show (D4-9).

@@ -21,7 +21,7 @@ import Animated, {
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { ChevronDown, ChevronRight } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { MOTION_DURATION_MS, motionLayout } from "@/utils/motion.ts";
 import { MarkdownView } from "./markdown-view.tsx";
 
@@ -48,6 +48,7 @@ export function ReasoningBlock({
    *  the list's width threading exists to prevent. */
   maxWidth?: number;
 }) {
+  const colors = useColors();
   const [state, setState] = useState<BubbleState>("partial");
   const userToggledRef = useRef(false);
   const rotation = useSharedValue(90);

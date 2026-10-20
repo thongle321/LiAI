@@ -19,7 +19,7 @@ import { memo, useState } from "react";
 import Animated from "react-native-reanimated";
 import { CheckCheck, CircleAlert, Wrench } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { formatTime, formatToolMetrics } from "@/utils/format.ts";
 import type { MessageRow } from "@/services/chat/rows.ts";
 import { blocksOf, turnText } from "@/services/chat/blocks.ts";
@@ -46,6 +46,7 @@ import type { MessageWidths } from "@/services/chat/message-width.ts";
  * `ok === false` SPECIFICALLY. Undefined means "never recorded" -- a
  * row written before the discriminant -- and that is not a failure. */
 function ToolBlock({ step }: { step: AgentStep }) {
+  const colors = useColors();
   if (step.ok === false) {
     return (
       <View className="w-full">
@@ -118,6 +119,7 @@ export const MessageListItem = memo(function MessageListItem({
    *  turn footer must not repeat what it already says. */
   contextBannerVisible?: boolean;
 }) {
+  const colors = useColors();
   const { message, grouped, status } = row;
   // No per-row entering/exiting here. Rows unmount as the render window
   // moves, so a per-row entrance replays every time the reader scrolls back

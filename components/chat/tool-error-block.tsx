@@ -16,7 +16,7 @@
 import { Text, View } from "react-native";
 import { AlertTriangle } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 
 export function ToolErrorBlock({
   tool,
@@ -27,6 +27,7 @@ export function ToolErrorBlock({
   /** The talent's reason. Never empty in practice, but not assumed. */
   message: string;
 }) {
+  const colors = useColors();
   return (
     // `basis-full` so it takes its own line: the sibling chips stay in a
     // wrapping row, and an error must not sit squeezed beside them.

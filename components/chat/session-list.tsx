@@ -32,7 +32,7 @@ import {
   Trash,
 } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { useKeyboardLift } from "@/hooks/useKeyboardLift.ts";
 import Animated from "react-native-reanimated";
 import { formatTime } from "@/utils/format.ts";
@@ -70,6 +70,7 @@ const SessionRow = memo(function SessionRow({
     event: { nativeEvent: { pageX: number; pageY: number } },
   ) => void;
 }) {
+  const colors = useColors();
   return (
     <Pressable
       onPress={() => onSelect(item)}
@@ -141,6 +142,7 @@ export function SessionList({
    *  error message for the inline notice, or null on success/cancel. */
   onExportSelected: (ids: string[]) => Promise<string | null>;
 }) {
+  const colors = useColors();
   const [notice, setNotice] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<ChatSession | null>(null);
   const [draft, setDraft] = useState("");

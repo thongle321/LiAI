@@ -38,7 +38,7 @@ import {
 } from "lucide-react-native";
 
 import { useChatStore } from "@/store/chat";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import {
   exportFilename,
   toAllSessionsJson,
@@ -56,7 +56,7 @@ import {
 import { useChatImport } from "@/hooks/useChatImport.ts";
 import { shareExportedFile } from "@/services/chat/share-export.ts";
 import { pickableModels } from "@/services/chat/models.ts";
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 
 type Panel = "menu" | "model" | "export" | "rename";
 
@@ -77,6 +77,7 @@ function MenuRow({
   disabled?: boolean;
   onPress: () => void;
 }) {
+  const colors = useColors();
   return (
     <Pressable
       onPress={disabled ? undefined : onPress}
@@ -120,6 +121,7 @@ export function ChatMenu({
    *  toggle state, so the row is a plain "open"). */
   onOpenSearch: () => void;
 }) {
+  const colors = useColors();
   const btnRef = useRef<View | null>(null);
   const [open, setOpen] = useState(false);
   // The panel unmounts with `open` so `exiting` plays, while the Modal
@@ -441,6 +443,7 @@ onPress={() => setPanel("export")}
 }
 
 function BackRow({ label, onPress }: { label: string; onPress: () => void }) {
+  const colors = useColors();
   return (
     <Pressable
       onPress={onPress}

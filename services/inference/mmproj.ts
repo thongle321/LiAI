@@ -104,7 +104,7 @@ export async function loadModelState(): Promise<
   try {
     const [fs, models] = await Promise.all([
       import("expo-file-system/legacy"),
-      import("../../store/modelStore.ts"),
+      import("../../store/model-store.ts"),
     ]);
     const m = models.useModelStore.getState();
     return {
@@ -129,6 +129,16 @@ export async function activeLocalProjectorPath(): Promise<string | undefined> {
     st.activeProviderType,
     st.docsDir,
   );
+}
+
+/** Can the ACTIVE engine see an image this turn? (G12, vision-series 02)
+ *
+ *  Moved here from store/chat/send.ts so the send gate and the vision screen
+ *  share one owner (services/inference/mmproj.ts). The store/UI boundary
+ *  stays state-only. */
+export async function multimodalAvailable(): Promise<boolean> {
+  const st = await loadModelState();
+  return st !== undefined && canSeeImages(st);
 }
 
 /** The projector path for the model the ENGINE is being asked to load

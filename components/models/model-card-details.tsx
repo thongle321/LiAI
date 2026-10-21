@@ -14,9 +14,9 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import { ExternalLink, ImageOff } from "lucide-react-native";
 
-import { useShallow } from "zustand/shallow";
+import { useShallow } from "zustand/react/shallow";
 import { useInference } from "@/store/inference.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import { useChatStore } from "@/store/chat";
 import { resolveLocalFile } from "@/services/inference/engine.ts";
 import { formatParams } from "@/services/search/model-providers.ts";
@@ -25,7 +25,7 @@ import {
   projectorStatus,
   visionActive,
 } from "@/services/models/vision-pairing.ts";
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import {
   estimateModelMemory,
   toMemoryMetadata,
@@ -59,6 +59,7 @@ export function ModelCardDetails({
   /** Summed by the card (single owner) so the two never disagree. */
   fileBytes: number;
 }) {
+  const colors = useColors();
   // One useShallow unit: the estimate reads exactly these six, so
   // unrelated inference writes never rebuild this card.
   const { nCtx, cacheK, cacheV, nUbatch, specDraftCacheK, specDraftCacheV } =

@@ -31,8 +31,7 @@
  * rendered invisible on device.
  */
 
-import { useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import {
   AudioLines,
@@ -48,22 +47,11 @@ import {
   Trash2,
 } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { motionLayout } from "@/utils/motion.ts";
-import { formatBytes } from "@/services/models/progress.ts";
-import { NEURAL_ENGINE_META } from "@/services/tts/engineMeta.ts";
-import {
-  canStartInstall,
-  downloadLine,
-  engineGroupState,
-  ringFraction,
-  voiceTap,
-  type EngineGroupState,
-} from "@/services/tts/voiceUi.ts";
-import { useFreeSpacePoll } from "@/hooks/useStorageDisclosure.ts";
-import type { NeuralEngineId, Voice } from "@/services/tts/types.ts";
-import { VOICE_PREVIEW_SAMPLE } from "@/constants/voice-strings.ts";
-import { useVoice } from "@/store/voice.ts";
+import type { NeuralEngineId } from "@/services/tts/types.ts";
+import { downloadLine } from "@/services/tts/voiceUi.ts";
+import { useEngineCardController } from "@/hooks/use-engine-card-controller.ts";
 import { ProgressRing } from "./progress-ring.tsx";
 import { RadioDot } from "./radio-dot.tsx";
 
@@ -126,102 +114,25 @@ function Action({
 }
 
 export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
-  const meta = NEURAL_ENGINE_META[engineId];
-  const downloads = useVoice((s) => s.downloads);
-  const activeEngineId = useVoice((s) => s.activeEngineId);
-  const currentVoice = useVoice((s) => s.currentVoice);
-  const setCurrentVoice = useVoice((s) => s.setCurrentVoice);
-  const startEngineDownload = useVoice((s) => s.startEngineDownload);
-  const pauseEngineDownload = useVoice((s) => s.pauseEngineDownload);
-  const resumeEngineDownload = useVoice((s) => s.resumeEngineDownload);
-  const removeEngineModel = useVoice((s) => s.removeEngineModel);
-  const play = useVoice((s) => s.play);
-  const stop = useVoice((s) => s.stop);
+  const colors = useColors();
+  const c = useEngineCardController(engineId);
+  const meta = c.meta;
+  const currentVoice = c.currentVoice;
+  const { expanded, setExpanded, previewingId, errorNote, setErrorNote } = c;
+  const { installable, lowDisk, freeBytes, ringProgress, sizeMb } = c;
+  const { track, onRemove, onTapVoice } = c;
+  const {
+    startEngineDownload,
+    pauseEngineDownload,
+    resumeEngineDownload,
+  } = c;
 
-  const [expanded, setExpanded] = useState(
-    () => currentVoice?.engine === engineId,
-  );
-  const [previewingId, setPreviewingId] = useState<string | null>(null);
-  const [errorNote, setErrorNote] = useState<string | null>(null);
-
-  const group: EngineGroupState = engineGroupState(downloads[engineId]);
   const Icon = ENGINE_ICON[engineId];
-  const sizeMb = Math.round(meta.modelBytes / 1_000_000);
+  const group = c.group;
 
-  // Free space only matters while there is something to download; a ready
-  // engine has no Install button and needs no preflight. The shared hook
-  // owns the read and the interval — no second poller here.
-  const { freeBytes } = useFreeSpacePoll(group.kind !== "ready");
-
-  const lowDisk = freeBytes !== null && freeBytes < meta.modelBytes * DISK_HEADROOM;
-  // The download runtime is single-slot: an in-flight engine owns it, so
-  // this card waits rather than fighting it for the same controller.
-  const slotBusy = activeEngineId !== null && activeEngineId !== engineId;
-  const installable = canStartInstall(group, slotBusy) && !lowDisk;
-
-  // Live progress only, and the rule (including why extraction is excluded)
-  // belongs to voiceUi with the rest of the card's state mapping.
-  const ringProgress = ringFraction(group);
-  // The glyph block's two marks, kept as one const each so the pill, its icon
-  // and the arc cannot drift apart. The arc is a non-text mark, so it takes
-  // the mark step rather than the signal step the icon beside it uses
-  // (DESIGN.md, The Two-Step Rule) — deliberately a shade apart. Kitten's
-  // warm ramp has no mark step of its own, so its arc reuses the accent.
+  // The glyph block's two marks.
   const glyphColor = meta.warmBadge ? colors.warmAccent : colors.primary;
   const ringColor = meta.warmBadge ? colors.warmAccent : colors.primaryMark;
-
-  // Every failure the bridge already reported (network, disk, checksum) is
-  // a status the body renders; this only covers a rejection it never saw.
-  function track(promise: Promise<unknown>): void {
-    promise.catch((error: unknown) => {
-      setErrorNote(error instanceof Error ? error.message : String(error));
-    });
-  }
-
-  function onRemove(): void {
-    Alert.alert(
-      `Remove ${meta.title}?`,
-      `This frees ${formatBytes(meta.modelBytes, 0)} on your device. You can download it again at any time.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            setPreviewingId(null);
-            setErrorNote(null);
-            // Stop first: the native PCM player holds the model open.
-            void stop();
-            track(removeEngineModel(engineId));
-          },
-        },
-      ],
-    );
-  }
-
-  function onTapVoice(voice: Voice): void {
-    const outcome = voiceTap({
-      tapped: voice,
-      engine: engineId,
-      currentVoice,
-      previewingId,
-      status: downloads[engineId],
-    });
-    if (outcome.kind === "unavailable") return;
-    if (outcome.kind === "stop-preview") {
-      setPreviewingId(null);
-      void stop();
-      return;
-    }
-    setCurrentVoice(voice);
-    setPreviewingId(voice.id);
-    setErrorNote(null);
-    track(
-      play(VOICE_PREVIEW_SAMPLE, { voice }).finally(() => {
-        setPreviewingId((id) => (id === voice.id ? null : id));
-      }),
-    );
-  }
 
   function renderAction() {
     if (group.kind === "ready") return null;

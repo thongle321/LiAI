@@ -6,6 +6,7 @@
  */
 
 import { toLlamaSampler, type LlamaSamplerParams } from "./sampler.ts";
+import type { ToolSupportProbe } from "./tool-support.ts";
 import type {
   CompletionCallbacks,
   CompletionEngine,
@@ -111,6 +112,11 @@ export interface LlamaContextLike {
   stopCompletion(): Promise<void>;
   release(): Promise<void>;
   initMultimodal?(opts: { path: string }): Promise<boolean>;
+  /** llama.rn's model metadata — the jinja caps the tool-support probe
+   *  reads (services/inference/tool-support.ts). Optional so every
+   *  existing fake stays valid: a context that reports no model is
+   *  "could not tell", never "does not support tools". */
+  model?: ToolSupportProbe["model"];
   /** Thinking-capability probe (services/inference//thinking-detection.ts).
    *  Optional so every existing fake stays valid — a partial build reports
    *  "could not tell" rather than "does not think". */

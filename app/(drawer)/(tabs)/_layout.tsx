@@ -9,7 +9,7 @@ import { View } from "react-native";
 import { router, Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { BottomNav, type ChatTab } from "@/components/bottom-nav.tsx";
+import { BottomNav, type ChatTab } from "@/components/navigation/bottom-nav.tsx";
 import { useKeyboardStore } from "@/store/keyboard.ts";
 
 // Same story as the root boundary: this was `app/(drawer)/(tabs)/+error.tsx`.

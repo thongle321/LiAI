@@ -50,7 +50,6 @@ export interface CatalogSlice {
   loadPresets: () => Promise<void>;
   /** Drop a preset from "Available to Download" until restart or reset. */
   dismissPreset: (presetId: string) => void;
-  loadSearchFilters: () => Promise<void>;
   /** Runs the search for `query` with the current filters, replacing the
    *  results. An empty query is a real search (PocketParity): the Hub
    *  answers with its default relevance listing. */
@@ -91,14 +90,12 @@ export interface CatalogSlice {
   setModelProgress: (modelId: string, progress: Partial<ModelSpec>) => void;
   getModel: (modelId: string) => ModelSpec | undefined;
   addLocalModel: (sourceUri: string, fileName: string, size: number) => Promise<void>;
-  saveModels: () => Promise<void>;
 }
 
 export interface DownloadsSlice {
   /** Load-guard learned ceiling (PocketPal largestSuccessfulLoad parity) */
   largestSuccessfulBytes: number;
 
-  saveMemoryGuard: () => Promise<void>;
   /** Dismiss the failure dialog: clears the stored reason WITHOUT
    *  touching downloadStatus — the row keeps offering Retry (C1) —
    *  and a re-failure writes a fresh reason, reopening the dialog. */
@@ -154,8 +151,6 @@ export interface RemoteSlice {
   remoteCaps: Record<string, RemoteCaps>;
   privacyAcknowledged: boolean;
 
-  saveRemoteApis: () => Promise<void>;
-  saveRemoteCaps: () => Promise<void>;
   addRemoteApi: (provider: RemoteApiProvider) => Promise<void>;
   removeRemoteApi: (providerId: string) => Promise<void>;
   updateRemoteApi: (
@@ -175,7 +170,6 @@ export interface SettingsSlice {
   useHfToken: boolean;
   modelSettings: Record<string, ModelSettings>;
 
-  saveModelSettings: () => Promise<void>;
   /** Drop every per-model override (name/prompt/stop words) — PocketPal's
    *  resetModels restores each model's default settings; ours are stored
    *  centrally, so resetting = clearing the map. */
@@ -211,9 +205,34 @@ export interface PersistenceSlice {
   loadPersisted: () => Promise<void>;
 }
 
+export interface VisionHealSlice {
+  /** Projector files the vision heal orphaned: the pairing that downloaded
+   *  them is gone, the files are not. File NAMES, not model ids — LiAI's
+   *  projector is an inline record on the model, not a model row. */
+  pendingProjectionCleanup: string[];
+  /** Re-derive the vision classification of a draft model (PocketPal's
+   *  healDraftVisionClassification). */
+  healDraftVisionClassification: () => Promise<void>;
+  /** Delete the projector files the heal orphaned. */
+  drainPendingProjectionCleanup: () => Promise<void>;
+}
+
+export interface WarningsSlice {
+  /** Model ids the tool-compat notice has already been shown for.
+   *  Persisted, so the notice stays a one-time thing across restarts
+   *  (PocketPal parity: UIStore's `toolCompatWarnedModels`). */
+  toolCompatWarnedModels: string[];
+  /** Has this model already been warned about? */
+  hasWarnedToolCompat: (modelId: string) => boolean;
+  /** Record the warning and persist the set. Idempotent. */
+  markToolCompatWarned: (modelId: string) => void;
+}
+
 export type ModelStore = CatalogSlice &
   DownloadsSlice &
   RemoteSlice &
   SettingsSlice &
   ActiveSlice &
+  WarningsSlice &
+  VisionHealSlice &
   PersistenceSlice;

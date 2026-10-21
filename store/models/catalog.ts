@@ -5,7 +5,6 @@ import type { StateCreator } from "zustand";
 import type {
   CatalogSlice,
   HFSearchError,
-  HFSearchFilters,
   ModelStore,
 } from "./types";
 import { buildLocalModelSpec } from "@/services/inference/local-model.ts";
@@ -17,12 +16,8 @@ import {
   HfError,
   searchModels as hfSearchModels,
 } from "@/services/models/huggingface.ts";
-import {
-  asyncStorage,
-  HF_SEARCH_FILTERS_KEY,
-  STORAGE_KEY,
-  generateId,
-} from "./storage.ts";
+import { generateId } from "./storage.ts";
+import { DEFAULT_SEARCH_FILTERS } from "./persist-shape";
 
 /** The legacy FS module, loaded on demand like storage.ts's rnStorage().
  * A top-level import of a native module makes this whole slice unloadable
@@ -65,7 +60,7 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
   /** The query the current results came from, so the token-retry can
    *  re-run the same search instead of clearing the field. */
   searchQuery: "",
-  searchFilters: { author: "", sortBy: "relevance" },
+  searchFilters: { ...DEFAULT_SEARCH_FILTERS },
 
   loadPresets: async () => {
     const presets = await hfGetPresets();
@@ -82,27 +77,9 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
       presets: state.presets.filter((p) => p.id !== presetId),
     })),
 
-  loadSearchFilters: async () => {
-    try {
-      const raw = await asyncStorage.getItem(HF_SEARCH_FILTERS_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as Partial<HFSearchFilters>;
-      set({
-        searchFilters: {
-          author: typeof parsed.author === "string" ? parsed.author : "",
-          sortBy: parsed.sortBy ?? "relevance",
-        },
-      });
-    } catch {
-      // A corrupt filter blob must not block searching.
-    }
-  },
-
   setSearchFilters: (patch) => {
+    // The persist middleware owns the disk; this only moves the state.
     set({ searchFilters: { ...get().searchFilters, ...patch } });
-    void asyncStorage
-      .setItem(HF_SEARCH_FILTERS_KEY, JSON.stringify(get().searchFilters))
-      .catch(() => {});
   },
 
   searchModels: async (query) => {
@@ -195,7 +172,6 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
     set((state) => ({
       models: [...state.models.filter((m) => m.id !== spec.id), spec],
     }));
-    get().saveModels();
   },
 
   getModelByOid: (oid) =>
@@ -210,7 +186,6 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
     set((state) => ({
       models: state.models.filter((m) => m.id !== modelId),
     }));
-    get().saveModels();
     return true;
   },
 
@@ -218,7 +193,6 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
     set((state) => ({
       models: [...state.models.filter((m) => m.id !== model.id), model],
     }));
-    get().saveModels();
   },
 
   removeModel: async (modelId) => {
@@ -248,7 +222,6 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
       models: state.models.filter((m) => m.id !== modelId),
       activeModelId: state.activeModelId === modelId ? null : state.activeModelId,
     }));
-    get().saveModels();
   },
 
   updateModel: (modelId, updates) => {
@@ -257,7 +230,6 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
         m.id === modelId ? { ...m, ...updates } : m,
       ),
     }));
-    get().saveModels();
   },
 
   setVisionEnabled: (modelId, enabled) => {
@@ -335,17 +307,5 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
     // The copy is at rest and complete — read what it says about itself,
     // so an imported model is not second-class to a downloaded one.
     await get().refreshGgufMetadata(id);
-  },
-
-  saveModels: async () => {
-    try {
-      // ponytail: remote apiKeys hydrate in memory only — never persist them.
-      const scrubbed = get().models.map((m) =>
-        m.origin === "remote_api" ? { ...m, apiKey: "" } : m,
-      );
-      await asyncStorage.setItem(STORAGE_KEY, JSON.stringify(scrubbed));
-    } catch (e) {
-      console.warn("Failed to save models:", e);
-    }
   },
 });

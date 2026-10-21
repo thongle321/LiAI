@@ -9,7 +9,7 @@ import type { ApiError } from "@/types/api.ts";
 import type { ChatMessage } from "@/types/chat.ts";
 import { newId } from "@/services/chat/messages.ts";
 import type { SessionStore } from "@/services/chat/session-store.ts";
-import { canSeeImages, loadModelState } from "@/services/inference/mmproj.ts";
+import { canSeeImages, loadModelState, multimodalAvailable } from "@/services/inference/mmproj.ts";
 import { useVoice } from "../voice.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
@@ -17,22 +17,10 @@ function llmError(message: string): ApiError {
   return { code: "llm_error", message };
 }
 
-/** Can the ACTIVE engine see an image this turn? (G12, vision-series 02)
- *
- * PocketPal asks `modelStore.activeModelCaps.visionActive` — whether a
- * projector is loaded RIGHT NOW. LiAI's engine slot is lazy (loaded at
- * send time), so this answers the equivalent question predictively: the
- * ACTIVE local model's spec is completed AND records its paired
- * projector (ticket 01), which is exactly the path ensureEngine will
- * attach (services/inference//mmproj.ts). A declaration alone never flips it.
- * Remote stays cannot-see until ticket 04.
- *
- * EXPORTED: the vision screen reads this same gate to show the can't-see
- * notice, so the strip and the notice can never disagree. */
-export async function multimodalAvailable(): Promise<boolean> {
-  const st = await loadModelState();
-  return st !== undefined && canSeeImages(st);
-}
+/** Can the ACTIVE engine see an image this turn? Moved to
+ *  services/inference/mmproj.ts (single owner). Re-exported for backward
+ *  compat; new code should import from mmproj directly. */
+export { multimodalAvailable } from "@/services/inference/mmproj.ts";
 
 /** What PocketPal says when images ride a turn the model cannot see.
  *  Shared with the vision screen's own notice surface (vision-series 01). */
@@ -194,6 +182,11 @@ export function createSendSlice(
       // inside the try so an early throw (e.g. multimodalAvailable) can't
       // strand the lock (D6-6).
       ctx.keepAwake(true);
+      // A conversation being born carries its staged companion, so the FIRST
+      // turn already runs with the persona's prompt and pact. Const so
+      // TS narrows past the null check (a second get() would not be).
+      const stagedCompanionId =
+        opts.sessionId === null ? get().stagedCompanionId : null;
       const outcome = await ctx.runTurn(
         opts.text,
         {
@@ -205,6 +198,7 @@ export function createSendSlice(
           // never a moment where a bubble exists but cannot be addressed.
           ...(opts.userId !== undefined ? { userMessageId: opts.userId } : {}),
           assistantMessageId: opts.assistantId,
+          ...(stagedCompanionId !== null ? { companionId: stagedCompanionId } : {}),
         },
         (token) => {
           if (gen !== ctx.streamGen) return;
@@ -246,6 +240,15 @@ export function createSendSlice(
         ...(outcome.outcome !== undefined ? { outcome: outcome.outcome } : {}),
       });
       adoptSession(outcome.sessionId);
+      // The staged companion was consumed: the row it was bound to exists now
+      // (sessionCompanionId mirrors it), so the stage must not leak into the
+      // NEXT conversation the user starts from the drawer.
+      if (opts.sessionId === null && get().stagedCompanionId !== null) {
+        const bornCompanion = await (await ctx.getStore())
+          ?.getSessionCompanion(outcome.sessionId)
+          .catch(() => null);
+        set({ stagedCompanionId: null, ...(bornCompanion !== null ? { sessionCompanionId: bornCompanion } : {}) });
+      }
       // Auto-speak: the finished reply, read aloud (ticket 05 / spec
       // Q3 + Q14) — spoken once per message, only when the user opted
       // in and the device passes the availability gate. Stopping first

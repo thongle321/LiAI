@@ -72,6 +72,7 @@ export class AndroidDownloadService {
     onProgress?: ProgressCallback;
     onComplete?: CompleteCallback;
   } = {};
+  private subscribers = new Map<string, Set<(job: DownloadJob) => void>>();
   private seenTerminal = new Set<string>();
   /** Previous sample per id, for the speed the native record does not carry
    *  (PocketPal computes it natively; ours ships raw bytes only — without
@@ -86,6 +87,25 @@ export class AndroidDownloadService {
     this.unsubscribe = addDownloadListener((event) => {
       this.apply(event, undefined, undefined);
     });
+  }
+
+  subscribe(jobId: string, callback: (job: DownloadJob) => void): () => void {
+    let set = this.subscribers.get(jobId);
+    if (!set) {
+      set = new Set();
+      this.subscribers.set(jobId, set);
+    }
+    set.add(callback);
+    return () => {
+      set.delete(callback);
+      if (set.size === 0) this.subscribers.delete(jobId);
+    };
+  }
+
+  private notifySubscribers(job: DownloadJob): void {
+    const set = this.subscribers.get(job.id);
+    if (!set) return;
+    for (const cb of set) cb(job);
   }
 
   /**
@@ -251,6 +271,7 @@ private apply(
 
     onProgress?.(next);
     this.callbacks.onProgress?.(next);
+    this.notifySubscribers(next);
 
     // The event stream may deliver the same terminal record more than once;
     // claimTerminal keeps onComplete single-fire.
@@ -308,6 +329,7 @@ private apply(
   removeJob(jobId: string): void {
     this.seenTerminal.delete(jobId);
     this.ticks.delete(jobId);
+    this.subscribers.delete(jobId);
     const job = this.mirror.get(jobId);
     this.mirror.delete(jobId);
     // Terminal is not forgotten. Without this the Room row survives the job,

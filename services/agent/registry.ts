@@ -57,83 +57,180 @@ const fail = (content: string): TalentOutcome => ({ ok: false, content });
 /** Deadline for the reader fetch (services/agent//registry.ts read_url). */
 export const READ_TIMEOUT_MS = 15_000;
 
-export function talentDefinitions(): ToolDefinition[] {
-  return [
-    {
-      type: "function",
-      function: {
-        name: "datetime",
-        description: "Get the current local date and time.",
-        parameters: {
-          type: "object",
-          properties: {
-            timezone: { type: "string", description: "IANA timezone, e.g. Asia/Ho_Chi_Minh" },
-          },
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "calculate",
-        description: "Evaluate a mathematical expression and return the result.",
-        parameters: {
-          type: "object",
-          properties: {
-            expression: { type: "string", description: "Arithmetic, e.g. '2 + 3 * 4'" },
-          },
-          required: ["expression"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "web_search",
-        description:
-          "Search the web for current information. Short keyword queries (2-6 words). Returns titles, URLs, snippets.",
-        parameters: {
-          type: "object",
-          properties: {
-            query: { type: "string", description: "Short keyword query" },
-          },
-          required: ["query"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "read_url",
-        description: "Open a page from a web_search result or user message and read its text.",
-        parameters: {
-          type: "object",
-          properties: {
-            url: { type: "string", description: "Exact http(s) URL to read" },
-          },
-          required: ["url"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "render_html",
-        description:
-          "Render an HTML document inline as a visual preview in the chat.",
-        parameters: {
-          type: "object",
-          properties: {
-            title: { type: "string", description: "Short label shown above the preview." },
-            html: {
-              type: "string",
-              description: "Complete, self-contained HTML document or fragment to render.",
+/** Every talent name this build knows, in menu order. The pact vocabulary:
+ *  a companion names these in `pact.talents`, and gating filters against this
+ *  set (PocketPal's TalentRegistry names). */
+export const TALENT_NAMES = [
+  "datetime",
+  "calculate",
+  "web_search",
+  "read_url",
+  "render_html",
+] as const;
+
+export type TalentName = (typeof TALENT_NAMES)[number];
+
+/** Context each talent wants beyond the prompt (PocketPal's
+ *  `recommendedContextTokens`, same values): a hint for the load-hint
+ *  snackbar, never a threshold that changes any behavior. */
+const RECOMMENDED_CONTEXT: Partial<Record<TalentName, number>> = {
+  web_search: 1000,
+  read_url: 1200,
+  render_html: 4096,
+};
+
+export function recommendedContextTokens(name: string): number | undefined {
+  return name in RECOMMENDED_CONTEXT
+    ? RECOMMENDED_CONTEXT[name as TalentName]
+    : undefined;
+}
+
+function definitionFor(name: TalentName): ToolDefinition {
+  switch (name) {
+    case "datetime":
+      return {
+        type: "function",
+        function: {
+          name: "datetime",
+          description: "Get the current local date and time.",
+          parameters: {
+            type: "object",
+            properties: {
+              timezone: {
+                type: "string",
+                description: "IANA timezone, e.g. Asia/Ho_Chi_Minh",
+              },
             },
           },
-          required: ["html"],
         },
-      },
-    },
+      };
+    case "calculate":
+      return {
+        type: "function",
+        function: {
+          name: "calculate",
+          description: "Evaluate a mathematical expression and return the result.",
+          parameters: {
+            type: "object",
+            properties: {
+              expression: {
+                type: "string",
+                description: "Arithmetic, e.g. '2 + 3 * 4'",
+              },
+            },
+            required: ["expression"],
+          },
+        },
+      };
+    case "web_search":
+      return {
+        type: "function",
+        function: {
+          name: "web_search",
+          description:
+            "Search the web for current information. Short keyword queries (2-6 words). Returns titles, URLs, snippets.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string", description: "Short keyword query" },
+            },
+            required: ["query"],
+          },
+        },
+      };
+    case "read_url":
+      return {
+        type: "function",
+        function: {
+          name: "read_url",
+          description:
+            "Open a page from a web_search result or user message and read its text.",
+          parameters: {
+            type: "object",
+            properties: {
+              url: {
+                type: "string",
+                description: "Exact http(s) URL to read",
+              },
+            },
+            required: ["url"],
+          },
+        },
+      };
+    case "render_html":
+      return {
+        type: "function",
+        function: {
+          name: "render_html",
+          description:
+            "Render an HTML document inline as a visual preview in the chat.",
+          parameters: {
+            type: "object",
+            properties: {
+              title: {
+                type: "string",
+                description: "Short label shown above the preview.",
+              },
+              html: {
+                type: "string",
+                description:
+                  "Complete, self-contained HTML document or fragment to render.",
+              },
+            },
+            required: ["html"],
+          },
+        },
+      };
+    default: {
+      // Unreachable while the switch covers TalentName; a throw keeps it
+      // honest if a name is ever added without a schema.
+      const unknown: never = name;
+      throw new Error(`no tool schema for talent: ${String(unknown)}`);
+    }
+  }
+}
+
+/** Tool schemas for a pact's talent names — PocketPal's
+ *  deriveToolSchemas: a STRICT SUBSET. Unknown names contribute nothing
+ *  (no validation, no error); an empty/absent list means no tools at all,
+ *  which is exactly what a chat with no companion sends. */
+export function deriveToolSchemas(names?: readonly string[]): ToolDefinition[] {
+  if (names === undefined) return TALENT_NAMES.map(definitionFor);
+  const wanted = new Set(names);
+  const out: ToolDefinition[] = [];
+  for (const name of TALENT_NAMES) {
+    if (wanted.has(name)) out.push(definitionFor(name));
+  }
+  return out;
+}
+
+/** Back-compat alias: every registered tool, no gating. */
+export function talentDefinitions(): ToolDefinition[] {
+  return deriveToolSchemas();
+}
+
+export interface TalentFragmentContext {
+  now: Date;
+  maxToolTurns: number;
+}
+
+/** System-prompt fragments for the active talents, folded by the caller
+ *  into the ONE leading system message (PocketPal's
+ *  collectSystemPromptFragments). Only web_search has one; the read_url
+ *  clause appears only when that talent is active too — a fragment naming
+ *  a tool the model cannot call is a lie. */
+export function collectSystemPromptFragments(
+  names: readonly string[],
+  ctx: TalentFragmentContext,
+): string[] {
+  if (!names.includes("web_search")) return [];
+  const today = ctx.now.toLocaleDateString("en-CA");
+  const canRead = names.includes("read_url");
+  const budget = Math.max(ctx.maxToolTurns - 1, 1);
+  return [
+    `Today's date is ${today}. You can search the web with web_search${
+      canRead ? " and open pages with read_url" : ""
+    }. For time-sensitive or factual questions, search first; usually one or two searches suffice — you have a budget of ${budget} tool calls. Answer using the facts in the results and cite source URLs. If the results do not contain the answer, say so rather than guessing.`,
   ];
 }
 

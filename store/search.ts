@@ -1,13 +1,15 @@
 /** Web-search settings: provider, result count, consent, per-provider keys.
  *
- * Factory takes KV storage + SecureStore adapter so tests inject memory
- * (see chat.ts pattern). Keys never touch KV. The on-device talent
- * consumes this shape (incl. consent gate).
+ * Persisted with Zustand's `persist` middleware over AsyncStorage; KV holds
+ * prefs, SecureStore holds keys (never KV). `skipHydration` keeps cold-start
+ * discipline. No version/migrate: breaking changes bump SEARCH_KEY.
  */
 
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
-import type { KeyValueStorage } from "../services/storage/storage";
+import type { KeyValueStorage } from "@/services/storage/storage";
+import { dedupedStorage, toStateStorage } from "@/services/storage/persist-helpers";
 import {
   DEFAULT_PROVIDER,
   DEFAULT_RESULT_COUNT,
@@ -15,9 +17,9 @@ import {
   parseResultCount,
   searchKeySS,
   type SearchProviderId,
-} from "../services/search/search-providers.ts";
+} from "@/services/search/search-providers.ts";
 
-export const SEARCH_KEY = "liai_search_v1";
+export const SEARCH_KEY = "liai_search";
 
 export interface SecureAdapter {
   getItem(key: string): Promise<string | null>;
@@ -39,7 +41,13 @@ export interface SearchState {
   clearProviderKey: (id: SearchProviderId) => Promise<void>;
 }
 
-function parseSearchSettings(raw: string | null): {
+interface SearchStoreApi {
+  persist: { rehydrate: () => void | Promise<void> };
+  getState: () => SearchState;
+  setState: (partial: Partial<SearchState>) => void;
+}
+
+function normalizeSearchSettings(raw: unknown): {
   activeProviderId: SearchProviderId;
   resultCount: number;
   hasConsented: boolean;
@@ -49,92 +57,121 @@ function parseSearchSettings(raw: string | null): {
     resultCount: DEFAULT_RESULT_COUNT,
     hasConsented: false,
   };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return fallback;
+  const r = raw as Record<string, unknown>;
+  return {
+    activeProviderId: isSearchProviderId(r.activeProviderId)
+      ? r.activeProviderId
+      : DEFAULT_PROVIDER,
+    resultCount: parseResultCount(r.resultCount),
+    hasConsented: r.hasConsented === true,
+  };
+}
+
+function parseSearchSettings(raw: string | null): ReturnType<typeof normalizeSearchSettings> {
+  const fallback = {
+    activeProviderId: DEFAULT_PROVIDER,
+    resultCount: DEFAULT_RESULT_COUNT,
+    hasConsented: false,
+  };
   if (!raw) return fallback;
   try {
-    const v: unknown = JSON.parse(raw);
-    if (!v || typeof v !== "object" || Array.isArray(v)) return fallback;
-    const r = v as Record<string, unknown>;
-    return {
-      activeProviderId: isSearchProviderId(r.activeProviderId)
-        ? r.activeProviderId
-        : DEFAULT_PROVIDER,
-      resultCount: parseResultCount(r.resultCount),
-      hasConsented: r.hasConsented === true,
-    };
+    return normalizeSearchSettings(JSON.parse(raw));
   } catch {
     return fallback;
   }
 }
 
 export function createSearchStore(storage: KeyValueStorage, secure: SecureAdapter) {
-  /** In-flight `load()`, so concurrent callers share one read. */
   let hydrating: Promise<void> | null = null;
+  let api: SearchStoreApi | null = null;
 
-  return create<SearchState>()((set, get) => {
-    async function persist(): Promise<void> {
-      const { activeProviderId, resultCount, hasConsented } = get();
-      try {
-        await storage.setItem(
-          SEARCH_KEY,
-          JSON.stringify({ activeProviderId, resultCount, hasConsented }),
-        );
-      } catch {
-        // Ignore persistence failures; search settings are non-critical.
-      }
-    }
-
-    async function guardedSecure(fn: () => Promise<void>): Promise<void> {
-      try {
-        await fn();
-      } catch {
-        // SecureStore unavailable (e.g. restricted device); keys stay unset.
-      }
-    }
-
-    return {
-      activeProviderId: DEFAULT_PROVIDER,
-      resultCount: DEFAULT_RESULT_COUNT,
-      hasConsented: false,
-      loaded: false,
-      load: async () => {
-        // Single-flight, like the model store's loadPersisted: the startup
-        // gate and the settings screen both call this, and a second read
-        // racing the first could overwrite a consent the user just toggled.
-        if (get().loaded) return;
-        hydrating ??= (async () => {
-          set({ ...parseSearchSettings(await storage.getItem(SEARCH_KEY)), loaded: true });
-        })().finally(() => {
-          hydrating = null;
-        });
-        await hydrating;
-      },
-      setActiveProvider: (id) => {
-        set({ activeProviderId: id });
-        void persist();
-      },
-      setResultCount: (n) => {
-        set({ resultCount: parseResultCount(n) });
-        void persist();
-      },
-      setConsented: (consented) => {
-        set({ hasConsented: consented });
-        void persist();
-      },
-      setProviderKey: async (id, key) => {
-        await guardedSecure(() => secure.setItem(searchKeySS(id), key));
-      },
-      getProviderKey: async (id) => {
-        try {
-          return await secure.getItem(searchKeySS(id));
-        } catch {
-          return null;
+  const created = create<SearchState>()(
+    persist(
+      (set, get) => {
+        async function guardedSecure(fn: () => Promise<void>): Promise<void> {
+          try {
+            await fn();
+          } catch {
+            // SecureStore unavailable (e.g. restricted device); keys stay unset.
+          }
         }
+
+        return {
+          activeProviderId: DEFAULT_PROVIDER,
+          resultCount: DEFAULT_RESULT_COUNT,
+          hasConsented: false,
+          loaded: false,
+          load: async () => {
+            if (get().loaded) return;
+            hydrating ??= (async () => {
+              if (!api) return;
+              try {
+                await api.persist.rehydrate();
+              } catch {
+                // Corrupt/unreadable blob: keep defaults rather than
+                // rejecting the load (matches prior parseSearchSettings).
+              }
+              set({ loaded: true });
+            })().finally(() => {
+              hydrating = null;
+            });
+            await hydrating;
+          },
+          setActiveProvider: (id) => {
+            set({ activeProviderId: id });
+          },
+          setResultCount: (n) => {
+            set({ resultCount: parseResultCount(n) });
+          },
+          setConsented: (consented) => {
+            set({ hasConsented: consented });
+          },
+          setProviderKey: async (id, key) => {
+            await guardedSecure(() => secure.setItem(searchKeySS(id), key));
+          },
+          getProviderKey: async (id) => {
+            try {
+              return await secure.getItem(searchKeySS(id));
+            } catch {
+              return null;
+            }
+          },
+          clearProviderKey: async (id) => {
+            await guardedSecure(() => secure.removeItem(searchKeySS(id)));
+          },
+        };
       },
-      clearProviderKey: async (id) => {
-        await guardedSecure(() => secure.removeItem(searchKeySS(id)));
+      {
+        name: SEARCH_KEY,
+        // Deduped: publishing `loaded` writes the same bytes the middleware
+        // just wrote, and the middleware writes on every state change.
+        storage: createJSONStorage(() => toStateStorage(dedupedStorage(storage))),
+        skipHydration: true,
+        partialize: (state) => ({
+          activeProviderId: state.activeProviderId,
+          resultCount: state.resultCount,
+          hasConsented: state.hasConsented,
+        }),
+        merge: (persistedState, currentState) => {
+          const validated = normalizeSearchSettings(persistedState);
+          return {
+            ...currentState,
+            ...validated,
+            loaded: currentState.loaded,
+          };
+        },
+        onRehydrateStorage: () => (state) => {
+          // Published through the store so subscribers re-render; an in-place
+          // mutation would leave them on a stale `loaded`.
+          if (state) api?.setState({ loaded: true });
+        },
       },
-    };
-  });
+    ),
+  );
+
+  api = created as unknown as SearchStoreApi;
+  return created;
 }
 
 async function rnStorage(): Promise<AsyncStorageStatic> {

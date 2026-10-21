@@ -70,12 +70,20 @@ function memoryStore() {
 
 function deps(over: Record<string, unknown> = {}) {
   return {
-    ensureEngine: async () => scriptedEngine("hello"),
-    getEngineSource: async () => ({ kind: "local", fileName: "a.gguf" }) as const,
-    getStore: async () => memoryStore(),
-    getSearch: async () => null,
-    getSystemPrompt: async () => undefined,
-    resolveImage: async () => null,
+    engine: {
+      ensureEngine: async () => scriptedEngine("hello"),
+      getEngineSource: async () => ({ kind: "local", fileName: "a.gguf" }) as const,
+    },
+    store: {
+      getStore: async () => memoryStore(),
+      getSearch: async () => null,
+    },
+    prompt: {
+      getSystemPrompt: async () => undefined,
+    },
+    media: {
+      resolveImage: async () => null,
+    },
     ...over,
   };
 }
@@ -85,7 +93,7 @@ describe("createTurnRunner", () => {
     const store = memoryStore();
     const runTurn = createTurnRunner({
       ...deps(),
-      getStore: async () => store,
+      store: { ...deps().store, getStore: async () => store },
     });
     const tokens: string[] = [];
     const out = await runTurn(
@@ -110,8 +118,8 @@ describe("createTurnRunner", () => {
     const store = memoryStore();
     const runTurn = createTurnRunner({
       ...deps(),
-      getStore: async () => store,
-      ensureEngine: async () => scriptedEngine("yo"),
+      store: { ...deps().store, getStore: async () => store },
+      engine: { ...deps().engine, ensureEngine: async () => scriptedEngine("yo") },
     });
     const out = await runTurn(
       "again",
@@ -125,7 +133,10 @@ describe("createTurnRunner", () => {
   });
 
   it("rejects when no model is active", async () => {
-    const runTurn = createTurnRunner({ ...deps(), getEngineSource: async () => null });
+    const runTurn = createTurnRunner({
+      ...deps(),
+      engine: { ...deps().engine, getEngineSource: async () => null },
+    });
     await await expect(runTurn("hi", { sessionId: null, history: [] }, undefined)).rejects.toThrow(/no model active/);
   });
 
@@ -133,9 +144,12 @@ describe("createTurnRunner", () => {
     let calls = 0;
     const runTurn = createTurnRunner({
       ...deps(),
-      ensureEngine: async () => {
-        calls += 1;
-        return scriptedEngine("x");
+      engine: {
+        ...deps().engine,
+        ensureEngine: async () => {
+          calls += 1;
+          return scriptedEngine("x");
+        },
       },
     });
     await await expect(runTurn("   ", { sessionId: null, history: [] }, undefined)).rejects.toThrow(/empty message/);
@@ -143,7 +157,10 @@ describe("createTurnRunner", () => {
   });
 
   it("still answers when the store is gone (ephemeral session)", async () => {
-    const runTurn = createTurnRunner({ ...deps(), getStore: async () => null });
+    const runTurn = createTurnRunner({
+      ...deps(),
+      store: { ...deps().store, getStore: async () => null },
+    });
     const out = await runTurn("hi", { sessionId: null, history: [] }, undefined);
     expect(out.reply).toBe("hello");
     expect(out.sessionId.startsWith("local-")).toBeTruthy();
@@ -152,16 +169,19 @@ describe("createTurnRunner", () => {
   it("rejects empty replies instead of persisting them", async () => {
     const runTurn = createTurnRunner({
       ...deps(),
-      ensureEngine: async () => ({
-        completion: async () => ({
-          text: "",
-          toolCalls: [],
-          promptTokens: 1,
-          completionTokens: 0,
-          stoppedEarly: false,
+      engine: {
+        ...deps().engine,
+        ensureEngine: async () => ({
+          completion: async () => ({
+            text: "",
+            toolCalls: [],
+            promptTokens: 1,
+            completionTokens: 0,
+            stoppedEarly: false,
+          }),
+          stopCompletion: async () => {},
         }),
-        stopCompletion: async () => {},
-      }),
+      },
     });
     await await expect(runTurn("hi", { sessionId: null, history: [] }, undefined)).rejects.toThrow(/empty reply/);
   });
@@ -171,9 +191,12 @@ describe("createTurnRunner", () => {
     const images = ["data:image/jpeg;base64,AAA", "data:image/jpeg;base64,BB"];
     const runTurn = createTurnRunner({
       ...deps(),
-      resolveImage: async (uri: string) => ({ path: `/tmp/img-${uri.length}.jpg`, owned: true }),
-      removeImages: async (paths: string[]) => {
-        removed.push(...paths);
+      media: {
+        ...deps().media,
+        resolveImage: async (uri: string) => ({ path: `/tmp/img-${uri.length}.jpg`, owned: true }),
+        removeImages: async (paths: string[]) => {
+          removed.push(...paths);
+        },
       },
     });
     const out = await runTurn(
@@ -192,20 +215,26 @@ describe("createTurnRunner", () => {
     const requests: Array<{ imagePaths?: string[] }> = [];
     const runTurn = createTurnRunner({
       ...deps({
-        ensureEngine: async () => ({
-          completion: async (request: { imagePaths?: string[] }) => {
-            requests.push(request);
-            return scriptedEngine("a cat").completion(
-              { messages: [] } as never,
-              { onToken: () => {} },
-            );
-          },
-          stopCompletion: async () => {},
-        }),
+        engine: {
+          ...deps().engine,
+          ensureEngine: async () => ({
+            completion: async (request: { imagePaths?: string[] }) => {
+              requests.push(request);
+              return scriptedEngine("a cat").completion(
+                { messages: [] } as never,
+                { onToken: () => {} },
+              );
+            },
+            stopCompletion: async () => {},
+          }),
+        },
       }),
-      resolveImage: async (value: string) => ({ path: value, owned: false }),
-      removeImages: async (paths: string[]) => {
-        removed.push(...paths);
+      media: {
+        ...deps().media,
+        resolveImage: async (value: string) => ({ path: value, owned: false }),
+        removeImages: async (paths: string[]) => {
+          removed.push(...paths);
+        },
       },
     });
     const out = await runTurn(
@@ -242,25 +271,29 @@ describe("createTurnRunner", () => {
       );
     };
     const base = {
-      resolveImage: async (value: string) => ({ path: value, owned: false }),
-      toDataUris: async (images: string[]) => images.map((u) => `encoded(${u})`),
-      ensureEngine: async () => ({
-        completion: capturing,
-        stopCompletion: async () => {},
-      }),
+      media: {
+        resolveImage: async (value: string) => ({ path: value, owned: false }),
+        toDataUris: async (images: string[]) => images.map((u) => `encoded(${u})`),
+      },
+      engine: {
+        ensureEngine: async () => ({
+          completion: capturing,
+          stopCompletion: async () => {},
+        }),
+      },
     };
     const image = "file:///cache/a.jpg";
 
     await createTurnRunner({
       ...deps(base),
-      getEngineSource: async () => ({ kind: "local", fileName: "a.gguf" }) as const,
+      engine: { ...deps(base).engine, getEngineSource: async () => ({ kind: "local", fileName: "a.gguf" }) as const },
     })("look", { sessionId: "s1", history: [], images: [image] }, undefined);
     expect(requests[0].imageDataUris).toBe(undefined);
     expect(requests[0].imagePaths).toEqual([image]);
 
     await createTurnRunner({
       ...deps(base),
-      getEngineSource: async () => remote,
+      engine: { ...deps(base).engine, getEngineSource: async () => remote },
     })("look", { sessionId: "s1", history: [], images: [image] }, undefined);
     expect(requests[1].imageDataUris).toEqual([`encoded(${image})`]);
     expect(requests[1].imagePaths).toEqual([image]);
@@ -270,15 +303,21 @@ describe("createTurnRunner", () => {
     const removed: string[] = [];
     const runTurn = createTurnRunner({
       ...deps(),
-      ensureEngine: async () => ({
-        completion: async () => {
-          throw new Error("boom");
+      engine: {
+        ...deps().engine,
+        ensureEngine: async () => ({
+          completion: async () => {
+            throw new Error("boom");
+          },
+          stopCompletion: async () => {},
+        }),
+      },
+      media: {
+        ...deps().media,
+        resolveImage: async (uri: string) => ({ path: `/tmp/img-${uri.length}.jpg`, owned: true }),
+        removeImages: async (paths: string[]) => {
+          removed.push(...paths);
         },
-        stopCompletion: async () => {},
-      }),
-      resolveImage: async (uri: string) => ({ path: `/tmp/img-${uri.length}.jpg`, owned: true }),
-      removeImages: async (paths: string[]) => {
-        removed.push(...paths);
       },
     });
     const images = ["data:image/jpeg;base64,AAA"];
@@ -294,7 +333,7 @@ describe("createTurnRunner", () => {
     const store = memoryStore();
     const runTurn = createTurnRunner({
       ...deps(),
-      getStore: async () => store,
+      store: { ...deps().store, getStore: async () => store },
     });
     const out = await runTurn(
       "again",
@@ -315,7 +354,10 @@ describe("createTurnRunner", () => {
       },
       stopCompletion: async () => {},
     };
-    const runTurn = createTurnRunner({ ...deps(), ensureEngine: async () => engine });
+    const runTurn = createTurnRunner({
+      ...deps(),
+      engine: { ...deps().engine, ensureEngine: async () => engine },
+    });
     await runTurn(
       "q",
       {

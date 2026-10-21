@@ -23,7 +23,7 @@ import Animated, { FadeInDown, FadeOutDown } from "react-native-reanimated";
 import { AlertTriangle, RotateCw, X } from "lucide-react-native";
 
 import { MOTION_DURATION_MS } from "@/utils/motion.ts";
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import type { ChatWarning } from "@/store/chat/types.ts";
 
 /** Severity-scaled dwell, as PocketPal does: an error is worth more of
@@ -42,6 +42,7 @@ export function ChatWarningSnackbar({
   onDismiss: () => void;
   onRetry?: () => void;
 }) {
+  const colors = useColors();
   // Re-armed whenever the warning changes, so a second identical warning
   // gets its full dwell instead of inheriting a nearly-expired timer.
   useEffect(() => {

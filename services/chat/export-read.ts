@@ -10,13 +10,14 @@
  * skipped, as ChatMenu always did.
  */
 
-import { defaultGetStore } from "@/store/chat.ts";
+// no static import of the store accessor: tinybase is device-only.
 import type { ExportSession } from "./export.ts";
 
 export async function readExportSessions(
   ids?: string[],
 ): Promise<ExportSession[]> {
-  const store = await defaultGetStore();
+  const { getSessionStore } = await import("./tinybase.ts");
+  const store = await getSessionStore();
   if (!store) throw new Error("Conversations are not ready yet.");
   const listed = await store.listSessions();
   const wanted = ids ?? listed.map((r) => r.id);

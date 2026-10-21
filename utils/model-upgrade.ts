@@ -9,7 +9,7 @@ import type {
   ModelSpec,
   RemoteApiProvider,
   RemoteCaps,
-} from "../types/models";
+} from "@/types/models";
 import { asRecord, positiveFinite } from "./guards.ts";
 
 const STATUSES: ModelDownloadStatus[] = [
@@ -148,6 +148,10 @@ export function upgradeModelSpec(raw: unknown): ModelSpec | null {
       ? v.capabilities.filter((c): c is string => typeof c === "string")
       : undefined,
     reasoning: typeof v.reasoning === "boolean" ? v.reasoning : undefined,
+    // Three-valued, like `reasoning`: absent = never probed. A corrupt
+    // value must not become a permanent "does not support tools".
+    supportsTools:
+      typeof v.supportsTools === "boolean" ? v.supportsTools : undefined,
     ggufMetadata: sanitizeGgufMetadata(v.ggufMetadata),
   };
 }

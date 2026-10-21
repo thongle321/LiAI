@@ -21,7 +21,7 @@
 import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { useAnimatedStyle, useDerivedValue } from "react-native-reanimated";
 
-import { keyboardOcclusion } from "../utils/keyboard.ts";
+import { keyboardOcclusion } from "@/utils/keyboard.ts";
 
 /** Animated style that translates a bottom-anchored view up by the keyboard.
  *

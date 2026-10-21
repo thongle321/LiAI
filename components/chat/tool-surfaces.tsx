@@ -29,7 +29,7 @@ import { ChevronRight, ExternalLink, Search, Wrench } from "lucide-react-native"
 
 import type { AgentStep } from "@/types/chat.ts";
 import { formatToolMetrics } from "@/utils/format.ts";
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { HtmlPreviewBubble } from "./html-preview-bubble.tsx";
 
 export interface ToolSurfaceProps {
@@ -83,6 +83,7 @@ function TriggerRow({
   accessibilityLabel: string;
   metrics?: AgentStep["metrics"];
 }) {
+  const colors = useColors();
   return (
     <View className="w-full">
       <Pressable
@@ -119,6 +120,7 @@ function StaticRow({
   label: string;
   metrics?: AgentStep["metrics"];
 }) {
+  const colors = useColors();
   return (
     <View className="w-full">
       <View className="min-h-12 w-full flex-row items-center gap-2 rounded-lg px-2 py-1">
@@ -185,6 +187,7 @@ function hitsOf(step: AgentStep): Hit[] {
 }
 
 function HitRow({ hit }: { hit: Hit }) {
+  const colors = useColors();
   return (
     <Pressable
       onPress={() => {

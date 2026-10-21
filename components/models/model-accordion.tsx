@@ -24,7 +24,7 @@ import { useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 
 export function ModelAccordion({
   title,
@@ -49,6 +49,7 @@ export function ModelAccordion({
    *  after it. Any other caller may still nest content here. */
   children?: ReactNode;
 }) {
+  const colors = useColors();
   const [pressed, setPressed] = useState(false);
   return (
     <View className={className}>

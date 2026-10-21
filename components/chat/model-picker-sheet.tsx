@@ -3,7 +3,7 @@
  *
  * Opened from the empty thread's "Select Model" card: activating a model
  * no longer means leaving the conversation. PocketPal's sheet is a tabbed
- * picker over pals AND models — LiAI has no pals, so this is the models
+ * picker over companions AND models — LiAI has no companions, so this is the models
  * half only, and management (download, delete, remote setup) stays on the
  * /models screen, exactly as PocketPal's picker defers to their Models
  * screen for the same things.
@@ -29,9 +29,9 @@ import { KeyboardControllerNative } from "react-native-keyboard-controller";
 import { Check } from "lucide-react-native";
 
 import { Sheet } from "../sheet.tsx";
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { pickableModels } from "@/services/chat/models.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 
 export function ModelPickerSheet({
   visible,
@@ -40,6 +40,7 @@ export function ModelPickerSheet({
   visible: boolean;
   onClose: () => void;
 }) {
+  const colors = useColors();
   const models = useModelStore((s) => s.models);
   const remoteApis = useModelStore((s) => s.remoteApis);
   const activeModelId = useModelStore((s) => s.activeModelId);

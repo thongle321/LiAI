@@ -17,15 +17,15 @@
  * the list's scroll).
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import { CheckCircle2 } from "lucide-react-native";
 
 import { Sheet } from "../sheet.tsx";
 import { useSnackbar } from "../snackbar.tsx";
-import { colors } from "@/themes/tokens.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useColors } from "@/themes/tokens.ts";
+import { useModelStore } from "@/store/model-store";
 import { extractHFModelTitle } from "@/services/models/hf-format.ts";
 import { HFDetailsView } from "./hf-details-view.tsx";
 import { HFSearchView, SORT_OPTIONS } from "./hf-search-view.tsx";
@@ -62,6 +62,7 @@ function SortSheet({
   onPick: (value: "relevance" | "downloads" | "lastModified" | "likes") => void;
   onClose: () => void;
 }) {
+  const colors = useColors();
   return (
     <Sheet visible={visible} onClose={onClose} title="Sort by" testID="hf-sort-sheet">
       {SORT_OPTIONS.map((option) => (
@@ -97,6 +98,7 @@ function AuthorSheet({
   onApply: (author: string) => void;
   onClose: () => void;
 }) {
+  const colors = useColors();
   const [draft, setDraft] = useState(author);
   useEffect(() => {
     if (visible) setDraft(author);
@@ -153,7 +155,6 @@ export function HFModelSearch({
   // keeps the re-rendering subscriptions isolated — a bookmark toggle must
   // not rebuild the search list.
   const searchModels = useModelStore((s) => s.searchModels);
-  const loadSearchFilters = useModelStore((s) => s.loadSearchFilters);
   const setSearchFilters = useModelStore((s) => s.setSearchFilters);
   const getModelFiles = useModelStore((s) => s.getModelFiles);
   const searchQuery = useModelStore((s) => s.searchQuery);
@@ -171,28 +172,18 @@ export function HFModelSearch({
   // Bumped by the filter sheets so the debounce effect re-runs: the store
   // holds the filters, and its identity never changes.
   const [filtersVersion, setFiltersVersion] = useState(0);
-  // Filters hydrate from storage once per open, BEFORE the first search,
-  // or a returning user's sort would be ignored by that request.
-  const hydrated = useRef(false);
 
   useEffect(() => {
     if (!visible) {
-      hydrated.current = false;
       setSelected(null);
       return;
     }
     // ponytail: debounce, PocketParity's 500ms.
     const t = setTimeout(() => {
-      void (async () => {
-        if (!hydrated.current) {
-          hydrated.current = true;
-          await loadSearchFilters();
-        }
-        await searchModels(query);
-      })();
+      void searchModels(query);
     }, 500);
     return () => clearTimeout(t);
-  }, [query, visible, filtersVersion, loadSearchFilters, searchModels]);
+  }, [query, visible, filtersVersion, searchModels]);
 
   const applyFilters = (patch: Parameters<typeof setSearchFilters>[0]) => {
     setSearchFilters(patch);

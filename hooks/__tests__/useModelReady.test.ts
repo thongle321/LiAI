@@ -10,7 +10,7 @@
 import { act, renderHook } from "@testing-library/react-native";
 
 import { useModelReady } from "../useModelReady.ts";
-import { useModelStore, type ModelStore } from "@/store/modelStore.ts";
+import { useModelStore, type ModelStore } from "@/store/model-store.ts";
 import { buildRemoteModelSpec } from "@/services/models/remote-api.ts";
 import type { ModelSpec, RemoteApiProvider } from "@/types/models.ts";
 

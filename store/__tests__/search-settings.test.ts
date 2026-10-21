@@ -48,7 +48,7 @@ describe("search store", () => {
     await useStore.getState().setProviderKey("brave", "bv-secret");
     await new Promise((r) => setTimeout(r, 0));
 
-    const saved = JSON.parse(storage.data[SEARCH_KEY]);
+    const saved = JSON.parse(storage.data[SEARCH_KEY]).state;
     expect(saved.activeProviderId).toBe("brave");
     expect(saved.hasConsented).toBe(true);
     expect(JSON.stringify(saved).includes("bv-secret")).toBe(false);
@@ -68,9 +68,12 @@ describe("search store", () => {
 describe("search consent hydration (D3-5)", () => {
   /** Consent that was granted in an earlier session, on disk. */
   const CONSENTED = JSON.stringify({
-    activeProviderId: "brave",
-    resultCount: 3,
-    hasConsented: true,
+    state: {
+      activeProviderId: "brave",
+      resultCount: 3,
+      hasConsented: true,
+    },
+    version: 0,
   });
 
   it("reads persisted consent on a cold start", async () => {

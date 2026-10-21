@@ -47,7 +47,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { X, Check } from "lucide-react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import { useInference } from "@/store/inference.ts";
 import { Sheet } from "../sheet.tsx";
 import { ToggleRow } from "../settings-rows.tsx";
@@ -62,7 +62,7 @@ import {
   EFFORT_LABELS,
   EFFORT_LEVELS,
 } from "@/utils/reasoning-capability.ts";
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 
 /** PocketPal's 1px hairline Divider between rows. */
 function Divider() {
@@ -97,6 +97,7 @@ function Field({
  * rule, and a functional mask rather than decoration: it is what says
  * "there is more of this". */
 function TemplatePreview({ text }: { text: string }) {
+  const colors = useColors();
   return (
     <View className="relative h-5 flex-[2] overflow-hidden">
       <Text
@@ -140,6 +141,7 @@ export function ModelSettingsSheet({
   model: ModelSpec | null;
   onClose: () => void;
 }) {
+  const colors = useColors();
   // Stable selectors: both are stable store functions, so this sheet
   // never re-renders on model-store writes.
   const getModelSettings = useModelStore((s) => s.getModelSettings);

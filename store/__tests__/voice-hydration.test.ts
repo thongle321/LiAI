@@ -20,9 +20,12 @@ describe("voice store hydration (D3-4)", () => {
    *  never pinned), so the persisted id is asserted as the default, not as a
    *  literal. What the test pins is that the SAVED values come back at all. */
   const SAVED = JSON.stringify({
-    currentVoice: { engine: "system", id: "some-os-voice" },
-    autoSpeak: true,
-    userTTSOverride: true,
+    state: {
+      currentVoice: { engine: "system", id: "some-os-voice" },
+      autoSpeak: true,
+      userTTSOverride: true,
+    },
+    version: 0,
   });
 
   it("reads the saved prefs on a cold start", async () => {
@@ -91,7 +94,7 @@ describe("voice store hydration (D3-4)", () => {
     await Promise.resolve();
 
     // The saved voice survived hydration: no write carried the nulls over it.
-    expect(JSON.parse(kv.data[VOICE_KEY]).autoSpeak).toBe(true);
+    expect(JSON.parse(kv.data[VOICE_KEY]).state.autoSpeak).toBe(true);
   });
 
   it("persists normally once hydrated", async () => {
@@ -102,6 +105,6 @@ describe("voice store hydration (D3-4)", () => {
     useStore.getState().setAutoSpeak(false);
     await Promise.resolve();
 
-    expect(JSON.parse(kv.data[VOICE_KEY]).autoSpeak).toBe(false);
+    expect(JSON.parse(kv.data[VOICE_KEY]).state.autoSpeak).toBe(false);
   });
 });

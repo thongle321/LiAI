@@ -16,9 +16,9 @@ import {
 } from "react-native";
 import { Eye, EyeOff, ExternalLink } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { cn } from "@/utils/cn.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import { useSnackbar } from "../snackbar.tsx";
 import { Sheet } from "../sheet.tsx";
 import { ActionRow, SettingsSection, ToggleRow } from "../settings-rows.tsx";
@@ -32,6 +32,7 @@ const HF_STEPS = [
 ];
 
 function HfTokenSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const colors = useColors();
   const hfToken = useModelStore((s) => s.hfToken);
   const setHfToken = useModelStore((s) => s.setHfToken);
   const { showSnackbar } = useSnackbar();

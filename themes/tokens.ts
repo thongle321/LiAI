@@ -1,73 +1,118 @@
 /** LiAI design tokens — TS mirror of `global.css`.
  *
- * Source of truth for styling is `global.css` (`@theme` + `@layer theme`);
- * this file mirrors the same values for JS-only use (icon colors,
- * third-party props, `useCSSVariable` guards). Keep the two in sync.
- * Authority: DESIGN.md. Font is Inter, loaded via expo-font in
- * app/_layout.tsx. Light-locked — the app has exactly one theme.
+ * Source of truth for styling is `global.css` (`@theme` + `@layer theme`
+ * with `@variant light` / `@variant dark`); this file mirrors the same
+ * values for JS-only use (icon colors, third-party props, inline styles).
+ * Keep the two in sync. Authority: DESIGN.md. Font is Inter, loaded via
+ * expo-font in app/_layout.tsx.
+ *
+ * TWO THEMES. `global.css` defines every --color-* token twice (light and
+ * dark, prompt_material/dark_mode_design_system.png). React components that
+ * read colors at render time must use `useColors()`, which re-resolves on
+ * theme switch. The exported `colors` object is the LIGHT palette snapshot
+ * — valid at module scope (constants, non-React consumers) but stale the
+ * moment the user switches to dark; prefer the hook inside components.
  */
 
-export const colors = {
-  /** The signal, as two steps of ONE hue (never two colours).
-   *
-   * The board's Signal Blue #3882F6 is 3.69:1 on white: fine as a MARK
-   * (icons, borders, focus rings — the 3:1 non-text floor) but illegal as
-   * text or under a white label, which need 4.5:1. `primary` is the step
-   * that carries anything read; `primaryMark` is the board colour, kept for
-   * non-text marks. Collapsing them into one value is what put every
-   * `text-primary` site and every primary button below AA. */
+import { useUniwind } from "uniwind";
+
+/** The signal, as two steps of ONE hue (never two colours).
+ *
+ * The board's Signal Blue #3882F6 is 3.69:1 on white: fine as a MARK
+ * (icons, borders, focus rings — the 3:1 non-text floor) but illegal as
+ * text or under a white label, which need 4.5:1. `primary` is the step
+ * that carries anything read; `primaryMark` is the mark colour, kept for
+ * non-text marks. Collapsing them into one value is what put every
+ * `text-primary` site and every primary button below AA. */
+export const lightColors = {
   primary: "#2563EB",
   primaryMark: "#3882F6",
   primaryHover: "#1D4ED8",
   primaryPressed: "#1D4ED8",
   onPrimary: "#FFFFFF",
   success: "#10B981",
-  /** The download button's green, in the same two-step shape as the signal
-   *  and the reds: `successFill` the tonal ground, `successMark` the 3:1
-   *  border step, `successDeep` the 4.5:1 label step. `success` above stays
-   *  the Jade icon colour and never carries text. Derivation lives in
-   *  DESIGN.md › Buttons (the download green); mirrored in global.css. */
   successFill: "#ECFDF5",
   successMark: "#059669",
   successDeep: "#047857",
-  warning: "#F59E0B",
-  /** Same split: `errorMark` is the 3.76:1 mark for borders and dots, `error`
-   *  the step that carries text and fills (#b91c1c — #dc2626 failed on the
-   *  recessed grounds at 4.41 and 4.44). */
+  warning: "#92400E",
   error: "#B91C1C",
   errorMark: "#EF4444",
-  /** Coolant cyan — machine-in-the-loop states only. */
   info: "#06B6D4",
-  /** The warm ramp — Kitten's tier chip and the voice avatars, and nothing
-   *  else. It is the one non-signal accent in the app, and it is deliberately
-   *  rationed: the Voice screen's engine cards, so a low-end device's voice
-   *  pack is the one chip that shouts. Mirrored in global.css as
-   *  .voice-badge--warm and as the bg-orange-100 avatar ground. */
   warmSurface: "#FFEDD5",
   warmAccent: "#C2410C",
+  /** Scrim for modal/sheet backdrops — the slate near-black, 60%. */
+  scrim: "rgba(15, 23, 42, 0.6)",
   /** Cool Paper: the page. Clean White: raised. Mist: recessed. */
   base: "#F8FAFC",
   surface1: "#FFFFFF",
   surface2: "#F1F5F9",
-  /** Surface tint — a ground for selected elements, never a border. */
   surface3: "#EFF6FF",
   border: "#E2E8F0",
-  /** Slate: secondary text only. Ink: everything that is read.
-   *  One step darker than the board's #64748B, which failed on Mist (4.34)
-   *  and Surface Tint (4.37). */
   secondaryText: "#475569",
-  /** The quiet step: text that should recede but is still read. Replaces
-   *  the 70%-alpha habit, which composited Slate to 3.59:1 on white — under
-   *  the 4.5:1 floor for 14px. This is measured, not chosen by eye. */
   secondaryTextMuted: "#5F6B7C",
   primaryText: "#0F172A",
   inverseText: "#FFFFFF",
 } as const;
 
-export type ColorName = keyof typeof colors;
+/** Dark board (prompt_material/dark_mode_design_system.png). Same roles,
+ * dark grounds: Background #0B0C10 is the page, Surface 1 #1E1E24 raised,
+ * Surface 2 #23252C recessed, Primary Soft #2A3A56 is the selected-element
+ * tint. The signal takes the board's lighter #5B8CFF step (the AA-safe
+ * step on dark); machine-in-the-loop states take the teal accent. */
+export const darkColors = {
+  primary: "#5B8CFF",
+  primaryMark: "#5B8CFF",
+  primaryHover: "#4E7FF0",
+  primaryPressed: "#3F6FE0",
+  onPrimary: "#0B0C10",
+  success: "#22C55E",
+  successFill: "#22C55E1A",
+  successMark: "#22C55E",
+  successDeep: "#22C55E",
+  warning: "#F59E0B",
+  /* Same two-step shape as the light reds, inverted for a dark ground:
+     #EF4444 measures only ~4.3:1 on Surface 1 (#1E1E24) — fine as a mark
+     (errorMark, 3:1 floor) but under the 4.5:1 text floor. `error` is the
+     lighter step that carries text/fills and clears 4.5:1 on every dark
+     surface. Mirrors how light keeps #b91c1c (text) vs #ef4444 (mark). */
+  error: "#F87171",
+  errorMark: "#EF4444",
+  info: "#00D1B2",
+  warmSurface: "#40301F",
+  warmAccent: "#FB923C",
+  /** Scrim — the board's Overlay #00000080 (~50% black). */
+  scrim: "rgba(0, 0, 0, 0.5)",
+  base: "#0B0C10",
+  surface1: "#1E1E24",
+  surface2: "#23252C",
+  surface3: "#1C2740",
+  border: "#2A2E35",
+  secondaryText: "#C8D5E1",
+  secondaryTextMuted: "#94A3B8",
+  primaryText: "#F8FAFC",
+  inverseText: "#0B0C10",
+} as const;
 
-/** Scrim for modal and sheet backdrops — near-black at 60%, never tinted. */
-export const scrim = "rgba(15, 23, 42, 0.6)";
+export type ColorName = keyof typeof lightColors;
+export type Colors = Record<ColorName, string>;
+
+/** Light snapshot — module-scope and non-React consumers only.
+ *  Components use `useColors()`. */
+export const colors: Colors = lightColors;
+
+/** The active palette for the current Uniwind theme; re-renders on switch. */
+export function useColors(): Colors {
+  const scheme = useColorScheme();
+  return scheme === "dark" ? darkColors : lightColors;
+}
+
+/** The active scheme as a native `colorScheme` string ("light" | "dark").
+ *  One source for the ~8 places that feed a native `colorScheme=` prop or
+ *  branch a glyph on the theme — they used to each retype the ternary. */
+export function useColorScheme(): "light" | "dark" {
+  const { theme } = useUniwind();
+  return theme === "dark" ? "dark" : "light";
+}
 
 export const font = {
   /** Names must match expo-font loads in app/_layout.tsx (no fallbacks). */

@@ -26,7 +26,7 @@ import {
 import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
 import { ChevronDown } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { colors, useColors } from "@/themes/tokens.ts";
 import { filterMessages } from "@/services/chat/filter.ts";
 import { buildRows, type ChatRow } from "@/services/chat/rows.ts";
 import {
@@ -36,9 +36,12 @@ import {
 } from "@/utils/motion.ts";
 import { useChatStore } from "@/store/chat.ts";
 import { useKeyboardStore } from "@/store/keyboard.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import { useInference } from "@/store/inference.ts";
 import { useKeyboardLift } from "@/hooks/useKeyboardLift.ts";
+import { useChatSessionLoader } from "@/hooks/useChatSessionLoader.ts";
+import { useChatHealth } from "@/hooks/useChatHealth.ts";
+import { useToolCompatWarning } from "@/hooks/useToolCompatWarning.ts";
 import { MessageListItem } from "@/components/chat/message-list-item.tsx";
 import { ChatEmptyPlaceholder } from "@/components/chat/chat-empty-placeholder.tsx";
 import { PendingIndicator } from "@/components/chat/pending-indicator.tsx";
@@ -57,8 +60,16 @@ import { GenerationSettingsSheet } from "@/components/chat/generation-settings-s
 import { ChatWarningSnackbar } from "@/components/chat/chat-warning-snackbar.tsx";
 import { ChatHeader } from "@/components/chat/chat-header.tsx";
 import { ModelPickerSheet } from "@/components/chat/model-picker-sheet.tsx";
+import {
+  GreetingBubble,
+  SuggestedPromptChips,
+} from "@/components/chat/greeting-bubble.tsx";
+import { CompanionsSheet } from "@/components/companions/companions-sheet.tsx";
+import { useCompanions } from "@/store/companions.ts";
+import { recommendedContextTokens } from "@/services/agent/registry.ts";
 
 export default function ChatRoute() {
+  const colors = useColors();
   const messages = useChatStore((s) => s.messages);
   // The header names the conversation and the model answering it; both
   // live here (G11 — the active model was otherwise invisible on this
@@ -75,8 +86,8 @@ export default function ChatRoute() {
   // that consumed flag: without it the effect re-fires on every render
   // and would stomp whatever the user had typed since.
   //
-  // No in-app producer for this URL. pocketpal's link is pal-keyed
-  // (`pocketpal://chat?palId=p1`) and pals are out of scope here, so
+  // No in-app producer for this URL. pocketpal's link is companion-keyed
+  // (`pocketpal://chat?palId=p1`) and companions are out of scope here, so
   // this only fires when an external app or Shortcut hands LiAI a
   // `liai://chat?message=...`. Deliberate, and recorded in the audit.
   const { message: deepLinkPrompt } = useLocalSearchParams<{ message?: string }>();
@@ -98,8 +109,6 @@ export default function ChatRoute() {
   const connection = useChatStore((s) => s.connection);
   const sending = useChatStore((s) => s.sending);
   const stopping = useChatStore((s) => s.stopping);
-  const loadSession = useChatStore((s) => s.loadSession);
-  const checkHealth = useChatStore((s) => s.checkHealth);
   const send = useChatStore((s) => s.send);
   const retry = useChatStore((s) => s.retry);
   // The failed turn's own retry, which used to live on the card this screen
@@ -215,16 +224,8 @@ export default function ChatRoute() {
       ? `${visible.length} of ${messages.length}`
       : null;
 
-  useEffect(() => {
-    void loadSession().then(() => checkHealth());
-  }, [loadSession, checkHealth]);
-
-  // Activation happens on the Models screen while chat stays mounted:
-  // re-resolve readiness so the prompt chips and the no-model affordance
-  // appear and vanish on their own.
-  useEffect(() => {
-    void checkHealth();
-  }, [activeModelId, checkHealth]);
+  useChatSessionLoader();
+  useChatHealth();
 
   // PocketPal parity: the composer is always visible. With no model the send
   // button disables and the field's placeholder names it. There is
@@ -252,6 +253,32 @@ export default function ChatRoute() {
   // send-enable and the prompt chips.
   const showPlaceholder = activeModelId === null && emptyState;
 
+  // ---- The companion persona (greeting + chips + load hint) ----------------
+  // The bound companion applies to the open conversation; the staged one to the
+  // conversation about to start (its greeting greets the empty new chat).
+  const sessionCompanionId = useChatStore((s) => s.sessionCompanionId);
+  const stagedCompanionId = useChatStore((s) => s.stagedCompanionId);
+  const effectiveCompanionId = sessionId !== null ? sessionCompanionId : stagedCompanionId;
+  const activeCompanion = useCompanions((s) =>
+    effectiveCompanionId === null ? undefined : s.companions.find((p) => p.id === effectiveCompanionId),
+  );
+  // One notice per model when a companion's talents meet a model that
+  // cannot call them (PocketPal parity). The screen resolves the
+  // companion; the hook owns the decision and the warned-set.
+  useToolCompatWarning(activeCompanion);
+  // Greeting only with a loaded model and an EMPTY, unsearched thread —
+  // exactly PocketPal's render predicate. Never persisted.
+  const greeting =
+    emptyState && !showPlaceholder && activeCompanion?.greeting?.text
+      ? activeCompanion.greeting
+      : undefined;
+  // One-shot context hint (PocketPal's usePalLoadHint): a companion whose heavy
+  // talent wants a bigger window than the loaded one gets ONE notice per
+  // (companion, context, talents) signature. Local engine only — a remote
+  // provider reports no n_ctx. Declared BELOW nCtx, which the banner
+  // section resolves.
+  const hintSeen = useRef<Set<string>>(new Set());
+
   const motionDuration = MOTION_DURATION_MS;
 
   // ---- The context banner slot -------------------------------------
@@ -262,6 +289,21 @@ export default function ChatRoute() {
   // supplies the state. Both halves moved out in one go: the view-model had
   // no seam to test through while it lived here.
   const nCtx = useInference((s) => s.nCtx);
+  useEffect(() => {
+    if (activeProviderType !== "local" || activeCompanion === undefined) return;
+    if (activeModelId === null) return;
+    const names = activeCompanion.pact?.talents.map((t) => t.name) ?? [];
+    const wanted = Math.max(0, ...names.map((n) => recommendedContextTokens(n) ?? 0));
+    if (wanted === 0 || wanted <= nCtx) return;
+    const key = `${activeCompanion.id}|${nCtx}|${names.join(",")}`;
+    if (hintSeen.current.has(key)) return;
+    hintSeen.current.add(key);
+    setChatWarning({
+      message: `"${activeCompanion.name}" works best with a bigger context window than the current ${nCtx} — some tool results may not fit.`,
+      severity: "warning",
+      recoverable: false,
+    });
+  }, [activeCompanion, nCtx, activeProviderType, activeModelId, setChatWarning]);
   const {
     banner,
     bannerShowing,
@@ -377,11 +419,14 @@ export default function ChatRoute() {
   // header title routes to /models, and each message offers "Regenerate
   // with…"); the picker is the no-model path only.
   const [pickerOpen, setPickerOpen] = useState(false);
+  // The persona half of the chat picker (PocketPal's ChatPalModelPicker
+  // companions tab): header button -> sheet of installed companions.
+  const [companionsSheetOpen, setCompanionsSheetOpen] = useState(false);
   // Sync the freeze flag with the sheet-open state (declared above because the
   // pickers are defined late in this component).
   useEffect(() => {
-    freeze.value = pickerOpen || generationOpen;
-  }, [pickerOpen, generationOpen, freeze]);
+    freeze.value = pickerOpen || generationOpen || companionsSheetOpen;
+  }, [pickerOpen, generationOpen, companionsSheetOpen, freeze]);
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
 
@@ -404,6 +449,7 @@ export default function ChatRoute() {
         modelLabel={activeModelLabel}
         onOpenModels={() => router.navigate("/models")}
         onOpenDrawer={() => navigation.openDrawer()}
+        onOpenCompanions={() => setCompanionsSheetOpen(true)}
         onNewConversation={() => {
           // The pen starts a fresh chat; a stale search bar must
           // not outlive the conversation it was filtering.
@@ -478,6 +524,13 @@ export default function ChatRoute() {
                   bottomInset={composerHeight + tabBarCompensation}
                   onSelectModel={() => setPickerOpen(true)}
                 />
+              ) : greeting !== undefined && activeCompanion !== undefined ? (
+                // The greeting bubble is LIST content (PocketPal renders it
+                // in the empty view), so it clears the floating composer the
+                // same way the placeholder does.
+                <View style={{ paddingTop: composerHeight + tabBarCompensation }}>
+                  <GreetingBubble companionName={activeCompanion.name} greeting={greeting.text} />
+                </View>
               ) : null
             }
             onEndVisibleChange={setAtEnd}
@@ -597,6 +650,17 @@ export default function ChatRoute() {
             onDismiss={dismissWarning}
             onRetry={retryFailedTurn}
           />
+          {/* Suggested-prompt chips (PocketPal's chip row): above the
+              composer, only on an empty thread with a greeting. Tapping
+              one SENDS it like any user message. */}
+          {greeting?.suggestedPrompts !== undefined &&
+          greeting.suggestedPrompts.length > 0 &&
+          !sending ? (
+            <SuggestedPromptChips
+              prompts={greeting.suggestedPrompts}
+              onSend={(text) => void send(text)}
+            />
+          ) : null}
   {/* The banner's own resolution — which of five, plus its fill — is
       useChatBanner's answer; this only draws it. */}
   {bannerShowing && (
@@ -647,6 +711,10 @@ export default function ChatRoute() {
       <ModelPickerSheet
         visible={pickerOpen}
         onClose={() => setPickerOpen(false)}
+      />
+      <CompanionsSheet
+        visible={companionsSheetOpen}
+        onClose={() => setCompanionsSheetOpen(false)}
       />
     </SafeAreaView>
   );

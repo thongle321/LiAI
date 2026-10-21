@@ -18,6 +18,7 @@ import type {
   TurnOutcomeFlags,
 } from "@/types/chat.ts";
 import type { SamplerParams } from "../inference/sampler.ts";
+import type { EffortLevel } from "@/utils/reasoning-capability.ts";
 
 /** One durable turn. Streaming/error are NOT here: they are live render
  * state owned by the chat store, and persisting them would resurrect a
@@ -69,20 +70,20 @@ export function draftSlot(sessionId: string | null): string {
   return sessionId ?? "new";
 }
 
-export interface SessionStore {
+/** One conversation's own settings override — the 'custom' layer of the
+ *  session → companion → global chain. Every field optional: a field the user
+ *  never touched stays absent so the layer below reaches it. */
+export interface SessionOverride {
+  sampler?: Partial<SamplerParams>;
+  thinking?: boolean;
+  effort?: EffortLevel;
+}
+
+/** Catalog of conversations: listing, minting, renaming, pinning, deleting,
+ *  duplicating, and titling. */
+export interface SessionCatalog {
   /** Mint a session and return its id. */
   create(): Promise<string>;
-  /** Turns in call order, or null when the session does not exist. Each
-   *  carries the row id it can be addressed by. Hydrate-once (C17): the
-   *  first open reads, later re-opens are served from memory — every
-   *  writer in the store invalidates its own session first, so a
-   *  cached transcript can never show a stale or empty conversation. */
-  get(sessionId: string): Promise<StoredMessage[] | null>;
-  /** Append one turn, creating the session row if it is not there yet.
-   *  Pass `id` to pin the row id — the chat slice mints it up front so a
-   *  bubble's id and its persisted id are the same string. Omit it and
-   *  the store mints one. */
-  append(sessionId: string, turn: StoredTurn, id?: string): Promise<void>;
   /** Every session, pinned first, then most recently updated. */
   listSessions(): Promise<SessionInfo[]>;
   /** False when the session does not exist. */
@@ -93,45 +94,51 @@ export interface SessionStore {
   deleteSession(sessionId: string): Promise<boolean>;
   /** Title the session only while it is still empty (first turn wins). */
   setTitleIfEmpty(sessionId: string, title: string): Promise<void>;
-  /** Drop the trailing assistant turn, for regenerate. False when the
-   *  last turn is not an assistant turn. */
+  /** Fork a conversation. Null when the source does not exist. */
+  duplicateSession(sessionId: string): Promise<string | null>;
+}
+
+/** Reading and writing a conversation's turns. */
+export interface TurnWriter {
+  /** Turns in call order, or null when the session does not exist. */
+  get(sessionId: string): Promise<StoredMessage[] | null>;
+  /** Append one turn, creating the session row if it is not there yet. */
+  append(sessionId: string, turn: StoredTurn, id?: string): Promise<void>;
+  /** Drop the trailing assistant turn, for regenerate. */
   popLastAssistant(sessionId: string): Promise<boolean>;
-  /** Drop the turn with `messageId` and everything after it, cascading to
-   *  those turns' tool calls. This is what edit-and-resend and
-   *  regenerate-from-the-middle need: re-running anything but the last
-   *  turn is meaningless unless the branch it sits on can be deleted.
-   *
-   *  Keyed by the id `get()` hands back, not by an index — the same way
-   *  pocketpal deletes (`removeMessagesFromId(message.id, true)`), so the
-   *  call cannot drift if render state and storage ever disagree about
-   *  order. False when the session or the id does not exist — an unknown
-   *  id drops nothing rather than guessing.
-   *
-   *  Deliberately additive: `popLastAssistant` stays for the last-turn
-   *  regenerate, which is cheaper and keeps its boolean contract. */
+  /** Drop the turn with `messageId` and everything after it. */
   truncateFrom(sessionId: string, messageId: string): Promise<boolean>;
-  /** Composer draft for a session, or "" when there is none. `null` is
-   *  the slot for a conversation that has not been sent yet. */
+}
+
+/** Composer drafts. `null` is the slot for a conversation not yet sent. */
+export interface DraftStore {
   getDraft(sessionId: string | null): Promise<string>;
   setDraft(sessionId: string | null, text: string): Promise<void>;
   clearDraft(sessionId: string | null): Promise<void>;
-  /** Which conversation is open, or null. */
+}
+
+/** Per-conversation companion binding and settings override layer. */
+export interface SessionSettings {
   getActiveSessionId(): Promise<string | null>;
   setActiveSessionId(sessionId: string | null): Promise<void>;
-  /** Sampling override for one conversation, or null when it follows the
-   *  global preset. Partial on purpose: only the fields the session actually
-   *  changed are stored, so a new global default still reaches it. */
-  getSessionSampler(sessionId: string): Promise<Partial<SamplerParams> | null>;
-  setSessionSampler(
+  getSessionCompanion(sessionId: string): Promise<string | null>;
+  setSessionCompanion(sessionId: string, companionId: string | null): Promise<boolean>;
+  getSessionSettingsSource(sessionId: string): Promise<"companion" | "custom" | null>;
+  setSessionSettingsSource(
     sessionId: string,
-    override: Partial<SamplerParams> | null,
+    source: "companion" | "custom",
+  ): Promise<boolean>;
+  getSessionOverride(sessionId: string): Promise<SessionOverride | null>;
+  setSessionOverride(
+    sessionId: string,
+    override: SessionOverride | null,
   ): Promise<void>;
-  /** Fork a conversation: its turns, its tool calls, and its sampler
-   *  override. Titled "<title> - Copy", becomes the active conversation,
-   *  and is never pinned. Null when the source does not exist.
-   *
-   *  The override travels with the copy on purpose: it is per
-   *  conversation, so a fork that dropped it would silently revert to the
-   *  preset — noticed only after trusting the fork. */
-  duplicateSession(sessionId: string): Promise<string | null>;
 }
+
+/** Composite port: a full session store. Prefer depending on one of the
+ *  four focused ports above when a caller only needs a slice. */
+export interface SessionStore
+  extends SessionCatalog,
+    TurnWriter,
+    DraftStore,
+    SessionSettings {}

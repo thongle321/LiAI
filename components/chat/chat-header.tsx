@@ -6,10 +6,10 @@
  */
 
 import { Pressable, Text, View } from "react-native";
-import { Menu, SquarePen } from "lucide-react-native";
+import { Menu, SquarePen, Users } from "lucide-react-native";
 import Animated from "react-native-reanimated";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { APP_NAME } from "@/constants/app.ts";
 import { usePressFeedback } from "@/utils/motion.ts";
 import { ChatMenu } from "./chat-menu.tsx";
@@ -22,6 +22,7 @@ export function ChatHeader({
   onNewConversation,
   onOpenGeneration,
   onOpenSearch,
+  onOpenCompanions,
 }: {
   title: string | null;
   modelLabel: string | null;
@@ -30,7 +31,9 @@ export function ChatHeader({
   onNewConversation: () => void;
   onOpenGeneration: () => void;
   onOpenSearch: () => void;
+  onOpenCompanions: () => void;
 }) {
+  const colors = useColors();
   const menuPress = usePressFeedback();
   const penPress = usePressFeedback();
 
@@ -90,6 +93,15 @@ export function ChatHeader({
             <SquarePen size={20} color={colors.primaryText} />
           </Pressable>
         </Animated.View>
+        <Pressable
+          onPress={onOpenCompanions}
+          className="icon-btn"
+          hitSlop={4}
+          accessibilityRole="button"
+          accessibilityLabel="Companions"
+        >
+          <Users size={20} color={colors.primaryText} />
+        </Pressable>
         <ChatMenu
           onOpenGeneration={onOpenGeneration}
           onOpenSearch={onOpenSearch}

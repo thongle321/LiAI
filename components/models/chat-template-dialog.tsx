@@ -16,13 +16,13 @@
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import { Sheet } from "../sheet.tsx";
-import { PickerMenu } from "../picker-menu.tsx";
+import { PickerMenu } from "../picker-menu";
 import {
   CHAT_TEMPLATE_NAMES,
   getChatTemplate,
   type ChatTemplatePreset,
 } from "@/utils/chat-templates.ts";
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 
 export function ChatTemplateDialog({
   visible,
@@ -37,6 +37,7 @@ export function ChatTemplateDialog({
   /** Write the edited config back into the parent's temp state. */
   onChange: (next: ChatTemplatePreset) => void;
 }) {
+  const colors = useColors();
   return (
     <Sheet
       visible={visible}

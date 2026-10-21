@@ -27,8 +27,10 @@ function newStoreRaw(): { store: TinyBaseSessionStore; tiny: ReturnType<typeof c
 it("keeps a boolean sampler override (include-thinking-in-context)", async () => {
 const store = newStore();
 const id = await store.create();
-await store.setSessionSampler(id, { includeThinkingInContext: false });
-expect(await store.getSessionSampler(id)).toEqual({
+await store.setSessionOverride(id, {
+  sampler: { includeThinkingInContext: false },
+});
+expect((await store.getSessionOverride(id))?.sampler).toEqual({
 includeThinkingInContext: false,
 });
 });
@@ -503,60 +505,77 @@ describe("drafts", () => {
   });
 });
 
-describe("session sampler", () => {
+describe("session override", () => {
   it("has no override until one is set", async () => {
     const store = newStore();
     const id = await store.create();
-    expect(await store.getSessionSampler(id)).toEqual(null);
+    expect(await store.getSessionOverride(id)).toEqual(null);
   });
 
   it("stores only the fields a session overrides", async () => {
     // Partial on purpose: a field the session never touched must keep
-    // following the global preset, so a new global default still lands.
+    // following the resolved base, so a new global default still lands.
     const store = newStore();
     const id = await store.create();
-    await store.setSessionSampler(id, { temperature: 0.2 });
-    expect(await store.getSessionSampler(id)).toEqual({ temperature: 0.2 });
+    await store.setSessionOverride(id, { sampler: { temperature: 0.2 } });
+    expect(await store.getSessionOverride(id)).toEqual({
+      sampler: { temperature: 0.2 },
+    });
+  });
+
+  it("stores thinking and effort alongside the sampler", async () => {
+    const store = newStore();
+    const id = await store.create();
+    await store.setSessionOverride(id, {
+      sampler: { temperature: 0.2 },
+      thinking: false,
+      effort: "high",
+    });
+    expect(await store.getSessionOverride(id)).toEqual({
+      sampler: { temperature: 0.2 },
+      thinking: false,
+      effort: "high",
+    });
   });
 
   it("keeps each session's override its own", async () => {
     const store = newStore();
     const a = await store.create();
     const b = await store.create();
-    await store.setSessionSampler(a, { temperature: 0.2 });
-    expect(await store.getSessionSampler(b)).toEqual(null);
-    await store.setSessionSampler(b, { topP: 0.5, temperature: 0.9 });
-    expect(await store.getSessionSampler(a)).toEqual({ temperature: 0.2 });
+    await store.setSessionOverride(a, { sampler: { temperature: 0.2 } });
+    expect(await store.getSessionOverride(b)).toEqual(null);
+    await store.setSessionOverride(b, { sampler: { topP: 0.5, temperature: 0.9 } });
+    expect((await store.getSessionOverride(a))?.sampler).toEqual({ temperature: 0.2 });
   });
 
-  it("restores the global preset when cleared with null", async () => {
+  it("restores the resolved base when cleared with null", async () => {
     const store = newStore();
     const id = await store.create();
-    await store.setSessionSampler(id, { temperature: 0.2 });
-    await store.setSessionSampler(id, null);
-    expect(await store.getSessionSampler(id)).toEqual(null);
+    await store.setSessionOverride(id, { sampler: { temperature: 0.2 } });
+    await store.setSessionOverride(id, null);
+    expect(await store.getSessionOverride(id)).toEqual(null);
   });
 
   it("treats an empty override as no override", async () => {
     const store = newStore();
     const id = await store.create();
-    await store.setSessionSampler(id, {});
-    expect(await store.getSessionSampler(id)).toEqual(null);
+    await store.setSessionOverride(id, {});
+    expect(await store.getSessionOverride(id)).toEqual(null);
   });
 
   it("drops the override when the session is deleted", async () => {
     const store = newStore();
     const id = await store.create();
-    await store.setSessionSampler(id, { temperature: 0.2 });
+    await store.setSessionOverride(id, { sampler: { temperature: 0.2 } });
     await store.deleteSession(id);
-    expect(await store.getSessionSampler(id)).toEqual(null);
+    expect(await store.getSessionOverride(id)).toEqual(null);
   });
 
   it("returns no override for a corrupt one rather than throwing", async () => {
     const { store, tiny } = newStoreRaw();
     const id = await store.create();
     tiny.setRow("sessionSampler", id, { values: "not json" });
-    expect(await store.getSessionSampler(id)).toEqual(null);
+    expect(await store.getSessionOverride(id)).toEqual(null);
   });
 
   it("ignores a stored field that is not a finite number", async () => {
@@ -565,7 +584,61 @@ describe("session sampler", () => {
     tiny.setRow("sessionSampler", id, {
       values: JSON.stringify({ temperature: "hot", topP: 0.5 }),
     });
-    expect(await store.getSessionSampler(id)).toEqual({ topP: 0.5 });
+    expect((await store.getSessionOverride(id))?.sampler).toEqual({ topP: 0.5 });
+  });
+
+  it("reads a legacy bare-sampler cell as the sampler layer", async () => {
+    // Rows written before the override widened to thinking/effort hold
+    // the sampler keys at the TOP level; that shape must keep working.
+    const { store, tiny } = newStoreRaw();
+    const id = await store.create();
+    tiny.setRow("sessionSampler", id, {
+      values: JSON.stringify({ temperature: 0.4 }),
+    });
+    expect(await store.getSessionOverride(id)).toEqual({
+      sampler: { temperature: 0.4 },
+    });
+  });
+});
+
+describe("session companion and settings source", () => {
+  it("has no companion and no source until one is set", async () => {
+    const store = newStore();
+    const id = await store.create();
+    expect(await store.getSessionCompanion(id)).toEqual(null);
+    expect(await store.getSessionSettingsSource(id)).toEqual(null);
+  });
+
+  it("binds a companion and reads it back", async () => {
+    const store = newStore();
+    const id = await store.create();
+    expect(await store.setSessionCompanion(id, "companion-1")).toEqual(true);
+    expect(await store.getSessionCompanion(id)).toEqual("companion-1");
+  });
+
+  it("flips the settings source", async () => {
+    const store = newStore();
+    const id = await store.create();
+    await store.setSessionCompanion(id, "companion-1");
+    expect(await store.setSessionSettingsSource(id, "custom")).toEqual(true);
+    expect(await store.getSessionSettingsSource(id)).toEqual("custom");
+  });
+
+  it("unbinding the companion resets the source", async () => {
+    const store = newStore();
+    const id = await store.create();
+    await store.setSessionCompanion(id, "companion-1");
+    await store.setSessionSettingsSource(id, "custom");
+    await store.setSessionCompanion(id, null);
+    expect(await store.getSessionCompanion(id)).toEqual(null);
+    // A source with no companion is meaningless — back to the default.
+    expect(await store.getSessionSettingsSource(id)).toEqual(null);
+  });
+
+  it("refuses writes for a session that does not exist", async () => {
+    const store = newStore();
+    expect(await store.setSessionCompanion("missing", "companion-1")).toEqual(false);
+    expect(await store.setSessionSettingsSource("missing", "custom")).toEqual(false);
   });
 });
 
@@ -625,24 +698,34 @@ describe("duplicating a session", () => {
     }
   });
 
-  it("carries the session's sampler override", async () => {
+  it("carries the session's settings override", async () => {
     // The override is per conversation, so a fork that dropped it would
-    // silently revert to the preset — only noticed after trusting the fork.
+    // silently revert to the base — only noticed after trusting the fork.
     const { store, id } = await seeded();
-    await store.setSessionSampler(id, { temperature: 0.2, topP: 0.5 });
+    await store.setSessionOverride(id, { sampler: { temperature: 0.2, topP: 0.5 } });
     const copyId = await store.duplicateSession(id);
     expect(copyId).toBeTruthy();
-    expect(await store.getSessionSampler(copyId as string)).toEqual({
+    expect((await store.getSessionOverride(copyId as string))?.sampler).toEqual({
       temperature: 0.2,
       topP: 0.5,
     });
+  });
+
+  it("carries the session's companion and settings source", async () => {
+    const { store, id } = await seeded();
+    await store.setSessionCompanion(id, "companion-1");
+    await store.setSessionSettingsSource(id, "custom");
+    const copyId = await store.duplicateSession(id);
+    expect(copyId).toBeTruthy();
+    expect(await store.getSessionCompanion(copyId as string)).toEqual("companion-1");
+    expect(await store.getSessionSettingsSource(copyId as string)).toEqual("custom");
   });
 
   it("leaves no override on the copy when the source had none", async () => {
     const { store, id } = await seeded();
     const copyId = await store.duplicateSession(id);
     expect(copyId).toBeTruthy();
-    expect(await store.getSessionSampler(copyId as string)).toEqual(null);
+    expect(await store.getSessionOverride(copyId as string)).toEqual(null);
   });
 
   it("titles the copy and makes it the active conversation", async () => {

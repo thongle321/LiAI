@@ -16,7 +16,7 @@ import {
   Mic,
   type LucideIcon,
 } from "lucide-react-native";
-import { colors } from "../themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 
 export type ChatTab = "chat" | "voice" | "vision";
 
@@ -59,6 +59,7 @@ export function BottomNav({
   active: ChatTab;
   onSelect: (tab: ChatTab) => void;
 }) {
+  const colors = useColors();
   return (
       <View className="flex-row border-t border-border bg-surface-1 px-2 pt-2 pb-1">
       {TABS.map((t) => {

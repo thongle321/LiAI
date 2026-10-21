@@ -1,6 +1,6 @@
 /** Per-model settings defaults + safe parsing (persisted as JSON). */
 
-import type { ModelSettings } from "../types/models";
+import type { ModelSettings } from "@/types/models";
 
 export const DEFAULT_MODEL_SETTINGS: ModelSettings = {
   displayName: "",

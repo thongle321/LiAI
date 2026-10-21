@@ -20,13 +20,13 @@ import { KeyboardControllerNative } from "react-native-keyboard-controller";
 
 import * as Haptics from "expo-haptics";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { useChatStore } from "@/store/chat.ts";
 import { useInference } from "@/store/inference.ts";
 import { suspendBackgroundRelease } from "@/services/inference/offload.ts";
 import { useModelReady } from "@/hooks/useModelReady.ts";
 import { useMultimodalAvailable } from "@/hooks/useMultimodalAvailable.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import { resolveThinking } from "@/services/inference/thinking.ts";
 import {
   MAX_IMAGES,
@@ -65,6 +65,7 @@ export function MessageInput({
   /** Leave edit mode, restoring the composer to the turn's own text. */
   onCancelEdit?: () => void;
 }) {
+  const colors = useColors();
   // This box is the bottom-anchored surface, so it carries the keyboard lift
   // itself rather than being wrapped in something that does. Same mechanism
   // the library applies internally (`translateY: height.value + offset` in
@@ -488,6 +489,7 @@ function PlusItem({
   label: string;
   onPress: () => void;
 }) {
+  const colors = useColors();
   return (
     <Pressable
       onPress={onPress}

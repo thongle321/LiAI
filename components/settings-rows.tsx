@@ -2,8 +2,8 @@
  *
  * Toggles are real native switches (SwiftUI on iOS, Compose on Android) via
  * @expo/ui — the platform owns the control, the app owns the label. The
- * root Host in app/_layout.tsx seeds them with Signal Blue and forces the
- * light scheme, so they land in the app's world rather than the platform's.
+ * root Host in app/_layout.tsx seeds them with Signal Blue and the app's
+ * own scheme, so they land in the app's world rather than the platform's.
  *
  * The card is the .rows BEM block in global.css (Clean White, 1px Hairline,
  * dividers edge to edge, 48dp floor); SettingsSection owns the rhythm
@@ -31,7 +31,7 @@ import { Host, Switch } from "@expo/ui";
 import Slider from "@expo/ui/community/slider";
 import { ChevronDown, ChevronRight, Minus, Plus } from "lucide-react-native";
 
-import { colors } from "../themes/tokens.ts";
+import { useColors, useColorScheme } from "@/themes/tokens.ts";
 import { PickerMenu } from "./picker-menu";
 
 /** Type rungs a zone renders at (font-size mirror,
@@ -109,6 +109,8 @@ export function ToggleRow({
   on: boolean;
   onPress: () => void;
 }) {
+  const scheme = useColorScheme();
+  const colors = useColors();
   return (
     <View
       className="flex-row items-center justify-between py-2"
@@ -123,9 +125,9 @@ export function ToggleRow({
       {/* Seeded HERE, not inherited: each @expo/ui Host builds its own native
           theme, and a Host without seedColor falls back to the device's
           Material You wallpaper — which is exactly what turned every switch
-          teal. colorScheme="light" keeps the light lock when the device is
-          dark (DESIGN.md, Native Palette Rule). */}
-      <Host matchContents ignoreSafeArea="keyboard" colorScheme="light" seedColor={colors.primary}>
+          teal. The scheme follows the app's own (light/dark), not the raw
+          device wallpaper palette. */}
+      <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
         <Switch value={on} onValueChange={onPress} testID={`toggle-${label}`} />
       </Host>
     </View>
@@ -182,6 +184,7 @@ export function StepperRow({
   minusDisabled?: boolean;
   plusDisabled?: boolean;
 }) {
+  const colors = useColors();
   return (
     <View className="flex-row items-center justify-between py-2">
       <RowLabel label={label} description={description} />
@@ -241,6 +244,7 @@ export function SliderRow({
   // numeric input]. The input mirrors the slider live while dragging and
   // commits on blur/submit; slider commits debounce 300ms like theirs.
   const size = useContext(RowSize);
+  const colors = useColors();
   const [text, setText] = useState(display);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const committed = useRef(value);
@@ -404,6 +408,7 @@ export function TextFieldRow({
   error?: string;
   onCommit: (value: number) => void;
 }) {
+  const colors = useColors();
   const [draft, setDraft] = useState(`${value}`);
   const [invalid, setInvalid] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -531,6 +536,7 @@ export function AdvancedGroup({
   description?: string;
   children: ReactNode;
 }) {
+  const colors = useColors();
   const [open, setOpen] = useState(false);
   return (
     <View>

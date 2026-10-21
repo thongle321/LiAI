@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Architecture review for LiAI mobile</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+</script>
+<style>
+  .seam { stroke-dasharray: 4 4; }
+  .leak { stroke: #dc2626; }
+  .deep { background: linear-gradient(135deg, #0f172a, #1e293b); color: #f8fafc; }
+  .shallow { background: #fef2f2; }
+  .mass { display: flex; flex-direction: column; }
+  .mass .iface { background: #fecaca; }
+  .mass .impl { background: #e2e8f0; }
+  .mass .iface-deep { background: #bbf7d0; height: 28px; }
+  .mass .impl-deep { background: #e2e8f0; }
+</style>
+</head>
+<body class="bg-stone-50 text-slate-900 font-sans">
+<main class="max-w-5xl mx-auto px-6 py-12 space-y-12">
+
+<header class="space-y-4">
+  <h1 class="text-3xl font-serif font-bold tracking-tight">Architecture review</h1>
+  <p class="text-sm text-slate-500">LiAI mobile &middot; 2026-10-19 &middot; 12 deepening candidates</p>
+  <div class="flex flex-wrap gap-3 text-xs">
+    <span class="px-2 py-1 rounded bg-emerald-100 text-emerald-800">Strong</span>
+    <span class="px-2 py-1 rounded bg-amber-100 text-amber-800">Worth exploring</span>
+    <span class="px-2 py-1 rounded bg-slate-200 text-slate-700">Speculative</span>
+    <span class="text-slate-400">&middot; solid box = module &middot; dashed = seam &middot; red = leakage &middot; thick dark = deep module</span>
+  </div>
+</header>
+
+<section id="candidates" class="space-y-10">
+
+<article class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-serif font-bold">Collapse the SessionStore port</h2>
+    <div class="flex gap-2">
+      <span class="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">Strong</span>
+      <span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs">ports &amp; adapters</span>
+    </div>
+  </div>
+  <p class="font-mono text-xs text-slate-500">services/chat/session-store.ts &middot; services/chat/tinybase-store.ts &middot; services/chat/__tests__/tinybase-store.test.ts</p>
+  <div class="grid grid-cols-2 gap-4">
+    <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+      <p class="text-xs uppercase tracking-wider text-slate-400">Before &middot; shallow</p>
+      <div class="mass space-y-1">
+        <div class="iface rounded border border-red-300 p-2 text-xs text-center" style="height:120px">Port interface<br/>~30 methods</div>
+        <div class="impl rounded border border-slate-300 p-2 text-xs text-center" style="height:130px">TinyBaseSessionStore<br/>1:1 cell mapping</div>
+      </div>
+      <p class="text-xs text-slate-500">interface nearly as tall as implementation</p>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+      <p class="text-xs uppercase tracking-wider text-slate-400">After &middot; deep</p>
+      <div class="mass space-y-1">
+        <div class="iface-deep rounded border-2 border-slate-900 p-2 text-xs text-center flex items-center justify-center">4 small ports<br/>(Catalog &middot; Turns &middot; Drafts &middot; Settings)</div>
+        <div class="impl-deep rounded border border-slate-300 p-2 text-xs text-center" style="height:130px">TinyBaseSessionStore<br/>(sole impl)</div>
+      </div>
+      <p class="text-xs text-slate-500">small interface, tall implementation</p>
+    </div>
+  </div>
+  <p><span class="font-semibold">Problem:</span> one port declares ~30 methods; the implementation is a 1:1 mapping over TinyBase cells, so the seam buys nothing.</p>
+  <p><span class="font-semibold">Solution:</span> replace the wide port with four focused ports (or a handful of higher-level conversation operations) and keep TinyBase as the sole adapter.</p>
+  <ul class="list-disc pl-5 text-sm space-y-1">
+    <li>locality: persistence bugs concentrate in one module</li>
+    <li>leverage: tests implement 4 ports, not 30 methods</li>
+    <li>interface shrinks; implementation absorbs the cell mapping</li>
+  </ul>
+</article>
+
+<article class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-serif font-bold">Consolidate turn-input resolvers</h2>
+    <div class="flex gap-2">
+      <span class="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">Strong</span>
+      <span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs">in-process</span>
+    </div>
+  </div>
+  <p class="font-mono text-xs text-slate-500">store/chat/index.ts (default* resolvers) &middot; services/chat/turn.ts &middot; store/chat/send.ts</p>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <pre class="mermaid">
+flowchart TB
+  subgraph before["Before: 15 thin resolvers"]
+    R1[defaultSystemPrompt] --> T[turn]
+    R2[defaultSampler] --> T
+    R3[defaultThinking] --> T
+    R4[defaultEffort] --> T
+    R5[defaultStopWords] --> T
+    R6[defaultChatTemplate] --> T
+    R7[defaultAddGenerationPrompt] --> T
+    R8[defaultTalentNames] --> T
+    R9[defaultJinja] --> T
+    R10[defaultEngineSource] --> T
+    R11[defaultSearchAuth] --> T
+    R12[defaultGetStore] --> T
+  end
+  subgraph after["After: one deep module"]
+    C[resolveTurnInputs(sessionId)] --> T2[turn]
+  end
+    </pre>
+  </div>
+  <p><span class="font-semibold">Problem:</span> ~15 async resolvers, each a thin pass-through with its own try/catch, so no single place owns "what a turn sees".</p>
+  <p><span class="font-semibold">Solution:</span> one <code>resolveTurnInputs(sessionId)</code> gathering all inputs in one pass with one error boundary, returning a typed object.</p>
+  <ul class="list-disc pl-5 text-sm space-y-1">
+    <li>locality: turn context lives in one module</li>
+    <li>leverage: one seam to test instead of fifteen</li>
+    <li>interface shrinks to one function call</li>
+  </ul>
+</article>
+
+<article class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-serif font-bold">Stop store slices leaking into the UI</h2>
+    <div class="flex gap-2">
+      <span class="px-2 py-1 rounded bg-amber-100 text-amber-800 text-xs font-medium">Worth exploring</span>
+      <span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs">in-process</span>
+    </div>
+  </div>
+  <p class="font-mono text-xs text-slate-500">store/chat/send.ts:32 (multimodalAvailable) &middot; store/chat/index.ts:81 (defaultGetStore) &middot; services/inference/mmproj.ts &middot; services/chat/tinybase.ts</p>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <pre class="mermaid">
+flowchart LR
+  subgraph before["Before"]
+    UI1[vision screen] -->|imports| S1[store/chat/send.ts]
+    UI2[gen settings sheet] -->|imports| S2[store/chat/index.ts]
+    S1 --> M[mmproj.ts]
+    S2 --> T[tinybase.ts]
+  end
+  subgraph after["After"]
+    UI3[vision screen] --> M2[mmproj.ts]
+    UI4[gen settings sheet] --> T2[tinybase.ts]
+    Store[store] -->|state only| UI5[screens]
+  end
+    </pre>
+  </div>
+  <p><span class="font-semibold">Problem:</span> screens import store internals (an async gate and a storage accessor) that add no logic beyond their service counterparts.</p>
+  <p><span class="font-semibold">Solution:</span> move <code>multimodalAvailable</code> into <code>mmproj.ts</code> and the store accessor into <code>tinybase.ts</code>; store/UI boundary becomes state-only.</p>
+  <ul class="list-disc pl-5 text-sm space-y-1">
+    <li>locality: gate has one owner</li>
+    <li>leverage: screens test against services</li>
+    <li>interface shrinks to state reads</li>
+  </ul>
+</article>
+
+<article class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-serif font-bold">Split the voice store's orchestration</h2>
+    <div class="flex gap-2">
+      <span class="px-2 py-1 rounded bg-amber-100 text-amber-800 text-xs font-medium">Worth exploring</span>
+      <span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs">in-process</span>
+    </div>
+  </div>
+  <p class="font-mono text-xs text-slate-500">store/voice.ts (441 lines) &middot; services/tts/download.ts &middot; services/tts/runtime.ts &middot; services/tts/engineRegistry.ts</p>
+  <div class="grid grid-cols-2 gap-4">
+    <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+      <p class="text-xs uppercase tracking-wider text-slate-400">Before &middot; shallow</p>
+      <div class="mass space-y-1">
+        <div class="iface rounded border border-red-300 p-2 text-xs text-center" style="height:150px">VoiceState<br/>~40 members<br/>(state + play + download + reconcile)</div>
+        <div class="impl rounded border border-slate-300 p-2 text-xs text-center" style="height:160px">store body<br/>near 1:1 transcription</div>
+      </div>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+      <p class="text-xs uppercase tracking-wider text-slate-400">After &middot; deep</p>
+      <div class="mass space-y-1">
+        <div class="iface-deep rounded border-2 border-slate-900 p-2 text-xs text-center flex items-center justify-center">VoiceState<br/>persisted state + reconcile</div>
+        <div class="impl-deep rounded border border-slate-300 p-2 text-xs text-center" style="height:160px">VoiceEngineService<br/>VoiceDownloadController<br/>(state + orchestration split)</div>
+      </div>
+    </div>
+  </div>
+  <p><span class="font-semibold">Problem:</span> the store owns hydration, download orchestration, play/stop, and reconcile; <code>play()</code> reaches into the native graph directly, so a unit test must fake all of it.</p>
+  <p><span class="font-semibold">Solution:</span> extract a <code>VoiceEngineService</code> (play/stop/isInstalled) and a <code>VoiceDownloadController</code>; the store becomes persisted state + reconcile.</p>
+  <ul class="list-disc pl-5 text-sm space-y-1">
+    <li>locality: play/stop logic in one testable module</li>
+    <li>leverage: store tests shrink to state + persistence</li>
+    <li>interface shrinks; orchestration absorbed</li>
+  </ul>
+</article>
+
+<article class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-serif font-bold">Replace global download callbacks with per-job subscribers</h2>
+    <div class="flex gap-2">
+      <span class="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">Strong</span>
+      <span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs">local-substitutable</span>
+    </div>
+  </div>
+  <p class="font-mono text-xs text-slate-500">store/models/downloads.ts (setProgressCallback/setCompleteCallback) &middot; services/downloads/download-service.ts (756 lines) &middot; services/downloads/android-download-service.ts</p>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <pre class="mermaid">
+sequenceDiagram
+  participant A as Download A
+  participant S as store (global callback)
+  participant B as Download B
+  A->>S: register progress cb
+  B->>S: register progress cb (overwrites)
+  A-->>S: progress (dropped / mis-attributed)
+  B-->>S: progress
+  Note over S: last-writer-wins bug
+    </pre>
+  </div>
+  <p><span class="font-semibold">Problem:</span> progress/completion are delivered through module-global callbacks; a second download re-registers and the first's updates are dropped or mis-attributed.</p>
+  <p><span class="font-semibold">Solution:</span> move per-job callback wiring into <code>download-service.ts</code> (per-job subscribers keyed by job id); the store only applies <code>DownloadJob</code> updates to model rows.</p>
+  <ul class="list-disc pl-5 text-sm space-y-1">
+    <li>locality: job lifecycle in one module</li>
+    <li>leverage: tests drive one job without cross-talk</li>
+    <li>interface shrinks to apply(update)</li>
+  </ul>
+</article>
+
+<article class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-serif font-bold">Split the HuggingFace grab-bag</h2>
+    <div class="flex gap-2">
+      <span class="px-2 py-1 rounded bg-amber-100 text-amber-800 text-xs font-medium">Worth exploring</span>
+      <span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs">in-process</span>
+    </div>
+  </div>
+  <p class="font-mono text-xs text-slate-500">services/models/huggingface.ts (740 lines) &middot; constants/presets.ts (new) &middot; services/models/hf-search.ts (new) &middot; services/models/spec-builders.ts (new)</p>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <pre class="mermaid">
+flowchart LR
+  subgraph before["Before: one module, ~15 exports"]
+    HF[huggingface.ts<br/>presets + HTTP + spec builders]
+  end
+  subgraph after["After: three modules"]
+    P[constants/presets.ts<br/>data only]
+    S[services/models/hf-search.ts<br/>Hub fetch + retry]
+    B[services/models/spec-builders.ts<br/>buildHfModelSpec etc.]
+  end
+    </pre>
+  </div>
+  <p><span class="font-semibold">Problem:</span> preset data (~300 lines), Hub HTTP/retry, and spec construction share one module, so consumers and tests drag in everything.</p>
+  <p><span class="font-semibold">Solution:</span> split into data-only presets, a search module, and spec builders; keep a barrel only if needed.</p>
+  <ul class="list-disc pl-5 text-sm space-y-1">
+    <li>locality: retry tests target search alone</li>
+    <li>leverage: preset tests run without network mocks</li>
+    <li>interface: each module exports a handful</li>
+  </ul>
+</article>
+
+<article class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-serif font-bold">Extract the engine-card controller</h2>
+    <div class="flex gap-2">
+      <span class="px-2 py-1 rounded bg-amber-100 text-amber-800 text-xs font-medium">Worth exploring</span>
+      <span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs">in-process</span>
+    </div>
+  </div>
+  <p class="font-mono text-xs text-slate-500">components/voice/engine-card.tsx (420 lines) &middot; services/tts/voiceUi.ts (pure rules, tested)</p>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <pre class="mermaid">
+flowchart TB
+  subgraph before["Before"]
+    C[EngineCard component<br/>preview lifecycle, errorNote,<br/>remove confirm, disk preflight]
+    P[voiceUi pure rules<br/>(tested)]
+    C --> P
+  end
+  subgraph after["After"]
+    H[useEngineCardController(engineId)<br/>state machine (testable)]
+    V[EngineCard view<br/>(pure render)]
+    H --> V
+    H --> P2[voiceUi pure rules]
+  end
+    </pre>
+  </div>
+  <p><span class="font-semibold">Problem:</span> pure rules are tested, but the card's controller logic (preview lifecycle, error-note tracking, remove confirmation) lives in the component and is untested; real bugs hide at the call site.</p>
+  <p><span class="font-semibold">Solution:</span> extract <code>useEngineCardController(engineId)</code> owning previewingId/errorNote/expanded and the track/onTap/onRemove flows; component becomes pure view.</p>
+  <ul class="list-disc pl-5 text-sm space-y-1">
+    <li>locality: controller transitions in one module</li>
+    <li>leverage: tested without rendering</li>
+    <li>interface shrinks to render-ready state</li>
+  </ul>
+</article>
+
+<article class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-serif font-bold">Group the TurnDeps interface</h2>
+    <div class="flex gap-2">
+      <span class="px-2 py-1 rounded bg-amber-100 text-amber-800 text-xs font-medium">Worth exploring</span>
+      <span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs">in-process</span>
+    </div>
+  </div>
+  <p class="font-mono text-xs text-slate-500">services/chat/turn.ts (TurnDeps, 61-104) &middot; store/chat/index.ts (defaultRunTurn)</p>
+  <div class="grid grid-cols-2 gap-4">
+    <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+      <p class="text-xs uppercase tracking-wider text-slate-400">Before &middot; shallow</p>
+      <div class="mass space-y-1">
+        <div class="iface rounded border border-red-300 p-2 text-xs text-center" style="height:130px">TurnDeps<br/>~25 optional methods<br/>(flat list)</div>
+        <div class="impl rounded border border-slate-300 p-2 text-xs text-center" style="height:140px">createTurnRunner<br/>~357 lines</div>
+      </div>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+      <p class="text-xs uppercase tracking-wider text-slate-400">After &middot; deep</p>
+      <div class="mass space-y-1">
+        <div class="iface-deep rounded border-2 border-slate-900 p-2 text-xs text-center flex items-center justify-center">TurnDeps<br/>4 groups:<br/>Engine &middot; Store &middot; Prompt &middot; Media</div>
+        <div class="impl-deep rounded border border-slate-300 p-2 text-xs text-center" style="height:140px">createTurnRunner</div>
+      </div>
+    </div>
+  </div>
+  <p><span class="font-semibold">Problem:</span> <code>TurnDeps</code> lists ~25 optional methods; building a fake requires knowing all of them, so the interface is nearly as complex as the runner.</p>
+  <p><span class="font-semibold">Solution:</span> group into <code>EngineDeps</code>, <code>StoreDeps</code>, <code>PromptDeps</code>, <code>MediaDeps</code>; <code>createTurnRunner</code> takes one grouped object.</p>
+  <ul class="list-disc pl-5 text-sm space-y-1">
+    <li>leverage: fakes implement 4 groups, not 25 methods</li>
+    <li>locality: each group owns one concern</li>
+    <li>interface shrinks; runner unchanged</li>
+  </ul>
+</article>
+
+<article class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-serif font-bold">Split the TTS oneshot and download state machines</h2>
+    <div class="flex gap-2">
+      <span class="px-2 py-1 rounded bg-slate-200 text-slate-700 text-xs font-medium">Speculative</span>
+      <span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs">in-process</span>
+    </div>
+  </div>
+  <p class="font-mono text-xs text-slate-500">services/tts/oneshot.ts (speakOnce, 233 lines) &middot; services/tts/download.ts (createTtsDownloadBridge, 271 lines)</p>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <pre class="mermaid">
+flowchart TB
+  subgraph before["Before: one promise, interleaved"]
+    O[speakOnce] --> E[engine creation]
+    O --> P[PCM player]
+    O --> G[generation stream]
+    O --> A[abort handling]
+    O --> C[cleanup]
+  end
+  subgraph after["After: split stages"]
+    O2[speakOnce] --> E2[createEngine]
+    O2 --> P2[startPlayer]
+    O2 --> G2[runGeneration]
+    O2 --> T[teardown]
+  end
+    </pre>
+  </div>
+  <p><span class="font-semibold">Problem:</span> <code>speakOnce</code> interleaves engine creation, PCM player, generation, abort, and cleanup in one promise; the download bridge keeps 4 closure fields with 8 methods. Abort/pause/resume paths are unverified.</p>
+  <p><span class="font-semibold">Solution:</span> split <code>speakOnce</code> into <code>createEngine</code>/<code>startPlayer</code>/<code>runGeneration</code>/<code>teardown</code>; extract the bridge's state into a <code>DownloadController</code> with explicit transitions.</p>
+  <ul class="list-disc pl-5 text-sm space-y-1">
+    <li>locality: abort/cancel paths in one module</li>
+    <li>leverage: stages testable independently</li>
+    <li>interface: one function becomes four</li>
+  </ul>
+</article>
+
+<article class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-serif font-bold">Make the download driver an explicit seam</h2>
+    <div class="flex gap-2">
+      <span class="px-2 py-1 rounded bg-amber-100 text-amber-800 text-xs font-medium">Worth exploring</span>
+      <span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs">ports &amp; adapters</span>
+    </div>
+  </div>
+  <p class="font-mono text-xs text-slate-500">services/downloads/download-service.ts (756 lines) &middot; services/downloads/android-download-service.ts (318 lines) &middot; store/models/downloads.ts (565 lines)</p>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <pre class="mermaid">
+flowchart LR
+  subgraph before["Before: implicit native seam"]
+    S[store/models/downloads] --> D[download-service.ts]
+    D --> N[WorkManager / disk / space]
+  end
+  subgraph after["After: explicit adapter"]
+    S2[store] --> D2[download-service.ts]
+    D2 --> I[DownloadDriver interface]
+    I --> N2[NativeDownloadAdapter]
+    I --> F[FakeDownloadAdapter (tests)]
+  end
+    </pre>
+  </div>
+  <p><span class="font-semibold">Problem:</span> pure progress math was extracted and tested, but the job lifecycle, WorkManager bridging, and store wiring are only exercised on device; the native seam is implicit.</p>
+  <p><span class="font-semibold">Solution:</span> make the native adapter an explicit <code>DownloadDriver</code> interface injected into the store and service, with a JS fake for tests; add contract tests for resume/cancel/complete.</p>
+  <ul class="list-disc pl-5 text-sm space-y-1">
+    <li>locality: JS seam no longer untested</li>
+    <li>leverage: one fake drives all transition tests</li>
+    <li>interface: driver is the seam, not the store</li>
+  </ul>
+  <div class="rounded border border-amber-200 bg-amber-50 p-3 text-xs">
+    Contradicts the "Kotlin is unreachable from npm test" note in AGENTS.md only insofar as the JS seam becomes testable; Kotlin still needs device runs.
+  </div>
+</article>
+
+<article class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-serif font-bold">Thin out the chat route</h2>
+    <div class="flex gap-2">
+      <span class="px-2 py-1 rounded bg-slate-200 text-slate-700 text-xs font-medium">Speculative</span>
+      <span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs">in-process</span>
+    </div>
+  </div>
+  <p class="font-mono text-xs text-slate-500">app/(drawer)/(tabs)/chat.tsx &middot; hooks/useChatBanner.ts &middot; components/chat/context-full-banner.tsx</p>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <pre class="mermaid">
+flowchart TB
+  subgraph before["Before: route owns orchestration"]
+    R[chat.tsx route] --> S[state collection]
+    R --> L[session loading]
+    R --> H[health checks]
+    R --> J[JSX]
+  end
+  subgraph after["After: pure composition"]
+    R2[chat.tsx route] --> H1[useChatSessionLoader]
+    R2 --> H2[useChatHealth]
+    R2 --> H3[useChatBanner]
+    R2 --> V[view]
+  end
+    </pre>
+  </div>
+  <p><span class="font-semibold">Problem:</span> the route still owns state collection, session loading, and health checks; the banner view-model was extracted but the route remains the integration point where hydration-ordering bugs land.</p>
+  <p><span class="font-semibold">Solution:</span> extract remaining concerns into <code>useChatSessionLoader</code> and <code>useChatHealth</code> so the route is pure composition; move hydration gating to root layout.</p>
+  <ul class="list-disc pl-5 text-sm space-y-1">
+    <li>locality: hydration ordering in one hook</li>
+    <li>leverage: hooks testable in isolation</li>
+    <li>interface: route becomes declarative shell</li>
+  </ul>
+</article>
+
+<article class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-serif font-bold">Colocate pure functions with their callers</h2>
+    <div class="flex gap-2">
+      <span class="px-2 py-1 rounded bg-amber-100 text-amber-800 text-xs font-medium">Worth exploring</span>
+      <span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs">in-process</span>
+    </div>
+  </div>
+  <p class="font-mono text-xs text-slate-500">store/voice.ts:171 (reconcileVoice) &middot; services/models/card-actions.ts:35 (cardActions) &middot; services/tts/voiceUi.ts:117 (voiceTap) &middot; services/chat/blocks.ts:26 (blocksOf) &middot; store/chat/send.ts:32 (multimodalAvailable)</p>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <pre class="mermaid">
+flowchart LR
+  subgraph before["Before: tested function, untested caller"]
+    F[pure function<br/>(tested)]
+    C[caller<br/>(untested)]
+    F -.drift.-> C
+  end
+  subgraph after["After: colocated / adapter"]
+    M[module<br/>function + caller together]
+    T[tests hit the real path]
+    M --> T
+  end
+    </pre>
+  </div>
+  <p><span class="font-semibold">Problem:</span> each pure function is tested, but its single caller passes data shaped slightly differently; the function's contract is verified, the call site's is not.</p>
+  <p><span class="font-semibold">Solution:</span> colocate each pure function with its sole caller (same module) or make the caller a one-line delegation, so the function <em>is</em> the implementation; alternatively accept the caller's native data shape.</p>
+  <ul class="list-disc pl-5 text-sm space-y-1">
+    <li>locality: function and caller in one module</li>
+    <li>leverage: tests exercise the real call path</li>
+    <li>interface: drift becomes a compile error</li>
+  </ul>
+</article>
+
+</section>
+
+<section id="top-recommendation" class="rounded-xl border-2 border-slate-900 bg-white p-6 space-y-3">
+  <h2 class="text-xl font-serif font-bold">Top recommendation</h2>
+  <p><a href="#candidates" class="font-semibold underline">Collapse the SessionStore port</a> &mdash; the widest interface in the codebase (~30 methods) sits over a 1:1 TinyBase mapping, so every session change pays a 30-method tax across the port, the impl, and its 949-line test. Deepening it first gives locality to the chat feature (the app's core) and shrinks the fake surface every other candidate depends on.</p>
+</section>
+
+</main>
+</body>
+</html>

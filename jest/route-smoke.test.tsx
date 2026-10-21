@@ -15,11 +15,7 @@ import { Link, useRouter } from "expo-router";
 import { fireEvent, renderRouter } from "expo-router/testing-library";
 
 import { routerMock } from "./router-mock.ts";
-
-/** The inline trees below are not part of the app's generated route union
- *  (expo-router types `href` from `.expo/types`), so their names have to be
- *  cast. Kept in one place so the cast has one explanation. */
-const route = (name: string) => name as never;
+import { route } from "./route-cast.ts";
 
 describe("expo-router testing harness", () => {
   it("renders the initial inline route", async () => {

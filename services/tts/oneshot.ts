@@ -102,6 +102,27 @@ async function assertSpeakerCount(
   }
 }
 
+/** Build the streaming engine for one speak call. Extracted so the engine
+ *  construction (thread count, provider) is independently testable and
+ *  does not live inside the generation promise. */
+async function createEngine(
+  api: SherpaTtsApi,
+  options: SpeakOnceOptions,
+  tuning: EngineTuning,
+  modelType: string,
+): Promise<PcmPlaybackEngine> {
+  return api.createStreamingTTS({
+    modelPath: { type: "file", path: options.modelPath },
+    modelType: modelType as TTSModelType,
+    ...(tuning.numThreads !== undefined
+      ? { numThreads: tuning.numThreads }
+      : options.numThreads !== undefined
+        ? { numThreads: options.numThreads }
+        : {}),
+    ...(tuning.provider !== undefined ? { provider: tuning.provider } : {}),
+  });
+}
+
 /** Generate `text` from a downloaded model and play it through the native
  *  mono PCM player. Rejects on generation errors; the player is always
  *  stopped and the engine destroyed on the way out. */
@@ -113,16 +134,7 @@ export async function speakOnce(
   if (options.signal?.aborted) return;
   const api = await load();
   const modelType = options.modelType ?? "auto";
-  const engine = await api.createStreamingTTS({
-    modelPath: { type: "file", path: options.modelPath },
-    modelType,
-    ...(tuning.numThreads !== undefined
-      ? { numThreads: tuning.numThreads }
-      : options.numThreads !== undefined
-        ? { numThreads: options.numThreads }
-        : {}),
-    ...(tuning.provider !== undefined ? { provider: tuning.provider } : {}),
-  });
+  const engine = await createEngine(api, options, tuning, modelType);
   try {
     await assertSpeakerCount(engine, options.expectedSpeakers, modelType);
     const sampleRate = await engine.getSampleRate();

@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import { Eye, EyeOff } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { cn } from "@/utils/cn.ts";
 import {
   MAX_RESULT_COUNT,
@@ -25,7 +25,7 @@ import {
   SEARCH_PROVIDERS,
   type SearchProviderId,
 } from "@/services/search/search-providers.ts";
-import { useShallow } from "zustand/shallow";
+import { useShallow } from "zustand/react/shallow";
 import { useSearch } from "@/store/search.ts";
 import { Sheet } from "../sheet.tsx";
 import {
@@ -57,6 +57,7 @@ function ProviderKeySheet({
    *  claiming no key is set while one is. */
   onChanged: () => void;
 }) {
+  const colors = useColors();
   const getProviderKey = useSearch((s) => s.getProviderKey);
   const setProviderKey = useSearch((s) => s.setProviderKey);
   const clearProviderKey = useSearch((s) => s.clearProviderKey);

@@ -93,7 +93,7 @@ import { TrueSheet, type TrueSheet as TrueSheetType } from "@lodev09/react-nativ
 import { X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { colors } from "../themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 
 /** An in-flow slot's measured height.
  *
@@ -138,6 +138,7 @@ export function Sheet({
   testID?: string;
   ref?: Ref<TrueSheetType>;
 }) {
+  const colors = useColors();
   // TrueSheet is ref-driven (present/dismiss); this adapter keeps the
   // declarative visible/onClose API so no caller changes. The internal ref
   // merges with the forwarded one: both must drive the same instance.

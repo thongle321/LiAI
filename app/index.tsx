@@ -25,18 +25,29 @@ import { useEffect, useState } from "react";
 import * as SplashScreen from "expo-splash-screen";
 import { Redirect } from "expo-router";
 
-import { isOnboarded } from "../services/onboarding.ts";
-import { useInference } from "../store/inference";
-import { useModelStore } from "../store/modelStore";
-import { useSearch } from "../store/search";
-import { useVoice } from "../store/voice";
+import {
+  createAutoRelease,
+  restoreAutoReleasedModel,
+} from "@/services/inference/auto-release.ts";
+import { useInference } from "@/store/inference";
+import { useModelStore } from "@/store/model-store";
+import { useOnboardingStore } from "@/store/onboarding";
+import { useSearch } from "@/store/search";
+import { useVoice } from "@/store/voice";
 
 export default function IndexGate() {
-  const [onboarded, setOnboarded] = useState<boolean | null>(null);
+  // The first-run gate is SUBSCRIBED, not snapshotted: the root layout
+  // guards the drawer with the same value, and two readers of one flag
+  // can disagree about whether the app is provisioned. `ready` is this
+  // screen's own wait (the other stores); `hydrated` is the store's.
+  const [ready, setReady] = useState(false);
+  const onboarded = useOnboardingStore((s) => s.onboarded);
+  const hydrated = useOnboardingStore((s) => s.hydrated);
   const loadPersisted = useModelStore((s) => s.loadPersisted);
   const loadInference = useInference((s) => s.load);
   const loadSearch = useSearch((s) => s.load);
   const loadVoice = useVoice((s) => s.load);
+  const hydrateOnboarding = useOnboardingStore((s) => s.hydrate);
 
   useEffect(() => {
     void (async () => {
@@ -52,12 +63,24 @@ export default function IndexGate() {
       // hydration. Unhydrated it reads `false`, so the voice chip is hidden,
       // `canSpeak` is false and auto-speak never fires (D3-4).
       await Promise.all([loadPersisted(), loadInference(), loadSearch(), loadVoice()]);
-      setOnboarded(await isOnboarded());
+      // The model this app auto-released when it was last backgrounded is
+      // warmed up HERE, while the splash still covers the wait: the first
+      // message then finds a warm engine instead of paying for a
+      // multi-gigabyte read (PocketParity: checkAndReloadAutoReleasedModel,
+      // ModelStore.ts:1148). Bounded, and it never rejects — but the splash
+      // is the app's first frame, so nothing may keep it up: a failure
+      // opens the app without the model.
+      await restoreAutoReleasedModel(createAutoRelease()).catch(() => {});
+      // The first-run gate is the STORE's, not a private read: the root
+      // layout guards the drawer with the same value, and two readers of
+      // one flag can disagree about whether the app is provisioned.
+      await hydrateOnboarding();
+      setReady(true);
       void SplashScreen.hideAsync().catch(() => {});
     })();
-  }, [loadPersisted, loadInference, loadSearch, loadVoice]);
+  }, [loadPersisted, loadInference, loadSearch, loadVoice, hydrateOnboarding]);
 
-  if (onboarded === null) return null;
+  if (!ready || !hydrated) return null;
   return onboarded ? (
     <Redirect href="/chat" />
   ) : (

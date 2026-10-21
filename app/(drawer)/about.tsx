@@ -3,11 +3,12 @@
 import { Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { colors } from "@/themes/tokens.ts";
+import { colors, useColors } from "@/themes/tokens.ts";
 import { APP_NAME } from "@/constants/app.ts";
 import { ScreenHeader } from "@/components/screen-header.tsx";
 
 export default function AboutScreen() {
+  const colors = useColors();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
       <ScreenHeader title="About" />

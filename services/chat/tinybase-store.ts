@@ -9,11 +9,12 @@
  * Store shape (TinyBase 10's Store is not generic; cells arrive as
  * AnyObject, so every read goes through a narrowing helper below and the
  * typed contract lives on the SessionStore port):
- *   sessions  { title, pinned, updatedAt }
+ *   sessions  { title, pinned, updatedAt, seq, activeCompanionId?, settingsSource? }
  *   messages  { sessionId, role, content, type, at, seq, usage* }
  *   toolRuns  { messageId, position, tool, input?, result?, ok?, data?,
  *               metrics? }
  *   drafts    { text }
+ *   sessionSampler { values }  (JSON: { sampler?, thinking?, effort? })
  *   Values    { activeSessionId, seq }
  *
  * ponytail: messages are UNBOUNDED. The 100-turn cap this replaces
@@ -30,9 +31,10 @@ import type {
   StoredMessage,
   StoredTurn,
 } from "./session-store.ts";
-import { draftSlot } from "./session-store.ts";
+import { draftSlot, type SessionOverride } from "./session-store.ts";
 import { sanitizeBlocks } from "./blocks.ts";
 import { DEFAULT_SAMPLER, type SamplerParams } from "../inference/sampler.ts";
+import { isEffortLevel } from "@/utils/reasoning-capability.ts";
 import { newId } from "./messages.ts";
 
 /** Row id: the timestamp prefix keeps ids unique across restarts, the
@@ -178,7 +180,7 @@ export class TinyBaseSessionStore implements SessionStore {
   }
 
   /** A fresh session row. One place, so `create`, `append` and
-   *  `setTitleIfEmpty` cannot drift on what a new session looks like. */
+   * `setTitleIfEmpty` cannot drift on what a new session looks like. */
   private newSessionRow(id: string, title: string): void {
     this.store.setRow("sessions", id, {
       title,
@@ -252,7 +254,7 @@ export class TinyBaseSessionStore implements SessionStore {
       // Flat, like usage: TinyBase has no nested cell.
       ...(turn.outcome?.contextFull === true ? { contextFull: true } : {}),
       ...(turn.outcome?.interrupted === true ? { interrupted: true } : {}),
-    ...(turn.outcome?.stoppedEarly === true ? { stoppedEarly: true } : {}),
+      ...(turn.outcome?.stoppedEarly === true ? { stoppedEarly: true } : {}),
       ...(turn.outcome?.timings !== undefined
         ? {
             promptMs: turn.outcome.timings.promptMs,
@@ -273,24 +275,24 @@ export class TinyBaseSessionStore implements SessionStore {
         tool: step.tool,
         ...(step.input !== undefined ? { input: step.input } : {}),
         ...(step.result !== undefined ? { result: step.result } : {}),
-    // `ok: false` is the load-bearing value, so it is stored even when
-    // false -- unlike the turn outcome flags, which drop a false. Dropping
-    // it here would make every failure indistinguishable from a row
-    // written before the discriminant existed.
-    ...(step.ok !== undefined ? { ok: step.ok } : {}),
-    ...(step.data !== undefined ? { data: step.data } : {}),
-    // C15: per-call cost, a JSON object column like input/data, with its
-    // two numbers normalized on the way in so a malformed step cannot
-    // poison the cell. Absent stays absent — an old row reads as "no
-    // metrics", which is exactly what the renderer needs to show none.
-    ...(step.metrics !== undefined
-      ? {
-          metrics: {
-            tokens: step.metrics.tokens,
-            durationMs: step.metrics.durationMs,
-          },
-        }
-      : {}),
+        // `ok: false` is the load-bearing value, so it is stored even when
+        // false -- unlike the turn outcome flags, which drop a false. Dropping
+        // it here would make every failure indistinguishable from a row
+        // written before the discriminant existed.
+        ...(step.ok !== undefined ? { ok: step.ok } : {}),
+        ...(step.data !== undefined ? { data: step.data } : {}),
+        // C15: per-call cost, a JSON object column like input/data, with its
+        // two numbers normalized on the way in so a malformed step cannot
+        // poison the cell. Absent stays absent — an old row reads as "no
+        // metrics", which is exactly what the renderer needs to show none.
+        ...(step.metrics !== undefined
+          ? {
+              metrics: {
+                tokens: step.metrics.tokens,
+                durationMs: step.metrics.durationMs,
+              },
+            }
+          : {}),
       });
     }
     this.touch(sessionId);
@@ -312,7 +314,7 @@ export class TinyBaseSessionStore implements SessionStore {
       // Rebuilt as the nested shape the port declares, from the flat
       // columns. Omitted entirely when the engine reported nothing, so an
       // old row simply has no `outcome` key.
-...(row.contextFull !== undefined || row.interrupted !== undefined
+      ...(row.contextFull !== undefined || row.interrupted !== undefined
         || row.stoppedEarly !== undefined
         || row.promptMs !== undefined
         ? {
@@ -364,25 +366,25 @@ export class TinyBaseSessionStore implements SessionStore {
         position: num(raw["position"]),
         ...(isRecord(raw["input"]) ? { input: raw["input"] } : {}),
         ...(typeof raw["result"] === "string" ? { result: raw["result"] } : {}),
-    // Absent -> undefined -> UNKNOWN, which is not the same as true. A
-    // row written before the column reads as "never recorded", not as
-    // "succeeded", so it renders conservatively.
-    ...(typeof raw["ok"] === "boolean" ? { ok: raw["ok"] } : {}),
-    // Mirrors `input`: a JSON object column, read back only when it really
-    // is an object, so a malformed cell cannot reach a renderer.
-    ...(isRecord(raw["data"]) ? { data: raw["data"] } : {}),
-    // Mirrors `data`: numbers only, or the step reads as having no
-    // metrics at all (C15).
-    ...(isRecord(raw["metrics"]) &&
-    typeof raw["metrics"]["tokens"] === "number" &&
-    typeof raw["metrics"]["durationMs"] === "number"
-      ? {
-          metrics: {
-            tokens: raw["metrics"]["tokens"],
-            durationMs: raw["metrics"]["durationMs"],
-          },
-        }
-      : {}),
+        // Absent -> undefined -> UNKNOWN, which is not the same as true. A
+        // row written before the column reads as "never recorded", not as
+        // "succeeded", so it renders conservatively.
+        ...(typeof raw["ok"] === "boolean" ? { ok: raw["ok"] } : {}),
+        // Mirrors `input`: a JSON object column, read back only when it really
+        // is an object, so a malformed cell cannot reach a renderer.
+        ...(isRecord(raw["data"]) ? { data: raw["data"] } : {}),
+        // Mirrors `data`: numbers only, or the step reads as having no
+        // metrics at all (C15).
+        ...(isRecord(raw["metrics"]) &&
+        typeof raw["metrics"]["tokens"] === "number" &&
+        typeof raw["metrics"]["durationMs"] === "number"
+          ? {
+              metrics: {
+                tokens: raw["metrics"]["tokens"],
+                durationMs: raw["metrics"]["durationMs"],
+              },
+            }
+          : {}),
       };
       const list = index.get(raw["messageId"]);
       if (list) list.push(step);
@@ -435,12 +437,12 @@ export class TinyBaseSessionStore implements SessionStore {
       this.store.delRow("messages", entry.id);
     }
     this.store.delRow("sessions", sessionId);
-    // A deleted conversation's draft, its sampler override and the pointer
+    // A deleted conversation's draft, its settings override and the pointer
     // to it are its data too: leaving them behind would strand a draft and
     // a tuning for a session that can never be reopened, and leave the app
     // pointing at nothing.
     await this.clearDraft(sessionId);
-    await this.setSessionSampler(sessionId, null);
+    await this.setSessionOverride(sessionId, null);
     if ((await this.getActiveSessionId()) === sessionId) {
       await this.setActiveSessionId(null);
     }
@@ -522,7 +524,9 @@ export class TinyBaseSessionStore implements SessionStore {
   async duplicateSession(sessionId: string): Promise<string | null> {
     if (!this.store.hasRow("sessions", sessionId)) return null;
     const turns = (await this.get(sessionId)) ?? [];
-    const sampler = await this.getSessionSampler(sessionId);
+    const override = await this.getSessionOverride(sessionId);
+    const companionId = await this.getSessionCompanion(sessionId);
+    const settingsSource = await this.getSessionSettingsSource(sessionId);
     const seq = this.nextSeq();
     const copyId = rowId(seq);
     const title = str(this.store.getCell("sessions", sessionId, "title"));
@@ -560,13 +564,25 @@ export class TinyBaseSessionStore implements SessionStore {
         : turn;
       await this.append(copyId, forked);
     }
-    if (sampler) await this.setSessionSampler(copyId, sampler);
+    if (override) await this.setSessionOverride(copyId, override);
+    // The persona and its settings source are per-conversation too: a
+    // fork that dropped them would silently lose the companion.
+    if (companionId) {
+      await this.setSessionCompanion(copyId, companionId);
+      if (settingsSource === "custom") {
+        await this.setSessionSettingsSource(copyId, "custom");
+      }
+    }
     // The fork is where you are going next; the drawer should show it.
     await this.setActiveSessionId(copyId);
     return copyId;
   }
 
-  async getSessionSampler(sessionId: string): Promise<Partial<SamplerParams> | null> {
+  /** The session override cell holds `{sampler, thinking?, effort?}`.
+   *  A bare sampler-only object (rows written before thinking/effort
+   *  existed) parses as `{sampler}` — the legacy shape IS the sampler
+   *  keys at the top level, exactly like parseVoiceState's v1 read. */
+  async getSessionOverride(sessionId: string): Promise<SessionOverride | null> {
     const raw = this.store.getCell("sessionSampler", sessionId, "values");
     if (typeof raw !== "string" || raw === "") return null;
     let parsed: unknown;
@@ -576,10 +592,22 @@ export class TinyBaseSessionStore implements SessionStore {
       return null;
     }
     if (!isRecord(parsed)) return null;
-    // Finite numbers AND booleans count as an override: a boolean flag
-    // (includeThinkingInContext) is a real per-session choice, and a
-    // number-only filter would silently drop `false` and fall back to the
-    // preset. A half-written save still degrades the same way.
+    const override: SessionOverride = {};
+    // New shape nests under `sampler`; a legacy cell IS the sampler keys
+    // at the top level. Reading both is what keeps old rows working.
+    const samplerSource = isRecord(parsed["sampler"]) ? parsed["sampler"] : parsed;
+    const sampler = this.samplerOf(samplerSource);
+    if (sampler) override.sampler = sampler;
+    if (typeof parsed["thinking"] === "boolean") override.thinking = parsed["thinking"];
+    if (isEffortLevel(parsed["effort"])) override.effort = parsed["effort"];
+    return Object.keys(override).length > 0 ? override : null;
+  }
+
+  /** Finite numbers AND booleans count as an override: a boolean flag
+   *  (includeThinkingInContext) is a real per-session choice, and a
+   *  number-only filter would silently drop `false` and fall back to the
+   *  preset. A half-written save still degrades the same way. */
+  private samplerOf(parsed: Record<string, unknown>): Partial<SamplerParams> | null {
     const out: Record<string, number | boolean> = {};
     for (const key of Object.keys(DEFAULT_SAMPLER)) {
       const v = parsed[key];
@@ -589,17 +617,62 @@ export class TinyBaseSessionStore implements SessionStore {
     return Object.keys(out).length > 0 ? (out as Partial<SamplerParams>) : null;
   }
 
-  async setSessionSampler(
+  async setSessionOverride(
     sessionId: string,
-    override: Partial<SamplerParams> | null,
+    override: SessionOverride | null,
   ): Promise<void> {
-    // An empty override IS "follow the global preset", so it deletes the
+    // An empty override IS "follow the resolved base", so it deletes the
     // row rather than storing "{}".
-    if (override === null || Object.keys(override).length === 0) {
+    if (
+      override === null ||
+      (override.sampler === undefined &&
+        override.thinking === undefined &&
+        override.effort === undefined)
+    ) {
       this.store.delRow("sessionSampler", sessionId);
       return;
     }
-    this.store.setCell("sessionSampler", sessionId, "values", JSON.stringify(override));
+    this.store.setCell(
+      "sessionSampler",
+      sessionId,
+      "values",
+      JSON.stringify(override),
+    );
+  }
+
+  async getSessionCompanion(sessionId: string): Promise<string | null> {
+    if (!this.store.hasRow("sessions", sessionId)) return null;
+    const value = this.store.getCell("sessions", sessionId, "activeCompanionId");
+    return typeof value === "string" && value !== "" ? value : null;
+  }
+
+  async setSessionCompanion(sessionId: string, companionId: string | null): Promise<boolean> {
+    if (!this.store.hasRow("sessions", sessionId)) return false;
+    if (companionId === null) {
+      this.store.delCell("sessions", sessionId, "activeCompanionId");
+      // A source with no companion is meaningless — back to the default.
+      this.store.delCell("sessions", sessionId, "settingsSource");
+      return true;
+    }
+    this.store.setCell("sessions", sessionId, "activeCompanionId", companionId);
+    return true;
+  }
+
+  async getSessionSettingsSource(
+    sessionId: string,
+  ): Promise<"companion" | "custom" | null> {
+    if (!this.store.hasRow("sessions", sessionId)) return null;
+    const value = this.store.getCell("sessions", sessionId, "settingsSource");
+    return value === "custom" || value === "companion" ? value : null;
+  }
+
+  async setSessionSettingsSource(
+    sessionId: string,
+    source: "companion" | "custom",
+  ): Promise<boolean> {
+    if (!this.store.hasRow("sessions", sessionId)) return false;
+    this.store.setCell("sessions", sessionId, "settingsSource", source);
+    return true;
   }
 
   async getActiveSessionId(): Promise<string | null> {

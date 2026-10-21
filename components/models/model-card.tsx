@@ -33,8 +33,8 @@ import {
   X,
 } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useColors } from "@/themes/tokens.ts";
+import { useModelStore } from "@/store/model-store";
 import { useStorageDisclosure } from "@/hooks/useStorageDisclosure.ts";
 import { parseModelSettings } from "@/utils/model-settings.ts";
 import { cardActions, statusDotState } from "@/services/models/card-actions.ts";
@@ -107,6 +107,7 @@ export function ModelCard({
    *  and the caller owns that. */
   onRemove?: () => void;
 }) {
+  const colors = useColors();
   // Stable selectors: actions never change identity, so each subscribes
   // alone and no card re-renders on unrelated store writes.
   const removeModel = useModelStore((s) => s.removeModel);
@@ -210,7 +211,7 @@ export function ModelCard({
             accessibilityLabel={dot === "active" ? "Loaded" : "Downloaded"}
           >
             <StatusDot
-              color={dot === "active" ? colors.success : colors.secondaryText}
+              color={dot === "active" ? colors.successMark : colors.secondaryText}
             />
           </View>
         ) : null}
@@ -375,6 +376,7 @@ export function RemoteProviderCard({
   onActivate: () => void;
   onRemove: () => void;
 }) {
+  const colors = useColors();
   // Same Default 8px step and hairline as every other card (DESIGN.md
   // "Default radius… buttons, inputs, cards"); the 24px this carried was
   // PocketPal's value, retired 2026-10-10.
@@ -384,7 +386,7 @@ export function RemoteProviderCard({
         <View className="flex-1">
           <View className="flex-row items-center gap-2">
             <StatusDot
-              color={isActive ? colors.success : colors.secondaryText}
+              color={isActive ? colors.successMark : colors.secondaryText}
             />
             <Text className="font-sans-semibold text-body-md text-primary-text">
               {item.name}

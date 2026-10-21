@@ -2,102 +2,104 @@
  *
  * `loadPersisted()` used to be unguarded, and four screens call it on mount
  * (the startup gate, Models, onboarding's model step, the token settings
- * card). Each call re-read eight KV keys plus SecureStore, replaced the
- * in-memory `models` array with the persisted snapshot — clobbering any live
- * `setModelProgress` values — and re-ran the native download reconcile. These
- * lock the guard and the flag the app's startup gate waits on.
+ * card). Each call re-read the KV storage, replaced the in-memory `models`
+ * array with the persisted snapshot — clobbering any live
+ * `setModelProgress` values — and re-ran the native download reconcile.
+ * These lock the guard and the flag the app's startup gate waits on.
  *
- * Storage is faked at the module boundary so the count is exact and no native
- * module is touched.
+ * Storage is injected, so the count is exact and no native module is
+ * touched. The exact number of keys is an implementation detail: what
+ * matters is that four callers share ONE pass over the storage.
  */
 
-import { useModelStore } from "../modelStore";
-import { asyncStorage } from "../models/storage";
-
-/** Reads issued by the hydration call, counted per key. */
-const mockReads: string[] = [];
+import { memoryStorage } from "@/jest/storage";
+import { createModelStore } from "../models";
 
 jest.mock("../models/storage", () => {
   const actual = jest.requireActual("../models/storage");
   return {
     ...actual,
-    asyncStorage: {
-      getItem: jest.fn(async (key: string) => {
-        mockReads.push(key);
-        return null;
-      }),
-      setItem: jest.fn(async () => undefined),
-      removeItem: jest.fn(async () => undefined),
-    },
     // SecureStore is reached by a DYNAMIC import, which Jest's CommonJS
-    // runtime cannot resolve; the real readSecret catches that and warns once
-    // per call. Stub it so the secret read is a counted no-op rather than log
-    // noise that reads like a failure.
+    // runtime cannot resolve; the real readSecret catches that and warns
+    // once per call. Stub it so the secret read is a quiet no-op.
     readSecret: jest.fn(async () => null),
     writeSecret: jest.fn(async () => undefined),
+    deleteSecret: jest.fn(async () => undefined),
   };
 });
 
-jest.mock("../../services/downloads/download-service", () => ({
+jest.mock("@/services/downloads/download-service", () => ({
   platformDownloadService: {
     reconcileWithNative: jest.fn(async () => []),
     getAllJobs: jest.fn(() => []),
   },
 }));
 
-/** The store is a singleton, so each test starts from the cold state the
- * guard keys off: un-hydrated, with the read counter cleared. */
-function resetHydration() {
-  mockReads.length = 0;
-  useModelStore.setState({ hydrated: false });
+jest.mock("@/services/models/huggingface.ts", () => ({
+  getPresets: jest.fn(async () => []),
+  searchModels: jest.fn(async () => ({ results: [], nextPageLink: null })),
+  getModelFiles: jest.fn(async () => []),
+  buildHfModelSpec: jest.fn(),
+  HfError: class HfError extends Error {},
+}));
+
+/** A store over a fake storage, so the reads can be counted. */
+function makeStore() {
+  const storage = memoryStorage();
+  const store = createModelStore(storage);
+  return { storage, store };
 }
 
 describe("model hydration", () => {
-  beforeEach(resetHydration);
+  it("four screens mounting at once share a single pass over the storage", async () => {
+    const single = makeStore();
+    await single.store.getState().loadPersisted();
+    const onePass = single.storage.reads.length;
 
-  it("four screens mounting at once share a single read", async () => {
-    const load = useModelStore.getState().loadPersisted;
+    const concurrent = makeStore();
+    const load = concurrent.store.getState().loadPersisted;
 
     await Promise.all([load(), load(), load(), load()]);
 
-    // One pass over the eight metadata keys, not four.
-    expect(new Set(mockReads).size).toEqual(8);
-    expect(mockReads.length).toEqual(8);
+    // Four callers, one pass: not four.
+    expect(concurrent.storage.reads.length).toEqual(onePass);
   });
 
   it("reports hydrated so the startup gate can stop holding the splash", async () => {
-    expect(useModelStore.getState().hydrated).toEqual(false);
-    await useModelStore.getState().loadPersisted();
-    expect(useModelStore.getState().hydrated).toEqual(true);
+    const { store } = makeStore();
+    expect(store.getState().hydrated).toEqual(false);
+    await store.getState().loadPersisted();
+    expect(store.getState().hydrated).toEqual(true);
   });
 
   it("a later load reads nothing, because the store already holds the catalog", async () => {
-    await useModelStore.getState().loadPersisted();
-    const afterFirst = mockReads.length;
+    const { storage, store } = makeStore();
+    await store.getState().loadPersisted();
+    const afterFirst = storage.reads.length;
 
-    await useModelStore.getState().loadPersisted();
-    await useModelStore.getState().loadPersisted();
+    await store.getState().loadPersisted();
+    await store.getState().loadPersisted();
 
-    expect(afterFirst).toEqual(8);
-    expect(mockReads.length).toEqual(8);
+    expect(storage.reads.length).toEqual(afterFirst);
   });
 
   it("stays hydrated when a read fails, so a cold start cannot hang forever", async () => {
     // The store logs the failure itself; silence it here so the suite's
     // console stays clean and a real warning elsewhere would stand out.
     const quiet = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const { storage, store } = makeStore();
     const boom = jest
-      .spyOn(asyncStorage, "getItem")
+      .spyOn(storage, "getItem")
       .mockRejectedValue(new Error("storage unavailable"));
 
-    await expect(useModelStore.getState().loadPersisted()).resolves.toBeUndefined();
+    await expect(store.getState().loadPersisted()).resolves.toBeUndefined();
 
     expect(quiet).toHaveBeenCalled();
     quiet.mockRestore();
 
     // The splash is released and the catalog is empty — a state the user can
     // fix from Models — rather than the gate waiting forever.
-    expect(useModelStore.getState().hydrated).toEqual(true);
+    expect(store.getState().hydrated).toEqual(true);
     boom.mockRestore();
   });
 });

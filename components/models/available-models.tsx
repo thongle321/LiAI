@@ -16,7 +16,7 @@
  * — see dismissPreset in store/models/catalog.ts.
  */
 
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import { presetSpecView } from "@/services/models/preset-spec.ts";
 import type { PresetModel } from "@/types/models";
 import { ModelCard } from "./model-card.tsx";

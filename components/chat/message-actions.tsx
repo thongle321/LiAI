@@ -24,7 +24,7 @@ import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Check, Copy, Volume2, VolumeX } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { useCopy } from "@/hooks/useCopy.ts";
 import { speakReply, stopSpeaking } from "@/services/voice/voice-speak.ts";
 import { useVoice } from "@/store/voice.ts";
@@ -50,6 +50,7 @@ export function MessageActions({
    *  say "Cut off": saying it twice is noise, not emphasis. */
   contextBannerVisible?: boolean;
 }) {
+  const colors = useColors();
   const { copied, copy } = useCopy();
   // The speak button exists only while TTS is available (ticket 05 /
   // spec Q14 — same rule as the store, read reactively).
@@ -131,7 +132,7 @@ export function MessageActions({
         accessibilityLabel={copied ? "Copied" : "Copy message"}
       >
         {copied ? (
-          <Check size={16} color={colors.success} />
+          <Check size={16} color={colors.successMark} />
         ) : (
           <Copy size={16} color={colors.secondaryText} />
         )}

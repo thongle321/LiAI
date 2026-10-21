@@ -2,16 +2,18 @@
 
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
 
-import { colors } from "@/themes/tokens.ts";
-import { setOnboarded } from "@/services/onboarding.ts";
+import { colors, useColors } from "@/themes/tokens.ts";
+import { useOnboardingStore } from "@/store/onboarding.ts";
 
 export default function DoneStep() {
-  async function finish(to: "/chat" | "/models"): Promise<void> {
-    await setOnboarded();
-    router.replace(to);
-  }
+  const colors = useColors();
+  // The gate is a live store, and the navigator is the only thing that can
+  // put the drawer back — so the button records WHERE to go and the root
+  // layout (hooks/useOnboardingGate.ts) does the navigating, once the
+  // navigator has re-admitted the drawer. A replace fired from here would
+  // be aimed at a route the navigator does not have yet, and dropped.
+  const complete = useOnboardingStore((s) => s.complete);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
@@ -23,7 +25,7 @@ export default function DoneStep() {
           Ask anything, anytime.{"\n"}LiAI remembers what matters.
         </Text>
         <Pressable
-          onPress={() => void finish("/chat")}
+          onPress={() => void complete("/chat")}
           className="btn btn--primary active:opacity-80 mt-8"
           accessibilityRole="button"
           accessibilityLabel="Start chatting"
@@ -33,7 +35,7 @@ export default function DoneStep() {
           </Text>
         </Pressable>
         <Pressable
-          onPress={() => void finish("/models")}
+          onPress={() => void complete("/models")}
           className="btn btn--ghost active:opacity-80 mt-3"
           accessibilityRole="button"
           accessibilityLabel="Browse all models"

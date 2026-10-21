@@ -14,18 +14,25 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider, useKeyboardState } from "react-native-keyboard-controller";
 import { ScopedVariables, Uniwind } from "uniwind";
 
-import { useEffect, useRef, useState } from "react";
-import { isOnboarded } from "../services/onboarding.ts";
-import { colors } from "../themes/tokens.ts";
-import { SnackbarProvider } from "../components/snackbar.tsx";
-import { useKeyboardStore } from "../store/keyboard.ts";
-import { useEngineOffload } from "../hooks/useEngineOffload.ts";
-import { useVoiceOffload } from "../hooks/useVoiceOffload.ts";
-import { useFluidTextVariables } from "../hooks/useFluidTextScale.ts";
+import { useEffect, useRef } from "react";
+import { useColors, useColorScheme } from "@/themes/tokens.ts";
+import { readStoredTheme } from "@/services/storage/theme.ts";
+import { SnackbarProvider } from "@/components/snackbar.tsx";
+import { useKeyboardStore } from "@/store/keyboard.ts";
+import { useEngineOffload } from "@/hooks/useEngineOffload.ts";
+import { useOnboardingGate } from "@/hooks/useOnboardingGate.ts";
+import { useVoiceOffload } from "@/hooks/useVoiceOffload.ts";
+import { useFluidTextVariables } from "@/hooks/useFluidTextScale.ts";
 
-// Light-locked (DESIGN.md): one theme, and it is the light one —
-// device dark mode must not invent a second world.
-Uniwind.setTheme("light");
+// Seed the persisted appearance (Settings > App Settings > Dark mode)
+// before the first paint. Fire-and-forget: the default "system" theme
+// renders until the read resolves, then switches if the stored choice
+// differs. readStoredTheme owns the storage call AND its failure path
+// (returns null rather than throwing), so a storage error can't surface
+// as an unhandled rejection here.
+void readStoredTheme().then((stored) => {
+  if (stored !== null) Uniwind.setTheme(stored);
+});
 
 // Keep the native splash visible until the Inter files resolve, so cold
 // start never flashes a blank white frame before the font gate below.
@@ -37,7 +44,7 @@ void SplashScreen.preventAutoHideAsync().catch(() => {});
 // This used to be `app/+error.tsx`, which is TanStack Router's syntax --
 // expo-router's route scanner throws on any route node starting with '+',
 // so the app died before rendering anything.
-export { RootErrorBoundary as ErrorBoundary } from "../components/route-error-boundaries.tsx";
+export { RootErrorBoundary as ErrorBoundary } from "@/components/route-error-boundaries.tsx";
 
 /** Bridges react-native-keyboard-controller's events into the store the
  * whole app reads (store/keyboard.ts explains why one writer matters).
@@ -52,6 +59,10 @@ function KeyboardVisibilitySync() {
 }
 
 export default function RootLayout() {
+  // Reactive to the theme so the Host seed, the status bar and the stack's
+  // content background follow the App Settings toggle.
+  const colors = useColors();
+  const scheme = useColorScheme();
   const [loaded, error] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -63,10 +74,11 @@ export default function RootLayout() {
   // navigator can. Optimistically true (most launches are returning users);
   // a false flip hides the drawer and the router falls back to index, which
   // redirects to onboarding.
-  const [onboarded, setOnboarded] = useState(true);
-  useEffect(() => {
-    void isOnboarded().then(setOnboarded);
-  }, []);
+  //
+  // The hook owns the gate AND the navigation that follows it; why the
+  // navigation waits for the navigator, and not for the button press, is
+  // in hooks/useOnboardingGate.ts.
+  const { onboarded } = useOnboardingGate();
   // Release the loaded model when the app is backgrounded, so a multi-GB
   // GGUF is not held resident (Settings > Model Loading).
   useEngineOffload();
@@ -98,10 +110,13 @@ export default function RootLayout() {
 
   return (
     // One Host for the whole app: it seeds every @expo/ui subtree with
-    // Signal Blue and forces the light scheme, so native switches, sheets
+    // Signal Blue and the app's OWN scheme, so native switches, sheets
     // and pickers land in LiAI's world instead of the platform's default.
-    <Host colorScheme="light" seedColor={colors.primary} style={{ flex: 1 }}>
-      <StatusBar style="dark" />
+    // The scheme must be passed explicitly: leaving it unset makes the
+    // Host follow the DEVICE scheme, so a stored "light" on a dark device
+    // renders the native subtrees dark against a light JS tree.
+    <Host colorScheme={scheme} seedColor={colors.primary} style={{ flex: 1 }}>
+      <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       {/* Fluid Type (DESIGN.md): scoped --text-* overrides so every
           text-* class re-resolves at this device's width (375dp base,
           factor 0.5, clamp [0.9, 1.1]). One wrap, zero call sites. */}

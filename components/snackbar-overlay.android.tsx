@@ -15,7 +15,7 @@ import {
   type SnackbarHostRef,
 } from "@expo/ui/jetpack-compose";
 
-import { colors } from "../themes/tokens.ts";
+import { useColors, useColorScheme } from "@/themes/tokens.ts";
 import type { SnackbarOptions, SnackbarOverlayHandle } from "./snackbar-overlay";
 
 const DEFAULT_DURATION = 4000;
@@ -27,6 +27,8 @@ function toNativeDuration(ms: number): "short" | "long" {
 }
 
 export function SnackbarOverlay({ ref }: { ref?: Ref<SnackbarOverlayHandle> }) {
+  const colors = useColors();
+  const scheme = useColorScheme();
   const nativeHostRef = useRef<SnackbarHostRef | null>(null);
 
   useImperativeHandle(
@@ -59,7 +61,7 @@ export function SnackbarOverlay({ ref }: { ref?: Ref<SnackbarOverlayHandle> }) {
           whose content never competes with the app's own keyboard
           handling (expo-ui tip 1 — the host otherwise shifts small
           content on keyboard open/close). */}
-      <Host matchContents ignoreSafeArea="keyboard" colorScheme="light" seedColor={colors.primary}>
+      <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
         <NativeSnackbarHost ref={nativeHostRef}>
           <NativeSnackbar
             containerColor={colors.surface1}

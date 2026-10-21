@@ -20,13 +20,14 @@
 import { View } from "react-native";
 import { Drawer } from "expo-router/drawer";
 
-import { colors, scrim } from "@/themes/tokens.ts";
-import { AppDrawerContent } from "@/components/app-drawer.tsx";
+import { useColors } from "@/themes/tokens.ts";
+import { AppDrawerContent } from "@/components/drawer/app-drawer.tsx";
 
 // Same story as the root boundary: this was `app/(drawer)/+error.tsx`.
 export { DrawerErrorBoundary as ErrorBoundary } from "@/components/route-error-boundaries.tsx";
 
 export default function DrawerLayout() {
+  const colors = useColors();
   return (
     <View className="flex-1">
       <View className="flex-1">
@@ -34,12 +35,13 @@ export default function DrawerLayout() {
           screenOptions={{
             headerShown: false,
             drawerStyle: { width: 280, backgroundColor: colors.surface1 },
-            overlayColor: scrim,
+            overlayColor: colors.scrim,
           }}
           drawerContent={() => <AppDrawerContent />}
         >
           <Drawer.Screen name="(tabs)" />
           <Drawer.Screen name="models" />
+          <Drawer.Screen name="companions" />
           <Drawer.Screen name="settings" />
           <Drawer.Screen name="voice-settings" />
           <Drawer.Screen name="about" />

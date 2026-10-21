@@ -15,9 +15,10 @@ import { Pressable, Text, View } from "react-native";
 import { useNavigation } from "expo-router";
 import { Menu } from "lucide-react-native";
 
-import { colors } from "../themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 
 export function ScreenHeader({ title, right }: { title: string; right?: ReactNode }) {
+  const colors = useColors();
   const navigation = useNavigation<{ openDrawer: () => void }>();
 
   return (

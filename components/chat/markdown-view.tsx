@@ -26,7 +26,7 @@ import {
 
 import { isOpenableUrl } from "@/services/chat/links.ts";
 import { useChatStore } from "@/store/chat";
-import { colors, embeddedText, font, typeScale } from "@/themes/tokens.ts";
+import { embeddedText, font, typeScale, useColors, useColorScheme, type Colors } from "@/themes/tokens.ts";
 import { CodeBlock } from "./code-block.tsx";
 
 /** One guarded open shared by both link overrides: Linking, then the
@@ -181,28 +181,36 @@ class ChatRenderer extends Renderer implements RendererInterface {
 
 const renderer = new ChatRenderer({ selectable: true });
 
-const baseText = {
-  fontFamily: font.sans,
-  // Pocketpal's bubble body (MarkdownView/styles.ts:15) — the bodyLg rung.
-  fontSize: typeScale.bodyLg.size,
-  color: colors.primaryText,
-};
+/** The bubble body rung, resolved against the ACTIVE palette at render
+ *  (these used to be module-scope constants frozen on the light snapshot).
+ *  Pocketpal's bubble body (MarkdownView/styles.ts:15) — the bodyLg rung. */
+function baseTextFor(colors: Colors) {
+  return {
+    fontFamily: font.sans,
+    fontSize: typeScale.bodyLg.size,
+    color: colors.primaryText,
+  };
+}
 
 // The reasoning block's own rung: their ReasoningBlock pins body 14/20 —
 // exactly the bodyMd rung, so it comes from the shared scale.
-const denseText = {
-  ...baseText,
-  fontSize: typeScale.bodyMd.size,
-  lineHeight: typeScale.bodyMd.lineHeight,
-};
+function denseTextFor(colors: Colors) {
+  return {
+    ...baseTextFor(colors),
+    fontSize: typeScale.bodyMd.size,
+    lineHeight: typeScale.bodyMd.lineHeight,
+  };
+}
 
 // Every text-bearing key gets the family: the library's internals set
 // sizes and weights but no fontFamily, so any key missed here falls
 // back to Roboto and sits visibly off-baseline next to Inter body.
-const headingText = {
-  fontFamily: font.sansSemiBold,
-  color: colors.primaryText,
-};
+function headingTextFor(colors: Colors) {
+  return {
+    fontFamily: font.sansSemiBold,
+    color: colors.primaryText,
+  };
+}
 
 export function MarkdownView({
   text,
@@ -223,11 +231,14 @@ export function MarkdownView({
    *  wrapper. See services/chat//message-width.ts. */
   maxWidth?: number;
 }) {
-  const body = dense ? denseText : baseText;
+  const colors = useColors();
+  const scheme = useColorScheme();
+  const body = dense ? denseTextFor(colors) : baseTextFor(colors);
   const elements = useMarkdown(text === "" ? " " : text, {
-    // The app is light-locked; leaving this on "dark" made the library
-    // inject its dark-scheme defaults into a light conversation.
-    colorScheme: "light",
+    // The library injects scheme-flavoured defaults for any key the styles
+    // object below does not override, so this must track the app's own
+    // theme — pinned to one scheme left those defaults wrong half the time.
+    colorScheme: scheme,
     renderer,
     styles: {
       text: body,
@@ -241,12 +252,12 @@ export function MarkdownView({
       // the shared type scale — h1 rides h2's 24 rung, h2 rides h3's 20,
       // h4-h6 sit at body size; markdownH3 (18) is the one bubble size
       // with no rung, so it lives in embeddedText.
-      h1: { ...headingText, fontSize: typeScale.h2.size },
-      h2: { ...headingText, fontSize: typeScale.h3.size },
-      h3: { ...headingText, fontSize: embeddedText.markdownH3 },
-      h4: { ...headingText, fontSize: typeScale.bodyLg.size },
-      h5: { ...headingText, fontSize: typeScale.bodyLg.size },
-      h6: { ...headingText, fontSize: typeScale.bodyLg.size },
+      h1: { ...headingTextFor(colors), fontSize: typeScale.h2.size },
+      h2: { ...headingTextFor(colors), fontSize: typeScale.h3.size },
+      h3: { ...headingTextFor(colors), fontSize: embeddedText.markdownH3 },
+      h4: { ...headingTextFor(colors), fontSize: typeScale.bodyLg.size },
+      h5: { ...headingTextFor(colors), fontSize: typeScale.bodyLg.size },
+      h6: { ...headingTextFor(colors), fontSize: typeScale.bodyLg.size },
       li: { ...body },
       codespan: {
         fontFamily: font.sans,

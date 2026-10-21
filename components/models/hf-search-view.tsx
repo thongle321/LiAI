@@ -31,8 +31,8 @@ import {
   X,
 } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useColors } from "@/themes/tokens.ts";
+import { useModelStore } from "@/store/model-store";
 import {
   extractHFModelTitle,
   formatNumber,
@@ -70,6 +70,7 @@ export function HFSearchView({
   onOpenAuthor: () => void;
   onOpenSort: () => void;
 }) {
+  const colors = useColors();
   const searchResults = useModelStore((s) => s.searchResults);
   const searchLoading = useModelStore((s) => s.searchLoading);
   const searchLoadingMore = useModelStore((s) => s.searchLoadingMore);

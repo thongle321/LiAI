@@ -9,9 +9,10 @@
 
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { useShallow } from "zustand/react/shallow";
 import { CloudDownload, Database, Play, Square, Volume2 } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 import { cn } from "@/utils/cn.ts";
 import { formatBytes } from "@/services/models/progress.ts";
 import { useFreeSpacePoll } from "@/hooks/useStorageDisclosure.ts";
@@ -28,6 +29,7 @@ import { useVoice } from "@/store/voice.ts";
  *  "1.2 GB available": the same poll the model cards use, so freeing space
  *  on the device updates this line without a remount. */
 function FreeStorageLine() {
+  const colors = useColors();
   const { freeBytes, checked } = useFreeSpacePoll(true);
   return (
     <View className="flex-row items-center gap-1">
@@ -40,7 +42,18 @@ function FreeStorageLine() {
 }
 
 export function VoiceSettings() {
-  const { currentVoice, autoSpeak, load, setCurrentVoice, setAutoSpeak } = useVoice();
+  const colors = useColors();
+  // Named selector: the screen only reads these five, so subscribing to the
+  // whole store would re-render it on every voice-store write.
+  const { currentVoice, autoSpeak, load, setCurrentVoice, setAutoSpeak } = useVoice(
+    useShallow((s) => ({
+      currentVoice: s.currentVoice,
+      autoSpeak: s.autoSpeak,
+      load: s.load,
+      setCurrentVoice: s.setCurrentVoice,
+      setAutoSpeak: s.setAutoSpeak,
+    })),
+  );
   const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {

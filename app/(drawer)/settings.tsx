@@ -22,7 +22,7 @@
 import { ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { colors } from "@/themes/tokens.ts";
+import { colors, useColors } from "@/themes/tokens.ts";
 import { ScreenHeader } from "@/components/screen-header.tsx";
 import { ContentColumn } from "@/components/content-column.tsx";
 import {
@@ -32,8 +32,10 @@ import {
 } from "@/components/settings/inference-settings.tsx";
 import { SearchSettings } from "@/components/settings/search-settings.tsx";
 import { HfTokenSettings } from "@/components/settings/hf-token-settings.tsx";
+import { AppSettings } from "@/components/settings/app-settings.tsx";
 
 export default function SettingsScreen() {
+  const colors = useColors();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.base }}>
       <ScreenHeader title="Settings" />
@@ -48,6 +50,7 @@ export default function SettingsScreen() {
           <ModelLoadingSettings />
           <SearchSettings />
           <HfTokenSettings />
+          <AppSettings />
         </ContentColumn>
       </ScrollView>
     </SafeAreaView>

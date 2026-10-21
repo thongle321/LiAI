@@ -9,12 +9,12 @@
  */
 
 import type {
+  SessionOverride,
   SessionStore,
   StoredMessage,
   StoredTurn,
 } from "@/services/chat/session-store.ts";
 import { draftSlot } from "@/services/chat/session-store.ts";
-import type { SamplerParams } from "@/services/inference/sampler.ts";
 import type { AgentStep, SessionInfo } from "@/types/chat.ts";
 import type { TurnRunner } from "@/store/chat/types.ts";
 
@@ -60,7 +60,8 @@ export function fakeSessionStore(
     });
   }
   const drafts = new Map<string, string>();
-  const samplers = new Map<string, Partial<SamplerParams>>();
+  const overrides = new Map<string, SessionOverride>();
+  const sessionCompanions = new Map<string, { companionId: string; source: "companion" | "custom" }>();
   let active: string | null = activeSessionId;
   let clock = 0;
   const calls: FakeStoreCalls = { creates: 0, appends: [], deletes: [] };
@@ -120,10 +121,11 @@ export function fakeSessionStore(
     },
     deleteSession: async (id: string) => {
       calls.deletes.push(id);
-      // Mirrors the real store: the draft, the sampler override and the
-      // pointer are its data.
+      // Mirrors the real store: the draft, the settings override, the
+      // companion binding and the pointer are its data.
       drafts.delete(draftSlot(id));
-      samplers.delete(id);
+      overrides.delete(id);
+      sessionCompanions.delete(id);
       if (active === id) active = null;
       return sessions.delete(id);
     },
@@ -165,13 +167,33 @@ export function fakeSessionStore(
     setActiveSessionId: async (sessionId) => {
       active = sessionId;
     },
-    getSessionSampler: async (sessionId) => samplers.get(sessionId) ?? null,
-    setSessionSampler: async (sessionId, override) => {
-      if (override === null || Object.keys(override).length === 0) {
-        samplers.delete(sessionId);
-      } else {
-        samplers.set(sessionId, override);
+    getSessionOverride: async (sessionId) => overrides.get(sessionId) ?? null,
+    setSessionOverride: async (sessionId, override) => {
+      const empty =
+        override === null ||
+        (override.sampler === undefined &&
+          override.thinking === undefined &&
+          override.effort === undefined);
+      if (empty) overrides.delete(sessionId);
+      else overrides.set(sessionId, override);
+    },
+    getSessionCompanion: async (sessionId) => sessionCompanions.get(sessionId)?.companionId ?? null,
+    setSessionCompanion: async (sessionId, companionId) => {
+      if (!sessions.has(sessionId)) return false;
+      if (companionId === null) sessionCompanions.delete(sessionId);
+      else {
+        const source = sessionCompanions.get(sessionId)?.source ?? "companion";
+        sessionCompanions.set(sessionId, { companionId, source });
       }
+      return true;
+    },
+    getSessionSettingsSource: async (sessionId) =>
+      sessionCompanions.get(sessionId)?.source ?? null,
+    setSessionSettingsSource: async (sessionId, source) => {
+      const bound = sessionCompanions.get(sessionId);
+      if (!bound) return false;
+      sessionCompanions.set(sessionId, { ...bound, source });
+      return true;
     },
     duplicateSession: async (sessionId) => {
       const row = sessions.get(sessionId);
@@ -186,8 +208,10 @@ export function fakeSessionStore(
         turns: row.turns.map((t) => ({ ...t })),
         seq: 0,
       });
-      const sampler = samplers.get(sessionId);
-      if (sampler) samplers.set(copyId, { ...sampler });
+      const override = overrides.get(sessionId);
+      if (override) overrides.set(copyId, { ...override });
+      const bound = sessionCompanions.get(sessionId);
+      if (bound) sessionCompanions.set(copyId, { ...bound });
       active = copyId;
       return copyId;
     },

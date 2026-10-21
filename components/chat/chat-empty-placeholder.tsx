@@ -13,7 +13,7 @@ import { Image, Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { images } from "@/constants/images.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 
 export function ChatEmptyPlaceholder({
   bottomInset,

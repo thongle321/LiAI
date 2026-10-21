@@ -13,19 +13,26 @@ export type MemoryStorage = KeyValueStorage & {
   data: Record<string, string>;
   /** Every `getItem` key, in order, for asserting a read happened once. */
   reads: string[];
+  /** Every `setItem` key, in order, for asserting a write did or did not
+   *  happen (a store that rewrites its whole state on every keystroke
+   *  passes every value assertion and still wears the disk down). */
+  writes: string[];
 };
 
 function backing(seed: Record<string, string> = {}): MemoryStorage {
   const data: Record<string, string> = { ...seed };
   const reads: string[] = [];
+  const writes: string[] = [];
   return {
     data,
     reads,
+    writes,
     getItem: async (key: string) => {
       reads.push(key);
       return data[key] ?? null;
     },
     setItem: async (key: string, value: string) => {
+      writes.push(key);
       data[key] = value;
     },
     removeItem: async (key: string) => {

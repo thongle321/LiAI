@@ -13,10 +13,12 @@ import {
 import { defaultMinSize, menuAnchor } from "@expo/ui/jetpack-compose/modifiers";
 import { ChevronDown } from "lucide-react-native";
 
-import { colors, typeScale } from "../themes/tokens.ts";
+import { useColors, useColorScheme, typeScale } from "@/themes/tokens.ts";
 import type { ResetMenuProps } from "./reset-menu";
 
 export function ResetMenu({ items }: ResetMenuProps) {
+  const colors = useColors();
+  const scheme = useColorScheme();
   const [open, setOpen] = useState(false);
   return (
     <Pressable
@@ -27,7 +29,7 @@ export function ResetMenu({ items }: ResetMenuProps) {
       accessibilityHint="Opens a list of reset destinations"
       accessibilityState={{ expanded: open }}
     >
-      <Host matchContents ignoreSafeArea="keyboard" colorScheme="light" seedColor={colors.primary}>
+      <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
         <ExposedDropdownMenuBox expanded={open} onExpandedChange={setOpen}>
           <Row
             verticalAlignment="center"

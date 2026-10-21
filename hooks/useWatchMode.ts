@@ -13,10 +13,10 @@ import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { Camera as VisionCameraView } from "react-native-vision-camera";
 
-import { MAX_IMAGES } from "../services/chat/attachments.ts";
-import { pushFrame } from "../services/vision/vision-watch.ts";
-import { snapshotToUri } from "../services/storage/snapshot.ts";
-import { useWatch } from "../store/watch.ts";
+import { MAX_IMAGES } from "@/services/chat/attachments.ts";
+import { pushFrame } from "@/services/vision/vision-watch.ts";
+import { snapshotToUri } from "@/services/storage/snapshot.ts";
+import { useWatch } from "@/store/watch.ts";
 
 export function useWatchMode(
   camera: RefObject<VisionCameraView | null>,

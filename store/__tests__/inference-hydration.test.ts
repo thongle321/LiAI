@@ -45,7 +45,7 @@ describe("inference hydration", () => {
   it("three cards mounting at once share a single read", async () => {
     // Exactly what app/(drawer)/settings.tsx does: three components, three
     // load() calls, one mount.
-    const storage = countingStorage({ [INFERENCE_KEY]: JSON.stringify({ nCtx: 8192 }) });
+    const storage = countingStorage({ [INFERENCE_KEY]: JSON.stringify({ state: { nCtx: 8192 }, version: 0 }) });
     const useStore = createInferenceStore(storage);
 
     await Promise.all([
@@ -75,7 +75,7 @@ describe("inference hydration", () => {
   it("a change made after hydration is not undone by a later load", async () => {
     // The data-loss case: a read resolving late used to write the stored value
     // back over the user's change.
-    const storage = countingStorage({ [INFERENCE_KEY]: JSON.stringify({ nCtx: 4096 }) });
+    const storage = countingStorage({ [INFERENCE_KEY]: JSON.stringify({ state: { nCtx: 4096 }, version: 0 }) });
     const useStore = createInferenceStore(storage);
 
     await useStore.getState().load();
@@ -89,10 +89,10 @@ describe("inference hydration", () => {
   it("a failed read does not poison later attempts", async () => {
     // `hydrating` is cleared in a finally, so a transient storage failure is
     // retryable instead of pinning the store to defaults forever.
-    const storage = countingStorage({ [INFERENCE_KEY]: JSON.stringify({ nCtx: 8192 }) }, 1);
+    const storage = countingStorage({ [INFERENCE_KEY]: JSON.stringify({ state: { nCtx: 8192 }, version: 0 }) }, 1);
     const useStore = createInferenceStore(storage);
 
-    await expect(useStore.getState().load()).rejects.toThrow();
+    await useStore.getState().load();
     expect(useStore.getState().loaded).toEqual(false);
 
     await useStore.getState().load();

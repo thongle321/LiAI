@@ -2,6 +2,7 @@
 
 import type { StateCreator } from "zustand";
 
+import type { KeyValueStorage } from "@/services/storage/storage";
 import type { ModelStore, PersistenceSlice } from "./types";
 import { parseModelSettingsMap } from "@/utils/model-settings";
 import { platformDownloadService } from "@/services/downloads/download-service";
@@ -13,220 +14,364 @@ import {
 } from "@/utils/model-upgrade";
 import {
   ACTIVE_MODEL_KEY,
+  HF_SEARCH_FILTERS_KEY,
   HF_TOKEN_KEY,
   HF_TOKEN_USE_KEY,
   MEMORY_GUARD_KEY,
   MODEL_SETTINGS_KEY,
+  PENDING_PROJECTION_CLEANUP_KEY,
   REMOTE_APIS_KEY,
   REMOTE_CAPS_KEY,
   STORAGE_KEY,
-  asyncStorage,
+  TOOL_COMPAT_WARNED_KEY,
   readSecret,
   writeSecret,
 } from "./storage";
+import { parseWarnedModelIds } from "./warnings";
+import { parseProjectionCleanupQueue } from "./vision-heal";
+import {
+  DEFAULT_SEARCH_FILTERS,
+  persistedState,
+  type ModelStateSource,
+} from "./persist-shape";
 
-/** The in-flight hydration, if any. Module scope because the slice is created
- * once per store while `loadPersisted` is called from four different screens. */
-let hydrating: Promise<void> | null = null;
+/** The legacy keys this store used to write, one per field. They are read
+ *  once, carried into the consolidated blob, and never written again.
+ *  HF_TOKEN_KEY is deliberately absent: it holds the plaintext HuggingFace
+ *  token, which is migrated to SecureStore separately (see hydrate()). */
+const LEGACY_KEYS = [
+  REMOTE_APIS_KEY,
+  ACTIVE_MODEL_KEY,
+  MODEL_SETTINGS_KEY,
+  MEMORY_GUARD_KEY,
+  REMOTE_CAPS_KEY,
+  HF_TOKEN_USE_KEY,
+  TOOL_COMPAT_WARNED_KEY,
+  PENDING_PROJECTION_CLEANUP_KEY,
+  HF_SEARCH_FILTERS_KEY,
+];
 
-export const createPersistenceSlice: StateCreator<
-  ModelStore,
-  [],
-  [],
-  PersistenceSlice
-> = (set, get) => ({
-  hydrated: false,
-  loadPersisted: async () => {
-    // Single-flight, and it has to be. Four screens hydrate on mount (the
-    // startup gate, Models, onboarding's model step, the token settings card),
-    // so an unguarded read re-read eight KV keys plus SecureStore on each -
-    // and, worse, replaced the in-memory `models` array with the persisted
-    // snapshot on every visit, clobbering live `setModelProgress` values and
-    // re-running the native reconcile. The store is the source of truth once
-    // hydrated and nothing writes these keys from outside this slice, so a
-    // repeat call has nothing left to fetch. Mirrors the inference store's
-    // `hydrating` (store/inference.ts).
-    if (get().hydrated) return;
-    hydrating ??= (async () => {
-      try {
-        await hydrate(set, get);
-      } finally {
-        // Set even on failure: a store that never resolves would hold the
-        // splash forever, and an empty catalog is a usable state the user can
-        // fix from the Models screen.
-        set({ hydrated: true });
+export function createPersistenceSlice(
+  storage: KeyValueStorage,
+): StateCreator<ModelStore, [], [], PersistenceSlice> {
+  // Per store instance, not per module: two stores (a second one in a
+  // test) must not share a flight.
+  let hydrating: Promise<void> | null = null;
+
+  return (set, get, api) => {
+    const storeApi = api as unknown as {
+      persist: { rehydrate: () => void | Promise<void> };
+    };
+    return {
+      hydrated: false,
+      loadPersisted: async () => {
+        if (get().hydrated) return;
+        hydrating ??= (async () => {
+          try {
+            await hydrate(set, get, storeApi, storage);
+          } finally {
+            set({ hydrated: true });
+          }
+        })().finally(() => {
+          hydrating = null;
+        });
+        await hydrating;
+      },
+    };
+  };
+}
+
+/** Carry an old install forward, once.
+ *
+ *  The consolidated blob is the healthy shape: an object with a `state`.
+ *  Anything else under STORAGE_KEY is either an old install or the bare
+ *  array the catalog slice used to write over the blob — and both are
+ *  rebuilt from the legacy keys and written back as the blob.
+ *
+ *  The legacy keys are read and cleared, never written again: the store
+ *  has exactly one writer from here on. */
+async function migrateLegacyIfNeeded(storage: KeyValueStorage): Promise<void> {
+  const existing = await storage.getItem(STORAGE_KEY);
+  if (existing) {
+    try {
+      const parsed = JSON.parse(existing);
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        !Array.isArray(parsed) &&
+        parsed.state &&
+        typeof parsed.state === "object"
+      ) {
+        return; // already consolidated
       }
-    })().finally(() => {
-      hydrating = null;
-    });
-    await hydrating;
-  },
-});
+      // Only the bare-array (broken build) shape is a migration candidate.
+      // Anything else that is not consolidated (corrupt, foreign) is left
+      // alone rather than overwritten with a rebuilt state.
+      if (!Array.isArray(parsed)) return;
+    } catch {
+      return; // corrupt: don't overwrite
+    }
+  }
 
-/** The read itself, kept out of the slice so the guard above is the only thing
- * the store has to reason about. */
+  const [
+    modelsRaw,
+    apisRaw,
+    legacyTokenRaw,
+    activeRaw,
+    settingsRaw,
+    guardRaw,
+    capsRaw,
+    useTokenRaw,
+    warnedRaw,
+    cleanupRaw,
+    filtersRaw,
+  ] = await Promise.all([
+    existing, // old: models array (if array-shaped)
+    storage.getItem(REMOTE_APIS_KEY),
+    storage.getItem(HF_TOKEN_KEY),
+    storage.getItem(ACTIVE_MODEL_KEY),
+    storage.getItem(MODEL_SETTINGS_KEY),
+    storage.getItem(MEMORY_GUARD_KEY),
+    storage.getItem(REMOTE_CAPS_KEY),
+    storage.getItem(HF_TOKEN_USE_KEY),
+    storage.getItem(TOOL_COMPAT_WARNED_KEY),
+    storage.getItem(PENDING_PROJECTION_CLEANUP_KEY),
+    storage.getItem(HF_SEARCH_FILTERS_KEY),
+  ]);
+
+  // Nothing to migrate.
+  const hasAnything =
+    (modelsRaw && modelsRaw !== "null") ||
+    apisRaw ||
+    legacyTokenRaw ||
+    activeRaw ||
+    settingsRaw ||
+    guardRaw ||
+    capsRaw ||
+    useTokenRaw ||
+    warnedRaw ||
+    cleanupRaw ||
+    filtersRaw;
+  if (!hasAnything) return;
+
+  // Models: old STORAGE_KEY was a JSON array.
+  let models: unknown = [];
+  if (modelsRaw) {
+    try {
+      const parsed = JSON.parse(modelsRaw);
+      if (Array.isArray(parsed)) models = parsed;
+    } catch {
+      models = [];
+    }
+  }
+
+  // Remote apis: migrate plaintext apiKeys to SecureStore.
+  let apis: unknown = [];
+  if (apisRaw) {
+    try {
+      const rawList: unknown = JSON.parse(apisRaw);
+      if (Array.isArray(rawList)) {
+        for (const entry of rawList) {
+          if (
+            entry &&
+            typeof entry === "object" &&
+            typeof (entry as { id?: unknown }).id === "string" &&
+            typeof (entry as { apiKey?: unknown }).apiKey === "string" &&
+            (entry as { apiKey: string }).apiKey !== ""
+          ) {
+            await writeSecret(
+              providerKeySS((entry as { id: string }).id),
+              (entry as { apiKey: string }).apiKey,
+            );
+          }
+        }
+        apis = rawList;
+      }
+    } catch {
+      apis = [];
+    }
+  }
+
+  let activeModelId: string | null = null;
+  let activeProviderType: "local" | "remote" | null = null;
+  if (activeRaw) {
+    try {
+      const parsed = JSON.parse(activeRaw);
+      activeModelId = parsed?.modelId ?? null;
+      activeProviderType = parsed?.providerType ?? null;
+    } catch {
+      // ignore
+    }
+  }
+
+  let modelSettings: Record<string, unknown> = {};
+  if (settingsRaw) {
+    try {
+      modelSettings = JSON.parse(settingsRaw) ?? {};
+    } catch {
+      modelSettings = {};
+    }
+  }
+
+  let largestSuccessfulBytes = 0;
+  if (guardRaw) {
+    try {
+      const g = JSON.parse(guardRaw);
+      if (typeof g === "number" && Number.isFinite(g) && g > 0) {
+        largestSuccessfulBytes = g;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  let remoteCaps: unknown = {};
+  let privacyAcknowledged = false;
+  if (capsRaw) {
+    try {
+      const parsed = JSON.parse(capsRaw);
+      if (parsed && typeof parsed === "object") {
+        remoteCaps = (parsed as Record<string, unknown>).caps ?? {};
+        privacyAcknowledged = (parsed as Record<string, unknown>).privacyAcknowledged === true;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const useHfToken = useTokenRaw === null ? true : useTokenRaw === "true";
+
+  const toolCompatWarnedModels = parseWarnedModelIds(warnedRaw);
+
+  const pendingProjectionCleanup = parseProjectionCleanupQueue(cleanupRaw);
+
+  // The saved Hub search filters, when the old install had them.
+  let searchFilters = { ...DEFAULT_SEARCH_FILTERS };
+  if (filtersRaw) {
+    try {
+      const parsed = JSON.parse(filtersRaw) as Partial<typeof searchFilters>;
+      searchFilters = {
+        author: typeof parsed.author === "string" ? parsed.author : "",
+        sortBy: parsed.sortBy ?? DEFAULT_SEARCH_FILTERS.sortBy,
+      };
+    } catch {
+      // A corrupt filter blob must not block the upgrade.
+    }
+  }
+
+  const state: ModelStateSource = {
+    models: upgradeModelList(models),
+    remoteApis: upgradeRemoteApis(apis),
+    activeModelId,
+    activeProviderType,
+    modelSettings: parseModelSettingsMap(JSON.stringify(modelSettings)),
+    largestSuccessfulBytes,
+    remoteCaps: upgradeRemoteCaps(remoteCaps),
+    privacyAcknowledged,
+    useHfToken,
+    toolCompatWarnedModels,
+    pendingProjectionCleanup,
+    searchFilters,
+  };
+
+  await storage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({ state: persistedState(state), version: 0 }),
+  );
+
+  // Clear the legacy keys (best-effort). They are read-only from here on.
+  for (const k of LEGACY_KEYS) {
+    await storage.removeItem(k).catch(() => {});
+  }
+}
+
 async function hydrate(
   set: (partial: Partial<ModelStore>) => void,
   get: () => ModelStore,
+  storeApi: { persist: { rehydrate: () => void | Promise<void> } },
+  storage: KeyValueStorage,
 ): Promise<void> {
   try {
-    const [
-      modelsRaw,
-      apisRaw,
-      legacyTokenRaw,
-      activeRaw,
-      settingsRaw,
-      guardRaw,
-      capsRaw,
-    useTokenRaw,
-  ] = await Promise.all([
-    asyncStorage.getItem(STORAGE_KEY),
-    asyncStorage.getItem(REMOTE_APIS_KEY),
-    asyncStorage.getItem(HF_TOKEN_KEY),
-    asyncStorage.getItem(ACTIVE_MODEL_KEY),
-    asyncStorage.getItem(MODEL_SETTINGS_KEY),
-    asyncStorage.getItem(MEMORY_GUARD_KEY),
-    asyncStorage.getItem(REMOTE_CAPS_KEY),
-    asyncStorage.getItem(HF_TOKEN_USE_KEY),
-  ]);
+    await migrateLegacyIfNeeded(storage);
 
-  if (modelsRaw) {
-      let models: ReturnType<typeof upgradeModelList> | null = null;
-      try {
-        models = upgradeModelList(JSON.parse(modelsRaw));
-      } catch {
-        // Corrupt payload only: start empty rather than crash. Platform
-        // reconcile failures must not wipe the catalog (D3-8).
-        set({ models: [] });
-        models = null;
+    // Rehydrate persisted fields via middleware.
+    await storeApi.persist.rehydrate();
+
+    // Cleanup queue lands in store before models are parsed (via rehydrate).
+    // Secrets: hydrate remote model keys from SecureStore.
+    const models = get().models;
+    if (models && models.length > 0) {
+      for (const m of models) {
+        if (m.origin === "remote_api" && m.id.startsWith("remote-")) {
+          const key = await readSecret(providerKeySS(m.id.slice("remote-".length)));
+          if (key) m.apiKey = key;
+        }
       }
-      if (models) {
-        try {
-          // Hydrate remote model keys from SecureStore (never persisted in KV).
-          for (const m of models) {
-            if (m.origin === "remote_api" && m.id.startsWith("remote-")) {
-              const key = await readSecret(providerKeySS(m.id.slice("remote-".length)));
-              if (key) m.apiKey = key;
-            }
-          }
-          set({ models });
-          // Persist scrubbed form immediately so a legacy plaintext provider
-          // key never lingers in AsyncStorage (D3-2, mirrors saveRemoteApis).
-          get().saveModels();
-          // Killed downloads leave partial files: mark them paused so the
-          // manual Resume button continues from kept bytes (no auto-start).
-          await get().reconcileInterrupted();
-          // THEN ask the platform what is still running.
-          const adopted = await platformDownloadService.reconcileWithNative?.();
-          for (const modelId of adopted ?? []) {
-            const spec = get().models.find((m) => m.id === modelId);
-            const job = platformDownloadService
-              .getAllJobs()
-              .find((j) => j.modelId === modelId);
-            if (spec && job) {
-              get().setModelProgress(modelId, {
-                downloadStatus: job.status,
-                downloadProgress: job.progress,
-                downloadedBytes: job.downloadedBytes,
-                totalBytes: job.totalBytes,
-              });
-            }
-          }
-        } catch {
-          // Platform reconcile failed: keep the hydrated catalog rather than
-          // wiping it; the next load can retry.
-          set({ models });
+      set({ models });
+      await get().reconcileInterrupted();
+      const adopted = await platformDownloadService.reconcileWithNative?.();
+      for (const modelId of adopted ?? []) {
+        const spec = get().models.find((m) => m.id === modelId);
+        const job = platformDownloadService.getAllJobs().find((j) => j.modelId === modelId);
+        if (spec && job) {
+          get().setModelProgress(modelId, {
+            downloadStatus: job.status,
+            downloadProgress: job.progress,
+            downloadedBytes: job.downloadedBytes,
+            totalBytes: job.totalBytes,
+          });
         }
       }
     }
 
-    if (apisRaw) {
-      try {
-        const rawList: unknown = JSON.parse(apisRaw);
-        // One-time migration: legacy plaintext apiKeys move to SecureStore.
-        if (Array.isArray(rawList)) {
-          for (const entry of rawList) {
-            if (
-              entry &&
-              typeof entry === "object" &&
-              typeof (entry as { id?: unknown }).id === "string" &&
-              typeof (entry as { apiKey?: unknown }).apiKey === "string" &&
-              (entry as { apiKey: string }).apiKey !== ""
-            ) {
-              await writeSecret(
-                providerKeySS((entry as { id: string }).id),
-                (entry as { apiKey: string }).apiKey,
-              );
-            }
+    // Vision heal + cleanup drain.
+    try {
+      await get().healDraftVisionClassification();
+      await get().drainPendingProjectionCleanup();
+    } catch (e) {
+      console.warn("Vision heal / projection cleanup failed:", e);
+    }
+
+    // Remote apis: hydrate keys from SecureStore.
+    const apis = get().remoteApis;
+    if (apis && apis.length > 0) {
+      // One-time migration: legacy plaintext apiKeys -> SecureStore.
+      // (Best-effort: if the blob still carries apiKey, migrate.)
+      for (const p of apis) {
+        if (p.apiKey && p.apiKey !== "") {
+          try {
+            await writeSecret(providerKeySS(p.id), p.apiKey);
+          } catch {
+            // ignore
           }
         }
-        const apis = upgradeRemoteApis(rawList);
-        for (const p of apis) {
-          const key = await readSecret(providerKeySS(p.id));
-          if (key) p.apiKey = key;
-        }
-        set({ remoteApis: apis });
-        // Persist scrubbed form immediately so plaintext never lingers.
-        get().saveRemoteApis();
-      } catch {
-        set({ remoteApis: [] });
       }
+      for (const p of apis) {
+        const key = await readSecret(providerKeySS(p.id));
+        if (key) p.apiKey = key;
+        else p.apiKey = "";
+      }
+      set({ remoteApis: apis });
     }
 
     // HF token: SecureStore first, legacy AsyncStorage migrates once.
     const ssToken = await readSecret(HF_TOKEN_SS_KEY);
     if (ssToken) {
       set({ hfToken: ssToken });
-    } else if (legacyTokenRaw) {
-      // Isolated: writeSecret now rejects, and letting that rejection reach
-      // hydrate's outer catch would abandon every read after this line. A
-      // failed migration keeps the legacy value in AsyncStorage to retry
-      // next launch.
-      try {
-        await writeSecret(HF_TOKEN_SS_KEY, legacyTokenRaw);
-        await asyncStorage.removeItem(HF_TOKEN_KEY);
-        set({ hfToken: legacyTokenRaw });
-      } catch {
-        // Legacy copy stays put; the token is simply absent this session.
+    } else {
+      const legacyTokenRaw = await storage.getItem(HF_TOKEN_KEY).catch(() => null);
+      if (legacyTokenRaw) {
+        try {
+          await writeSecret(HF_TOKEN_SS_KEY, legacyTokenRaw);
+          await storage.removeItem(HF_TOKEN_KEY);
+          set({ hfToken: legacyTokenRaw });
+        } catch {
+          // legacy copy stays put
+        }
       }
     }
-    // Absent means the default (on): only an explicit "false" parks it.
-    if (useTokenRaw !== null) {
-      set({ useHfToken: useTokenRaw === "true" });
-    }
 
-    if (activeRaw) {
-      const parsed = JSON.parse(activeRaw);
-      set({
-        activeModelId: parsed.modelId,
-        activeProviderType: parsed.providerType,
-      });
-    }
-
-    set({ modelSettings: parseModelSettingsMap(settingsRaw) });
-
-    try {
-      const guard = guardRaw ? JSON.parse(guardRaw) : 0;
-      if (typeof guard === "number" && Number.isFinite(guard) && guard > 0) {
-        set({ largestSuccessfulBytes: guard });
-      }
-    } catch {
-      // Ignore corrupt guard value.
-    }
-
-    try {
-      const capsRawParsed: unknown = capsRaw ? JSON.parse(capsRaw) : null;
-      if (capsRawParsed && typeof capsRawParsed === "object") {
-        const payload = capsRawParsed as Record<string, unknown>;
-        set({
-          remoteCaps: upgradeRemoteCaps(payload.caps),
-          privacyAcknowledged: payload.privacyAcknowledged === true,
-        });
-      }
-    } catch {
-      // Ignore corrupt caps value.
-    }
-
+    // loadPresets
     await get().loadPresets();
   } catch (e) {
     console.warn("Failed to load persisted model state:", e);

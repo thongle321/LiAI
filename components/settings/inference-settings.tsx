@@ -11,8 +11,8 @@
  * reply: the engine slot reloads when any init param changes.
  */
 
-import { useEffect, useState } from "react";
-import { Linking, Platform, Pressable, Text, View } from "react-native";
+import { useEffect } from "react";
+import { Linking, Pressable, Text, View } from "react-native";
 import { ExternalLink } from "lucide-react-native";
 
 import {
@@ -27,14 +27,11 @@ import {
   type CacheType,
   type FlashAttn,
 } from "@/store/inference.ts";
-import { useShallow } from "zustand/shallow";
-import { useModelStore } from "@/store/modelStore";
-import { useModelsUi } from "@/store/modelsUi.ts";
-import { colors } from "@/themes/tokens.ts";
-import {
-  getAvailableDevices,
-  getDeviceAvailability,
-} from "@/services/inference/deviceSelection.ts";
+import { useShallow } from "zustand/react/shallow";
+import { useModelStore } from "@/store/model-store";
+import { useModelsUi } from "@/store/models-ui.ts";
+import { useColors } from "@/themes/tokens.ts";
+import { SHOWS_WEIGHT_REPACKING, useDeviceAccelerators } from "./inference-device";
 import {
   AdvancedGroup,
   PickerRow,
@@ -53,6 +50,7 @@ const OPENCL_DOCS_URL =
   "https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/OPENCL.md#model-preparation";
 
 export function ModelInitializationSettings() {
+  const colors = useColors();
   // One useShallow unit: all 31 fields render here, so the section
   // re-renders only when one of them changes — never on memory/loading
   // writes owned by the sibling sections below.
@@ -126,29 +124,13 @@ export function ModelInitializationSettings() {
   const models = useModelStore((s) => s.models);
   const activeModelId = useModelStore((s) => s.activeModelId);
 
-  // Which accelerators the phone actually reports. Unknown (still
-  // loading) reads as CPU-only — PocketPal's direction: never offer
-  // hardware that isn't there. iOS needs no query: Metal is always
-  // present and no Hexagon exists, so it starts resolved (no flash).
-  const [availability, setAvailability] = useState<{
-    hasHexagon: boolean;
-    hasGpu: boolean;
-  } | null>(() =>
-    Platform.OS === "android"
-      ? null
-      : { hasHexagon: false, hasGpu: true },
-  );
+  // Which accelerators the phone actually reports. null (still loading) reads
+  // as CPU-only: never promise hardware that isn't there. The platform split
+  // itself lives in ./inference-device — iOS starts resolved, Android asks.
+  const availability = useDeviceAccelerators();
 
   useEffect(() => {
     void load();
-    if (Platform.OS !== "android") return;
-    let live = true;
-    void getAvailableDevices().then((devices) => {
-      if (live) setAvailability(getDeviceAvailability(devices));
-    });
-    return () => {
-      live = false;
-    };
   }, []);
 
   // A draft has to be a real, downloaded model, and never the model being
@@ -180,7 +162,7 @@ export function ModelInitializationSettings() {
           />
         </View>
       ) : null}
-      {Platform.OS !== "android" || availability?.hasGpu ? (
+      {availability?.hasGpu ? (
         <View className="row">
           <SliderRow
             label="GPU layers"
@@ -395,7 +377,7 @@ export function MemorySettings() {
           onPress={() => setUseMmap(!useMmap)}
         />
       </View>
-      {Platform.OS === "android" ? (
+      {SHOWS_WEIGHT_REPACKING ? (
         <View className="row">
           <ToggleRow
             label="Enable Weight Repacking"

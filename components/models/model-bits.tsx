@@ -4,7 +4,7 @@ import { Alert, Pressable, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import { CheckCircle2, Download, Eye, MessageSquare, Pause, Play, X } from "lucide-react-native";
 
-import { colors } from "@/themes/tokens.ts";
+import { useColors, type Colors } from "@/themes/tokens.ts";
 import { clampPercent, formatBytes, progressCaption } from "@/services/models/progress.ts";
 import type { ModelDownloadStatus, ModelType } from "@/types/models";
 
@@ -20,14 +20,18 @@ export function formatCompact(n: number): string {
   return `${n}`;
 }
 
-const STATUS_DOT_COLOR: Record<ModelDownloadStatus, string> = {
-  completed: colors.success,
-  downloading: colors.primary,
-  paused: colors.warning,
-  failed: colors.error,
-  cancelled: colors.secondaryText,
-  idle: colors.secondaryText,
-};
+/** The dot colour per status, resolved against the ACTIVE palette so a
+ * theme switch recolours the badge (was a module-scope light snapshot). */
+function statusDotColor(palette: Colors): Record<ModelDownloadStatus, string> {
+  return {
+    completed: palette.success,
+    downloading: palette.primary,
+    paused: palette.warning,
+    failed: palette.error,
+    cancelled: palette.secondaryText,
+    idle: palette.secondaryText,
+  };
+}
 
 const STATUS_LABEL: Record<ModelDownloadStatus, string> = {
   completed: "Downloaded",
@@ -59,6 +63,7 @@ export function StatusDot({ color }: { color: string }) {
 /** Leading model-type icon (PocketPal ModelCard.getModelTypeIcon parity):
  * eye for vision models, chat bubble for text. 16px before the name. */
 export function ModelTypeIcon({ type }: { type: ModelType }) {
+  const colors = useColors();
   const vision = type === "vision";
   const Icon = vision ? Eye : MessageSquare;
   return (
@@ -70,9 +75,10 @@ export function ModelTypeIcon({ type }: { type: ModelType }) {
 }
 
 export function StatusBadge({ status }: { status: ModelDownloadStatus }) {
+  const colors = useColors();
   return (
     <View className="flex-row items-center gap-2">
-      <StatusDot color={STATUS_DOT_COLOR[status]} />
+      <StatusDot color={statusDotColor(colors)[status]} />
       <Text className="text-quiet">
         {STATUS_LABEL[status]}
       </Text>
@@ -124,6 +130,7 @@ export function DownloadProgressBar({
  * ground, 48dp tall, 8px radius. Labelled rather than an icon alone: it
  * deletes the partial file, and a bare X does not say that. */
 export function CancelDownloadButton({ onPress }: { onPress: () => void }) {
+  const colors = useColors();
   return (
     <Pressable
       onPress={onPress}
@@ -187,6 +194,7 @@ export function DownloadButton({
   onResume?: () => void;
   disabled?: boolean;
 }) {
+  const colors = useColors();
   const isDownloading = status === "downloading";
   const isPaused = status === "paused";
   const isCompleted = status === "completed";
@@ -207,7 +215,7 @@ export function DownloadButton({
   if (isCompleted) {
     return (
       <View className="flex-row items-center rounded-lg bg-surface-2 px-3 py-2">
-        <CheckCircle2 size={16} color={colors.success} />
+        <CheckCircle2 size={16} color={colors.successMark} />
         <Text className="ml-2 text-quiet">Downloaded</Text>
       </View>
     );

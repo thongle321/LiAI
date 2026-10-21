@@ -13,7 +13,8 @@ import { create } from "zustand";
 
 import type { SearchAuth } from "@/types/api.ts";
 import { useSearch } from "../search.ts";
-import { createSendSlice, multimodalAvailable } from "./send.ts";
+import { createSendSlice } from "./send.ts";
+import { multimodalAvailable } from "@/services/inference/mmproj.ts";
 import { createSessionsSlice } from "./sessions.ts";
 import { createDraftSlice } from "./draft.ts";
 import type { ChatCtx, ChatDeps, ChatState, TurnRunner } from "./types.ts";
@@ -29,6 +30,7 @@ import {
   type EffortLevel,
 } from "@/utils/reasoning-capability.ts";
 import type { ThinkingChatProbe } from "@/services/inference/thinking-detection.ts";
+import type { ToolSupportProbe } from "@/services/inference/tool-support.ts";
 import {
   getAvailableDevices,
   resolveComputeDevices,
@@ -37,7 +39,11 @@ import { createRemoteEngine } from "@/services/inference/remote-engine.ts";
 import { resolveImage } from "@/services/storage/images.ts";
 import { createTurnRunner } from "@/services/chat/turn.ts";
 import { holdScreen, releaseScreen } from "@/services/chat/keep-awake.ts";
-import type { SessionStore } from "@/services/chat/session-store.ts";
+import type { SessionStore, SessionOverride } from "@/services/chat/session-store.ts";
+import type { ModelStore } from "../model-store.ts";
+import type { ModelSpec } from "@/types/models.ts";
+import type { Companion } from "@/types/companion.ts";
+import { generateFinalSystemPrompt } from "@/utils/companion-template.ts";
 
 /** Default BYOK resolver: consent-gated key from SecureStore, never KV.
  * Short-circuits before touching SecureStore when consent is absent. */
@@ -57,7 +63,7 @@ async function defaultSearchAuth(): Promise<SearchAuth | null> {
 /** Default engine source: live models store (no keys needed to pick). */
 async function defaultEngineSource(): Promise<EngineSource | null> {
   try {
-    const { useModelStore } = await import("../modelStore.ts");
+    const { useModelStore } = await import("../model-store.ts");
     const m = useModelStore.getState();
     return selectEngineSource({
       activeModelId: m.activeModelId,
@@ -135,7 +141,7 @@ async function resolveInit(): Promise<LlamaInitParams> {
   let modelDraft: string | undefined;
   if (params.draftModelId) {
     try {
-      const { useModelStore } = await import("../modelStore.ts");
+      const { useModelStore } = await import("../model-store.ts");
       const draft = useModelStore
         .getState()
         .models.find(
@@ -211,6 +217,10 @@ function getManager(): EngineManager {
             // ModelStore.ts:3280): probe once per load and persist the verdict.
             // Off the critical path — never delays the first turn.
             void recordThinkingCapability(fileName, ctx);
+          // Tool support, same shape and same reason: the verdict is read
+          // HERE because the manager keeps only the CompletionEngine, not
+          // the raw context this probe needs.
+          void recordToolSupport(fileName, ctx);
           return {
             engine: local.createLocalEngine(ctx),
             release: () => local.releaseLocalEngine(ctx),
@@ -221,7 +231,7 @@ function getManager(): EngineManager {
       },
       async (providerId: string) => {
         try {
-          const { useModelStore } = await import("../modelStore.ts");
+          const { useModelStore } = await import("../model-store.ts");
           const { readSecret } = await import("../models/storage.ts");
           const { providerKeySS } = await import("../../services/auth/secrets.ts");
           const m = useModelStore.getState();
@@ -235,6 +245,24 @@ function getManager(): EngineManager {
     );
   }
   return manager;
+}
+
+/** The model row a freshly loaded file belongs to, and the store that owns it.
+ *
+ *  Both capability probes (thinking, tool support) answer the same two
+ *  questions first: which model is this file, and where do I write the
+ *  verdict. The answer is the same for both, so it lives here once.
+ *
+ *  The model store is reached by dynamic import, like everywhere else in
+ *  this file: it pulls in native pieces a plain-Node test cannot resolve. */
+async function modelForFile(
+  fileName: string,
+): Promise<{ m: ModelStore; spec: ModelSpec } | null> {
+  const { useModelStore } = await import("../model-store.ts");
+  const m = useModelStore.getState();
+  const spec = m.models.find((model) => model.files[0]?.name === fileName);
+  if (!spec) return null;
+  return { m, spec };
 }
 
 /** Probe a freshly loaded context for thinking support and record it
@@ -253,32 +281,120 @@ async function recordThinkingCapability(
   ctx: { getFormattedChat?: ThinkingChatProbe["getFormattedChat"] },
 ): Promise<void> {
   try {
-    const [{ detectThinkingCapability }, { useModelStore }, { useInference }] =
-      await Promise.all([
-        import("../../services/inference/thinking-detection.ts"),
-        import("../modelStore.ts"),
-        import("../inference.ts"),
-      ]);
+    const { detectThinkingCapability } = await import(
+      "../../services/inference/thinking-detection.ts"
+    );
     const verdict = await detectThinkingCapability(ctx);
     if (verdict === undefined) return;
-    const m = useModelStore.getState();
-    const spec = m.models.find((model) => model.files[0]?.name === fileName);
-    if (!spec) return;
-    if (useInference.getState().thinkingOverrides[spec.id] !== undefined) return;
-    m.updateModel(spec.id, { reasoning: verdict });
+    const found = await modelForFile(fileName);
+    if (!found) return;
+    const { useInference } = await import("../inference.ts");
+    if (useInference.getState().thinkingOverrides[found.spec.id] !== undefined)
+      return;
+    if (found.spec.reasoning === verdict) return;
+    found.m.updateModel(found.spec.id, { reasoning: verdict });
   } catch {
     // Detection is a nicety; the model works without it.
   }
 }
 
-/** Resolved thinking state for the ACTIVE model (C6): a user
- *  override, then the spec's detected capability, then the global
- *  preference. An unclassified model gets the global flag, exactly as
- *  before this ticket. */
-async function defaultThinking(): Promise<boolean | undefined> {
+/** Probe a freshly loaded context for tool support and record it.
+ *
+ *  PocketPal parity: `pocketpal-ai/src/screens/ChatScreen/ChatScreen.tsx:148`
+ *  reads `model.chatTemplates.jinja` off the live context to decide
+ *  whether a companion's talents can be called at all.
+ *
+ *  Runs ONCE per load, off the critical path, and only writes when the
+ *  verdict CHANGES: the probe runs on every load, and a load that
+ *  rewrites the catalog to disk is a load that thrashes AsyncStorage.
+ *
+ *  "Could not tell" writes nothing — a context that reported no model
+ *  must not permanently mark a tool-capable model as incapable.
+ *
+ *  Local models only: `loadLocal` is the local loader, and a remote
+ *  provider's tool support is the server's business (we never probe it). */
+async function recordToolSupport(
+  fileName: string,
+  ctx: { model?: ToolSupportProbe["model"] },
+): Promise<void> {
   try {
+    const { hasToolSupport } = await import(
+      "../../services/inference/tool-support.ts"
+    );
+    const verdict = hasToolSupport(ctx);
+    if (verdict === undefined) return;
+    const found = await modelForFile(fileName);
+    if (!found) return;
+    if (found.spec.supportsTools === verdict) return;
+    found.m.updateModel(found.spec.id, { supportsTools: verdict });
+  } catch {
+    // Detection is a nicety; the model works without it.
+  }
+}
+
+/** The ACTIVE model's companion-bound persona for THIS conversation, or null.
+ *  The session's binding wins; a staged (not-yet-sent) session has none. */
+async function sessionCompanion(sessionId: string | null): Promise<Companion | null> {
+  try {
+    if (!sessionId) return null;
+    const store = await defaultGetStore();
+    if (!store) return null;
+    const companionId = await store.getSessionCompanion(sessionId).catch(() => null);
+    if (!companionId) return null;
+    const { useCompanions } = await import("../companions.ts");
+    return useCompanions.getState().getCompanion(companionId) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The session's OWN override layer — read ONLY when the session
+ *  flipped to 'custom'. With source 'companion' (the default) the session
+ *  follows the companion-resolved base and its stale override must not leak
+ *  into a turn (PocketPal's settings_source gate). */
+async function sessionCustomOverride(
+  sessionId: string | null,
+): Promise<SessionOverride | null> {
+  try {
+    if (!sessionId) return null;
+    const store = await defaultGetStore();
+    if (!store) return null;
+    const source = await store
+      .getSessionSettingsSource(sessionId)
+      .catch(() => null);
+    if (source !== "custom") return null;
+    return await store.getSessionOverride(sessionId).catch(() => null);
+  } catch {
+    return null;
+  }
+}
+
+/** Pact talent names for THIS conversation (tool gating). Always from
+ *  the session's companion, regardless of settings source: the pact is the
+ *  source of truth for tool availability, exactly like PocketPal — a
+ *  custom-settings session keeps its persona's tools. */
+async function defaultTalentNames(sessionId: string | null): Promise<string[]> {
+  try {
+    const companion = await sessionCompanion(sessionId);
+    return companion?.pact?.talents.map((t) => t.name) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** Resolved thinking state for THIS turn (C6 + session override).
+ *
+ *  Chain: session override (only when 'custom') → per-model user
+ *  override → the spec's detected capability → the global preference.
+ *  An unclassified model gets the global flag, exactly as before. */
+async function defaultThinking(
+  sessionId: string | null,
+): Promise<boolean | undefined> {
+  try {
+    const custom = await sessionCustomOverride(sessionId);
+    if (custom?.thinking !== undefined) return custom.thinking;
     const { useInference } = await import("../inference.ts");
-    const { useModelStore } = await import("../modelStore.ts");
+    const { useModelStore } = await import("../model-store.ts");
     const inf = useInference.getState();
     const m = useModelStore.getState();
     // Remote engines have no enable_thinking flag (the toggle is local
@@ -299,17 +415,22 @@ async function defaultThinking(): Promise<boolean | undefined> {
   }
 }
 
-/** Graded effort for the ACTIVE model (PocketPal axis-2 parity).
+/** Graded effort for THIS turn (PocketPal axis-2 parity + session
+ *  override).
  *
  *  Axis 1 gates the send: with "Reasoning model" OFF the kwarg is not
  *  sent at all — a kwarg the model ignores would otherwise ride along on
- *  every turn of a model the user told us does not think. Remote models
- *  included: their sheet shows Reasoning too, and the remote engine
- *  carries the provider-appropriate body field. */
-async function defaultEffort(): Promise<EffortLevel | undefined> {
+ *  every turn of a model the user told us does not think. An explicit
+ *  session effort ('custom' source) beats the gate the same way it beats
+ *  the per-model map: it is the most specific choice that exists. */
+async function defaultEffort(
+  sessionId: string | null,
+): Promise<EffortLevel | undefined> {
   try {
+    const custom = await sessionCustomOverride(sessionId);
+    if (custom?.effort !== undefined) return custom.effort;
     const { useInference } = await import("../inference.ts");
-    const { useModelStore } = await import("../modelStore.ts");
+    const { useModelStore } = await import("../model-store.ts");
     const m = useModelStore.getState();
     const id = m.activeModelId;
     if (id === null) return undefined;
@@ -352,25 +473,36 @@ async function defaultSampler(sessionId: string | null): Promise<SamplerParams |
   try {
     const [{ useInference }, { useModelStore }, sessionStore] = await Promise.all([
       import("../inference.ts"),
-      import("../modelStore.ts"),
+      import("../model-store.ts"),
       defaultGetStore(),
     ]);
     if (useModelStore.getState().activeProviderType === "remote") return null;
     const global = useInference.getState().sampler;
     if (!sessionStore || !sessionId) return global;
-    return resolveSampler(
-      global,
-      await sessionStore.getSessionSampler(sessionId).catch(() => null),
-    );
+    const override = await sessionCustomOverride(sessionId);
+    return resolveSampler(global, override?.sampler ?? null);
   } catch {
     return null;
   }
 }
 
-/** Per-model system prompt override; absent stays absent. */
-async function defaultSystemPrompt(): Promise<string | undefined> {
+/** Per-model system prompt override; absent stays absent. WITH a bound
+ *  companion the persona WINS: the companion's prompt (Mustache-rendered with its
+ *  parameters) is the conversation's identity, and settings_source does
+ *  not gate it — that only governs generation settings (PocketPal's
+ *  resolveSystemPrompt: companion → model → none). */
+async function defaultSystemPrompt(
+  sessionId: string | null,
+): Promise<string | undefined> {
   try {
-    const { useModelStore } = await import("../modelStore.ts");
+    const companion = await sessionCompanion(sessionId);
+    if (companion?.systemPrompt && companion.systemPrompt.trim() !== "") {
+      if (companion.parameters && Object.keys(companion.parameters).length > 0) {
+        return generateFinalSystemPrompt(companion.systemPrompt, companion.parameters);
+      }
+      return companion.systemPrompt;
+    }
+    const { useModelStore } = await import("../model-store.ts");
     const m = useModelStore.getState();
     if (!m.activeModelId) return undefined;
     const prompt = m.getModelSettings(m.activeModelId).systemPrompt;
@@ -384,7 +516,7 @@ async function defaultSystemPrompt(): Promise<string | undefined> {
  *  the configured EOS string joins the stop list). */
 async function defaultStopWords(): Promise<string[]> {
   try {
-    const { useModelStore } = await import("../modelStore.ts");
+    const { useModelStore } = await import("../model-store.ts");
     const m = useModelStore.getState();
     if (!m.activeModelId) return [];
     const s = m.getModelSettings(m.activeModelId);
@@ -401,7 +533,7 @@ async function defaultStopWords(): Promise<string[]> {
 /** Per-model chat-template override; "" keeps the model default. */
 async function defaultChatTemplate(): Promise<string> {
   try {
-    const { useModelStore } = await import("../modelStore.ts");
+    const { useModelStore } = await import("../model-store.ts");
     const m = useModelStore.getState();
     if (!m.activeModelId) return "";
     return m.getModelSettings(m.activeModelId).chatTemplate;
@@ -413,7 +545,7 @@ async function defaultChatTemplate(): Promise<string> {
 /** Per-model add-generation-prompt override; undefined keeps default. */
 async function defaultAddGenerationPrompt(): Promise<boolean | undefined> {
   try {
-    const { useModelStore } = await import("../modelStore.ts");
+    const { useModelStore } = await import("../model-store.ts");
     const m = useModelStore.getState();
     if (!m.activeModelId) return undefined;
     // Tri-state passthrough: true AND false are both user choices that must
@@ -426,41 +558,60 @@ async function defaultAddGenerationPrompt(): Promise<boolean | undefined> {
 }
 
 /** Default on-device turn: engine slot + agent loop + persisted turns. */
+async function resolveTurnInputs(sessionId: string | null): Promise<import("@/services/chat/turn.ts").TurnInputs> {
+  const sid = sessionId ?? null;
+  return {
+    engineSource: await defaultEngineSource().catch(() => null),
+    store: await defaultGetStore().catch(() => null),
+    search: null,
+    systemPrompt: await defaultSystemPrompt(sid ?? "").catch(() => undefined),
+    talentNames: (await defaultTalentNames(sid).catch(() => [])) ?? [],
+    thinking: await defaultThinking(sid ?? "").catch(() => undefined),
+    effort: await defaultEffort(sid ?? "").catch(() => undefined),
+    jinja: (await defaultJinja().catch(() => false)) ?? false,
+    sampler: await defaultSampler(sid).catch(() => null),
+    stopWords: (await defaultStopWords().catch(() => [])) ?? [],
+    chatTemplate: (await defaultChatTemplate().catch(() => "")) ?? "",
+    addGenerationPrompt: await defaultAddGenerationPrompt().catch(() => undefined),
+  };
+}
+
 function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner {
   return (text, paths, onToken, onReasoning, onToolStart, onToolDelta) => {
     const runTurn = createTurnRunner({
-      ensureEngine: async (source: EngineSource) =>
-        // The projector rides the same resolution the image gate uses
-        // (services/inference//mmproj.ts): the slot key includes it, so a model
-        // whose pair arrived mid-session cannot reuse the blind context.
-        getManager().ensure(
-          source,
-          source.kind === "local"
-            ? await projectorPathForFileName(source.fileName)
-            : undefined,
-          // Same resolver as the loader: a settings change makes a new
-          // key, the warm context misses, and the next turn reloads at
-          // the settings the user just chose (finding 1).
-          source.kind === "local" ? await resolveInit() : undefined,
-        ),
-      getEngineSource: () => defaultEngineSource(),
-      getStore: () => defaultGetStore(),
-      getSearch: async () => {
-        const auth = await getSearch().catch(() => null);
-        return auth ? { provider: auth.provider, key: auth.key, count: auth.count } : null;
+      engine: {
+        ensureEngine: async (source: EngineSource) =>
+          // The projector rides the same resolution the image gate uses
+          // (services/inference//mmproj.ts): the slot key includes it, so a model
+          // whose pair arrived mid-session cannot reuse the blind context.
+          getManager().ensure(
+            source,
+            source.kind === "local"
+              ? await projectorPathForFileName(source.fileName)
+              : undefined,
+            // Same resolver as the loader: a settings change makes a new
+            // key, the warm context misses, and the next turn reloads at
+            // the settings the user just chose (finding 1).
+            source.kind === "local" ? await resolveInit() : undefined,
+          ),
+        getEngineSource: () => defaultEngineSource(),
       },
-      getSystemPrompt: () => defaultSystemPrompt(),
-      getStopWords: () => defaultStopWords(),
-      getChatTemplate: () => defaultChatTemplate(),
-      getAddGenerationPrompt: () => defaultAddGenerationPrompt(),
-      getThinking: () => defaultThinking(),
-      getEffort: () => defaultEffort(),
-      getJinja: () => defaultJinja(),
-      getSampler: (sid) => defaultSampler(sid),
-      // Attachment → file for the engine. Lives in services/storage/images
-      // so the borrowed-path pass-through and the legacy data-uri decode
-      // have one owner (D5-4).
-      resolveImage,
+      store: {
+        getStore: () => defaultGetStore(),
+        getSearch: async () => {
+          const auth = await getSearch().catch(() => null);
+          return auth ? { provider: auth.provider, key: auth.key, count: auth.count } : null;
+        },
+      },
+      prompt: {
+        getTurnInputs: (sid) => resolveTurnInputs(sid),
+      },
+      media: {
+        // Attachment → file for the engine. Lives in services/storage/images
+        // so the borrowed-path pass-through and the legacy data-uri decode
+        // have one owner (D5-4).
+        resolveImage,
+      },
     });
     return runTurn(text, paths, onToken, onReasoning, onToolStart, onToolDelta);
   };

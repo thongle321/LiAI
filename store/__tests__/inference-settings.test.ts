@@ -51,6 +51,10 @@ describe("inference store", () => {
         imageMaxTokens: s.imageMaxTokens,
         draftModelId: s.draftModelId,
         autoOffload: s.autoOffload,
+        // The auto-release record rides the same defaults/persist round
+        // trip: it is the only thing that survives the process death
+        // between backgrounding and the next launch.
+        autoReleasedModelId: s.autoReleasedModelId,
       }).toEqual({ ...DEFAULT_INFERENCE });
     expect(s.loaded).toEqual(true);
   });

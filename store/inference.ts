@@ -1,22 +1,23 @@
 /** On-device inference init params: persisted, applied at context load.
  *
- * Factory takes storage so tests inject memory (see modelsUi pattern).
- * Only params the llama.rn bridge in services/inference//local-engine.ts forwards
- * are stored here — no dead knobs. Changing params busts the engine cache
- * because the manager folds them into its slot key.
+ * Persisted with Zustand's `persist` middleware over AsyncStorage.
+ * `skipHydration` keeps cold-start discipline (manual `rehydrate()`).
+ * No version/migrate: breaking changes bump INFERENCE_KEY.
  */
 
 import { create } from "zustand";
+import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
-import type { KeyValueStorage } from "../services/storage/storage";
+import type { KeyValueStorage } from "@/services/storage/storage";
+import { dedupedStorage, toStateStorage } from "@/services/storage/persist-helpers";
 import {
   DEFAULT_SAMPLER,
   parseSampler,
   type SamplerParams,
-} from "../services/inference/sampler.ts";
-import { isEffortLevel, type EffortLevel } from "../utils/reasoning-capability.ts";
+} from "@/services/inference/sampler.ts";
+import { isEffortLevel, type EffortLevel } from "@/utils/reasoning-capability.ts";
 
-export const INFERENCE_KEY = "liai_inference_v1";
+export const INFERENCE_KEY = "liai_inference";
 
 export const MIN_CONTEXT = 512;
 export const MAX_GPU_LAYERS = 99;
@@ -78,6 +79,11 @@ export interface InferenceParams {
    *  and a phone that re-loads a model on the next message is fine while
    *  one that never releases it gets killed for memory. */
   autoOffload: boolean;
+  /** The local model this app auto-released when it backgrounded, or null.
+   *  Persisted so the next launch can warm it back up before the first
+   *  message (PocketParity: wasAutoReleased + lastAutoReleasedModelId,
+   *  ModelStore.ts:1127). A null id IS "nothing was auto-released". */
+  autoReleasedModelId: string | null;
 }
 
 export interface InferenceState extends InferenceParams {
@@ -110,6 +116,8 @@ export interface InferenceState extends InferenceParams {
   setImageMaxTokens: (n: number) => void;
   setDraftModelId: (id: string | null) => void;
   setAutoOffload: (on: boolean) => void;
+  /** Record (or clear) the model this app auto-released. */
+  setAutoReleasedModelId: (id: string | null) => Promise<void>;
 }
 
 export const DEFAULT_INFERENCE: InferenceParams = {
@@ -139,6 +147,7 @@ export const DEFAULT_INFERENCE: InferenceParams = {
   imageMaxTokens: 512,
   draftModelId: null,
   autoOffload: true,
+  autoReleasedModelId: null,
 };
 
 /** Single clamp every numeric param flows through (persist/restore + setters). */
@@ -159,8 +168,8 @@ function asOverrides(value: unknown): Record<string, boolean> {
 /** Effort map: only canonical levels survive (PocketPal's EFFORT_LEVELS).
  *  This is the ONE place the persisted string world meets the union. */
 function asEffortOverrides(value: unknown): Record<string, EffortLevel> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const out: Record<string, EffortLevel> = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return out;
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
     if (isEffortLevel(v)) out[k] = v;
   }
@@ -216,6 +225,8 @@ function asParams(value: unknown): InferenceParams {
     ),
     draftModelId: typeof v.draftModelId === "string" ? v.draftModelId : null,
     autoOffload: flag("autoOffload", DEFAULT_INFERENCE.autoOffload),
+    autoReleasedModelId:
+      typeof v.autoReleasedModelId === "string" ? v.autoReleasedModelId : null,
   };
 }
 
@@ -228,205 +239,185 @@ export function parseInferenceParams(raw: string | null): InferenceParams {
   }
 }
 
+interface InferenceStoreApi {
+  persist: { rehydrate: () => void | Promise<void> };
+  getState: () => InferenceState;
+  setState: (partial: Partial<InferenceState>) => void;
+}
+
+const PARAM_KEYS: (keyof InferenceParams)[] = [
+  "nCtx",
+  "nGpuLayers",
+  "useMlock",
+  "useMmap",
+  "nBatch",
+  "nUbatch",
+  "nThreads",
+  "flashAttn",
+  "cacheK",
+  "cacheV",
+  "speculativeEnabled",
+  "specDraftGpuLayers",
+  "specDraftCacheK",
+  "specDraftCacheV",
+  "thinkingEnabled",
+  "thinkingOverrides",
+  "effortOverrides",
+  "jinjaEnabled",
+  "sampler",
+  "useHexagonNpu",
+  "useWeightRepacking",
+  "imageMaxTokens",
+  "draftModelId",
+  "autoOffload",
+  "autoReleasedModelId",
+];
+
 export function createInferenceStore(storage: KeyValueStorage) {
-  return create<InferenceState>()((set, get) => {
-    async function persist(): Promise<void> {
-      const {
-        nCtx,
-        nGpuLayers,
-        useMlock,
-        useMmap,
-        nBatch,
-        nUbatch,
-        nThreads,
-        flashAttn,
-        cacheK,
-        cacheV,
-        speculativeEnabled,
-        specDraftGpuLayers,
-        specDraftCacheK,
-        specDraftCacheV,
-        thinkingEnabled,
-        jinjaEnabled,
-        sampler,
-        useHexagonNpu,
-        useWeightRepacking,
-        imageMaxTokens,
-        draftModelId,
-        autoOffload,
-        thinkingOverrides,
-        effortOverrides,
-      } = get();
-      try {
-        await storage.setItem(
-          INFERENCE_KEY,
-          JSON.stringify({
-            nCtx,
-            nGpuLayers,
-            useMlock,
-            useMmap,
-            nBatch,
-            nUbatch,
-            nThreads,
-            flashAttn,
-            cacheK,
-            cacheV,
-            speculativeEnabled,
-            specDraftGpuLayers,
-            specDraftCacheK,
-            specDraftCacheV,
-            thinkingEnabled,
-            jinjaEnabled,
-            sampler,
-            useHexagonNpu,
-            useWeightRepacking,
-            imageMaxTokens,
-            draftModelId,
-            autoOffload,
-            thinkingOverrides,
-            effortOverrides,
-          }),
-        );
-      } catch {
-        // Non-critical prefs; the running values still apply.
-      }
-    }
+  let hydrating: Promise<void> | null = null;
+  let api: InferenceStoreApi | null = null;
 
-    /** In-flight hydration, so concurrent callers share one read. */
-    let hydrating: Promise<void> | null = null;
+  const created = create<InferenceState>()(
+    persist(
+      (set, get) => {
+        return {
+          ...DEFAULT_INFERENCE,
+          loaded: false,
+          load: async () => {
+            if (get().loaded) return;
+            hydrating ??= (async () => {
+              if (!api) return;
+              await api.persist.rehydrate();
+            })().finally(() => {
+              hydrating = null;
+            });
+            await hydrating;
+          },
+          setNCtx: (n) => {
+            set({ nCtx: clampInt(n, MIN_CONTEXT, Number.MAX_SAFE_INTEGER) });
+          },
+          setNGpuLayers: (n) => {
+            set({ nGpuLayers: clampInt(n, 0, MAX_GPU_LAYERS) });
+          },
+          setUseMlock: (on) => {
+            set({ useMlock: on });
+          },
+          setUseMmap: (on) => {
+            set({ useMmap: on });
+          },
+          setNBatch: (n) => {
+            set({ nBatch: clampInt(n, 1, MAX_BATCH) });
+          },
+          setNUbatch: (n) => {
+            set({ nUbatch: clampInt(n, 1, MAX_BATCH) });
+          },
+          setNThreads: (n) => {
+            set({ nThreads: clampInt(n, 1, MAX_THREADS) });
+          },
+          setFlashAttn: (v) => {
+            set({ flashAttn: v });
+          },
+          setCacheK: (v) => {
+            set({ cacheK: v });
+          },
+          setCacheV: (v) => {
+            set({ cacheV: v });
+          },
+          setSpeculativeEnabled: (on) => {
+            set({ speculativeEnabled: on });
+          },
+          setSpecDraftGpuLayers: (n) => {
+            set({ specDraftGpuLayers: clampInt(n, 0, MAX_GPU_LAYERS) });
+          },
+          setSpecDraftCacheK: (v) => {
+            set({ specDraftCacheK: v });
+          },
+          setSpecDraftCacheV: (v) => {
+            set({ specDraftCacheV: v });
+          },
+          setThinkingEnabled: (on) => {
+            set({ thinkingEnabled: on });
+          },
+          setThinkingOverride: (modelId, on) => {
+            set({
+              thinkingOverrides: { ...get().thinkingOverrides, [modelId]: on },
+            });
+          },
+          setEffortOverride: (modelId, effort) => {
+            set((s) => {
+              const next = { ...s.effortOverrides };
+              if (effort === null) delete next[modelId];
+              else if (isEffortLevel(effort)) next[modelId] = effort;
+              return { effortOverrides: next };
+            });
+          },
+          setJinjaEnabled: (on) => {
+            set({ jinjaEnabled: on });
+          },
+          setSampler: (patch) => {
+            set({ sampler: parseSampler({ ...get().sampler, ...patch }) });
+          },
+          setUseHexagonNpu: (on) => {
+            set({ useHexagonNpu: on });
+          },
+          setUseWeightRepacking: (on) => {
+            set({ useWeightRepacking: on });
+          },
+          setImageMaxTokens: (n) => {
+            set({ imageMaxTokens: clampInt(n, MIN_IMAGE_TOKENS, MAX_IMAGE_TOKENS) });
+          },
+          setDraftModelId: (id) => {
+            set({ draftModelId: id });
+          },
+          setAutoOffload: (on) => {
+            set({ autoOffload: on });
+          },
+          setAutoReleasedModelId: async (id) => {
+            set({ autoReleasedModelId: id });
+            // Ensure the record lands on disk before the caller frees the engine.
+            try {
+              const state: Record<string, unknown> = {};
+              const cur = get();
+              for (const k of PARAM_KEYS) state[k] = cur[k];
+              await storage.setItem(INFERENCE_KEY, JSON.stringify({ state, version: 0 }));
+            } catch {
+              // best effort
+            }
+          },
+        };
+      },
+      {
+        name: INFERENCE_KEY,
+        // Deduped: the middleware writes on every state change, and publishing
+        // `loaded` writes the same bytes it just wrote.
+        storage: createJSONStorage(() => toStateStorage(dedupedStorage(storage))),
+        skipHydration: true,
+        partialize: (state: InferenceState) => {
+          const out: Record<string, unknown> = {};
+          for (const k of PARAM_KEYS) {
+            out[k] = state[k];
+          }
+          return out;
+        },
+        merge: (persistedState, currentState) => {
+          const validated = asParams(persistedState);
+          return {
+            ...currentState,
+            ...validated,
+            loaded: currentState.loaded,
+          };
+        },
+        onRehydrateStorage: () => (state, error) => {
+          // Published through the store so subscribers re-render; an in-place
+          // mutation would leave them on a stale `loaded`.
+          if (state && !error) api?.setState({ loaded: true });
+        },
+      },
+    ),
+  );
 
-    return {
-      ...DEFAULT_INFERENCE,
-      loaded: false,
-      load: async () => {
-        // Single-flight, and it has to be. The settings screen mounts three
-        // cards that each call this on open, so an unguarded read did the same
-        // AsyncStorage fetch and parse three times on first mount and again on
-        // every visit — and, worse, a read resolving after the user changed a
-        // setting would write the stored value back over their change. The
-        // store is the in-memory source of truth once hydrated and nothing
-        // writes INFERENCE_KEY from outside this store, so a repeat call has
-        // nothing left to fetch. `hydrating` is cleared in `finally` so a
-        // failed read does not poison every later attempt.
-        if (get().loaded) return;
-        hydrating ??= (async () => {
-          set({
-            ...parseInferenceParams(await storage.getItem(INFERENCE_KEY)),
-            loaded: true,
-          });
-        })().finally(() => {
-          hydrating = null;
-        });
-        await hydrating;
-      },
-      setNCtx: (n) => {
-        set({ nCtx: clampInt(n, MIN_CONTEXT, Number.MAX_SAFE_INTEGER) });
-        void persist();
-      },
-      setNGpuLayers: (n) => {
-        set({ nGpuLayers: clampInt(n, 0, MAX_GPU_LAYERS) });
-        void persist();
-      },
-      setUseMlock: (on) => {
-        set({ useMlock: on });
-        void persist();
-      },
-      setUseMmap: (on) => {
-        set({ useMmap: on });
-        void persist();
-      },
-      setNBatch: (n) => {
-        set({ nBatch: clampInt(n, 1, MAX_BATCH) });
-        void persist();
-      },
-      setNUbatch: (n) => {
-        set({ nUbatch: clampInt(n, 1, MAX_BATCH) });
-        void persist();
-      },
-      setNThreads: (n) => {
-        set({ nThreads: clampInt(n, 1, MAX_THREADS) });
-        void persist();
-      },
-      setFlashAttn: (v) => {
-        set({ flashAttn: v });
-        void persist();
-      },
-      setCacheK: (v) => {
-        set({ cacheK: v });
-        void persist();
-      },
-      setCacheV: (v) => {
-        set({ cacheV: v });
-        void persist();
-      },
-      setSpeculativeEnabled: (on) => {
-        set({ speculativeEnabled: on });
-        void persist();
-      },
-      setSpecDraftGpuLayers: (n) => {
-        set({ specDraftGpuLayers: clampInt(n, 0, MAX_GPU_LAYERS) });
-        void persist();
-      },
-      setSpecDraftCacheK: (v) => {
-        set({ specDraftCacheK: v });
-        void persist();
-      },
-      setSpecDraftCacheV: (v) => {
-        set({ specDraftCacheV: v });
-        void persist();
-      },
-      setThinkingEnabled: (on) => {
-        set({ thinkingEnabled: on });
-        void persist();
-      },
-      setThinkingOverride: (modelId, on) => {
-        set({
-          thinkingOverrides: { ...get().thinkingOverrides, [modelId]: on },
-        });
-        void persist();
-      },
-      setEffortOverride: (modelId, effort) => {
-        set((s) => {
-          // null CLEARS the model's entry (merge-patch, so one model's
-          // override can never clobber another's); a non-level string is
-          // ignored rather than stored.
-          const next = { ...s.effortOverrides };
-          if (effort === null) delete next[modelId];
-          else if (isEffortLevel(effort)) next[modelId] = effort;
-          return { effortOverrides: next };
-        });
-        void persist();
-      },
-      setJinjaEnabled: (on) => {
-        set({ jinjaEnabled: on });
-        void persist();
-      },
-      setSampler: (patch) => {
-        set({ sampler: parseSampler({ ...get().sampler, ...patch }) });
-        void persist();
-      },
-      setUseHexagonNpu: (on) => {
-        set({ useHexagonNpu: on });
-        void persist();
-      },
-      setUseWeightRepacking: (on) => {
-        set({ useWeightRepacking: on });
-        void persist();
-      },
-      setImageMaxTokens: (n) => {
-        set({ imageMaxTokens: clampInt(n, MIN_IMAGE_TOKENS, MAX_IMAGE_TOKENS) });
-        void persist();
-      },
-      setDraftModelId: (id) => {
-        set({ draftModelId: id });
-        void persist();
-      },
-      setAutoOffload: (on) => {
-        set({ autoOffload: on });
-        void persist();
-      },
-    };
-  });
+  api = created as unknown as InferenceStoreApi;
+  return created;
 }
 
 async function rnStorage(): Promise<AsyncStorageStatic> {

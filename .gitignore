@@ -6,7 +6,6 @@
 .env*.local
 
 # Python (retired backend leftovers + caches)
-/backend/.venv/
 *.whl
 .pytest_cache/
 .ruff_cache/
@@ -35,6 +34,15 @@ scratch/
 /.pi/
 /.impeccable/
 skills-lock.json
+
+# Vendored reference app (read it, never edit it, never ship it)
+/pocketpal-ai/
+
+# Scratch material for prompts
+/prompt_material/
+
+# Local issue tracker (see docs/agents/issue-tracker.md) — local by design
+/.scratch/
 
 # Logs / OS / editors
 npm-debug.log*

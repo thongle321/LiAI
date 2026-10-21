@@ -4,15 +4,21 @@ import { Pressable, Text, View } from "react-native";
 import { Check, Copy } from "lucide-react-native";
 import CodeHighlighter from "react-native-code-highlighter";
 import github from "react-syntax-highlighter/dist/esm/styles/hljs/github";
+import githubDark from "react-syntax-highlighter/dist/esm/styles/hljs/github-gist";
 
-import { colors, font, typeScale } from "@/themes/tokens.ts";
+import { font, typeScale, useColors, useColorScheme } from "@/themes/tokens.ts";
 import { useCopy } from "@/hooks/useCopy.ts";
 
-/** github's own white code background cleared so the Mist card shows through. */
-const CODE_STYLE = {
-  ...github,
-  hljs: { ...github.hljs, background: "transparent" },
-} as typeof github;
+/** github's own white code background cleared so the card ground shows
+ *  through. The dark variant is github-gist (near-black, same family),
+ *  cleared the same way — so code follows the app theme with one prop. */
+function codeStyle(dark: boolean): typeof github {
+  const base = dark ? githubDark : github;
+  return {
+    ...base,
+    hljs: { ...base.hljs, background: "transparent" },
+  };
+}
 
 export function CodeBlock({
   language,
@@ -21,6 +27,8 @@ export function CodeBlock({
   language: string;
   text: string;
 }) {
+  const colors = useColors();
+  const dark = useColorScheme() === "dark";
   const { copied, copy } = useCopy();
 
   return (
@@ -35,18 +43,18 @@ export function CodeBlock({
           accessibilityLabel={copied ? "Copied" : "Copy code"}
         >
           {copied ? (
-            <Check size={16} color={colors.success} />
+            <Check size={16} color={colors.successMark} />
           ) : (
             <Copy size={16} color={colors.secondaryText} />
           )}
         </Pressable>
       </View>
       <CodeHighlighter
-        // Light plan, not atomOneDark: the near-black code plane is the
-        // retired world. The card supplies the Mist ground, so the style's
-        // own white background is cleared. Inter carries the code
-        // (Single Family Rule — no monospace exception).
-        hljsStyle={CODE_STYLE}
+        // github (light) / github-gist (dark), same family, both with the
+        // style's own background cleared so the card's Mist/Surface-2 ground
+        // shows through. Inter carries the code (Single Family Rule — no
+        // monospace exception).
+        hljsStyle={codeStyle(dark)}
         language={language}
         textStyle={{
           fontSize: typeScale.bodyMd.size,

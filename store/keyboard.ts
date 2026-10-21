@@ -24,7 +24,7 @@
 
 import { create } from "zustand";
 
-import { TAB_BAR_HEIGHT_SEED, resolveTabBarHeight } from "../utils/keyboard.ts";
+import { TAB_BAR_HEIGHT_SEED, resolveTabBarHeight } from "@/utils/keyboard.ts";
 
 export interface KeyboardUIState {
   /** The keyboard is showing, for the whole app — not per screen. */

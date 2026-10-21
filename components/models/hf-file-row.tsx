@@ -17,7 +17,7 @@ import { Pressable, Text, View } from "react-native";
 import { Bookmark, ChevronRight, Eye, Lock, Trash2 } from "lucide-react-native";
 
 import { useColors } from "@/themes/tokens.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import { hfSpecId } from "@/services/models/huggingface.ts";
 import { visionSizeBreakdown } from "@/services/models/hf-format.ts";
 import { hfFileWarnings } from "@/services/models/hf-warnings.ts";

@@ -28,12 +28,12 @@ import { Redirect } from "expo-router";
 import {
   createAutoRelease,
   restoreAutoReleasedModel,
-} from "../services/inference/auto-release.ts";
-import { useInference } from "../store/inference";
-import { useModelStore } from "../store/modelStore";
-import { useOnboardingStore } from "../store/onboarding";
-import { useSearch } from "../store/search";
-import { useVoice } from "../store/voice";
+} from "@/services/inference/auto-release.ts";
+import { useInference } from "@/store/inference";
+import { useModelStore } from "@/store/model-store";
+import { useOnboardingStore } from "@/store/onboarding";
+import { useSearch } from "@/store/search";
+import { useVoice } from "@/store/voice";
 
 export default function IndexGate() {
   // The first-run gate is SUBSCRIBED, not snapshotted: the root layout

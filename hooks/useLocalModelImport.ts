@@ -7,10 +7,10 @@ import { Alert } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import * as LegacyFileSystem from "expo-file-system/legacy";
 
-import { numberedFileName } from "../services/inference/local-model.ts";
-import { useSnackbar } from "../components/snackbar.tsx";
+import { numberedFileName } from "@/services/inference/local-model.ts";
+import { useSnackbar } from "@/components/snackbar.tsx";
 import { useLoadGuard } from "./useLoadGuard.ts";
-import { useModelStore } from "../store/modelStore";
+import { useModelStore } from "@/store/model-store";
 
 export function useLocalModelImport(): () => Promise<void> {
   const addLocalModel = useModelStore((s) => s.addLocalModel);

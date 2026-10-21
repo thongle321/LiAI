@@ -8,7 +8,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
-import type { KeyValueStorage } from "../services/storage/storage";
+import type { KeyValueStorage } from "@/services/storage/storage";
 import { dedupedStorage, toStateStorage } from "@/services/storage/persist-helpers";
 import {
   DEFAULT_PROVIDER,
@@ -17,7 +17,7 @@ import {
   parseResultCount,
   searchKeySS,
   type SearchProviderId,
-} from "../services/search/search-providers.ts";
+} from "@/services/search/search-providers.ts";
 
 export const SEARCH_KEY = "liai_search";
 

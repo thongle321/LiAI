@@ -1,6 +1,10 @@
 /**
  * The onboarding "You're set" screen: both buttons must land on a screen.
  *
+ * In `jest/` rather than beside the route it exercises, because every file
+ * under `app/` is a route to Expo Router — see the "keeps app/ to routes"
+ * guard in jest/architecture-conventions.test.ts.
+ *
  * The bug this pins: the root layout guards the drawer with
  * `Stack.Protected`, so while the gate is closed the `(drawer)` group is
  * NOT in the navigator's route names. Completing onboarding used to write

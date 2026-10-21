@@ -16,7 +16,7 @@ import {
   Mic,
   type LucideIcon,
 } from "lucide-react-native";
-import { useColors } from "../themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 
 export type ChatTab = "chat" | "voice" | "vision";
 

@@ -213,7 +213,7 @@ export function createAutoRelease(): AutoReleaseDeps {
       await useInference.getState().setAutoReleasedModelId(id);
     },
     readActive: async () => {
-      const { useModelStore } = await import("../../store/modelStore.ts");
+      const { useModelStore } = await import("../../store/model-store.ts");
       const m = useModelStore.getState();
       const spec = m.activeModelId
         ? m.models.find((model) => model.id === m.activeModelId)

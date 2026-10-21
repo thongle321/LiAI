@@ -6,7 +6,6 @@
 .env*.local
 
 # Python (retired backend leftovers + caches)
-/backend/.venv/
 *.whl
 .pytest_cache/
 .ruff_cache/
@@ -40,7 +39,7 @@ skills-lock.json
 /pocketpal-ai/
 
 # Scratch material for prompts
-
+/prompt_material/
 
 # Local issue tracker (see docs/agents/issue-tracker.md) — local by design
 /.scratch/

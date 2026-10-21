@@ -8,14 +8,14 @@
 import { create } from "zustand";
 import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
-import type { KeyValueStorage } from "../services/storage/storage";
+import type { KeyValueStorage } from "@/services/storage/storage";
 import { dedupedStorage, toStateStorage } from "@/services/storage/persist-helpers";
 import {
   DEFAULT_SAMPLER,
   parseSampler,
   type SamplerParams,
-} from "../services/inference/sampler.ts";
-import { isEffortLevel, type EffortLevel } from "../utils/reasoning-capability.ts";
+} from "@/services/inference/sampler.ts";
+import { isEffortLevel, type EffortLevel } from "@/utils/reasoning-capability.ts";
 
 export const INFERENCE_KEY = "liai_inference";
 

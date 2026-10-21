@@ -104,7 +104,7 @@ export async function loadModelState(): Promise<
   try {
     const [fs, models] = await Promise.all([
       import("expo-file-system/legacy"),
-      import("../../store/modelStore.ts"),
+      import("../../store/model-store.ts"),
     ]);
     const m = models.useModelStore.getState();
     return {

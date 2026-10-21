@@ -12,7 +12,7 @@ import { Alert } from "react-native";
 import { router } from "expo-router";
 
 import { useChatStore } from "@/store/chat.ts";
-import { useModelStore } from "@/store/modelStore.ts";
+import { useModelStore } from "@/store/model-store.ts";
 import { resolveCompanionModelAction } from "@/services/companions/activate.ts";
 import type { Companion } from "@/types/companion.ts";
 

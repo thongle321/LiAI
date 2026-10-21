@@ -9,9 +9,9 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
-import type { KeyValueStorage } from "../services/storage/storage.ts";
+import type { KeyValueStorage } from "@/services/storage/storage.ts";
 import { dedupedStorage, toStateStorage } from "@/services/storage/persist-helpers";
-import { clampWatchInterval, WATCH_INTERVAL_DEFAULT_MS } from "../services/vision/vision-watch.ts";
+import { clampWatchInterval, WATCH_INTERVAL_DEFAULT_MS } from "@/services/vision/vision-watch.ts";
 
 export const WATCH_KEY = "liai_watch";
 

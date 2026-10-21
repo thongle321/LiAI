@@ -9,7 +9,7 @@ import type {
   ModelSpec,
   RemoteApiProvider,
   RemoteCaps,
-} from "../types/models";
+} from "@/types/models";
 import { asRecord, positiveFinite } from "./guards.ts";
 
 const STATUSES: ModelDownloadStatus[] = [

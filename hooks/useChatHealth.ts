@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 import { useChatStore } from "@/store/chat.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 
 /** Re-resolve inference readiness whenever the active model changes, so the
  *  chat screen's affordances track model switches made elsewhere. */

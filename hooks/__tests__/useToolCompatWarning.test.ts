@@ -12,7 +12,7 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 
 import { useToolCompatWarning } from "../useToolCompatWarning.ts";
 import { useChatStore } from "@/store/chat.ts";
-import { useModelStore } from "@/store/modelStore.ts";
+import { useModelStore } from "@/store/model-store.ts";
 import { TOOL_COMPAT_WARNING } from "@/services/chat/tool-compat.ts";
 import type { Companion } from "@/types/companion.ts";
 import type { ModelSpec } from "@/types/models.ts";

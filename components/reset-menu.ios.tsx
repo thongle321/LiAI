@@ -5,7 +5,7 @@ import { Host } from "@expo/ui";
 import { Button, Menu } from "@expo/ui/swift-ui";
 import { ChevronDown } from "lucide-react-native";
 
-import { useColors, useColorScheme } from "../themes/tokens.ts";
+import { useColors, useColorScheme } from "@/themes/tokens.ts";
 import type { ResetMenuProps } from "./reset-menu";
 
 export function ResetMenu({ items }: ResetMenuProps) {

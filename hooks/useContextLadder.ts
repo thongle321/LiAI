@@ -13,22 +13,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { useInference } from "../store/inference.ts";
-import { useModelStore } from "../store/modelStore.ts";
+import { useInference } from "@/store/inference.ts";
+import { useModelStore } from "@/store/model-store.ts";
 import {
   buildContextLadder,
   CONTEXT_LADDER,
   type ContextLadder,
-} from "../services/chat/context-ladder.ts";
-import { maxContextLength, type GgufHeader } from "../services/models/gguf-metadata.ts";
-import { toMemoryMetadata } from "../services/models/memoryEstimator.ts";
+} from "@/services/chat/context-ladder.ts";
+import { maxContextLength, type GgufHeader } from "@/services/models/gguf-metadata.ts";
+import { toMemoryMetadata } from "@/services/models/memoryEstimator.ts";
 import {
   makeFitStatusFor,
   makeMemoryBytesFor,
   safeCeiling,
   type FitStatus,
-} from "../services/models/context-fit.ts";
-import { readTotalMemory } from "../services/models/device-tiers.ts";
+} from "@/services/models/context-fit.ts";
+import { readTotalMemory } from "@/services/models/device-tiers.ts";
 
 const EMPTY: ContextLadder = { stops: [], anyFits: false, defaultIndex: 0 };
 

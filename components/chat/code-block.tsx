@@ -43,7 +43,7 @@ export function CodeBlock({
           accessibilityLabel={copied ? "Copied" : "Copy code"}
         >
           {copied ? (
-            <Check size={16} color={colors.success} />
+            <Check size={16} color={colors.successMark} />
           ) : (
             <Copy size={16} color={colors.secondaryText} />
           )}

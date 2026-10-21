@@ -21,7 +21,7 @@ import { Alert } from "react-native";
 import { Pressable, Text, View } from "react-native";
 import { CheckCircle2, Download, Trash2 } from "lucide-react-native";
 
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import { useChatStore } from "@/store/chat";
 import { useColors } from "@/themes/tokens.ts";
 import { formatBytes, progressCaption } from "./model-bits.tsx";

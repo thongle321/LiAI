@@ -215,7 +215,7 @@ export function DownloadButton({
   if (isCompleted) {
     return (
       <View className="flex-row items-center rounded-lg bg-surface-2 px-3 py-2">
-        <CheckCircle2 size={16} color={colors.success} />
+        <CheckCircle2 size={16} color={colors.successMark} />
         <Text className="ml-2 text-quiet">Downloaded</Text>
       </View>
     );

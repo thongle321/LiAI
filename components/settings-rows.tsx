@@ -31,7 +31,7 @@ import { Host, Switch } from "@expo/ui";
 import Slider from "@expo/ui/community/slider";
 import { ChevronDown, ChevronRight, Minus, Plus } from "lucide-react-native";
 
-import { useColors, useColorScheme } from "../themes/tokens.ts";
+import { useColors, useColorScheme } from "@/themes/tokens.ts";
 import { PickerMenu } from "./picker-menu";
 
 /** Type rungs a zone renders at (font-size mirror,

@@ -356,12 +356,12 @@ export function VisionBottomPanel({
             </Text>
           </ScrollView>
         ) : (
-          <Text className="text-center font-sans text-body-md text-inverse-text/80">
+          <Text className="text-center font-sans text-body-md text-inverse-text">
             {phase === "idle" ? "Tap the mic and ask about what you see" : statusLabel}
           </Text>
         )}
         {camProblem !== null && (
-          <Text className="mt-1 text-center font-sans text-body-sm text-inverse-text/70">
+          <Text className="mt-1 text-center font-sans text-body-sm text-inverse-text">
             {camProblem}
           </Text>
         )}

@@ -290,7 +290,7 @@ export function ContextLadderSheet({
                 // it — the whole point of the ladder.
                 const fitClass =
                   stop.fit === "fits"
-                    ? "border-success/40 bg-success/10 text-success"
+                    ? "border-success/40 bg-success/10 text-success-deep"
                     : stop.fit === "tight"
                       ? "border-warning/40 bg-warning/10 text-warning"
                       : "border-error/40 bg-error/10 text-error";

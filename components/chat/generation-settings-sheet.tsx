@@ -38,12 +38,12 @@ import {
 import type { SessionOverride } from "@/services/chat/session-store.ts";
 import { useShallow } from "zustand/react/shallow";
 import { useInference } from "@/store/inference.ts";
-import { useModelStore } from "@/store/modelStore.ts";
+import { useModelStore } from "@/store/model-store.ts";
 import { useChatStore } from "@/store/chat";
 import { useCompanions } from "@/store/companions.ts";
 import { SamplerRows } from "./sampler-rows.tsx";
 import { Sheet } from "../sheet.tsx";
-import { ResetMenu } from "../reset-menu.tsx";
+import { ResetMenu } from "../reset-menu";
 import { RowSizeProvider, Segmented, SettingsSection } from "../settings-rows.tsx";
 
 type Mode = "companion" | "session" | "preset";

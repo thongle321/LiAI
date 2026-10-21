@@ -210,3 +210,268 @@ describe("text roles", () => {
     ).toEqual([]);
   });
 });
+
+/* ---------------------------------------------------------------------------
+ * CONTRAST — "checked, never eyeballed", actually checked.
+ *
+ * DESIGN.md states the Measured Contrast Rule five times and names this guard.
+ * Until now it named a file that did not exist (`tests/color-contrast.test.ts`),
+ * which is how six live failures survived: 12px amber text at 2.15:1, the dark
+ * primary button's label at 3.16:1, and every dark selected-element label.
+ *
+ * It reads the REAL token values out of global.css and measures the pairs the
+ * app actually paints, rather than every theoretical combination. Three floors:
+ * 4.5:1 for text, 3:1 for marks (icons, dots, borders, focus rings), and none
+ * for hairlines — DESIGN.md's one documented exemption, a divider carrying no
+ * information of its own.
+ */
+
+/** One spelling for both files: lowercase, and `rgb(a b c / d)` collapsed to
+ *  the same string as `rgba(a, b, c, d)` — the scrim is written both ways. */
+function normaliseColor(raw: string): string {
+  const value = raw.trim().toLowerCase();
+  const fn = value.match(
+    /^rgba?\(\s*([\d.]+)\s*[\s,]\s*([\d.]+)\s*[\s,]\s*([\d.]+)\s*(?:[/,]\s*([\d.]+)\s*)?\)$/,
+  );
+  if (fn !== null) return `rgba(${fn[1]},${fn[2]},${fn[3]},${fn[4] ?? "1"})`;
+  return value.replace(/\s+/g, "");
+}
+
+/** The `--color-*` declarations of one @variant block, keyed by CSS name.
+ *  Brace-counted from the opening brace: a lazy regex stops at the wrong
+ *  nesting level once comments or inner blocks are present. */
+function variantColors(variant: string): Record<string, string> {
+  const css = readFileSync(join(ROOT, "global.css"), "utf8");
+  const start = css.indexOf(`@variant ${variant} {`);
+  if (start === -1) return {};
+  let i = css.indexOf("{", start) + 1;
+  let depth = 1;
+  while (depth > 0 && i < css.length) {
+    if (css[i] === "{") depth += 1;
+    else if (css[i] === "}") depth -= 1;
+    i += 1;
+  }
+  const block = css.slice(css.indexOf("{", start) + 1, i - 1);
+  const out: Record<string, string> = {};
+  for (const [, name, value] of block.matchAll(/(--color-[\w-]+)\s*:\s*([^;]+);/g)) {
+    out[name] = normaliseColor(value);
+  }
+  return out;
+}
+
+/** `themes/tokens.ts`'s palettes, read as source text.
+ *
+ *  Read rather than imported on purpose: this suite is in the jest program
+ *  (`jest/tsconfig.json`), which resolves with `customConditions: []` and no
+ *  `react-native` condition, so importing `themes/tokens.ts` would drag
+ *  `uniwind` through a resolver that cannot see it. The file is two flat
+ *  `key: "#hex",` blocks, so the parse below is exact. */
+function palette(name: "lightColors" | "darkColors"): Record<string, string> {
+  const source = readFileSync(join(ROOT, "themes/tokens.ts"), "utf8");
+  const start = source.indexOf(`export const ${name} = {`);
+  if (start === -1) throw new Error(`themes/tokens.ts has no ${name}`);
+  const body = source.slice(start, source.indexOf("} as const;", start));
+  const out: Record<string, string> = {};
+  for (const [, key, value] of body.matchAll(/^\s*([A-Za-z]\w*):\s*"([^"]+)",/gm)) {
+    out[key] = normaliseColor(value);
+  }
+  return out;
+}
+
+/** The TS mirror's camelCase key -> the CSS name it stands for: `surface1` ->
+ *  `surface-1`, `secondaryTextMuted` -> `secondary-text-muted`. */
+function cssName(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/([a-z])(\d)/g, "$1-$2")
+    .toLowerCase();
+}
+
+/** The four grounds a token is painted on: Clean White, Cool Paper, Mist and
+ *  Surface Tint. */
+const GROUNDS = ["surface-1", "base", "surface-2", "surface-3"] as const;
+
+/** Every role that carries TEXT — held to 4.5:1 on every ground. */
+const TEXT_ROLES = [
+  "primary-text",
+  "secondary-text",
+  "secondary-text-muted",
+  "primary",
+  "error",
+  "warning",
+  "success-deep",
+] as const;
+
+/** Every role that carries a MARK (icon, dot, border, focus ring) — 3:1, the
+ *  non-text floor. Amber is here as well as in TEXT_ROLES because it is the one
+ *  status hue that cannot split into two steps; see its note in global.css.
+ *  `info` is deliberately absent: nothing paints it. */
+const MARK_ROLES = ["primary-mark", "error-mark", "success-mark", "warning"] as const;
+
+/** A label measured against the fill it actually sits on. */
+const LABEL_PAIRS: readonly (readonly [string, string])[] = [
+  ["on-primary", "primary"],
+  ["on-primary", "error"],
+  ["warm-accent", "warm-surface"],
+];
+
+/** The status chips: `bg-<fill>/10` with the matching text step on top
+ *  (`context-full-banner.tsx`). A tint is real paint, so the chip's label is
+ *  measured against the TINT, not the page — the check a raw token comparison
+ *  cannot make, and the one that caught amber. */
+const TINT_PAIRS: readonly (readonly [string, string])[] = [
+  ["success", "success-deep"],
+  ["warning", "warning"],
+  ["error", "error"],
+];
+
+const TINT_ALPHA = 0.1;
+
+/** A six-digit hex as RGB, or null for anything else (`--color-scrim` is an
+ *  rgba backdrop and is never a measured text pair). */
+function rgbOf(value: string): readonly [number, number, number] | null {
+  const hex = value.match(/^#([0-9a-f]{6})$/i);
+  if (hex === null) return null;
+  return [
+    parseInt(hex[1].slice(0, 2), 16),
+    parseInt(hex[1].slice(2, 4), 16),
+    parseInt(hex[1].slice(4, 6), 16),
+  ];
+}
+
+function channelToLinear(channel: number): number {
+  const c = channel / 255;
+  return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+function luminance(value: string): number {
+  const rgb = rgbOf(value);
+  if (rgb === null) throw new Error(`not a six-digit hex: ${value}`);
+  return (
+    0.2126 * channelToLinear(rgb[0]) +
+    0.7152 * channelToLinear(rgb[1]) +
+    0.0722 * channelToLinear(rgb[2])
+  );
+}
+
+/** WCAG 2.1 contrast ratio. */
+function contrast(a: string, b: string): number {
+  const x = luminance(a);
+  const y = luminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
+/** `fill` at `alpha` over an opaque `ground`, as hex. */
+function tinted(fill: string, alpha: number, ground: string): string {
+  const f = rgbOf(fill);
+  const g = rgbOf(ground);
+  if (f === null || g === null) throw new Error(`not a six-digit hex: ${fill} / ${ground}`);
+  const mixed = f.map((c, i) => Math.round(c * alpha + g[i] * (1 - alpha)));
+  return `#${mixed.map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+}
+
+describe("contrast", () => {
+  const themes: readonly (readonly [string, Record<string, string>])[] = [
+    ["light", variantColors("light")],
+    ["dark", variantColors("dark")],
+  ];
+
+  const token = (colors: Record<string, string>, role: string): string => {
+    const value = colors[`--color-${role}`];
+    if (value === undefined) throw new Error(`no --color-${role} in this theme`);
+    return value;
+  };
+
+  it("clears 4.5:1 for every text role on every ground", () => {
+    const failures = themes.flatMap(([theme, colors]) =>
+      TEXT_ROLES.flatMap((role) =>
+        GROUNDS.flatMap((ground) => {
+          const ratio = contrast(token(colors, role), token(colors, ground));
+          return ratio < 4.5 ? [`${theme} ${role} on ${ground} = ${ratio.toFixed(2)}`] : [];
+        }),
+      ),
+    );
+    expect(failures).toEqual([]);
+  });
+
+  it("clears 3:1 for every mark role on every ground", () => {
+    const failures = themes.flatMap(([theme, colors]) =>
+      MARK_ROLES.flatMap((role) =>
+        GROUNDS.flatMap((ground) => {
+          const ratio = contrast(token(colors, role), token(colors, ground));
+          return ratio < 3 ? [`${theme} ${role} on ${ground} = ${ratio.toFixed(2)}`] : [];
+        }),
+      ),
+    );
+    expect(failures).toEqual([]);
+  });
+
+  it("clears 4.5:1 for a label on the fill it sits on", () => {
+    const failures = themes.flatMap(([theme, colors]) =>
+      LABEL_PAIRS.flatMap(([label, fill]) => {
+        const ratio = contrast(token(colors, label), token(colors, fill));
+        return ratio < 4.5 ? [`${theme} ${label} on ${fill} = ${ratio.toFixed(2)}`] : [];
+      }),
+    );
+    expect(failures).toEqual([]);
+  });
+
+  it("clears 4.5:1 for a status chip on its own 10% tint", () => {
+    const failures = themes.flatMap(([theme, colors]) =>
+      TINT_PAIRS.flatMap(([fill, text]) =>
+        GROUNDS.flatMap((ground) => {
+          const ratio = contrast(
+            token(colors, text),
+            tinted(token(colors, fill), TINT_ALPHA, token(colors, ground)),
+          );
+          return ratio < 4.5
+            ? [`${theme} ${text} on ${fill}/10 over ${ground} = ${ratio.toFixed(2)}`]
+            : [];
+        }),
+      ),
+    );
+    expect(failures).toEqual([]);
+  });
+
+  it("keeps themes/tokens.ts in step with global.css", () => {
+    // DESIGN.md: the check "also fails if themes/tokens.ts drifts from
+    // global.css". Every mismatch is a one-sided leak — a token edited in one
+    // file and not the other, leaving JS-only consumers (icon colours, native
+    // props, inline styles) on a stale value while the UI moves on.
+    const mirrored: Record<string, Record<string, string>> = {
+      light: palette("lightColors"),
+      dark: palette("darkColors"),
+    };
+    const failures: string[] = [];
+    for (const [theme, colors] of themes) {
+      const ts = mirrored[theme];
+      for (const [key, value] of Object.entries(ts)) {
+        const name = `--color-${cssName(key)}`;
+        const cssValue = colors[name];
+        if (cssValue === undefined) failures.push(`${theme} ${key}: in tokens.ts, not global.css`);
+        else if (cssValue !== value) {
+          failures.push(`${theme} ${key}: global.css ${cssValue} vs tokens.ts ${value}`);
+        }
+      }
+      const named = new Set(Object.keys(ts).map((key) => cssName(key)));
+      for (const name of Object.keys(colors)) {
+        if (!named.has(name.replace("--color-", ""))) {
+          failures.push(`${theme} ${name}: in global.css, not tokens.ts`);
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it("never dims a text colour with an alpha modifier", () => {
+    // The No-Alpha-Text Rule. Seven `text-secondary-text/70` sites once sat in
+    // this codebase at 3.59:1, and two `text-inverse-text/70|80` sites survived
+    // long after. The rule exists because the alpha lives in the CALL SITE,
+    // where no token test can see it — so this scan is the only thing that can.
+    expect(
+      hits(
+        /text-(?:primary|primary-text|secondary-text|secondary-text-muted|inverse-text|on-primary|error|success|success-deep|warning|body|quiet|action)\/\d{1,3}/,
+      ),
+    ).toEqual([]);
+  });
+});

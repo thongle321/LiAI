@@ -32,7 +32,7 @@ import {
 } from "lucide-react-native";
 
 import { useColors } from "@/themes/tokens.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import {
   extractHFModelTitle,
   formatNumber,

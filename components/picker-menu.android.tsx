@@ -23,7 +23,7 @@ import {
 import { defaultMinSize, menuAnchor } from "@expo/ui/jetpack-compose/modifiers";
 import { ChevronDown } from "lucide-react-native";
 
-import { useColors, useColorScheme, typeScale } from "../themes/tokens.ts";
+import { useColors, useColorScheme, typeScale } from "@/themes/tokens.ts";
 import type { PickerMenuProps } from "./picker-menu";
 
 export function PickerMenu<T extends string>({

@@ -16,7 +16,7 @@
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import { Sheet } from "../sheet.tsx";
-import { PickerMenu } from "../picker-menu.tsx";
+import { PickerMenu } from "../picker-menu";
 import {
   CHAT_TEMPLATE_NAMES,
   getChatTemplate,

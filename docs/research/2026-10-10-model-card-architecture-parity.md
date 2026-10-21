@@ -84,7 +84,7 @@ gutter, which DESIGN.md calls out as "the defect, not a style choice".
   `#eff6ff` *is* `surface-3` — so this cost no new colour.
 - **The Download ground.** PocketPal's `btnDownload` trio
   (`#ecfdf5` / `#bbf7d0` / `#047857`), carried by three new tokens pinned in
-  `tests/color-contrast.test.ts`.
+  `jest/design-system.test.ts`.
 - **Icon buttons sit bare in the target.** No wrapper box. DESIGN.md's own
   rule ("pad the hit area, not the circle") and the reference's
   `styles.iconButton` agree; the box this card drew was decoration that also

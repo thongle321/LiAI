@@ -13,8 +13,8 @@
  * refreshed by checkHealth() from ChatScreen and can go stale.
  */
 
-import { useModelStore } from "../store/modelStore.ts";
-import { selectEngineSource } from "../services/inference/engine.ts";
+import { useModelStore } from "@/store/model-store.ts";
+import { selectEngineSource } from "@/services/inference/engine.ts";
 
 export function useModelReady(): boolean {
   return useModelStore(

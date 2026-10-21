@@ -12,7 +12,7 @@ import { Pressable, Text, View } from "react-native";
 import Animated, { FadeInDown, FadeInUp, FadeOutDown, FadeOutUp } from "react-native-reanimated";
 import { X } from "lucide-react-native";
 
-import { useColors, type Colors } from "../themes/tokens.ts";
+import { useColors, type Colors } from "@/themes/tokens.ts";
 import type {
   SnackbarOptions,
   SnackbarOverlayHandle,
@@ -36,7 +36,7 @@ const EXIT_DELAY_MS = 250;
 function typeColorFor(colors: Colors, type: SnackbarType): string {
   switch (type) {
     case "info": return colors.primary;
-    case "success": return colors.success;
+    case "success": return colors.successMark;
     case "warning": return colors.warning;
     case "error": return colors.error;
   }

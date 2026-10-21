@@ -18,7 +18,7 @@
 import { useEffect, useMemo } from "react";
 
 import { useChatStore } from "@/store/chat.ts";
-import { useModelStore } from "@/store/modelStore.ts";
+import { useModelStore } from "@/store/model-store.ts";
 import {
   TOOL_COMPAT_CODE,
   TOOL_COMPAT_WARNING,

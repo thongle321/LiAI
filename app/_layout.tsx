@@ -15,14 +15,14 @@ import { KeyboardProvider, useKeyboardState } from "react-native-keyboard-contro
 import { ScopedVariables, Uniwind } from "uniwind";
 
 import { useEffect, useRef } from "react";
-import { useColors, useColorScheme } from "../themes/tokens.ts";
-import { readStoredTheme } from "../services/storage/theme.ts";
-import { SnackbarProvider } from "../components/snackbar.tsx";
-import { useKeyboardStore } from "../store/keyboard.ts";
-import { useEngineOffload } from "../hooks/useEngineOffload.ts";
-import { useOnboardingGate } from "../hooks/useOnboardingGate.ts";
-import { useVoiceOffload } from "../hooks/useVoiceOffload.ts";
-import { useFluidTextVariables } from "../hooks/useFluidTextScale.ts";
+import { useColors, useColorScheme } from "@/themes/tokens.ts";
+import { readStoredTheme } from "@/services/storage/theme.ts";
+import { SnackbarProvider } from "@/components/snackbar.tsx";
+import { useKeyboardStore } from "@/store/keyboard.ts";
+import { useEngineOffload } from "@/hooks/useEngineOffload.ts";
+import { useOnboardingGate } from "@/hooks/useOnboardingGate.ts";
+import { useVoiceOffload } from "@/hooks/useVoiceOffload.ts";
+import { useFluidTextVariables } from "@/hooks/useFluidTextScale.ts";
 
 // Seed the persisted appearance (Settings > App Settings > Dark mode)
 // before the first paint. Fire-and-forget: the default "system" theme
@@ -44,7 +44,7 @@ void SplashScreen.preventAutoHideAsync().catch(() => {});
 // This used to be `app/+error.tsx`, which is TanStack Router's syntax --
 // expo-router's route scanner throws on any route node starting with '+',
 // so the app died before rendering anything.
-export { RootErrorBoundary as ErrorBoundary } from "../components/route-error-boundaries.tsx";
+export { RootErrorBoundary as ErrorBoundary } from "@/components/route-error-boundaries.tsx";
 
 /** Bridges react-native-keyboard-controller's events into the store the
  * whole app reads (store/keyboard.ts explains why one writer matters).

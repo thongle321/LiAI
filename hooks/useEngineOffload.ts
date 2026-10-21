@@ -7,18 +7,18 @@
 import { useEffect } from "react";
 import { AppState } from "react-native";
 
-import { watchBackgroundRelease } from "../services/inference/offload.ts";
+import { watchBackgroundRelease } from "@/services/inference/offload.ts";
 import {
   clearAutoReleased,
   createAutoRelease,
   markAutoReleased,
-} from "../services/inference/auto-release.ts";
-import { useChatStore } from "../store/chat";
+} from "@/services/inference/auto-release.ts";
+import { useChatStore } from "@/store/chat";
 // The deep path is deliberate: store/chat.ts SHADOWS the store/chat/
 // directory, so the bare specifier resolves to the barrel (which re-exports
 // only the store surface) and not to the module holding this function.
-import { reloadLocalEngine } from "../store/chat/index.ts";
-import { useInference } from "../store/inference.ts";
+import { reloadLocalEngine } from "@/store/chat/index.ts";
+import { useInference } from "@/store/inference.ts";
 
 export function useEngineOffload(): void {
   useEffect(() => {

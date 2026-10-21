@@ -25,7 +25,7 @@ import {
   menuExiting,
 } from "@/utils/motion.ts";
 import { useColors } from "@/themes/tokens.ts";
-import type { ModelsUiFilter } from "@/store/modelsUi.ts";
+import type { ModelsUiFilter } from "@/store/models-ui.ts";
 
 function GroupLabel({ label }: { label: string }) {
   return (

@@ -93,7 +93,7 @@ import { TrueSheet, type TrueSheet as TrueSheetType } from "@lodev09/react-nativ
 import { X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useColors } from "../themes/tokens.ts";
+import { useColors } from "@/themes/tokens.ts";
 
 /** An in-flow slot's measured height.
  *

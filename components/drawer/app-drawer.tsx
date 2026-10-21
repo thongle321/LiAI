@@ -20,15 +20,15 @@ import {
   type LucideIcon,
 } from "lucide-react-native";
 
-import { useColors } from "../themes/tokens.ts";
-import { useChatStore } from "../store/chat.ts";
+import { useColors } from "@/themes/tokens.ts";
+import { useChatStore } from "@/store/chat.ts";
 import {
   exportFilename,
   toSessionJson,
-} from "../services/chat/export.ts";
-import { readExportSessions } from "../services/chat/export-read.ts";
-import { shareExportedFile } from "../services/chat/share-export.ts";
-import { SessionList } from "./chat/session-list.tsx";
+} from "@/services/chat/export.ts";
+import { readExportSessions } from "@/services/chat/export-read.ts";
+import { shareExportedFile } from "@/services/chat/share-export.ts";
+import { SessionList } from "../chat/session-list.tsx";
 
 const VERSION = Constants.expoConfig?.version ?? "0.1.0";
 

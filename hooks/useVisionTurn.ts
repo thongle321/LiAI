@@ -16,22 +16,22 @@ import {
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
 
-import type { VoicePhase } from "../services/voice/voice-status.ts";
+import type { VoicePhase } from "@/services/voice/voice-status.ts";
 import {
   bargeActionFor,
   isThrottlingError,
   isVoiceThrottled,
   setVoiceThrottled,
   voiceErrorAction,
-} from "../services/voice/voice-status.ts";
-import { ensureMicAccess } from "../services/voice/mic-access.ts";
-import { speakReply, stopSpeaking } from "../services/voice/voice-speak.ts";
-import { useVoice } from "../store/voice.ts";
-import { VOICE_LISTEN_OPTS } from "../services/voice/voice-listen.ts";
-import { snapshotToUri } from "../services/storage/snapshot.ts";
-import { useChatStore } from "../store/chat.ts";
-import { multimodalAvailable } from "../services/inference/mmproj.ts";
-import { MULTIMODAL_WARNING } from "../store/chat/send.ts";
+} from "@/services/voice/voice-status.ts";
+import { ensureMicAccess } from "@/services/voice/mic-access.ts";
+import { speakReply, stopSpeaking } from "@/services/voice/voice-speak.ts";
+import { useVoice } from "@/store/voice.ts";
+import { VOICE_LISTEN_OPTS } from "@/services/voice/voice-listen.ts";
+import { snapshotToUri } from "@/services/storage/snapshot.ts";
+import { useChatStore } from "@/store/chat.ts";
+import { multimodalAvailable } from "@/services/inference/mmproj.ts";
+import { MULTIMODAL_WARNING } from "@/store/chat/send.ts";
 
 const NOTHING_HEARD = "Didn't hear anything — tap the mic to try again.";
 const NO_FRAME = "Couldn't capture a frame — try again.";

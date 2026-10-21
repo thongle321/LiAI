@@ -22,9 +22,9 @@ import { ContentColumn } from "@/components/content-column.tsx";
 import { useLocalModelImport } from "@/hooks/useLocalModelImport.ts";
 import { useLoadGuard } from "@/hooks/useLoadGuard.ts";
 import { useShallow } from "zustand/react/shallow";
-import { useModelStore } from "@/store/modelStore.ts";
+import { useModelStore } from "@/store/model-store.ts";
 import { useChatStore } from "@/store/chat.ts";
-import { useModelsUi } from "@/store/modelsUi.ts";
+import { useModelsUi } from "@/store/models-ui.ts";
 import { isProviderActive } from "@/services/search/model-providers.ts";
 import {
   buildModelGroups,

@@ -34,7 +34,7 @@ import {
 } from "lucide-react-native";
 
 import { useColors } from "@/themes/tokens.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import { useStorageDisclosure } from "@/hooks/useStorageDisclosure.ts";
 import { parseModelSettings } from "@/utils/model-settings.ts";
 import { cardActions, statusDotState } from "@/services/models/card-actions.ts";
@@ -211,7 +211,7 @@ export function ModelCard({
             accessibilityLabel={dot === "active" ? "Loaded" : "Downloaded"}
           >
             <StatusDot
-              color={dot === "active" ? colors.success : colors.secondaryText}
+              color={dot === "active" ? colors.successMark : colors.secondaryText}
             />
           </View>
         ) : null}
@@ -386,7 +386,7 @@ export function RemoteProviderCard({
         <View className="flex-1">
           <View className="flex-row items-center gap-2">
             <StatusDot
-              color={isActive ? colors.success : colors.secondaryText}
+              color={isActive ? colors.successMark : colors.secondaryText}
             />
             <Text className="font-sans-semibold text-body-md text-primary-text">
               {item.name}

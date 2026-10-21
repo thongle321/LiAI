@@ -47,7 +47,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { X, Check } from "lucide-react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import { useInference } from "@/store/inference.ts";
 import { Sheet } from "../sheet.tsx";
 import { ToggleRow } from "../settings-rows.tsx";

@@ -1,7 +1,7 @@
 /** HH:MM for timestamp rows (bubbles, history list),
  *  and the per-tool-call cost line (C15). */
 
-import type { ToolMetrics } from "../types/chat.ts";
+import type { ToolMetrics } from "@/types/chat.ts";
 
 export function formatTime(at: number): string {
   const d = new Date(at);

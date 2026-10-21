@@ -78,7 +78,14 @@
       --color-success-fill: #ecfdf5;
       --color-success-mark: #059669;
       --color-success-deep: #047857;
-      --color-warning: #f59e0b;
+      /* Amber, the light-theme step. #F59E0B measures 2.15:1 on Clean White —
+       * under BOTH floors — and it was carrying 12px text (.storage-warning,
+       * the banner and sheet warnings) as well as status glyphs. It cannot
+       * split into text and mark steps the way the reds do: #B45309 is the
+       * lightest amber that clears 3:1, and it still fails 4.5:1 on its OWN
+       * 10% tint, which the fit chip paints (bg-warning/10). #92400E is the
+       * lightest step that clears both, so ONE step serves every role. */
+      --color-warning: #92400e;
       --color-error: #b91c1c;
       --color-error-mark: #ef4444;
 
@@ -109,7 +116,10 @@
       --color-primary-mark: #5b8cff;
       --color-primary-hover: #4e7ff0;
       --color-primary-pressed: #3f6fe0;
-      --color-on-primary: #ffffff;
+      /* Near-black, not white: #5B8CFF is a LIGHT fill on a dark ground, so a
+       * white label measures 3.16:1 and fails. Base-ink on the signal fill is
+       * the dark-theme equivalent of light's white-on-primary (6.18:1). */
+      --color-on-primary: #0b0c10;
       /* Teal is the dark board's accent — machine-in-the-loop states keep
          the role, take the hue. */
       --color-warm-accent: #fb923c;
@@ -128,12 +138,13 @@
       --color-error-mark: #ef4444;
 
       /* Background #0B0C10 is the page; Surface 1 #1E1E24 raised, Surface 2
-         #23252C recessed; the tint step takes Primary Soft #2A3A56 (the
-         board's own selected-element ground). */
+         #23252C recessed. The tint step is a darkened Primary Soft: the board's
+         #2A3A56 is light enough that the signal (and Alert Red) dropped under
+         4.5:1 on it, which broke every selected-element label. */
       --color-base: #0b0c10;
       --color-surface-1: #1e1e24;
       --color-surface-2: #23252c;
-      --color-surface-3: #2a3a56;
+      --color-surface-3: #1c2740;
       --color-border: #2a2e35;
       /* The board's Overlay #00000080 (~50% black). */
       --color-scrim: rgb(0 0 0 / 0.5);

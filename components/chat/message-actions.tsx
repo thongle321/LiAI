@@ -132,7 +132,7 @@ export function MessageActions({
         accessibilityLabel={copied ? "Copied" : "Copy message"}
       >
         {copied ? (
-          <Check size={16} color={colors.success} />
+          <Check size={16} color={colors.successMark} />
         ) : (
           <Copy size={16} color={colors.secondaryText} />
         )}

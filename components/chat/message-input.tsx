@@ -26,7 +26,7 @@ import { useInference } from "@/store/inference.ts";
 import { suspendBackgroundRelease } from "@/services/inference/offload.ts";
 import { useModelReady } from "@/hooks/useModelReady.ts";
 import { useMultimodalAvailable } from "@/hooks/useMultimodalAvailable.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import { resolveThinking } from "@/services/inference/thinking.ts";
 import {
   MAX_IMAGES,

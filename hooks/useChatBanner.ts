@@ -21,11 +21,11 @@ import {
   resolveBannerVariant,
   type BannerResolution,
   type BannerVariant,
-} from "../services/chat/banner-variant.ts";
-import { effectiveNCtx, fillPercent } from "../services/chat/context-fill.ts";
-import { talentDefinitions } from "../services/agent/registry.ts";
-import type { ChatMessage } from "../types/chat.ts";
-import type { RemoteCaps } from "../types/models.ts";
+} from "@/services/chat/banner-variant.ts";
+import { effectiveNCtx, fillPercent } from "@/services/chat/context-fill.ts";
+import { talentDefinitions } from "@/services/agent/registry.ts";
+import type { ChatMessage } from "@/types/chat.ts";
+import type { RemoteCaps } from "@/types/models.ts";
 
 export interface ChatBannerInput {
   messages: readonly ChatMessage[];

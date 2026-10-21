@@ -8,12 +8,12 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
-import type { KeyValueStorage } from "../services/storage/storage";
+import type { KeyValueStorage } from "@/services/storage/storage";
 import { dedupedStorage, toStateStorage } from "@/services/storage/persist-helpers";
 import {
   AVAILABLE_TO_DOWNLOAD,
   READY_TO_USE,
-} from "../services/models/model-groups.ts";
+} from "@/services/models/model-groups.ts";
 
 export const UI_STATE_KEY = "liai_models_ui";
 

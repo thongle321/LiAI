@@ -42,7 +42,7 @@ import {
 import { TALENT_NAMES } from "@/services/agent/registry.ts";
 import { shareCompanions } from "@/services/companions/share-companions.ts";
 import { useCompanions } from "@/store/companions.ts";
-import { useModelStore } from "@/store/modelStore.ts";
+import { useModelStore } from "@/store/model-store.ts";
 import type { Companion, CompanionModelRef, ParameterDefinition } from "@/types/companion.ts";
 
 /** Preset card colors — PocketPal ships preset gradients; without a

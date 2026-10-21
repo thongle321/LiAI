@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 
 import { useChatHealth } from "../useChatHealth.ts";
 import { useChatStore } from "@/store/chat.ts";
-import { useModelStore } from "@/store/modelStore.ts";
+import { useModelStore } from "@/store/model-store.ts";
 
 describe("useChatHealth", () => {
   afterEach(() => {

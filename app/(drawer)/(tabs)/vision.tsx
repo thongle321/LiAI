@@ -33,7 +33,7 @@ import { VOICE_STATUS_LABEL } from "@/services/voice/voice-status.ts";
 import { useVisionTurn } from "@/hooks/useVisionTurn.ts";
 import { useWatchMode } from "@/hooks/useWatchMode.ts";
 import { useModelReady } from "@/hooks/useModelReady.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import {
   VisionBottomPanel,
   VisionPreview,

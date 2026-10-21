@@ -12,7 +12,7 @@
 import { useEffect, useState } from "react";
 import { Paths } from "expo-file-system";
 
-import { storageDisclosure, type StorageDisclosure } from "../services/models/storage-disclosure.ts";
+import { storageDisclosure, type StorageDisclosure } from "@/services/models/storage-disclosure.ts";
 
 /** Fast enough that freeing space shows up while the user is still looking
  *  at the card, slow enough not to ask the filesystem the same question

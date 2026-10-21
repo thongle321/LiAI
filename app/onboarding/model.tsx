@@ -26,7 +26,7 @@ import { PresetModelCard } from "@/components/models/available-models.tsx";
 import { ModelSettingsSheet } from "@/components/models/model-settings-sheet.tsx";
 import { presetPrimaryFile, presetSpecView } from "@/services/models/preset-spec.ts";
 import { useLoadGuard } from "@/hooks/useLoadGuard.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import type { ModelSpec, PresetModel } from "@/types/models";
 
 export default function ModelStep() {

@@ -117,8 +117,8 @@ or sync backend ever exists.
   product and must never be edited.
 - **Specs and research:** `docs/specs/` (per-feature specs and audits),
   `docs/research/` (reference-behaviour findings, recorded divergences).
-- **Executable parity checks:** `tests/` is run with `node --test`, and pins the
-  anatomy and copy of the surfaces measured against the reference.
+- **Executable parity checks:** `npm test` runs the Jest suite (`jest/` plus every `__tests__/`
+  beside its subject), and pins the anatomy and copy of the surfaces measured against the reference.
 
 ## Product Principles
 
@@ -137,13 +137,14 @@ or sync backend ever exists.
 
 ## Accessibility & Inclusion
 
-Binding requirements, machine-checked in `tests/`:
+Binding requirements:
 
 - Touch targets clear **48×48dp** on both platforms (Android's Material minimum
-  is the higher bar and is the shared one).
+  is the higher bar and is the shared one), held in the BEM blocks in
+  `global.css` rather than at call sites.
 - Text contrast **4.5:1**, non-text marks **3:1**, measured against real token
-  values in `tests/color-contrast.test.ts`; a token drifting from its CSS mirror
-  fails the build.
+  values in `jest/design-system.test.ts`; a token drifting from its CSS mirror in
+  `themes/tokens.ts` fails `npm test`.
 - **Dynamic type** is supported: the type scale drifts with device width inside a
   clamped range and composes with the system accessibility scale.
 - **Colour is never the only signal** — every status carries a glyph and a word.

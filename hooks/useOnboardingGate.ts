@@ -20,8 +20,8 @@
 import { useEffect, useRef, useState } from "react";
 import { router, usePathname } from "expo-router";
 
-import { decideOnboardingExit } from "../utils/onboarding-exit.ts";
-import { useOnboardingStore } from "../store/onboarding.ts";
+import { decideOnboardingExit } from "@/utils/onboarding-exit.ts";
+import { useOnboardingStore } from "@/store/onboarding.ts";
 
 /** A replace that lands nowhere is re-issued on a tick, this long after
  * the last attempt, up to this many times. The navigator re-admits the

@@ -151,6 +151,12 @@ plugins/
 
 docs/
 
+__mocks__/
+
+scripts/
+
+prompt_material/
+
 
 ```
 
@@ -162,8 +168,7 @@ components too early. Screen bodies are NOT shared UI and do not live in
 `components/` root: they get their own folder (`components/settings/`,
 `components/models/`), beside the private parts only they use. Shared row
 and sheet primitives that several features use (`settings-rows.tsx`)
-stay flat. Files are kebab-case, platform suffix included
-(`picker-menu.ios.tsx`), matching `create-expo-app`.
+stay flat.
 **assets/device-tiers.json** Keep it typed (see `services/models/device-tiers.ts`).
 **store/** holds Zustand stores. A store with injected collaborators
 composes its slices behind a barrel (`store/chat/index.ts`,
@@ -174,24 +179,58 @@ downloads/ auth/ storage/`. Never expose secret keys here.
 **utils/** is pure functions only: formatting, parsing, guards, motion,
 capability rules. A file that imports `expo-*`, `react-native-*`, SQLite or
 TinyBase belongs in `services/`, not here.
-**Imports:** anything two or more directories deep imports through the `@/`
-alias (`tsconfig.json` maps `@/*` to the repo root; Metro resolves it, and
-`jest.config.js` mirrors the mapping). A sibling stays relative — `./x` is
-already unambiguous. So `import { useChatStore } from "@/store/chat.ts";`, not
-`"../../../store/chat.ts"`. `jest/architecture-conventions.test.ts` enforces
-this. Dynamic `import()` calls are the one exception and keep their relative
-paths: jest's CJS runtime does not route them through `moduleNameMapper`.
+**Filenames:** kebab-case everywhere — `services/`, `store/`, `utils/`, `themes/`,
+`types/`, `constants/`, and `components/` with its platform suffix
+(`picker-menu.ios.tsx`) — matching `create-expo-app`. Two exceptions, both
+deliberate: a React hook file is camelCase (`hooks/useChatBanner.ts`), and a
+file whose suite is named in its subject's own casing keeps that casing
+(`services/tts/voiceUi.ts` → `voiceUi.test.ts`, `utils/model-settings.ts` →
+`model-settings.test.ts`). `jest/architecture-conventions.test.ts` enforces the
+kebab rule in `components/` only; the two exceptions are why the rest is prose.
+When a name is ambiguous, follow the folder: a `store/` file that mirrors
+`store/models/` is `model-store.ts`, not `modelStore.ts`.
+**Imports:** use the `@/` alias whenever a specifier leaves its own top-level
+directory (`tsconfig.json` maps `@/*` to the repo root; Metro resolves it, and
+`jest.config.js` mirrors the mapping). So
+`import { useChatStore } from "@/store/chat.ts";` from anywhere, never
+`"../../store/chat.ts"`. A `../` that RESOLVES inside the same top-level
+directory stays relative — `components/models/x.tsx` → `../sheet.tsx` is
+`components/sheet.tsx` — as does a sibling, since `./x` is already unambiguous.
+Two exemptions: a `.css` side-effect import stays relative (jest maps `\.css$`
+to a stub, and `^@/(.*)$` is listed first, so `@/global.css` would hand Jest raw
+CSS), and a dynamic `import()` keeps its relative path (jest's CJS runtime does
+not route it through `moduleNameMapper`).
+`jest/architecture-conventions.test.ts` resolves every specifier and enforces
+all of it.
 **jest/** is the test harness: `setup.ts` (module boundaries, loaded before
 a module is imported), `setupFilesAfterEnv.ts` (per-test hygiene),
 `fixtures/` (shared fakes), plus the router/storage/source helpers and the
 mocks `jest.config.js` maps. There is no `tests/` folder — tests live in a
 `__tests__/` folder beside the code they test, one concern per file, named
-in the subject's own casing (`voiceUi.install.test.ts`).
+in the subject's own casing (`voiceUi.install.test.ts`). **`app/` is the one
+exception, and it is not a preference:** every file under `app/` becomes a
+route to Expo Router, so a `__tests__` folder there would be navigable, and a
+test file has no default component to render. Route-level suites
+(`route-smoke`, `onboarding-gate`, `onboarding-done`) therefore live in
+`jest/`, and `jest/architecture-conventions.test.ts` asserts `app/` holds no
+test file or `__tests__` folder.
 **modules/** holds local Expo native modules (e.g. `native-download`, Kotlin
 + TypeScript). Their Kotlin is unreachable from `npm test` — nothing in this
 repo exercises it on a device today, so treat Kotlin changes as unverified
 until someone runs the app.
 **docs/** holds research, specs and agent docs (see Agent skills below).
+**__mocks__/** holds the module-boundary fakes `jest.config.js` maps by name —
+`__mocks__/external/*` stands in for the native packages a suite cannot load
+(llama.rn, vision-camera, sherpa-onnx, SQLite, and the rest). Add a fake here
+rather than a per-suite `jest.mock` factory when more than one suite needs it.
+**scripts/** holds the repo's own checks. `check-route-filenames.mjs` runs
+inside `npm test`: expo-router throws on a route node starting with `+` unless
+it is exactly `+not-found`, and that crash happens before the app renders.
+`keyboard-flash-loop.mjs` and `keyboard-jank-loop.mjs` are on-device dev loops.
+**prompt_material/** is the design board the visual system derives from — four
+screenshots cited as provenance by `global.css`, `themes/tokens.ts` and
+`PRODUCT.md`. Reference material, never shipped, and not an asset: no screen
+imports from it, so it stays out of `constants/images.ts`.
 **pocketpal-ai/** is the vendored reference app — read it, never edit it.
 **plugins/** holds Expo config plugins. Native tweaks live here so `expo prebuild` regenerates them; never hand-edit `android/` or `ios/`.
 **android/** is committed (PocketPal's way; `expo prebuild --clean` regenerates it from `app.json` + `plugins/` — restore anything else from git). Its manifest carries the two
@@ -323,9 +362,12 @@ When building a feature:
 
 6. Make sure the feature works end to end.
 
-7. Fix lint and type errors before finishing.
+7. Fix type errors before finishing (`npm run typecheck`), and run `npm test`.
 
-
+   There is **no linter** — that is a recorded decision, not an omission (see
+   `docs/architecture-divergences.md`). Style is held by
+   `jest/architecture-conventions.test.ts` and `jest/design-system.test.ts`,
+   plus the prose in this file.
 
 ## Secrets
 
@@ -333,7 +375,13 @@ When building a feature:
 
 - Store user-provided keys (ex: HF token, provider keys,...) in SecureStore.
 
-- Use server routes for tokens, AI calls, and any external API access.
+- No secret may be hardcoded or bundled. User-supplied keys (HF token, search
+  provider keys) live in SecureStore (`services/auth/secrets.ts`) and are read at
+  call time, never through app state or AsyncStorage.
+
+- If a backend lands, tokens and AI calls move behind server routes. Until then
+  the app calls HuggingFace, Tavily, Brave and Jina directly — that is the
+  recorded position, not an oversight to be "fixed" by inventing a server.
 
 
 

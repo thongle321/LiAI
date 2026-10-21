@@ -15,7 +15,7 @@ import {
   type SnackbarHostRef,
 } from "@expo/ui/jetpack-compose";
 
-import { useColors, useColorScheme } from "../themes/tokens.ts";
+import { useColors, useColorScheme } from "@/themes/tokens.ts";
 import type { SnackbarOptions, SnackbarOverlayHandle } from "./snackbar-overlay";
 
 const DEFAULT_DURATION = 4000;

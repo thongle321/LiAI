@@ -8,8 +8,8 @@
  * send path.
  */
 
-import { useModelStore } from "../store/modelStore.ts";
-import { canSeeImages } from "../services/inference/mmproj.ts";
+import { useModelStore } from "@/store/model-store.ts";
+import { canSeeImages } from "@/services/inference/mmproj.ts";
 
 export function useMultimodalAvailable(): boolean {
   return useModelStore((s) => canSeeImages(s));

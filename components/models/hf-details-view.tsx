@@ -26,7 +26,7 @@ import { useColors } from "@/themes/tokens.ts";
 import { useSnackbar } from "../snackbar.tsx";
 import { useFreeSpacePoll } from "@/hooks/useStorageDisclosure.ts";
 import { useLoadGuard } from "@/hooks/useLoadGuard.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import {
   formatNumber,
   isVisionModel,

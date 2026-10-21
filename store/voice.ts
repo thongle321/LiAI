@@ -26,14 +26,14 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
-import type { KeyValueStorage } from "../services/storage/storage.ts";
+import type { KeyValueStorage } from "@/services/storage/storage.ts";
 import { dedupedStorage, gatedStorage, toStateStorage } from "@/services/storage/persist-helpers";
-import { DEVICE_DEFAULT_VOICE, type NeuralEngineId, type Voice } from "../services/tts/types.ts";
-import { ENGINE_ORDER, NEURAL_ENGINE_META } from "../services/tts/engineMeta.ts";
-import { ttsDownloads, type TtsModelStatus } from "../services/tts/download.ts";
-import { ttsRuntime } from "../services/tts/runtime.ts";
-import { playVoice } from "../services/tts/voice-engine.ts";
-import { readTotalMemory } from "../services/models/device-tiers.ts";
+import { DEVICE_DEFAULT_VOICE, type NeuralEngineId, type Voice } from "@/services/tts/types.ts";
+import { ENGINE_ORDER, NEURAL_ENGINE_META } from "@/services/tts/engineMeta.ts";
+import { ttsDownloads, type TtsModelStatus } from "@/services/tts/download.ts";
+import { ttsRuntime } from "@/services/tts/runtime.ts";
+import { playVoice } from "@/services/tts/voice-engine.ts";
+import { readTotalMemory } from "@/services/models/device-tiers.ts";
 
 export const VOICE_KEY = "liai_voice";
 

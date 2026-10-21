@@ -40,7 +40,7 @@ import { resolveImage } from "@/services/storage/images.ts";
 import { createTurnRunner } from "@/services/chat/turn.ts";
 import { holdScreen, releaseScreen } from "@/services/chat/keep-awake.ts";
 import type { SessionStore, SessionOverride } from "@/services/chat/session-store.ts";
-import type { ModelStore } from "../modelStore.ts";
+import type { ModelStore } from "../model-store.ts";
 import type { ModelSpec } from "@/types/models.ts";
 import type { Companion } from "@/types/companion.ts";
 import { generateFinalSystemPrompt } from "@/utils/companion-template.ts";
@@ -63,7 +63,7 @@ async function defaultSearchAuth(): Promise<SearchAuth | null> {
 /** Default engine source: live models store (no keys needed to pick). */
 async function defaultEngineSource(): Promise<EngineSource | null> {
   try {
-    const { useModelStore } = await import("../modelStore.ts");
+    const { useModelStore } = await import("../model-store.ts");
     const m = useModelStore.getState();
     return selectEngineSource({
       activeModelId: m.activeModelId,
@@ -141,7 +141,7 @@ async function resolveInit(): Promise<LlamaInitParams> {
   let modelDraft: string | undefined;
   if (params.draftModelId) {
     try {
-      const { useModelStore } = await import("../modelStore.ts");
+      const { useModelStore } = await import("../model-store.ts");
       const draft = useModelStore
         .getState()
         .models.find(
@@ -231,7 +231,7 @@ function getManager(): EngineManager {
       },
       async (providerId: string) => {
         try {
-          const { useModelStore } = await import("../modelStore.ts");
+          const { useModelStore } = await import("../model-store.ts");
           const { readSecret } = await import("../models/storage.ts");
           const { providerKeySS } = await import("../../services/auth/secrets.ts");
           const m = useModelStore.getState();
@@ -258,7 +258,7 @@ function getManager(): EngineManager {
 async function modelForFile(
   fileName: string,
 ): Promise<{ m: ModelStore; spec: ModelSpec } | null> {
-  const { useModelStore } = await import("../modelStore.ts");
+  const { useModelStore } = await import("../model-store.ts");
   const m = useModelStore.getState();
   const spec = m.models.find((model) => model.files[0]?.name === fileName);
   if (!spec) return null;
@@ -394,7 +394,7 @@ async function defaultThinking(
     const custom = await sessionCustomOverride(sessionId);
     if (custom?.thinking !== undefined) return custom.thinking;
     const { useInference } = await import("../inference.ts");
-    const { useModelStore } = await import("../modelStore.ts");
+    const { useModelStore } = await import("../model-store.ts");
     const inf = useInference.getState();
     const m = useModelStore.getState();
     // Remote engines have no enable_thinking flag (the toggle is local
@@ -430,7 +430,7 @@ async function defaultEffort(
     const custom = await sessionCustomOverride(sessionId);
     if (custom?.effort !== undefined) return custom.effort;
     const { useInference } = await import("../inference.ts");
-    const { useModelStore } = await import("../modelStore.ts");
+    const { useModelStore } = await import("../model-store.ts");
     const m = useModelStore.getState();
     const id = m.activeModelId;
     if (id === null) return undefined;
@@ -473,7 +473,7 @@ async function defaultSampler(sessionId: string | null): Promise<SamplerParams |
   try {
     const [{ useInference }, { useModelStore }, sessionStore] = await Promise.all([
       import("../inference.ts"),
-      import("../modelStore.ts"),
+      import("../model-store.ts"),
       defaultGetStore(),
     ]);
     if (useModelStore.getState().activeProviderType === "remote") return null;
@@ -502,7 +502,7 @@ async function defaultSystemPrompt(
       }
       return companion.systemPrompt;
     }
-    const { useModelStore } = await import("../modelStore.ts");
+    const { useModelStore } = await import("../model-store.ts");
     const m = useModelStore.getState();
     if (!m.activeModelId) return undefined;
     const prompt = m.getModelSettings(m.activeModelId).systemPrompt;
@@ -516,7 +516,7 @@ async function defaultSystemPrompt(
  *  the configured EOS string joins the stop list). */
 async function defaultStopWords(): Promise<string[]> {
   try {
-    const { useModelStore } = await import("../modelStore.ts");
+    const { useModelStore } = await import("../model-store.ts");
     const m = useModelStore.getState();
     if (!m.activeModelId) return [];
     const s = m.getModelSettings(m.activeModelId);
@@ -533,7 +533,7 @@ async function defaultStopWords(): Promise<string[]> {
 /** Per-model chat-template override; "" keeps the model default. */
 async function defaultChatTemplate(): Promise<string> {
   try {
-    const { useModelStore } = await import("../modelStore.ts");
+    const { useModelStore } = await import("../model-store.ts");
     const m = useModelStore.getState();
     if (!m.activeModelId) return "";
     return m.getModelSettings(m.activeModelId).chatTemplate;
@@ -545,7 +545,7 @@ async function defaultChatTemplate(): Promise<string> {
 /** Per-model add-generation-prompt override; undefined keeps default. */
 async function defaultAddGenerationPrompt(): Promise<boolean | undefined> {
   try {
-    const { useModelStore } = await import("../modelStore.ts");
+    const { useModelStore } = await import("../model-store.ts");
     const m = useModelStore.getState();
     if (!m.activeModelId) return undefined;
     // Tri-state passthrough: true AND false are both user choices that must

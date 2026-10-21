@@ -36,7 +36,7 @@ import {
 } from "@/utils/motion.ts";
 import { useChatStore } from "@/store/chat.ts";
 import { useKeyboardStore } from "@/store/keyboard.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import { useInference } from "@/store/inference.ts";
 import { useKeyboardLift } from "@/hooks/useKeyboardLift.ts";
 import { useChatSessionLoader } from "@/hooks/useChatSessionLoader.ts";

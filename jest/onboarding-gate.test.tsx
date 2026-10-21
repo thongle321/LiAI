@@ -1,6 +1,10 @@
 /**
  * The first-run gate is enforced by the navigator, not by a Redirect.
  *
+ * In `jest/` rather than beside the route it exercises, because every file
+ * under `app/` is a route to Expo Router — see the "keeps app/ to routes"
+ * guard in jest/architecture-conventions.test.ts.
+ *
  * A Redirect lives in app/index.tsx, so it can only fire once that screen
  * mounts. A deep link (`liai://models`, `liai://chat?message=…`) resolves its
  * target route directly and never mounts index — the Redirect never runs and

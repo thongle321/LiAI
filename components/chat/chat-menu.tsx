@@ -38,7 +38,7 @@ import {
 } from "lucide-react-native";
 
 import { useChatStore } from "@/store/chat";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import {
   exportFilename,
   toAllSessionsJson,

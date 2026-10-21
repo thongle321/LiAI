@@ -18,7 +18,7 @@ import { Eye, EyeOff, ExternalLink } from "lucide-react-native";
 
 import { useColors } from "@/themes/tokens.ts";
 import { cn } from "@/utils/cn.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import { useSnackbar } from "../snackbar.tsx";
 import { Sheet } from "../sheet.tsx";
 import { ActionRow, SettingsSection, ToggleRow } from "../settings-rows.tsx";

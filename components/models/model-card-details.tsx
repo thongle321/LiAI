@@ -16,7 +16,7 @@ import { ExternalLink, ImageOff } from "lucide-react-native";
 
 import { useShallow } from "zustand/react/shallow";
 import { useInference } from "@/store/inference.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 import { useChatStore } from "@/store/chat";
 import { resolveLocalFile } from "@/services/inference/engine.ts";
 import { formatParams } from "@/services/search/model-providers.ts";

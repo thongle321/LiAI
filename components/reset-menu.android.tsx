@@ -13,7 +13,7 @@ import {
 import { defaultMinSize, menuAnchor } from "@expo/ui/jetpack-compose/modifiers";
 import { ChevronDown } from "lucide-react-native";
 
-import { useColors, useColorScheme, typeScale } from "../themes/tokens.ts";
+import { useColors, useColorScheme, typeScale } from "@/themes/tokens.ts";
 import type { ResetMenuProps } from "./reset-menu";
 
 export function ResetMenu({ items }: ResetMenuProps) {

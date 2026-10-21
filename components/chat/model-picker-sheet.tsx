@@ -31,7 +31,7 @@ import { Check } from "lucide-react-native";
 import { Sheet } from "../sheet.tsx";
 import { useColors } from "@/themes/tokens.ts";
 import { pickableModels } from "@/services/chat/models.ts";
-import { useModelStore } from "@/store/modelStore";
+import { useModelStore } from "@/store/model-store";
 
 export function ModelPickerSheet({
   visible,

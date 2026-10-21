@@ -56,9 +56,9 @@ export function keyboardOcclusion(height: number, insetsBottom = 0): number {
 
 /** Seeded height of the tab bar, excluding the bottom safe-area inset.
  *
- * The CANONICAL definition is TAB_BAR_HEIGHT in components/bottom-nav.tsx
- * (a source scan lives in tests/keyboard-avoidance.test.ts and locks that
- * file). This module is its only re-declaration, and it exists because
+ * The CANONICAL definition is TAB_BAR_HEIGHT in
+ * components/navigation/bottom-nav.tsx. This module is its only
+ * re-declaration, and it exists because
  * BottomNav.tsx imports React Native and Uniwind: a store importing it for
  * one number drags the native type graph into the ambient program and
  * breaks the augmentation loading. One re-declaration, here, in the module
@@ -66,7 +66,13 @@ export function keyboardOcclusion(height: number, insetsBottom = 0): number {
  * DEFAULT font scale (listed on TAB_BAR_HEIGHT in BottomNav.tsx) — an
  * ESTIMATE the bar's own onLayout replaces, because the label scales with
  * the OS font setting up to 1.5x and a grown bar measures taller than any
- * fixed sum. */
+ * fixed sum.
+ *
+ * Nothing machine-checks the two against each other: this comment used to
+ * point at a `tests/keyboard-avoidance.test.ts` source scan that does not
+ * exist, and `utils/__tests__/keyboard.test.ts` only asserts the seed is a
+ * positive integer. A class-sum edit in BottomNav therefore drifts this
+ * value silently. */
 export const TAB_BAR_HEIGHT_SEED = 69;
 
 /** The tab bar's measured height wins over the seeded class-sum constant —

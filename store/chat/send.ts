@@ -13,6 +13,20 @@ import { canSeeImages, loadModelState, multimodalAvailable } from "@/services/in
 import { useVoice } from "../voice.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
+/** Pure: last user message before (excluding) a bubble. */
+export function priorUserTextIn(messages: ChatMessage[], beforeId: string): ChatMessage | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].id === beforeId) {
+      for (let j = i - 1; j >= 0; j -= 1) {
+        if (messages[j].role === "user") return messages[j];
+      }
+      return null;
+    }
+  }
+  const last = [...messages].reverse().find((m) => m.role === "user");
+  return last ?? null;
+}
+
 function llmError(message: string): ApiError {
   return { code: "llm_error", message };
 }
@@ -314,17 +328,7 @@ export function createSendSlice(
 
   /** Last user text before (excluding) a bubble — the question to rerun. */
   function priorUserText(beforeId: string): ChatMessage | null {
-    const messages = get().messages;
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      if (messages[i].id === beforeId) {
-        for (let j = i - 1; j >= 0; j -= 1) {
-          if (messages[j].role === "user") return messages[j];
-        }
-        return null;
-      }
-    }
-    const last = [...messages].reverse().find((m) => m.role === "user");
-    return last ?? null;
+    return priorUserTextIn(get().messages, beforeId);
   }
 
   return {

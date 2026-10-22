@@ -6,13 +6,12 @@
  * own scheme, so they land in the app's world rather than the platform's.
  *
  * The card is the .rows BEM block in global.css (Clean White, 1px Hairline,
- * dividers edge to edge, 48dp floor); SettingsSection owns the rhythm
- * between groups (and, for now, the lead-in description), so no screen
- * hand-rolls that again. Section TITLES are gone (font-size mirror Q6=B).
+ * 48dp floor). `title` turns it into PocketPal's titled card: 16/24 regular
+ * title inside, 16px padding, dividers inset 16px, 16px between cards.
+ * SettingsSection owns that rhythm so no screen hand-rolls it.
  *
- * Every row carries a description (DESIGN.md, Settings): a bare label says
- * nothing about what the value does, and a control whose effect the user
- * cannot predict is worse than no control at all.
+ * Descriptions are not mandatory: a row explains itself only when the value
+ * or its consequence is not obvious (consent, cost, errors, warnings).
  */
 
 import {
@@ -59,41 +58,55 @@ export function RowSizeProvider({
   return <RowSize.Provider value={value}>{children}</RowSize.Provider>;
 }
 
-/** Label + optional description, the left half of every row. */
-export function RowLabel({ label, description }: { label: string; description?: string }) {
+/** Label + optional leading icon + optional description, the left half of
+ *  every row. */
+export function RowLabel({
+  label,
+  description,
+  icon,
+}: {
+  label: string;
+  description?: string;
+  icon?: ReactNode;
+}) {
   const size = useContext(RowSize);
   return (
-    <View className="flex-1 pr-4">
-      <Text className={`font-sans ${size.label} text-primary-text`}>{label}</Text>
-      {description ? (
-        <Text className={`mt-1 font-sans ${size.desc} text-secondary-text`}>
-          {description}
-        </Text>
-      ) : null}
+    <View className="flex-1 flex-row items-center pr-4">
+      {icon ? <View className="mr-2">{icon}</View> : null}
+      <View className="flex-1">
+        <Text className={`font-sans ${size.label} text-primary-text`}>{label}</Text>
+        {description ? (
+          <Text className={`mt-1 font-sans ${size.desc} text-secondary-text`}>
+            {description}
+          </Text>
+        ) : null}
+      </View>
     </View>
   );
 }
 
-/** A titled group of rows. `children` are the .row-wrapped contents. */
-export function SettingsSection({
-  description,
-  children,
-  plain = false,
-}: {
-  description?: string;
-  children: ReactNode;
-  /** PocketPal's param card: 16px padding, 24px rhythm, NO dividers (the
-   *  `.row` class is what draws them, so plain children skip it). */
-  plain?: boolean;
-}) {
+/** A group of rows, either PocketPal's titled settings card or the plain
+ *  (borderless, undivided) card the sheets use. */
+type SettingsSectionProps = { children: ReactNode } & (
+  | { title: string; plain?: undefined }
+  | { title?: undefined; plain: true }
+);
+
+export function SettingsSection(props: SettingsSectionProps) {
+  if (props.plain === true) {
+    return (
+      <View className="mb-6">
+        <View className="rows rows--plain">{props.children}</View>
+      </View>
+    );
+  }
+
   return (
-    <View className="mb-6">
-      {description ? (
-        <Text className="mb-2 font-sans text-body-md text-secondary-text">
-          {description}
-        </Text>
-      ) : null}
-      <View className={plain ? "rows rows--plain" : "rows"}>{children}</View>
+    <View className="mb-4">
+      <View className="rows rows--titled">
+        <Text className="card-title pb-2">{props.title}</Text>
+        {props.children}
+      </View>
     </View>
   );
 }
@@ -101,11 +114,13 @@ export function SettingsSection({
 export function ToggleRow({
   label,
   description,
+  icon,
   on,
   onPress,
 }: {
   label: string;
   description?: string;
+  icon?: ReactNode;
   on: boolean;
   onPress: () => void;
 }) {
@@ -118,7 +133,7 @@ export function ToggleRow({
       accessibilityState={{ checked: on }}
       accessibilityLabel={label}
     >
-      <RowLabel label={label} description={description} />
+      <RowLabel label={label} description={description} icon={icon} />
       {/* No `label` on the native Switch: on iOS it draws a second copy of
           the text next to the control, so the row's own Text is the label and
           the Host carries the accessible name for it. */}
@@ -529,11 +544,9 @@ export function ActionRow({
  *  past, and a screen with 28 visible rows is a wall (DESIGN.md, Settings). */
 export function AdvancedGroup({
   label,
-  description,
   children,
 }: {
   label: string;
-  description?: string;
   children: ReactNode;
 }) {
   const colors = useColors();
@@ -547,7 +560,10 @@ export function AdvancedGroup({
         accessibilityState={{ expanded: open }}
         accessibilityLabel={label}
       >
-        <RowLabel label={label} description={description} />
+        {/* PocketPal's accordion title: 14/20 secondary, no description. */}
+        <Text className="flex-1 pr-4 font-sans text-title text-secondary-text">
+          {label}
+        </Text>
         {/* Glyph swap, not a transform: a style-rotated lucide icon
             rendered INVISIBLE on device (the closed group showed no chevron
             at all). Right when closed, down when open — the affordance
@@ -560,7 +576,8 @@ export function AdvancedGroup({
       </Pressable>
       {/* The children are wrapped here, not at each call site: .row is what
           carries the 16px inset, the 48dp floor and the divider, and rows
-          written bare lose all three. */}
+          written bare lose all three. The parent card already pads 16px, so
+          the children use `.row--titled` to drop the horizontal inset. */}
       {open
         ? Children.toArray(children).map((child, index) => (
             // The index, because it is the only key guaranteed unique among
@@ -569,7 +586,14 @@ export function AdvancedGroup({
             // buys nothing. (The previous version synthesised one from
             // String(child), which is always "[object Object]" and so
             // collapsed to a single key for every row — a crash.)
-            <View className={index === Children.count(children) - 1 ? "row row--last" : "row"} key={index}>
+            <View
+              className={
+                index === Children.count(children) - 1
+                  ? "row row--titled row--last"
+                  : "row row--titled"
+              }
+              key={index}
+            >
               {child}
             </View>
           ))

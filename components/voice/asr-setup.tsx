@@ -155,8 +155,8 @@ export function AsrSetup() {
 
   return (
     <View className="mb-4">
-      <SettingsSection description="Tap the mic in chat to dictate; speech is transcribed on your device.">
-        <View className="row">
+      <SettingsSection title="Voice Input">
+        <View className="row row--titled row--last">
           <ToggleRow
             label="Voice input"
             description={
@@ -173,7 +173,7 @@ export function AsrSetup() {
 
       <View className="mb-3 mt-6 flex-row items-end justify-between">
         <View className="flex-1 pr-4">
-          <Text className="section-title">Voice models</Text>
+          <Text className="card-title">Voice models</Text>
           <Text className="mt-1 text-quiet">
             On-device speech recognition. Uses storage space.
           </Text>

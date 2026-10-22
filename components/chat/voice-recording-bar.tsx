@@ -90,7 +90,7 @@ function LanguageLabel() {
   if (code === null) {
     return (
       <Text
-        className="pb-1.5 text-center font-sans text-caption text-secondary-text"
+        className="pb-1.5 text-center text-quiet"
         testID="voice-language"
       >
         Language: auto
@@ -105,7 +105,7 @@ function LanguageLabel() {
       testID="voice-language-reset"
     >
       <Text
-        className="pb-1.5 text-center font-sans text-caption text-secondary-text"
+        className="pb-1.5 text-center text-quiet"
         testID="voice-language"
       >
         Language: {code.toUpperCase()} (tap to reset)
@@ -139,7 +139,7 @@ export function VoiceRecordingBar({
         </Pressable>
         {isTranscribing ? (
           <Text
-            className="flex-1 text-center font-sans text-body-sm text-secondary-text"
+            className="flex-1 text-center text-quiet"
             accessibilityLiveRegion="polite"
             testID="voice-transcribing"
           >

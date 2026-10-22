@@ -284,11 +284,9 @@ export function SearchSettings() {
   const providerIds = SEARCH_PROVIDERS.map((p) => p.id);
 
   return (
-    <SettingsSection
-      description="Searches leave this device. Bring your own key — we never hold it."
-    >
+    <SettingsSection title="Internet Search">
       {hasConsented ? (
-        <View className="row">
+        <View className="row row--titled">
           <ActionRow
             label="Searching the web is enabled"
             description={CONSENT_TEXT}
@@ -298,7 +296,7 @@ export function SearchSettings() {
           />
         </View>
       ) : (
-        <View className="row">
+        <View className="row row--titled">
           <ActionRow
             label="Searches leave your device"
             description={CONSENT_TEXT}
@@ -307,17 +305,16 @@ export function SearchSettings() {
           />
         </View>
       )}
-      <View className="row">
+      <View className="row row--titled">
         <PickerRow<SearchProviderId>
           label="Search provider"
-          description="Which service answers, and which key it uses."
           options={providerIds}
           value={activeProviderId}
           onChange={(next) => setActiveProvider(next)}
           displayFor={providerMenuLabel}
         />
       </View>
-      <View className="row">
+      <View className="row row--titled">
         <ActionRow
           label="API key"
           description={
@@ -333,10 +330,9 @@ export function SearchSettings() {
           onPress={() => setKeySheetFor(activeProviderId)}
         />
       </View>
-      <View className="row">
+      <View className="row row--titled row--last">
         <SliderRow
           label="Results per search"
-          description="Fewer results keep more room in the model's context."
           display={`${resultCount}`}
           value={resultCount}
           min={MIN_RESULT_COUNT}

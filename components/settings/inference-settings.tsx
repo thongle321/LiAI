@@ -149,24 +149,20 @@ export function ModelInitializationSettings() {
   const draftName = new Map(models.map((m) => [m.id, m.name]));
 
   return (
-    <SettingsSection
-      description="Takes effect on the next reply — the model reloads automatically."
-    >
+    <SettingsSection title="Model Initialization Settings">
       {availability?.hasHexagon ? (
-        <View className="row">
+        <View className="row row--titled">
           <ToggleRow
             label="Use Hexagon NPU"
-            description="Run parts of the model on the Hexagon DSP. Faster, but not every model is quantised for it."
             on={useHexagonNpu}
             onPress={() => setUseHexagonNpu(!useHexagonNpu)}
           />
         </View>
       ) : null}
       {availability?.hasGpu ? (
-        <View className="row">
+        <View className="row row--titled">
           <SliderRow
             label="GPU layers"
-            description="How much of the model runs on the GPU. All of it is fastest."
             display={`${nGpuLayers}`}
             value={nGpuLayers}
             min={0}
@@ -177,7 +173,7 @@ export function ModelInitializationSettings() {
       ) : null}
       {!availability ||
       (!availability.hasHexagon && !availability.hasGpu) ? (
-        <View className="row">
+        <View className="row row--titled">
           <View className="flex-1 pr-4">
             <Text className="font-sans text-body-lg text-primary-text">
               Device Selection
@@ -204,10 +200,9 @@ export function ModelInitializationSettings() {
           </View>
         </View>
       ) : null}
-      <View className="row">
+      <View className="row row--titled">
         <TextFieldRow
           label="Context Size"
-          description="How much conversation the model can hold at once."
           value={nCtx}
           min={MIN_CONTEXT}
           placeholder={`Enter context size (min ${MIN_CONTEXT})`}
@@ -217,13 +212,9 @@ export function ModelInitializationSettings() {
       </View>
       {/* No .row wrapper here: AdvancedGroup wraps its own children, so
           wrapping it would stack the inset and add a second divider. */}
-      <AdvancedGroup
-        label="Advanced Settings"
-        description="Batching, attention, caches, and speculative decoding."
-      >
+      <AdvancedGroup label="Advanced Settings">
           <SliderRow
             label="Batch Size"
-            description="Tokens processed per pass. Larger is faster, heavier on memory."
             display={`${nBatch}`}
             value={nBatch}
             min={1}
@@ -233,7 +224,6 @@ export function ModelInitializationSettings() {
           />
           <SliderRow
             label="Physical Batch Size"
-            description="The hardware-level batch underneath it."
             display={`${nUbatch}`}
             value={nUbatch}
             min={1}
@@ -253,7 +243,6 @@ export function ModelInitializationSettings() {
           />
           <SliderRow
             label="Image Max Tokens"
-            description="Maximum tokens for image processing (lower = faster, less detail). Applied when the model loads."
             display={`${imageMaxTokens}`}
             value={imageMaxTokens}
             min={MIN_IMAGE_TOKENS}
@@ -263,28 +252,24 @@ export function ModelInitializationSettings() {
           />
           <Segmented<FlashAttn>
             label="Flash Attention"
-            description="Memory-efficient attention (auto-enabled on Metal)."
             value={flashAttn}
             options={FLASH_OPTIONS}
             onPick={setFlashAttn}
           />
           <PickerRow<CacheType>
             label="Key Cache Type"
-            description="Select the cache type for key computation."
             options={CACHE_TYPES}
             value={cacheK}
             onChange={setCacheK}
           />
           <PickerRow<CacheType>
             label="Value Cache Type"
-            description="Select the cache type for value computation."
             options={CACHE_TYPES}
             value={cacheV}
             onChange={setCacheV}
           />
           <ToggleRow
             label="Speculative Decoding"
-            description="Use a small draft model (or an embedded MTP model) to predict tokens and speed up generation. Experimental."
             on={speculativeEnabled}
             onPress={() => setSpeculativeEnabled(!speculativeEnabled)}
           />
@@ -292,7 +277,6 @@ export function ModelInitializationSettings() {
             <>
               <PickerRow
                 label="Draft Model"
-                description="Drafts tokens for the active model."
                 options={draftOptions}
                 value={draftModelId ?? NO_DRAFT}
                 onChange={(id) => setDraftModelId(id === NO_DRAFT ? null : id)}
@@ -304,7 +288,6 @@ export function ModelInitializationSettings() {
               />
               <SliderRow
                 label="Draft GPU Layers"
-                description="Number of draft-model layers to offload to the GPU."
                 display={`${specDraftGpuLayers}`}
                 value={specDraftGpuLayers}
                 min={0}
@@ -314,14 +297,12 @@ export function ModelInitializationSettings() {
               />
               <PickerRow<CacheType>
                 label="Draft Key Cache Type"
-                description="Applies once speculative decoding runs."
                 options={CACHE_TYPES}
                 value={specDraftCacheK}
                 onChange={setSpecDraftCacheK}
               />
               <PickerRow<CacheType>
                 label="Draft Value Cache Type"
-                description="Applies once speculative decoding runs."
                 options={CACHE_TYPES}
                 value={specDraftCacheV}
                 onChange={setSpecDraftCacheV}
@@ -360,34 +341,31 @@ export function MemorySettings() {
   }, []);
 
   return (
-    <SettingsSection>
-      <View className="row">
+    <SettingsSection title="Memory Settings">
+      <View className="row row--titled">
         <ToggleRow
           label="Use Memory Lock"
-          description="Force system to keep model in RAM rather than swapping or compressing."
           on={useMlock}
           onPress={() => setUseMlock(!useMlock)}
         />
       </View>
-      <View className="row">
+      <View className="row row--titled">
         <ToggleRow
           label="Memory Mapping"
-          description="Use memory-mapped files for faster model loading."
           on={useMmap}
           onPress={() => setUseMmap(!useMmap)}
         />
       </View>
       {SHOWS_WEIGHT_REPACKING ? (
-        <View className="row">
+        <View className="row row--titled">
           <ToggleRow
             label="Enable Weight Repacking"
-            description="Faster prompt processing with minimal memory overhead when memory mapping is disabled. Token generation is unaffected."
             on={useWeightRepacking}
             onPress={() => setUseWeightRepacking(!useWeightRepacking)}
           />
         </View>
       ) : null}
-      <View className="row">
+      <View className="row row--titled row--last">
         <Text className="text-quiet">
           Model reload needed for changes to take effect.
         </Text>
@@ -412,19 +390,17 @@ export function ModelLoadingSettings() {
   }, []);
 
   return (
-    <SettingsSection>
-      <View className="row">
+    <SettingsSection title="Model Loading Settings">
+      <View className="row row--titled">
         <ToggleRow
           label="Auto Offload/Load"
-          description="Offload model when app is in background."
           on={autoOffload}
           onPress={() => setAutoOffload(!autoOffload)}
         />
       </View>
-      <View className="row">
+      <View className="row row--titled row--last">
         <ToggleRow
           label="Auto-Navigate to Chat"
-          description="Jump to chat when you activate a model."
           on={autoNavigateToChat}
           onPress={() => setAutoNavigateToChat(!autoNavigateToChat)}
         />

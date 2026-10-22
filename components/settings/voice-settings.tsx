@@ -79,11 +79,10 @@ export function VoiceSettings() {
 
   return (
     <View className="mb-4">
-      <SettingsSection>
-        <View className="row">
+      <SettingsSection title="Voice Output">
+        <View className="row row--titled row--last">
           <ToggleRow
             label="Auto-speak responses"
-            description="Read new replies aloud as they arrive."
             on={autoSpeak}
             onPress={() => setAutoSpeak(!autoSpeak)}
           />
@@ -137,7 +136,7 @@ export function VoiceSettings() {
       {/* The downloadable engines, lightest first. */}
       <View className="mb-3 mt-6 flex-row items-end justify-between">
         <View className="flex-1 pr-4">
-          <Text className="section-title">Downloadable engines</Text>
+          <Text className="card-title">Downloadable engines</Text>
           <Text className="mt-1 text-quiet">
             Voice packs are stored on your device. Uses storage space.
           </Text>

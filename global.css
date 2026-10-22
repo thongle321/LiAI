@@ -278,9 +278,9 @@
   color: var(--color-warning);
 }
 
-/* Grouped rows: .rows is a row card (0 internal padding so the dividers run
-   edge to edge — the shape comes from the group above); .row is one row
-   inside it. */
+/* Grouped rows: .rows is a row card (no internal padding by default, so the
+   dividers run edge to edge; the titled modifier below pads it 16px); .row
+   is one row inside it. */
 .rows {
   background-color: var(--color-surface-1);
   overflow: hidden;
@@ -294,6 +294,14 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+/* Modifier: Settings and Voice cards carry a title inside the card
+   (PocketPal's Card.Title). The card pads 16px so the title and the inset
+   dividers share one edge; rows drop their own horizontal padding with
+   `.row--titled`. It is a modifier rather than a descendant selector
+   because Uniwind resolves one class token at a time. */
+.rows--titled {
+  padding: 16px;
 }
 
 .row {
@@ -311,6 +319,11 @@
 .row--last {
   border-bottom-width: 0;
 }
+/* Row inside a `.rows--titled` card: the card already pads 16px. */
+.row--titled {
+  padding-left: 0;
+  padding-right: 0;
+}
 
 /* Section title (PocketPal's 18px bold section headers, ModelSettings
    sheet + the "Multimodal Settings" / "Reasoning" headings). 20px semibold
@@ -319,6 +332,17 @@
   font-family: var(--font-sans-semibold);
   font-size: 20px;
   line-height: 28px;
+  color: var(--color-primary-text);
+}
+
+/* PocketPal's Card.Title: 16/24 regular Ink, inside the 16px-padded card.
+   Also the rung for the Voice screen's list headings ("Downloadable
+   engines", "Voice models"), so the shared size is intentional.
+   `.section-title` stays the 20/28 heading used by the model-settings sheet. */
+.card-title {
+  font-family: var(--font-sans);
+  font-size: var(--text-body-lg);
+  line-height: var(--text-body-lg--line-height);
   color: var(--color-primary-text);
 }
 

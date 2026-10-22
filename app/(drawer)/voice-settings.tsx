@@ -1,6 +1,7 @@
 /** Voice output settings live here (moved out of Settings).
  *
- * Same rows, models-style screen chrome: back header, no cards.
+ * Same rows, models-style screen chrome: back header, titled row cards
+ * ("Voice Output", "Voice Input") matching the Settings screen.
  */
 
 import { ScrollView } from "react-native";

@@ -160,7 +160,8 @@ describe("theme parity", () => {
     // the block will not follow the theme switch.
     const colorRules = [
       ".btn--primary", ".btn--secondary", ".btn--tonal", ".btn--ghost",
-      ".input", ".surface", ".card", ".rows", ".row", ".section-title",
+      ".input", ".surface", ".card", ".rows", ".rows--titled",
+      ".row", ".row--titled", ".section-title", ".card-title",
       ".seg", ".seg--active", ".seg-label", ".seg-label--active",
       ".text-body", ".text-quiet", ".text-action",
       ".voice-card", ".voice-card--active", ".voice-card__title",

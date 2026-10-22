@@ -1,11 +1,11 @@
 /** Settings: PocketPal's card set, in its order, in our tokens.
  *
- * Five cards, because the other three of PocketPal's eight have no home
- * here: App Settings loses all four of its rows (Language needs an i18n
- * layer this app does not have, Dark Mode is its own piece of work,
- * Text-to-speech and Display Memory Usage are excluded or impossible), so
- * it would render empty. Cache & Storage is a PocketPal Shortcuts cache
- * this app has no subject for. Export Options was excluded.
+ * Six cards. App Settings follows Model Loading, exactly where PocketPal
+ * puts it, and now carries the one row we support — Dark Mode (Language
+ * needs an i18n layer this app does not have; Text-to-speech lives on the
+ * Voice screen; Display Memory Usage is excluded or impossible). Cache &
+ * Storage is a PocketPal Shortcuts cache this app has no subject for, and
+ * Export Options was excluded.
  *
  * There is deliberately NO storage card either: free space is reported on
  * the download cards themselves, where the size it is compared against is
@@ -15,8 +15,11 @@
  * lives in the chat screen's "Generation settings" sheet, which is where
  * PocketPal keeps it.
  *
- * Voice lives on its own screen (app/voice-settings.tsx), reached from
- * the drawer.
+ * Each card is titled (16/24 regular) and its dividers are inset 16px,
+ * matching PocketPal's Card.Title + Card.Content anatomy in our tokens.
+ *
+ * Voice lives on its own screen (app/(drawer)/voice-settings.tsx), reached
+ * from the drawer.
  */
 
 import { ScrollView } from "react-native";
@@ -48,9 +51,9 @@ export default function SettingsScreen() {
           <ModelInitializationSettings />
           <MemorySettings />
           <ModelLoadingSettings />
+          <AppSettings />
           <SearchSettings />
           <HfTokenSettings />
-          <AppSettings />
         </ContentColumn>
       </ScrollView>
     </SafeAreaView>

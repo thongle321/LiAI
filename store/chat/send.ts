@@ -40,9 +40,9 @@ function llmError(message: string): ApiError {
  *  there. */
 async function localCpuDecode(): Promise<boolean> {
   try {
-    const { useModelStore } = await import("@/store/model-store.ts");
+    const { useModelStore } = await import("../model-store.ts");
     if (useModelStore.getState().activeProviderType !== "local") return false;
-    const { useInference } = await import("@/store/inference");
+    const { useInference } = await import("../inference.ts");
     return useInference.getState().nGpuLayers === 0;
   } catch {
     // Unreadable store: no wait (never block a voice turn on a hunch).

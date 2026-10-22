@@ -72,6 +72,7 @@ covers the layer architecture); this file is the itemized inventory.
 | `liai_search` | `activeProviderId`, `resultCount`, `hasConsented` |
 | `liai_watch` | vision watch interval |
 | `liai_models_ui` | expanded groups, filters, autoNavigateToChat |
+| `liai.theme` | explicit `light` / `dark` appearance — snapshotted from the OS on first launch, then never follows it (legacy `system` migrates on read) |
 | `liai_onboarded`, `liai_companions_pip_seeded` | once-only flags |
 
 ### 2b. SecureStore (expo-secure-store)
@@ -104,14 +105,17 @@ per-session override JSON), `companions`, `Values` (activeSessionId, seq).
   features LiAI doesn't have.
 - Supabase session + `AuthService.profile` — no auth backend in LiAI.
 - `cached_pals` / `user_library` / `sync_status` — PalsHub sync.
-- `UIStore._language` / `colorScheme` — LiAI has no persisted language or
-  theme override (follows system); add only if a settings screen asks for one.
+- `UIStore._language` — LiAI has no persisted language (English-only); add
+  only if a settings screen asks for one. `UIStore.colorScheme` now has a
+  counterpart: `liai.theme` stores an explicit light/dark choice (first
+  launch snapshots the OS scheme, then the app never follows the OS), matching
+  PocketPal's behaviour.
 
 ## 5. Feature-matched gap scan (shared features only)
 
 Method: for every PocketPal persisted field belonging to a feature LiAI has,
 confirmed a persisted counterpart. Excluded PocketPal-only features (IAP,
-benchmarks, feedback id, Supabase, PalsHub, language/theme pickers,
+benchmarks, feedback id, Supabase, PalsHub, language picker,
 `displayMemUsage`, onboarding-topics snapshot — LiAI has no such screen).
 
 **Verdict: no missing persistence.** Every shared feature round-trips:

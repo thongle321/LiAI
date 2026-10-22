@@ -5,7 +5,7 @@
  * search talent consumes this exact shape.
  */
 
-export type SearchProviderId = "tavily" | "brave";
+import type { SearchProviderId } from "@/types/api.ts";
 
 export interface SearchProviderMeta {
   id: SearchProviderId;

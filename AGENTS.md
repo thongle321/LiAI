@@ -153,8 +153,6 @@ docs/
 
 __mocks__/
 
-scripts/
-
 prompt_material/
 
 
@@ -223,10 +221,6 @@ until someone runs the app.
 `__mocks__/external/*` stands in for the native packages a suite cannot load
 (llama.rn, vision-camera, sherpa-onnx, SQLite, and the rest). Add a fake here
 rather than a per-suite `jest.mock` factory when more than one suite needs it.
-**scripts/** holds the repo's own checks. `check-route-filenames.mjs` runs
-inside `npm test`: expo-router throws on a route node starting with `+` unless
-it is exactly `+not-found`, and that crash happens before the app renders.
-`keyboard-flash-loop.mjs` and `keyboard-jank-loop.mjs` are on-device dev loops.
 **prompt_material/** is the design board the visual system derives from — four
 screenshots cited as provenance by `global.css`, `themes/tokens.ts` and
 `PRODUCT.md`. Reference material, never shipped, and not an asset: no screen

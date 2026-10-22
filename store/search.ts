@@ -16,8 +16,8 @@ import {
   isSearchProviderId,
   parseResultCount,
   searchKeySS,
-  type SearchProviderId,
 } from "@/services/search/search-providers.ts";
+import type { SearchProviderId } from "@/types/api.ts";
 
 export const SEARCH_KEY = "liai_search";
 

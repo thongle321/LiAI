@@ -14,7 +14,7 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import { Brain, Camera, Image as ImageIcon, Pencil, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
+import { Brain, Camera, Image as ImageIcon, Mic, Pencil, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
 import Animated from "react-native-reanimated";
 import { KeyboardControllerNative } from "react-native-keyboard-controller";
 
@@ -25,6 +25,8 @@ import { useChatStore } from "@/store/chat.ts";
 import { useInference } from "@/store/inference.ts";
 import { suspendBackgroundRelease } from "@/services/inference/offload.ts";
 import { useModelReady } from "@/hooks/useModelReady.ts";
+import { useVoiceCapture } from "@/hooks/useVoiceCapture.ts";
+import { useAsrStore } from "@/store/asr.ts";
 import { useMultimodalAvailable } from "@/hooks/useMultimodalAvailable.ts";
 import { useModelStore } from "@/store/model-store";
 import { resolveThinking } from "@/services/inference/thinking.ts";
@@ -127,6 +129,14 @@ export function MessageInput({
   // rejected before the run.
   const [attached, setAttached] = useState<string[]>([]);
   const [attachIssue, setAttachIssue] = useState<string | null>(null);
+  const captureState = useAsrStore((s) => s.captureState);
+  const asrError = useAsrStore((s) => s.error);
+  const voiceCapture = useVoiceCapture({
+    onTranscript: (text) => {
+      setDraft(draft === "" ? text : `${draft} ${text}`);
+    },
+  });
+  const isRecording = captureState === "recording";
   // G9 (PocketParity): pressing Send with no model fires a warning haptic
   // and a temporary helper line (ChatInput.tsx:228-240). The button KEEPS
   // its disabled look — only `disabled` is dropped, so the press has
@@ -241,6 +251,19 @@ export function MessageInput({
             {attachIssue}
           </Text>
         )}
+        {asrError !== null && (
+          <Text className="px-4 pb-1 font-sans text-xs text-secondary-text">
+            {asrError}
+          </Text>
+        )}
+        {isRecording && (
+          <View className="flex-row items-center gap-2 px-4 py-2 bg-surface-2">
+            <Mic size={16} color={colors.primary} />
+            <Text className="font-sans text-body-sm text-primary-text">
+              Recording… tap mic to stop
+            </Text>
+          </View>
+        )}
         {blockedNote !== null && (
           // Same treatment as the other issue lines, so a blocked send
           // does not shout louder than a failed attach.
@@ -336,6 +359,14 @@ export function MessageInput({
               settings screen. */}
           <View className="flex-row items-center justify-between px-4 py-2 min-h-9">
             <View className="flex-row items-center gap-2 flex-1">
+              <Pressable
+                onPress={() => (isRecording ? voiceCapture.stop() : voiceCapture.start())}
+                className={`h-12 w-12 items-center justify-center rounded-full ${isRecording ? "bg-primary" : "bg-surface-3"}`}
+                accessibilityRole="button"
+                accessibilityLabel={isRecording ? "Stop recording" : "Start voice input"}
+              >
+                <Mic size={20} color={isRecording ? colors.onPrimary : colors.primary} />
+              </Pressable>
               <Animated.View style={plusPress.animatedStyle}>
                 <Pressable
                   onPress={modelReady && canSee ? () => setPlusOpen((o) => !o) : undefined}

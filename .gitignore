@@ -36,7 +36,6 @@ scratch/
 skills-lock.json
 
 # Vendored reference app (read it, never edit it, never ship it)
-/pocketpal-ai/
 
 # Scratch material for prompts
 /prompt_material/

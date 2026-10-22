@@ -23,8 +23,8 @@ import {
   MAX_RESULT_COUNT,
   MIN_RESULT_COUNT,
   SEARCH_PROVIDERS,
-  type SearchProviderId,
 } from "@/services/search/search-providers.ts";
+import type { SearchProviderId } from "@/types/api.ts";
 import { useShallow } from "zustand/react/shallow";
 import { useSearch } from "@/store/search.ts";
 import { Sheet } from "../sheet.tsx";

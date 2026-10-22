@@ -10,7 +10,7 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as LegacyFileSystem from "expo-file-system/legacy";
 
-import { useSnackbar } from "@/components/snackbar.tsx";
+import { useSnackbar } from "@/hooks/useSnackbar.ts";
 import { useChatStore } from "@/store/chat.ts";
 
 function plural(n: number, one: string): string {

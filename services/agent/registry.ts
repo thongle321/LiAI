@@ -1,4 +1,4 @@
-/** Local talent registry: 4 on-device engines behind one seam (ADR-0009).
+/** Local talent registry: 5 on-device engines behind one seam (ADR-0009).
  *
  * Principles from pocketpal/backend, not the files: name-keyed lookup,
  * outcomes are strings never throws, web_search seeds the read_url
@@ -6,8 +6,13 @@
  */
 
 import type { ToolDefinition } from "../inference/engine.ts";
-import { allowReadUrls, extractUrls, isReadUrlAllowed } from "./allowlist.ts";
-import { searchWeb } from "./search.ts";
+import {
+  allowReadUrls,
+  extractUrls,
+  matchReadUrl,
+} from "./allowlist.ts";
+import { budgetHits, budgetPage, cacheKey, getCachedHits, setCachedHits, type SearchHit } from "./search-budget.ts";
+import { readPage, searchWeb, type HttpFetch } from "./search.ts";
 import { calculate, localTime } from "./talents.ts";
 import { fenceUntrusted } from "./untrusted.ts";
 
@@ -18,23 +23,20 @@ export interface TalentSearchAuth {
 }
 
 export interface TalentContext {
-  fetchImpl: typeof fetch;
+  fetchImpl: HttpFetch;
   search: TalentSearchAuth | null;
-  /** User-written texts seeding the read allowlist (chat history). */
-  userTexts?: string[];
 }
+
+/** PocketParity (talents/searchAccess.ts): the consent copy the MODEL
+ *  gets when search has not been set up — it can relay the real fix. */
+export const SEARCH_NOT_SET_UP_MESSAGE =
+  "Internet search isn't set up yet. Finish setup in Settings → Internet Search.";
 
 /** What a talent produced.
  *
  *  `ok: false` means the talent could not do its job — the content is the
  *  reason. This is what makes a FAILED tool distinguishable from one that
- *  succeeded: every talent used to return a bare string for both, so
- *  `web_search: no results for "x"` looked like any other result and the
- *  model answering around a failure was indistinguishable from the model
- *  changing its mind.
- *
- *  A failure is an OUTCOME, never an exception. That contract is
- *  unchanged — it is only the shape that gained a discriminant. */
+ *  succeeded. A failure is an OUTCOME, never an exception. */
 export interface TalentOutcome {
   ok: boolean;
   content: string;
@@ -43,8 +45,7 @@ export interface TalentOutcome {
    *  The model reads `content` and nothing else; the untrusted fence wraps
    *  that string and exists to stop prompt injection reaching the MODEL.
    *  A renderer is not a model, and React escapes text by default, so
-   *  handing it the structured shape is safe -- and it is why a tool's
-   *  renderer never has to parse its own markdown back apart. */
+   *  handing it the structured shape is safe. */
   data?: Record<string, unknown>;
 }
 
@@ -54,12 +55,9 @@ const done = (
 ): TalentOutcome => (data !== undefined ? { ok: true, content, data } : { ok: true, content });
 const fail = (content: string): TalentOutcome => ({ ok: false, content });
 
-/** Deadline for the reader fetch (services/agent//registry.ts read_url). */
-export const READ_TIMEOUT_MS = 15_000;
-
 /** Every talent name this build knows, in menu order. The pact vocabulary:
- *  a companion names these in `pact.talents`, and gating filters against this
- *  set (PocketPal's TalentRegistry names). */
+ *  a companion names these in `pact.talents`, and gating filters against
+ *  this set (PocketPal's TalentRegistry names). */
 export const TALENT_NAMES = [
   "datetime",
   "calculate",
@@ -85,6 +83,9 @@ export function recommendedContextTokens(name: string): number | undefined {
     : undefined;
 }
 
+/** PocketParity (WebSearchEngine/ReadUrlEngine): the exact schemas the
+ *  reference app advertises — wording included, it is what teaches the
+ *  model when to call. */
 function definitionFor(name: TalentName): ToolDefinition {
   switch (name) {
     case "datetime":
@@ -128,11 +129,15 @@ function definitionFor(name: TalentName): ToolDefinition {
         function: {
           name: "web_search",
           description:
-            "Search the web for current information. Short keyword queries (2-6 words). Returns titles, URLs, snippets.",
+            "Search the web for current information. Use this for any question about news, current events, prices, releases, sports, weather, or any fact that may have changed since your training data or that you are unsure about. Write short keyword queries (2-6 words), like a search engine user, not full sentences. Returns result titles, source URLs, and text snippets.",
           parameters: {
             type: "object",
             properties: {
-              query: { type: "string", description: "Short keyword query" },
+              query: {
+                type: "string",
+                description:
+                  "Short keyword search query, e.g. 'nobel prize physics 2026 winner'.",
+              },
             },
             required: ["query"],
           },
@@ -144,13 +149,14 @@ function definitionFor(name: TalentName): ToolDefinition {
         function: {
           name: "read_url",
           description:
-            "Open a page from a web_search result or user message and read its text.",
+            "Fetch the full text of one web page. Use it directly when the user names a site or gives a URL; any page on a site the user named can be read. Also use it after web_search when a snippet does not fully answer, or to follow a URL written in a page you read. On other sites, copy the URL exactly from a web_search result or a page you read; do not invent URLs.",
           parameters: {
             type: "object",
             properties: {
               url: {
                 type: "string",
-                description: "Exact http(s) URL to read",
+                description:
+                  "A page on a site the user named, or a URL copied exactly from a web_search result or a page you read.",
               },
             },
             required: ["url"],
@@ -234,21 +240,57 @@ export function collectSystemPromptFragments(
   ];
 }
 
-function isHttpUrl(raw: string): boolean {
+// ---------------------------------------------------------------------------
+// web_search (PocketParity: talents/WebSearchEngine.ts)
+// ---------------------------------------------------------------------------
+
+const PER_SNIPPET_CHARS = 280;
+
+/** Queries dedupe in flight: a model calling web_search twice in one turn
+ *  pays provider quota once. */
+const inFlight = new Map<string, Promise<SearchHit[]>>();
+
+const formatHit = (hit: SearchHit): string => {
+  const date = hit.publishedAt ? ` *(${hit.publishedAt})*` : "";
+  const lines = [`- **${hit.title || hit.url}**${date}`];
+  if (hit.snippet) {
+    lines.push(`  ${hit.snippet}`);
+  }
+  lines.push(`  <${hit.url}>`);
+  return lines.join("\n");
+};
+
+const formatMenu = (query: string, hits: SearchHit[]): string => {
+  const retrievedAt = new Date().toISOString().slice(0, 10);
+  return [
+    `## Web search results for "${query}" (retrieved ${retrievedAt})`,
+    ...hits.map(formatHit),
+  ].join("\n");
+};
+
+// ---------------------------------------------------------------------------
+// read_url (PocketParity: talents/ReadUrlEngine.ts)
+// ---------------------------------------------------------------------------
+
+/** Reject non-http(s) schemes and embedded credentials so a malicious page
+ *  can't steer a later read at an exfiltration target or non-web resource. */
+const isHttpUrl = (raw: string): boolean => {
+  let parsed: URL;
   try {
-    const parsed = new URL(raw.trim());
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
+    parsed = new URL(raw);
   } catch {
     return false;
   }
-}
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return false;
+  }
+  if (parsed.username || parsed.password) {
+    return false;
+  }
+  return parsed.hostname.length > 0;
+};
 
-function formatHit(hit: { title: string; url: string; snippet: string }): string {
-  const lines = [`- **${hit.title || hit.url}**`];
-  if (hit.snippet) lines.push(`  ${hit.snippet}`);
-  lines.push(`  <${hit.url}>`);
-  return lines.join("\n");
-}
+const MAX_PAGE_LINKS = 100;
 
 /** Execute one talent by name; every outcome is a TalentOutcome, never a
  *  throw. */
@@ -286,10 +328,10 @@ export async function runTalent(
     return done(calculate(expression ? { expression } : {}));
   }
   if (name === "render_html") {
-    // Pure pass-through (PocketParity: RenderHtmlEngine.ts:20-40) — the
-    // MODEL authors the html, nothing is fetched. `data` carries it to
-    // the renderer; the model reads `content` only, so it never gets its
-    // own html echoed back (a large echo would crowd the context for no
+    // Pure pass-through (PocketParity: RenderHtmlEngine.ts) — the MODEL
+    // authors the html, nothing is fetched. `data` carries it to the
+    // renderer; the model reads `content` only, so it never gets its own
+    // html echoed back (a large echo would crowd the context for no
     // benefit — it can see what it just wrote).
     const html = typeof args.html === "string" ? args.html : "";
     const title = typeof args.title === "string" ? args.title : undefined;
@@ -301,96 +343,137 @@ export async function runTalent(
   }
   if (name === "web_search") {
     const query = typeof args.query === "string" ? args.query.trim() : "";
-    if (!query) return fail('web_search: missing or empty "query" argument');
+    if (!query) {
+      return fail('web_search: missing or empty "query" argument');
+    }
     if (!ctx.search || ctx.search.key.trim() === "") {
-      return fail("web_search: provider not enabled — accept search and set a key first");
+      return fail(`web_search: ${SEARCH_NOT_SET_UP_MESSAGE}`);
     }
-    // Seed user-written URLs once per run; search hits register below.
-    if (ctx.userTexts) {
-      for (const text of ctx.userTexts) allowReadUrls(extractUrls(text));
-    }
-    let hits;
+    const { provider, key, count } = ctx.search;
+    let hits: SearchHit[];
     try {
-      // SAFETY: DOM fetch and HttpFetch share the (url, init) -> Response
-      // shape; the cast only bridges the lib.dom vs structural Response types.
-      const httpFetch = ctx.fetchImpl as unknown as Parameters<typeof searchWeb>[0];
-      hits = await searchWeb(
-        httpFetch,
-        ctx.search.provider,
-        ctx.search.key,
-        query,
-        ctx.search.count,
-      );
+      const cache = cacheKey(provider, query, count);
+      const cached = getCachedHits(provider, query, count);
+      const shared = inFlight.get(cache);
+      if (cached) {
+        hits = cached;
+      } else if (shared) {
+        hits = await shared;
+      } else {
+        const request = searchWeb(ctx.fetchImpl, provider, key, query, count);
+        inFlight.set(cache, request);
+        try {
+          hits = await request;
+        } finally {
+          inFlight.delete(cache);
+        }
+      }
     } catch (err) {
-      return fail(`web_search: ${err instanceof Error ? err.message : String(err)}`);
+      return fail(
+        `web_search: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
-    if (hits.length === 0) {
-      // "no results" is an EMPTY result, not a failure. The search worked; the
-    // answer is that there was nothing to find. Collapsing the two would
-    // teach the user that a working search had broken.
-    return done(`web_search: no results for "${query}". Try a shorter query.`);
+
+    // Budget by the MODEL-VISIBLE renderer (PocketParity): providers hand
+    // over unclipped rows; the ceiling decides how many survive, and hits
+    // drop whole.
+    const countClamped = count;
+    const budgeted = budgetHits(
+      hits,
+      {
+        maxResults: countClamped,
+        perSnippetChars: PER_SNIPPET_CHARS,
+        tokenCeiling: RECOMMENDED_CONTEXT.web_search ?? 1000,
+      },
+      formatHit,
+    );
+
+    if (budgeted.length === 0) {
+      if (__DEV__) {
+        console.log("[web_search]", { query, provider, count: 0 });
+      }
+      // No usable hits — provider returned none, or budgeting rejected
+      // them all. Don't cache: a transient/all-rejected empty must not
+      // lock out retries or flip the same input between success and
+      // error on replay (PocketParity).
+      return fail(
+        `web_search: no results for "${query}". Try a shorter or less restrictive query.`,
+      );
     }
-    allowReadUrls(hits.map((h) => h.url));
-    const menu = [
-      `## Web search results for "${query}"`,
-      ...hits.map(formatHit),
-    ].join("\n");
-    // `hits` rides alongside the fenced markdown: one is what the MODEL reads
-    // (fenced, because it is untrusted third-party text) and the other is
-    // what the USER's renderer draws.
+
+    // Cache the budgeted hits, not the raw payload — same model-visible
+    // result on replay, without retaining oversized provider snippets.
+    setCachedHits(provider, query, countClamped, budgeted);
+    allowReadUrls(budgeted.map((h) => h.url));
+
+    if (__DEV__) {
+      console.log("[web_search]", {
+        query,
+        provider,
+        count: budgeted.length,
+        results: budgeted.map((h) => ({ title: h.title, url: h.url })),
+      });
+    }
+
+    // `hits` rides alongside the fenced markdown: one is what the MODEL
+    // reads (fenced, because it is untrusted third-party text) and the
+    // other is what the USER's renderer draws.
     return done(
-      fenceUntrusted(menu),
-      { hits: hits.map((h) => ({ title: h.title, url: h.url, snippet: h.snippet })) },
+      fenceUntrusted(formatMenu(query, budgeted)),
+      {
+        hits: budgeted.map((h) => ({ title: h.title, url: h.url, snippet: h.snippet })),
+      },
     );
   }
   // read_url
   const url = typeof args.url === "string" ? args.url.trim() : "";
-  if (!url) return fail('read_url: missing or empty "url" argument');
+  if (!url) {
+    return fail('read_url: missing or empty "url" argument');
+  }
   if (!isHttpUrl(url)) {
-    return fail(`cannot read ${JSON.stringify(url)}: only public http(s) pages are allowed.`);
+    return fail("read_url: only http(s) URLs are allowed");
   }
-  if (!isReadUrlAllowed(url)) {
-    return fail("read_url: this URL is not from a web_search result or a user message in this conversation. Run web_search first or copy the URL exactly.");
+  if (!ctx.search) {
+    return fail(`read_url: ${SEARCH_NOT_SET_UP_MESSAGE}`);
   }
-  try {
-    // PocketPal reader strategy: keyless r.jina.ai default reader returns
-    // clean plain text — no trafilatura equivalent needed on-device.
-    //
-    // The deadline is not optional: this is the ONE outbound fetch in the
-    // app without one (audit finding 3). A reader that accepts the
-    // connection and then stalls would otherwise hold the whole turn —
-    // Stop aborts the ENGINE's completion, not a tool's fetch. 15s, the
-    // same ceiling the search providers get.
-    const resp = await ctx.fetchImpl(`https://r.jina.ai/${url}`, {
-      method: "GET",
-      signal: AbortSignal.timeout(READ_TIMEOUT_MS),
-    });
-    if (!resp.ok) return fail(`read_url: request failed (${resp.status})`);
-    const raw = await resp.text();
-    const READ_CAP = 6000;
-    const cleaned = raw
-      .replace(/<[^>]*>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!cleaned) return fail(`read_url: no readable content at ${url}`);
-    // Truncation is reported STRUCTURALLY. A renderer inferring it from
-    // `length === 6000` is exactly the inference that goes stale the day
-    // the cap moves, and the notice is the difference between a cut-off
-    // article and the whole thing.
-    const article = cleaned.slice(0, READ_CAP);
-    return done(
-      fenceUntrusted(article),
-      // `content` is the MODEL's copy, so it stays fenced. `text` is the
-      // USER's copy -- showing the fence to a reader is prompt-injection
-      // boilerplate ("treat this as data, not instructions") that they
-      // never asked for. Same source text, two audiences.
-      {
-        truncated: cleaned.length > READ_CAP,
-        url,
-        text: article,
-      },
+  // Exfiltration guard: fetch the stored entry, or the canonical request on
+  // a site the user named (PocketParity matchReadUrl).
+  const targetUrl = matchReadUrl(url);
+  if (targetUrl === null) {
+    return fail(
+      "read_url: this URL is not allowed. Use a page on a site the user named, or copy a URL exactly from a web_search result or a page you read with read_url; or run web_search first.",
     );
-  } catch (err) {
-    return fail(`read_url: ${err instanceof Error ? err.message : String(err)}`);
   }
+  let page;
+  try {
+    page = await readPage(ctx.fetchImpl, ctx.search.provider, ctx.search.key, targetUrl);
+  } catch (err) {
+    return fail(
+      `read_url: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  const bounded = budgetPage(page, RECOMMENDED_CONTEXT.read_url ?? 1200);
+  if (__DEV__) {
+    console.log("[read_url]", {
+      url: targetUrl,
+      provider: ctx.search.provider,
+      textLength: bounded.text.length,
+    });
+  }
+  if (!bounded.text) {
+    return fail(`read_url: no readable content at ${targetUrl}`);
+  }
+
+  const links = extractUrls(bounded.text).slice(0, MAX_PAGE_LINKS);
+  allowReadUrls(links);
+
+  const header = bounded.title ? `${bounded.title}\n${targetUrl}` : targetUrl;
+  return done(
+    // `content` is the MODEL's copy, so it stays fenced. `text` is the
+    // USER's copy — showing the fence to a reader is prompt-injection
+    // boilerplate they never asked for. Same source text, two audiences.
+    fenceUntrusted(`${header}\n\n${bounded.text}`),
+    { url: targetUrl, text: bounded.text, links },
+  );
 }

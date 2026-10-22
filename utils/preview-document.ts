@@ -24,14 +24,15 @@ table, pre, code { max-width: 100%; overflow-x: auto; }
 </style>`;
 
 /** Only for a FRAGMENT (no <html>): give it a body worth looking at, and
- *  follow the device's colour scheme. */
-const FRAGMENT_STYLES = `<style>
-body { margin: 0; padding: 12px; font-family: -apple-system, system-ui, Roboto, sans-serif; }
-@media (prefers-color-scheme: dark) {
-  body { background: #1c1c1e; color: #f5f5f7; }
-  a { color: #4ea3ff; }
-}
+ *  follow the app's colour scheme (passed in), not the device's. */
+function fragmentStyles(dark: boolean): string {
+  return `<style>
+body { margin: 0; padding: 12px; font-family: -apple-system, system-ui, Roboto, sans-serif; ${
+    dark ? "background: #1a1d24; color: #f8fafc;" : "background: #ffffff; color: #0f172a;"
+  } }
+a { color: ${dark ? "#588cff" : "#2563eb"}; }
 </style>`;
+}
 
 /** Wrap model html into a loadable document, injecting the CSP and viewport
  *  into an existing <head> when there is one.
@@ -40,7 +41,7 @@ body { margin: 0; padding: 12px; font-family: -apple-system, system-ui, Roboto, 
  *  render model-authored markup with no policy at all, which is the one
  *  failure this file exists to prevent. Branches: full document with a
  *  head, a document declaring <html> without one, and a bare fragment. */
-export function wrapDocument(html: string): string {
+export function wrapDocument(html: string, dark: boolean = false): string {
   const trimmed = html.trim();
   const hasHtml = /^<html[\s>]/i.test(trimmed);
   const hasDoctype = /^<!doctype\s/i.test(trimmed);
@@ -62,5 +63,5 @@ export function wrapDocument(html: string): string {
   // Bare fragment (or something malformed): build the whole document. The
   // fallback is deliberate — an unparseable string still renders as html
   // rather than showing a blank preview.
-  return `<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8" />\n${PREVIEW_HEAD_INJECTION}\n${FRAGMENT_STYLES}\n</head>\n<body>\n${trimmed}\n</body>\n</html>`;
+  return `<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8" />\n${PREVIEW_HEAD_INJECTION}\n${fragmentStyles(dark)}\n</head>\n<body>\n${trimmed}\n</body>\n</html>`;
 }

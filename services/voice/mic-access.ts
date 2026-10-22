@@ -7,6 +7,7 @@
  * plain node (this imports the native module).
  */
 import { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
+import { Linking } from "react-native";
 
 export type MicAccess = "granted" | "settings" | "unavailable";
 
@@ -21,4 +22,11 @@ export async function ensureMicAccess(): Promise<MicAccess> {
     // Native module absent (stale dev build): nothing to ask.
     return "unavailable";
   }
+}
+
+/** Straight to this app's OS settings — the only affordance a PERMANENT
+ *  mic denial gets (PocketPal openMicSettings). Fire-and-forget: a failed
+ *  open leaves the error snackbar's affordance inert, nothing worse. */
+export function openMicPermissionSettings(): void {
+  void Linking.openSettings().catch(() => {});
 }

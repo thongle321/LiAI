@@ -1,7 +1,11 @@
-// Ported verbatim from pocketpal-ai/src/services/asr/constants.ts
+// Ported from pocketpal-ai/src/services/asr/constants.ts.
+// The reference's ASR_DEVICE_TIERS (["high", "flagship"]) ride ITS tier ids;
+// ours are the bundled device-tier vocabulary (assets/device-tiers.json),
+// so the same intent — "device RAM clears the voice-input floor" — maps to
+// balanced (≥4 GiB) and capable (≥8 GiB).
 import type { AsrTier, AsrTierManifest } from "./types.ts";
 
-export const ASR_DEVICE_TIERS = ["high", "flagship"] as const;
+export const ASR_DEVICE_TIERS = ["balanced", "capable"] as const;
 
 export const ASR_ANDROID_RAM_SHARE = 0.45;
 export const ASR_IOS_CEILING_SHARE = 0.8;

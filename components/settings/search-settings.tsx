@@ -44,6 +44,18 @@ function providerName(id: SearchProviderId): string {
   return SEARCH_PROVIDERS.find((p) => p.id === id)?.name ?? id;
 }
 
+/** PocketParity meta: a gated provider lists in the menu (suffix makes
+ *  its state explicit) while the store refuses to activate it. */
+function providerMenuLabel(id: SearchProviderId): string {
+  const meta = SEARCH_PROVIDERS.find((p) => p.id === id);
+  const selectable = meta?.selectable !== false;
+  return selectable ? (meta?.name ?? id) : `${meta?.name ?? id} (coming soon)`;
+}
+
+function providerRequiresKey(id: SearchProviderId): boolean {
+  return SEARCH_PROVIDERS.find((p) => p.id === id)?.requiresKey !== false;
+}
+
 /** The key editor, as a sheet: a secret should not sit on the settings
  *  screen waiting to be read over someone's shoulder. */
 function ProviderKeySheet({
@@ -180,7 +192,12 @@ function ProviderKeySheet({
         {/* Q8: their sentence, brand-swapped. */}
         {"Let the assistant search the web with its own tools. Bring your own API key — LiAI never holds your keys or routes your queries."}
       </Text>
-      <Text className="mb-1 font-sans text-body-md text-primary-text">API key</Text>
+      <Text className="font-sans-semibold text-body-sm text-primary-text">API key</Text>
+      {providerId !== null && !providerRequiresKey(providerId) && (
+        <Text className="mb-2 font-sans text-micro text-secondary-text">
+          {`Optional for ${providerName(providerId)} — a key only raises the daily limit.`}
+        </Text>
+      )}
       <View className="relative">
         <TextInput
           value={draft}
@@ -297,7 +314,7 @@ export function SearchSettings() {
           options={providerIds}
           value={activeProviderId}
           onChange={(next) => setActiveProvider(next)}
-          displayFor={providerName}
+          displayFor={providerMenuLabel}
         />
       </View>
       <View className="row">

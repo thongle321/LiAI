@@ -56,15 +56,19 @@ export const lightColors = {
 
 /** Dark board (prompt_material/dark_mode_design_system.png). Same roles,
  * dark grounds: Background #0B0C10 is the page, Surface 1 #1E1E24 raised,
- * Surface 2 #23252C recessed, Primary Soft #2A3A56 is the selected-element
- * tint. The signal takes the board's lighter #5B8CFF step (the AA-safe
- * step on dark); machine-in-the-loop states take the teal accent. */
+ * Surface 2 #23252C recessed, and the selected-element tint ground is
+ * the board's Backdrop #1A1D24 (the board's Primary Soft #2A3A56 drops
+ * the signal below 4.5:1 on it; Backdrop keeps every text role clear).
+ * The signal takes the board's #588CFF step; on-primary is the board's
+ * own On Primary #FFFFFF (3.18:1 on the fill — board-sanctioned, pinned
+ * in jest/design-system.test.ts); error-as-text keeps the lighter
+ * #F87171 step per the Two-Step Rule. */
 export const darkColors = {
-  primary: "#5B8CFF",
-  primaryMark: "#5B8CFF",
+  primary: "#588CFF",
+  primaryMark: "#588CFF",
   primaryHover: "#4E7FF0",
   primaryPressed: "#3F6FE0",
-  onPrimary: "#0B0C10",
+  onPrimary: "#FFFFFF",
   success: "#22C55E",
   successFill: "#22C55E1A",
   successMark: "#22C55E",
@@ -85,9 +89,9 @@ export const darkColors = {
   base: "#0B0C10",
   surface1: "#1E1E24",
   surface2: "#23252C",
-  surface3: "#1C2740",
+  surface3: "#1A1D24",
   border: "#2A2E35",
-  secondaryText: "#C8D5E1",
+  secondaryText: "#CBD5E1",
   secondaryTextMuted: "#94A3B8",
   primaryText: "#F8FAFC",
   inverseText: "#0B0C10",

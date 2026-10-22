@@ -3,6 +3,7 @@
 import {
   DEFAULT_PROVIDER,
   DEFAULT_RESULT_COUNT,
+  isProviderSelectable,
   isSearchProviderId,
   parseResultCount,
   searchKeySS,
@@ -14,10 +15,17 @@ describe("search providers lib", () => {
   it("keys namespace per provider, counts clamp", () => {
     expect(searchKeySS("tavily")).toBe("liai_search_key_tavily");
     expect(isSearchProviderId("brave")).toBe(true);
-    expect(isSearchProviderId("exa")).toBe(false);
+    expect(isSearchProviderId("exa")).toBe(true);
+    expect(isSearchProviderId("you")).toBe(true);
+    expect(isSearchProviderId("nope")).toBe(false);
     expect(parseResultCount(99)).toBe(8);
     expect(parseResultCount(0)).toBe(1);
     expect(parseResultCount("x")).toBe(DEFAULT_RESULT_COUNT);
+  });
+
+  it("gates the active provider — Parallel lists but never activates", () => {
+    expect(isProviderSelectable("parallel")).toBe(false);
+    expect(isProviderSelectable("brave")).toBe(true);
   });
 });
 
@@ -30,7 +38,7 @@ describe("search store", () => {
     secure = memorySecure();
   });
 
-  it("defaults to Tavily, 5 results, no consent", async () => {
+  it("defaults to Brave (PocketParity), 5 results, no consent", async () => {
     const useStore = createSearchStore(storage, secure);
     await useStore.getState().load();
     const s = useStore.getState();

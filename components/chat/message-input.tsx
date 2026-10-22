@@ -26,7 +26,12 @@ import { useInference } from "@/store/inference.ts";
 import { suspendBackgroundRelease } from "@/services/inference/offload.ts";
 import { useModelReady } from "@/hooks/useModelReady.ts";
 import { useVoiceCapture } from "@/hooks/useVoiceCapture.ts";
+import { asrErrorCopy, hasOpenSettingsAction, OPEN_SETTINGS_LABEL } from "@/services/asr/error-copy.ts";
+import { openMicPermissionSettings } from "@/services/voice/mic-access.ts";
 import { useAsrStore } from "@/store/asr.ts";
+import { useSnackbar } from "@/components/snackbar.tsx";
+import { VoiceRecordingBar } from "@/components/chat/voice-recording-bar.tsx";
+import { useRouter } from "expo-router";
 import { useMultimodalAvailable } from "@/hooks/useMultimodalAvailable.ts";
 import { useModelStore } from "@/store/model-store";
 import { resolveThinking } from "@/services/inference/thinking.ts";
@@ -131,12 +136,38 @@ export function MessageInput({
   const [attachIssue, setAttachIssue] = useState<string | null>(null);
   const captureState = useAsrStore((s) => s.captureState);
   const asrError = useAsrStore((s) => s.error);
+  const asrAvailable = useAsrStore((s) => s.asrAvailable);
+  const tierReady = useAsrStore((s) => s.isSelectedTierReady);
+  const resetCapture = useAsrStore((s) => s.resetCapture);
+  const router = useRouter();
+  const { showSnackbar } = useSnackbar();
   const voiceCapture = useVoiceCapture({
     onTranscript: (text) => {
       setDraft(draft === "" ? text : `${draft} ${text}`);
     },
   });
   const isRecording = captureState === "recording";
+  const isTranscribing = captureState === "transcribing";
+  // D1 (PocketParity): while capturing — recording OR transcribing — the
+  // bar REPLACES the whole control row; a capture mid-decode still owns
+  // the composer.
+  const voiceCaptureActive = isRecording || isTranscribing;
+  // D8 (PocketParity): ASR errors surface as a snackbar with the mapped
+  // copy, and only a BLOCKED permission gets the Open Settings action.
+  useEffect(() => {
+    if (asrError === null) return;
+    showSnackbar(asrErrorCopy(asrError), {
+      type: "error",
+      ...(hasOpenSettingsAction(asrError)
+        ? {
+            action: {
+              label: OPEN_SETTINGS_LABEL,
+              onPress: () => openMicPermissionSettings(),
+            },
+          }
+        : {}),
+    });
+  }, [asrError, showSnackbar]);
   // G9 (PocketParity): pressing Send with no model fires a warning haptic
   // and a temporary helper line (ChatInput.tsx:228-240). The button KEEPS
   // its disabled look — only `disabled` is dropped, so the press has
@@ -251,19 +282,6 @@ export function MessageInput({
             {attachIssue}
           </Text>
         )}
-        {asrError !== null && (
-          <Text className="px-4 pb-1 font-sans text-xs text-secondary-text">
-            {asrError}
-          </Text>
-        )}
-        {isRecording && (
-          <View className="flex-row items-center gap-2 px-4 py-2 bg-surface-2">
-            <Mic size={16} color={colors.primary} />
-            <Text className="font-sans text-body-sm text-primary-text">
-              Recording… tap mic to stop
-            </Text>
-          </View>
-        )}
         {blockedNote !== null && (
           // Same treatment as the other issue lines, so a blocked send
           // does not shout louder than a failed attach.
@@ -354,19 +372,47 @@ export function MessageInput({
               accessibilityHint={modelReady ? undefined : composerPlaceholder}
             />
           </View>
-          {/* Control bar: left controls (attach) and right controls (thinking,
-              send/stop). No voice controls — voice settings live on the Voice
-              settings screen. */}
+          {/* Control bar: while a voice capture records or transcribes, the
+              whole row IS the VoiceRecordingBar (D1/D2/D3/D10 — its cancel,
+              waveform, timer, stop and language chip). No capture: left
+              controls (mic + attach), right controls (thinking, send/stop).
+              The mic GATE (D5): hidden when the availability gate is shut;
+              a gate that is open without an installed tier routes to the
+              Voice settings screen (PocketParity mic-button-setup). */}
+          {voiceCaptureActive ? (
+            <VoiceRecordingBar
+              onCancel={() => {
+                voiceCapture.cancel();
+                resetCapture();
+              }}
+              onStop={() => voiceCapture.stop()}
+            />
+          ) : (
           <View className="flex-row items-center justify-between px-4 py-2 min-h-9">
             <View className="flex-row items-center gap-2 flex-1">
-              <Pressable
-                onPress={() => (isRecording ? voiceCapture.stop() : voiceCapture.start())}
-                className={`h-12 w-12 items-center justify-center rounded-full ${isRecording ? "bg-primary" : "bg-surface-3"}`}
-                accessibilityRole="button"
-                accessibilityLabel={isRecording ? "Stop recording" : "Start voice input"}
-              >
-                <Mic size={20} color={isRecording ? colors.onPrimary : colors.primary} />
-              </Pressable>
+              {asrAvailable && (
+                <Pressable
+                  onPress={
+                    tierReady
+                      ? () => (isRecording ? voiceCapture.stop() : voiceCapture.start())
+                      : () => router.push("/voice-settings")
+                  }
+                  testID={tierReady ? "mic-button" : "mic-button-setup"}
+                  className={`h-12 w-12 items-center justify-center rounded-full ${
+                    isRecording || isTranscribing ? "bg-primary" : "bg-surface-3"
+                  }`}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    tierReady
+                      ? isRecording
+                        ? "Stop recording"
+                        : "Start voice input"
+                      : "Set up voice input"
+                  }
+                >
+                  <Mic size={20} color={isRecording || isTranscribing ? colors.onPrimary : colors.primary} />
+                </Pressable>
+              )}
               <Animated.View style={plusPress.animatedStyle}>
                 <Pressable
                   onPress={modelReady && canSee ? () => setPlusOpen((o) => !o) : undefined}
@@ -505,6 +551,7 @@ export function MessageInput({
               )}
             </View>
           </View>
+          )}
         </View>
       </View>
     </Animated.View>

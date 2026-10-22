@@ -17,7 +17,7 @@ import type { SamplerParams } from "../inference/sampler.ts";
 import type { EffortLevel } from "@/utils/reasoning-capability.ts";
 import type { TurnOutcomeFlags, ToolMetrics, TurnBlock } from "@/types/chat.ts";
 import { runTalent, type TalentSearchAuth } from "./registry.ts";
-import { resetReadUrlAllowlist } from "./allowlist.ts";
+import { seedReadUrlAllowlist } from "./allowlist.ts";
 
 export interface AgentStep {
   id: string;
@@ -93,7 +93,11 @@ export interface AgentRunOptions {
   addGenerationPrompt?: boolean;
   fetchImpl: typeof fetch;
   search: TalentSearchAuth | null;
-  userTexts?: string[];
+  /** Persisted steps of THIS session's earlier turns (PocketPal's
+   *  sessionRows): web_search hit URLs and read_url links recorded before
+   *  the last reload re-seed the allowlist, so a restored conversation
+   *  still admits the URLs it once surfaced. */
+  sessionSteps?: Array<{ tool?: string; data?: Record<string, unknown> }>;
   maxTurns?: number;
   onEvent: (event: AgentEvent) => void;
 }
@@ -125,7 +129,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
     tools,
     fetchImpl,
     search,
-    userTexts,
+    sessionSteps,
     maxTurns = DEFAULT_MAX_TURNS,
     onEvent,
   } = options;
@@ -148,13 +152,14 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
   let endFlags: TurnOutcomeFlags | undefined;
 
   onEvent({ type: "run_started" });
-  // The read_url allowlist is process-global (a module-level Set). Every
-  // run starts from empty so a URL approved by an EARLIER conversation
-  // can never be fetched from a later one, and the set cannot grow for
-  // the life of the process (audit finding 4). This is the one reset
-  // production needed; the seeds below (userTexts, search hits) still
-  // fill it for THIS run only.
-  resetReadUrlAllowlist();
+  // The read_url allowlist is process-global. Every run resets it and
+  // re-seeds from exactly ONE definition of trusted sources (PocketParity
+  // seedReadUrlAllowlist): user-written text in the ASSEMBLED messages,
+  // plus this session's persisted search-hit URLs and read_url links.
+  // Assistant text, tool arguments and fenced tool summaries are never a
+  // source, so a URL approved in an EARLIER conversation can never be
+  // fetched from a later one (audit finding 4).
+  seedReadUrlAllowlist(messages, sessionSteps ?? []);
 
   try {
     for (let turn = 0; ; turn += 1) {
@@ -375,7 +380,6 @@ endFlags = {
         const talent = await runTalent(call.name, call.arguments, {
           fetchImpl,
           search,
-          userTexts,
         });
         const input = parseArgs(call.arguments);
         steps.push({

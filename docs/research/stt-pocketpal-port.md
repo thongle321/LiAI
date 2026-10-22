@@ -68,3 +68,18 @@ VAD, segmenter, memory gating, cancel, background cleanup).
 Proceed in phases. Start with Phase 1-2 (deps + pure asr port) as a PR, then
 Phase 3-5, then UI. Do not attempt all in one pass — native build verification
 is required between phases.
+
+## ASR settings UI (current)
+
+PocketPal's ASR surface is not a picker: flat rows inside the App Settings
+card, one per tier, with the label at `bodyMedium` (14/20) and the size at
+`labelSmall` (11/16), and a single action on the right — Download (Retry on
+error), disabled Downloading…, or Remove. Nothing marks which tier is active
+except the store's `selectedTier`, and `ASRStore.downloadModel` selects the
+tier it just installed.
+
+LiAI follows the same flat rows and install-selects behaviour inside the
+Voice Input card. It keeps the existing free-space caption, marks the active
+installed tier with a Check (PocketPal shows no visible selection), and adds
+tap-to-switch so changing tiers does not require a delete/reinstall. The rows
+hide while Voice input is off, as they do in PocketPal.

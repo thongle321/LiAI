@@ -2,20 +2,22 @@
  *  riding the Voice settings screen under TTS (D7 — PocketPal's ASR
  *  settings surface). Availability is a plain ON/OFF toggle over the
  *  persisted tri-state: OFF and ON are explicit overrides; toggling is
- *  how the user says they want a side of the device default. Tier rows
- *  carry PocketPal's tier copy, download/remove CTAs and the storage
- *  denial wording. */
+ *  how the user says they want a side of the device default.
+ *
+ *  The tiers are PocketPal's flat rows: label + size on the left, the
+ *  download action on the right, no cards or radio column. Installing a
+ *  tier selects it (store/downloadModel), and tapping an installed row
+ *  switches to it — the one addition to PocketPal's set, which only has
+ *  install/remove. Rows stay hidden while Voice input is off. */
 
 import { useEffect } from "react";
 import { Pressable, Text, View } from "react-native";
-import { Download, Trash2 } from "lucide-react-native";
+import { Check } from "lucide-react-native";
 
 import { useColors } from "@/themes/tokens.ts";
-import { cn } from "@/utils/cn.ts";
 import { formatBytes } from "@/services/models/progress.ts";
 import { useFreeSpacePoll } from "@/hooks/useStorageDisclosure.ts";
 import { SettingsSection, ToggleRow } from "@/components/settings-rows.tsx";
-import { RadioDot } from "@/components/voice/radio-dot.tsx";
 import { useAsrStore } from "@/store/asr.ts";
 import {
   ASR_DISK_HEADROOM_FACTOR,
@@ -23,9 +25,7 @@ import {
   ASR_TIER_ORDER,
   ASR_TIERS,
 } from "@/services/asr/constants.ts";
-import {
-  insufficientStorageCopy,
-} from "@/services/asr/error-copy.ts";
+import { insufficientStorageCopy } from "@/services/asr/error-copy.ts";
 import type { AsrTier } from "@/services/asr/types.ts";
 
 /** Human tier names — PocketPal's tier* strings, verbatim. */
@@ -35,7 +35,7 @@ const TIER_LABEL: Record<AsrTier, string> = {
   "large-turbo": "Large Turbo (best quality)",
 };
 
-function TierCard({ tier }: { tier: AsrTier }) {
+function TierRow({ tier, last }: { tier: AsrTier; last: boolean }) {
   const colors = useColors();
   const manifest = ASR_TIERS[tier];
   const selected = useAsrStore((s) => s.selectedTier === tier);
@@ -51,94 +51,84 @@ function TierCard({ tier }: { tier: AsrTier }) {
   const failed = state === "error";
 
   return (
-    <Pressable
-      onPress={installed ? () => setSelectedTier(tier) : undefined}
-      accessibilityRole="radio"
-      accessibilityState={{ checked: selected }}
-      accessibilityLabel={TIER_LABEL[tier]}
-      className={cn("voice-card", selected && "voice-card--active", "mb-3")}
-      testID={`asr-tier-${tier}`}
-    >
-      <View className="voice-card__header">
-        <View className="h-9 w-9 items-center justify-center rounded-full bg-orange-100">
-          <Download size={18} color={colors.warmAccent} />
-        </View>
-        <View className="flex-1">
-          <View className="flex-row items-center gap-2">
-            <Text className="voice-card__title">{TIER_LABEL[tier]}</Text>
-            {selected && (
-              <View className="voice-badge">
-                <Text className="voice-badge__text">Selected</Text>
-              </View>
-            )}
-          </View>
-          <Text className="voice-card__spec">
-            {formatBytes(manifest.estimatedBytes)}
-            {installed
-              ? " — installed"
-              : downloading
-                ? ` — ${Math.round(progress * 100)}%`
-                : ""}
-          </Text>
-        </View>
-        <RadioDot checked={selected} />
-      </View>
-      <View className="voice-card__body">
-        {downloading ? (
-          <Text className="text-quiet" testID={`asr-downloading-${tier}`}>
-            Downloading… {Math.round(progress * 100)}%
-          </Text>
-        ) : (
-          <View className="flex-row items-center gap-2 self-start">
-            {installed ? (
-              <Pressable
-                onPress={() => void deleteModel(tier)}
-                className="btn btn--ghost active:opacity-80 flex-row items-center gap-2 px-4 py-2"
-                accessibilityRole="button"
-                accessibilityLabel={`Remove ${TIER_LABEL[tier]}`}
-                testID={`asr-remove-${tier}`}
+    <View className={last ? "row row--titled row--last" : "row row--titled"}>
+      <View className="flex-row items-center gap-3">
+        <Pressable
+          onPress={installed ? () => setSelectedTier(tier) : undefined}
+          disabled={!installed}
+          accessibilityRole="radio"
+          accessibilityState={{ checked: installed && selected, disabled: !installed }}
+          accessibilityLabel={TIER_LABEL[tier]}
+          className="flex-1 flex-row items-center"
+          testID={`asr-tier-${tier}`}
+        >
+          <View className="flex-1 pr-3">
+            <Text className="font-sans text-body-md text-primary-text">
+              {TIER_LABEL[tier]}
+            </Text>
+            <Text className="mt-1 font-sans text-xs text-secondary-text">
+              {formatBytes(manifest.estimatedBytes, 0)}
+              {downloading ? ` — ${Math.round(progress * 100)}%` : ""}
+            </Text>
+            {failed && error === ASR_INSUFFICIENT_STORAGE && (
+              <Text
+                className="mt-1 font-sans text-body-sm text-error"
+                accessibilityLiveRegion="polite"
+                testID={`asr-storage-note-${tier}`}
               >
-                <Trash2 size={14} color={colors.secondaryText} />
-                <Text className="text-body">Remove</Text>
-              </Pressable>
-            ) : (
-              <Pressable
-                onPress={() => void downloadModel(tier)}
-                className={cn(
-                  "btn btn--tonal active:opacity-80 flex-row items-center gap-2 px-4 py-2",
-                  failed && "opacity-60",
+                {insufficientStorageCopy(
+                  manifest.estimatedBytes * ASR_DISK_HEADROOM_FACTOR,
+                  freeDiskBytes,
                 )}
-                accessibilityRole="button"
-                accessibilityLabel={failed ? "Retry" : "Download"}
-                testID={`asr-download-${tier}`}
+              </Text>
+            )}
+            {failed && error !== null && error !== ASR_INSUFFICIENT_STORAGE && (
+              <Text
+                className="mt-1 font-sans text-body-sm text-error"
+                accessibilityLiveRegion="polite"
+                testID={`asr-error-${tier}`}
               >
-                <Download size={14} color={colors.primary} />
-                <Text className="font-sans-semibold text-body-md text-primary">
-                  {failed ? "Retry" : "Download"}
-                </Text>
-              </Pressable>
+                {error}
+              </Text>
             )}
           </View>
-        )}
-        {failed && error === ASR_INSUFFICIENT_STORAGE && (
-          <Text
-            className="mt-1 text-quiet"
-            accessibilityLiveRegion="polite"
-            testID={`asr-storage-note-${tier}`}
+          {installed && selected ? <Check size={16} color={colors.primary} /> : null}
+        </Pressable>
+
+        {downloading ? (
+          <Pressable
+            disabled
+            accessibilityRole="button"
+            accessibilityState={{ disabled: true }}
+            className="btn btn--secondary btn--disabled"
+            accessibilityLabel="Downloading"
+            testID={`asr-downloading-${tier}`}
           >
-            {insufficientStorageCopy(
-              manifest.estimatedBytes * ASR_DISK_HEADROOM_FACTOR,
-              freeDiskBytes,
-            )}
-          </Text>
-        )}
-        {failed && error !== null && error !== ASR_INSUFFICIENT_STORAGE && (
-          <Text className="mt-1 text-quiet" testID={`asr-error-${tier}`}>
-            {error}
-          </Text>
+            <Text className="text-body">Downloading…</Text>
+          </Pressable>
+        ) : installed ? (
+          <Pressable
+            onPress={() => void deleteModel(tier)}
+            className="btn btn--secondary active:opacity-80"
+            accessibilityRole="button"
+            accessibilityLabel={`Remove ${TIER_LABEL[tier]}`}
+            testID={`asr-remove-${tier}`}
+          >
+            <Text className="text-body">Remove</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => void downloadModel(tier)}
+            className="btn btn--tonal active:opacity-80"
+            accessibilityRole="button"
+            accessibilityLabel={failed ? "Retry" : "Download"}
+            testID={`asr-download-${tier}`}
+          >
+            <Text className="text-body">{failed ? "Retry" : "Download"}</Text>
+          </Pressable>
         )}
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -147,7 +137,7 @@ export function AsrSetup() {
   const asrAvailable = useAsrStore((s) => s.asrAvailable);
   const deviceSupported = useAsrStore((s) => s.deviceSupported);
   const setUserASROverride = useAsrStore((s) => s.setUserASROverride);
-  const { freeBytes, checked } = useFreeSpacePoll(true);
+  const { freeBytes, checked } = useFreeSpacePoll(asrAvailable);
 
   useEffect(() => {
     void load();
@@ -156,7 +146,11 @@ export function AsrSetup() {
   return (
     <View className="mb-4">
       <SettingsSection title="Voice Input">
-        <View className="row row--titled row--last">
+        <View
+          className={
+            asrAvailable ? "row row--titled" : "row row--titled row--last"
+          }
+        >
           <ToggleRow
             label="Voice input"
             description={
@@ -169,23 +163,22 @@ export function AsrSetup() {
             onPress={() => setUserASROverride(!asrAvailable)}
           />
         </View>
-      </SettingsSection>
 
-      <View className="mb-3 mt-6 flex-row items-end justify-between">
-        <View className="flex-1 pr-4">
-          <Text className="card-title">Voice models</Text>
-          <Text className="mt-1 text-quiet">
-            On-device speech recognition. Uses storage space.
+        {asrAvailable &&
+          ASR_TIER_ORDER.map((tier, index) => (
+            <TierRow
+              key={tier}
+              tier={tier}
+              last={index === ASR_TIER_ORDER.length - 1}
+            />
+          ))}
+
+        {asrAvailable && checked && freeBytes !== null && (
+          <Text className="mt-2 self-end font-sans text-xs text-secondary-text">
+            {formatBytes(freeBytes, 1)} available
           </Text>
-        </View>
-        {checked && freeBytes !== null && (
-          <Text className="text-quiet">{formatBytes(freeBytes, 1)} available</Text>
         )}
-      </View>
-
-      {ASR_TIER_ORDER.map((tier) => (
-        <TierCard key={tier} tier={tier} />
-      ))}
+      </SettingsSection>
     </View>
   );
 }

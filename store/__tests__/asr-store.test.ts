@@ -154,6 +154,30 @@ describe("download preflight (PocketParity disk rule)", () => {
   });
 });
 
+describe("installing a tier selects it (PocketParity)", () => {
+  it("makes the downloaded tier the selected, ready one", async () => {
+    const installed = new Set<AsrTier>();
+    const useStore = createAsrStore(
+      memoryStorage(),
+      deps({
+        engine: async () =>
+          fakeEngine({
+            isInstalled: async (tier) => installed.has(tier),
+            downloadModel: async (tier) => void installed.add(tier),
+          }),
+      }).deps,
+    );
+    await useStore.getState().load();
+    // The default is small, but base is the tier being installed.
+    expect(useStore.getState().selectedTier).toBe(ASR_DEFAULT_TIER);
+
+    await useStore.getState().downloadModel("base");
+    expect(useStore.getState().selectedTier).toBe("base");
+    expect(useStore.getState().downloadStates.base).toBe("ready");
+    expect(useStore.getState().isSelectedTierReady).toBe(true);
+  });
+});
+
 describe("deleteModel reselection (PocketParity fallback)", () => {
   it("falls back to the next READY tier when the selected one is deleted", async () => {
     const installed = new Set<AsrTier>(["base", "large-turbo"]);
@@ -210,7 +234,7 @@ describe("backgrounded release (PocketParity: background only, idle only)", () =
 });
 
 describe("loading derives disk install state (PocketParity init)", () => {
-  it("marks installed tiers ready and seeds selection readiness", async () => {
+  it("marks installed tiers ready and selects the installed one", async () => {
     const installed = new Set<AsrTier>(["base"]);
     const useStore = createAsrStore(
       memoryStorage(),
@@ -223,7 +247,35 @@ describe("loading derives disk install state (PocketParity init)", () => {
     expect(useStore.getState().downloadStates.base).toBe("ready");
     expect(useStore.getState().downloadStates.small).toBe("not_installed");
     expect(useStore.getState().downloadStates["large-turbo"]).toBe("not_installed");
-    expect(useStore.getState().isSelectedTierReady).toBe(false); // small not installed
+    // The default (small) is absent, so the installed base wins.
+    expect(useStore.getState().selectedTier).toBe("base");
+    expect(useStore.getState().isSelectedTierReady).toBe(true);
+  });
+
+  it("repairs a persisted selection whose tier is no longer installed", async () => {
+    const installed = new Set<AsrTier>(["base"]);
+    const storage = memoryStorage();
+    storage.data[ASR_KEY] = JSON.stringify({
+      state: { userASROverride: null, selectedTier: "small", spokenLanguage: null },
+      version: 0,
+    });
+    const useStore = createAsrStore(
+      storage,
+      deps({
+        engine: async () =>
+          fakeEngine({ isInstalled: async (tier) => installed.has(tier) }),
+      }).deps,
+    );
+    await useStore.getState().load();
+    expect(useStore.getState().selectedTier).toBe("base");
+    expect(useStore.getState().isSelectedTierReady).toBe(true);
+  });
+
+  it("leaves the selection alone when no tier is installed", async () => {
+    const useStore = createAsrStore(memoryStorage(), deps().deps);
+    await useStore.getState().load();
+    expect(useStore.getState().selectedTier).toBe(ASR_DEFAULT_TIER);
+    expect(useStore.getState().isSelectedTierReady).toBe(false);
   });
 
   it("load() is idempotent", async () => {
@@ -239,5 +291,27 @@ describe("loading derives disk install state (PocketParity init)", () => {
     await useStore.getState().load();
     await useStore.getState().load();
     expect(watched).toBe(1);
+  });
+});
+
+describe("switching tiers", () => {
+  it("selects a different installed tier", async () => {
+    const installed = new Set<AsrTier>(["base", "small"]);
+    const useStore = createAsrStore(
+      memoryStorage(),
+      deps({
+        engine: async () =>
+          fakeEngine({ isInstalled: async (tier) => installed.has(tier) }),
+      }).deps,
+    );
+    await useStore.getState().load();
+    // The default is installed, so it stays selected.
+    expect(useStore.getState().selectedTier).toBe(ASR_DEFAULT_TIER);
+
+    useStore.getState().setSelectedTier("base");
+    expect(useStore.getState().selectedTier).toBe("base");
+
+    useStore.getState().setSelectedTier("small");
+    expect(useStore.getState().selectedTier).toBe("small");
   });
 });

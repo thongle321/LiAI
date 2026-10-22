@@ -139,6 +139,18 @@ const initialErrors = (): Record<AsrTier, string | null> => ({
   "large-turbo": null,
 });
 
+/** The first installed tier in display order, optionally skipping one (the
+ *  tier being deleted). Shared by load reconciliation and delete fallback. */
+function firstReadyTier(
+  states: Record<AsrTier, AsrDownloadState>,
+  except?: AsrTier,
+): AsrTier | null {
+  return (
+    ASR_TIER_ORDER.find((tier) => tier !== except && states[tier] === "ready") ??
+    null
+  );
+}
+
 export function createAsrStore(storage: KeyValueStorage, deps: AsrDeps) {
   let hydrating: Promise<void> | null = null;
   let api: AsrStoreApi | null = null;
@@ -208,6 +220,13 @@ export function createAsrStore(storage: KeyValueStorage, deps: AsrDeps) {
                 } catch {
                   // Unreadable disk: leave not_installed; download re-checks.
                 }
+              }
+              // A persisted selection can outlive its model (a wipe, a failed
+              // install): point it at a tier actually on disk.
+              const { selectedTier, downloadStates } = get();
+              if (downloadStates[selectedTier] !== "ready") {
+                const installed = firstReadyTier(downloadStates);
+                if (installed) set({ selectedTier: installed });
               }
               await refreshTierReadiness();
               if (!unwatchBackground) {
@@ -297,9 +316,12 @@ export function createAsrStore(storage: KeyValueStorage, deps: AsrDeps) {
                   downloadProgress: { ...st.downloadProgress, [tier]: p },
                 }));
               });
+              // PocketParity: the tier you just installed becomes the active
+              // one — the settings row set has no separate picker.
               set((st) => ({
                 downloadStates: { ...st.downloadStates, [tier]: "ready" },
                 downloadProgress: { ...st.downloadProgress, [tier]: 1 },
+                selectedTier: tier,
               }));
               await refreshTierReadiness();
             } catch (err) {
@@ -322,9 +344,7 @@ export function createAsrStore(storage: KeyValueStorage, deps: AsrDeps) {
               // to the next READY tier (default otherwise).
               let selectedTier = st.selectedTier;
               if (tier === st.selectedTier) {
-                selectedTier =
-                  ASR_TIER_ORDER.find((t) => t !== tier && states[t] === "ready") ??
-                  ASR_DEFAULT_TIER;
+                selectedTier = firstReadyTier(states, tier) ?? ASR_DEFAULT_TIER;
               }
               return {
                 downloadStates: states,

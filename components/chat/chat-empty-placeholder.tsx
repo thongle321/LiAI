@@ -27,8 +27,8 @@ export function ChatEmptyPlaceholder({
    *  KeyboardChatScrollView's dynamic inset, but this card's placement no
    *  longer depends on it, so the keyboard can't drag it around. */
   bottomInset: number;
-  /** Opens the in-chat model picker (PocketPal's ChatPalModelPickerSheet).
-   *  Absent falls back to the /models route. */
+  /** Opens the in-chat companion/model picker (PocketPal's
+   *  ChatPalModelPickerSheet). Absent falls back to the /models route. */
   onSelectModel?: () => void;
 }) {
   const router = useRouter();

@@ -93,6 +93,15 @@ behaviour rather than app code (markdown table rendering), the library file is c
 
 ---
 
+## Postscript (2026-10-23): composer pal/model picker ported
+
+The 2026-09-29 pass excluded `ChatPalModelPickerSheet` and `PalStore` from its scope.
+That exclusion is historical: the tabbed pal/model picker has since been ported as
+`components/chat/chat-picker-sheet.tsx` (`Companions` + `Models` tabs, opening on
+Models). The composer's leading `chat-picker-button` opens it, the chat header no
+longer carries a companion button, and the mic moved beside Send. Full record:
+`docs/research/2026-10-23-chat-composer-picker-parity.md`.
+
 ## 2. Feature inventory (pocketpal-ai chat)
 
 ### 2.1 Header / navigation
@@ -277,6 +286,7 @@ Status key: **Present** / **Partial** / **Missing**.
 | Blocked-send feedback | Present (different mechanism) | The placeholder names the state and the send button disables (`MessageInput.tsx:196-207`, `:398-405`). No haptic, and no transient helper line — a deliberate simplification recorded in the keyboard spec §12. |
 | **Thinking toggle pill / effort cycle in the composer** | **Missing** | `useInference` has `thinkingEnabled` and `setThinkingEnabled` (`store/inference.ts:49,112,332`) and it threads into the turn (`store/chat/index.ts:188-192`, `lib/chat/turn.ts:139-141`), but there is **no control in the chat UI** — `MessageInput.tsx`'s control row has only plus / field / mic / send-or-stop (`:344-405`). The only place it can be changed is the Settings screen. And there is no graded-effort concept anywhere (`reasoning_effort` has zero hits outside this doc). |
 | Model-aware placeholder | Present | `MessageInput.tsx:196-207`, pocketpal's strings verbatim. |
+| Composer companion/model picker | Present | `components/chat/chat-picker-sheet.tsx`, `components/chat/message-input.tsx` (`chat-picker-button`), `app/(drawer)/(tabs)/chat.tsx`. |
 | Image attach: camera + gallery | Present | `MessageInput.tsx:222-232`, `:305-330`; `lib/chat/attachments.ts`. |
 | **Multi-image attach (up to 5)** | **SHIPPED** | `lib/chat/attachments.ts` gained `pickImages` (returns up to `MAX_IMAGES` = pocketpal's `selectionLimit`); `ChatMessage.images`, `TurnPaths.images` and `send(text, images?)` are arrays; `lib/chat/turn.ts` maps every photo to a media path and drops one that fails to save rather than failing the turn; the composer shows a wrapping preview strip with per-image ✕. The bound is enforced at our seam, not trusted to the OS — `selectionLimit` is advisory. |
 | **Auto-release suspension around the picker** | **Missing** | pocketpal wraps camera/gallery in `disableAutoRelease` (`ChatInput.tsx:265-276`, `:326-349`) so a mid-pick model release can't happen. We have `hooks/useEngineOffload.ts` but the attach path never calls it — an Android model released between opening and returning from the picker would break the turn that follows. |

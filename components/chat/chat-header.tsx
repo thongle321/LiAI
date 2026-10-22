@@ -1,12 +1,13 @@
 /** Chat header in LiAI style, derived from PocketPal's ChatHeader.
  *
  * Two-line title: conversation name, then the active model. Left slot opens
- * the drawer; right slot has New conversation + ChatMenu. Fixed 56dp height,
- * matching DESIGN.md's header pin.
+ * the drawer; right slot has New conversation + ChatMenu. The companion is
+ * not here: it is chosen from the composer's picker, matching PocketPal's
+ * pal selector. Fixed 56dp height, matching DESIGN.md's header pin.
  */
 
 import { Pressable, Text, View } from "react-native";
-import { Menu, SquarePen, Users } from "lucide-react-native";
+import { Menu, SquarePen } from "lucide-react-native";
 import Animated from "react-native-reanimated";
 
 import { useColors } from "@/themes/tokens.ts";
@@ -22,7 +23,6 @@ export function ChatHeader({
   onNewConversation,
   onOpenGeneration,
   onOpenSearch,
-  onOpenCompanions,
 }: {
   title: string | null;
   modelLabel: string | null;
@@ -31,7 +31,6 @@ export function ChatHeader({
   onNewConversation: () => void;
   onOpenGeneration: () => void;
   onOpenSearch: () => void;
-  onOpenCompanions: () => void;
 }) {
   const colors = useColors();
   const menuPress = usePressFeedback();
@@ -93,15 +92,6 @@ export function ChatHeader({
             <SquarePen size={20} color={colors.primaryText} />
           </Pressable>
         </Animated.View>
-        <Pressable
-          onPress={onOpenCompanions}
-          className="icon-btn"
-          hitSlop={4}
-          accessibilityRole="button"
-          accessibilityLabel="Companions"
-        >
-          <Users size={20} color={colors.primaryText} />
-        </Pressable>
         <ChatMenu
           onOpenGeneration={onOpenGeneration}
           onOpenSearch={onOpenSearch}

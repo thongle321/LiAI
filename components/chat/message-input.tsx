@@ -1,4 +1,5 @@
-/** Message input: the composer — text field + attach + thinking shortcut.
+/** Message input: the composer — text field, attach, companion/model picker,
+ * thinking and voice, with send at the trailing edge.
  *
  * Renamed from ChatInput.tsx (message-view refactor): same behavior, new
  * name. The composer attach button opens the camera/gallery picker, and the
@@ -14,7 +15,7 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import { Brain, Camera, Image as ImageIcon, Mic, Pencil, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
+import { Brain, Camera, ChevronUp, Image as ImageIcon, Mic, Pencil, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
 import Animated from "react-native-reanimated";
 import { KeyboardControllerNative } from "react-native-keyboard-controller";
 
@@ -51,6 +52,8 @@ export function MessageInput({
   onHeightChange,
   editing,
   onCancelEdit,
+  companionName,
+  onOpenPicker,
 }: {
   sending: boolean;
   /** False with no loaded model: send disables (PocketPal parity). */
@@ -71,6 +74,11 @@ export function MessageInput({
   editing?: boolean;
   /** Leave edit mode, restoring the composer to the turn's own text. */
   onCancelEdit?: () => void;
+  /** The companion bound to this conversation, or null when none is. The
+   *  composer only reads it to label the picker; the route owns the state. */
+  companionName: string | null;
+  /** Open the companion/model picker (PocketPal's composer chevron). */
+  onOpenPicker: () => void;
 }) {
   const colors = useColors();
   // This box is the bottom-anchored surface, so it carries the keyboard lift
@@ -375,10 +383,11 @@ export function MessageInput({
           {/* Control bar: while a voice capture records or transcribes, the
               whole row IS the VoiceRecordingBar (D1/D2/D3/D10 — its cancel,
               waveform, timer, stop and language chip). No capture: left
-              controls (mic + attach), right controls (thinking, send/stop).
-              The mic GATE (D5): hidden when the availability gate is shut;
-              a gate that is open without an installed tier routes to the
-              Voice settings screen (PocketParity mic-button-setup). */}
+              controls (attach, companion/model picker), right controls
+              (thinking, mic, send/stop) — PocketPal's split. The mic GATE
+              (D5): hidden when the availability gate is shut; a gate that is
+              open without an installed tier routes to the Voice settings
+              screen (PocketParity mic-button-setup). */}
           {voiceCaptureActive ? (
             <VoiceRecordingBar
               onCancel={() => {
@@ -390,29 +399,6 @@ export function MessageInput({
           ) : (
           <View className="flex-row items-center justify-between px-4 py-2 min-h-9">
             <View className="flex-row items-center gap-2 flex-1">
-              {asrAvailable && (
-                <Pressable
-                  onPress={
-                    tierReady
-                      ? () => (isRecording ? voiceCapture.stop() : voiceCapture.start())
-                      : () => router.push("/voice-settings")
-                  }
-                  testID={tierReady ? "mic-button" : "mic-button-setup"}
-                  className={`h-12 w-12 items-center justify-center rounded-full ${
-                    isRecording || isTranscribing ? "bg-primary" : "bg-surface-3"
-                  }`}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    tierReady
-                      ? isRecording
-                        ? "Stop recording"
-                        : "Start voice input"
-                      : "Set up voice input"
-                  }
-                >
-                  <Mic size={20} color={isRecording || isTranscribing ? colors.onPrimary : colors.primary} />
-                </Pressable>
-              )}
               <Animated.View style={plusPress.animatedStyle}>
                 <Pressable
                   onPress={modelReady && canSee ? () => setPlusOpen((o) => !o) : undefined}
@@ -433,6 +419,31 @@ export function MessageInput({
                   <Plus size={20} color={modelReady && canSee ? colors.primary : colors.secondaryText} />
                 </Pressable>
               </Animated.View>
+              {/* PocketPal's pal selector (ChatInput.tsx): a chevron that
+                  opens the tabbed companion/model sheet, labelled with the
+                  active companion's name when one is bound. The label only
+                  appears with an active model, as PocketPal's does. */}
+              <Pressable
+                onPress={onOpenPicker}
+                testID="chat-picker-button"
+                className="h-12 shrink flex-row items-center gap-1"
+                accessibilityRole="button"
+                accessibilityLabel={
+                  companionName === null
+                    ? "Choose companion and model"
+                    : `Choose companion and model, current ${companionName}`
+                }
+              >
+                <View className="h-12 w-12 items-center justify-center rounded-full bg-surface-3">
+                  <ChevronUp size={20} color={colors.primary} />
+                </View>
+                {activeModelId !== null && !!companionName && (
+                  <Text numberOfLines={1} className="shrink text-quiet">
+                    Companion:{" "}
+                    <Text className="font-sans-semibold">{companionName}</Text>
+                  </Text>
+                )}
+              </Pressable>
               {plusOpen && (
                 // Anchored to the plus button's wrapper and extending right into
                 // the empty composer space — the plus is leftmost, so w-48 fits
@@ -498,6 +509,34 @@ export function MessageInput({
                   >
                     Think
                   </Text>
+                </Pressable>
+              )}
+              {/* Mic sits beside Send, as pocketpal's ChatInput does
+                  (`styles.micBeforeSend`): the two things that finish a turn
+                  are adjacent, and the leading slot belongs to attachment
+                  and the companion/model picker. All voice gates and testIDs
+                  below are unchanged from its old leading position. */}
+              {asrAvailable && (
+                <Pressable
+                  onPress={
+                    tierReady
+                      ? () => (isRecording ? voiceCapture.stop() : voiceCapture.start())
+                      : () => router.push("/voice-settings")
+                  }
+                  testID={tierReady ? "mic-button" : "mic-button-setup"}
+                  className={`h-12 w-12 items-center justify-center rounded-full ${
+                    isRecording || isTranscribing ? "bg-primary" : "bg-surface-3"
+                  }`}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    tierReady
+                      ? isRecording
+                        ? "Stop recording"
+                        : "Start voice input"
+                      : "Set up voice input"
+                  }
+                >
+                  <Mic size={20} color={isRecording || isTranscribing ? colors.onPrimary : colors.primary} />
                 </Pressable>
               )}
               {/* Send and Stop are siblings, never nested: two nested pressables

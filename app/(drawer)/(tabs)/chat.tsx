@@ -59,12 +59,11 @@ import { useModelReady } from "@/hooks/useModelReady.ts";
 import { GenerationSettingsSheet } from "@/components/chat/generation-settings-sheet.tsx";
 import { ChatWarningSnackbar } from "@/components/chat/chat-warning-snackbar.tsx";
 import { ChatHeader } from "@/components/chat/chat-header.tsx";
-import { ModelPickerSheet } from "@/components/chat/model-picker-sheet.tsx";
+import { ChatPickerSheet } from "@/components/chat/chat-picker-sheet.tsx";
 import {
   GreetingBubble,
   SuggestedPromptChips,
 } from "@/components/chat/greeting-bubble.tsx";
-import { CompanionsSheet } from "@/components/companions/companions-sheet.tsx";
 import { useCompanions } from "@/store/companions.ts";
 import { recommendedContextTokens } from "@/services/agent/registry.ts";
 
@@ -228,11 +227,11 @@ export default function ChatRoute() {
   useChatHealth();
 
   // PocketPal parity: the composer is always visible. With no model the send
-  // button disables and the field's placeholder names it. There is
-  // deliberately NO in-composer prompt or button: the models screen is
-  // reached from the header title, which names the conversation and the
-  // model answering it, and the empty thread has its own card with a
-  // button. `ready` is only the transport health check; the
+  // button disables and the field's placeholder names it. The composer's own
+  // chevron opens the companion/model picker (PocketPal's pal selector), so
+  // both choices are available without leaving the thread. The header title
+  // still routes to /models for download and remote setup, and each message
+  // keeps "Regenerate with…". `ready` is only the transport health check; the
   // engine-accurate gate (useModelReady) is what the composer's own
   // affordances key off, inside MessageInput. Do not confuse the two
   // when editing either side.
@@ -413,20 +412,16 @@ export default function ChatRoute() {
     blankSpace.value = streaming ? listHeight : 0;
   }, [streaming, listHeight, blankSpace]);
   const [generationOpen, setGenerationOpen] = useState(false);
-  // PocketPal's in-chat model picker: opened from the empty thread's CTA so
-  // activating a model no longer means leaving the conversation. There is
-  // deliberately no composer chevron (that decision predates this: the
-  // header title routes to /models, and each message offers "Regenerate
-  // with…"); the picker is the no-model path only.
+  // One chat picker for both halves of PocketPal's ChatPalModelPickerSheet:
+  // the empty thread's CTA and the composer's chevron open the same sheet,
+  // which lands on Models every time. The companion now lives here rather
+  // than in the header.
   const [pickerOpen, setPickerOpen] = useState(false);
-  // The persona half of the chat picker (PocketPal's ChatPalModelPicker
-  // companions tab): header button -> sheet of installed companions.
-  const [companionsSheetOpen, setCompanionsSheetOpen] = useState(false);
   // Sync the freeze flag with the sheet-open state (declared above because the
   // pickers are defined late in this component).
   useEffect(() => {
-    freeze.value = pickerOpen || generationOpen || companionsSheetOpen;
-  }, [pickerOpen, generationOpen, companionsSheetOpen, freeze]);
+    freeze.value = pickerOpen || generationOpen;
+  }, [pickerOpen, generationOpen, freeze]);
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
 
@@ -449,7 +444,6 @@ export default function ChatRoute() {
         modelLabel={activeModelLabel}
         onOpenModels={() => router.navigate("/models")}
         onOpenDrawer={() => navigation.openDrawer()}
-        onOpenCompanions={() => setCompanionsSheetOpen(true)}
         onNewConversation={() => {
           // The pen starts a fresh chat; a stale search bar must
           // not outlive the conversation it was filtering.
@@ -625,6 +619,8 @@ export default function ChatRoute() {
         onCancelEdit={cancelEdit}
         onSend={(text, images) => send(text, images)}
         onHeightChange={handleComposerHeight}
+        companionName={activeCompanion?.name ?? null}
+        onOpenPicker={() => setPickerOpen(true)}
       />
       {/* Composer overlays: the chrome that is NOT part of the field and so
           cannot live inside it. Anchored directly above the field and lifted
@@ -708,13 +704,9 @@ export default function ChatRoute() {
         visible={generationOpen}
         onClose={() => setGenerationOpen(false)}
       />
-      <ModelPickerSheet
+      <ChatPickerSheet
         visible={pickerOpen}
         onClose={() => setPickerOpen(false)}
-      />
-      <CompanionsSheet
-        visible={companionsSheetOpen}
-        onClose={() => setCompanionsSheetOpen(false)}
       />
     </SafeAreaView>
   );

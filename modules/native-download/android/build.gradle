@@ -34,6 +34,24 @@ dependencies {
   // launch. Room is deliberately not used: there are no queries to run, only
   // a record to read back.
   implementation "com.google.code.gson:gson:2.11.0"
+
+  // Native test harness (ticket 01, .scratch/download-native-parity):
+  // the ONLY unit-test suites in this repo live here, ported from
+  // pocketpal-ai — npm test cannot reach Kotlin. Test scope only; nothing
+  // here rides in the app APK.
+  testImplementation "junit:junit:4.13.2"
+  testImplementation "org.robolectric:robolectric:4.16"
+  testImplementation "androidx.test:core-ktx:1.7.0"
+  testImplementation "androidx.room:room-testing:2.7.1"
+  // Bundled SQLite driver so Room tests run in-JVM with no emulator and no
+  // Robolectric sqlite natives (reference: TestDownloads.kt:9).
+  testImplementation "androidx.sqlite:sqlite-bundled-jvm:2.6.1"
+  // Pinned to the PRODUCTION okhttp 4.9.2, not the reference's 4.12.0: the
+  // transfer behavior under test must be the one that ships. HF redirect
+  // handling is the reason (docs/research/huggingface-download-path.md).
+  testImplementation "com.squareup.okhttp3:mockwebserver:4.9.2"
+  testImplementation "androidx.work:work-testing:2.9.1"
+  testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0"
 }
 
 android {
@@ -41,6 +59,17 @@ android {
   defaultConfig {
     versionCode 1
     versionName "0.1.0"
+  }
+  // Robolectric boots a lite Android environment (context, filesystem) for
+  // the JVM suites — what ApplicationProvider and Room's builder need.
+  testOptions {
+    unitTests.includeAndroidResources = true
+    unitTests.all {
+      // Robolectric's conscrypt TLS provider throws on these suites
+      // (reference: app/build.gradle:169); the transfers under test use
+      // plain http against MockWebServer anyway.
+      systemProperty "robolectric.conscryptMode", "OFF"
+    }
   }
   lintOptions {
     abortOnError false

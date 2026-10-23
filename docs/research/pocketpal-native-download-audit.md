@@ -367,3 +367,6 @@ scheduling fall through to the WorkManager branch
   native changes stay marked unverified. All download logic currently under
   test lives in the pure helpers (`resume-state`, `http-retry`,
   `download-jobs`, `download-error`, `vision-pairing`, `file-state`).
+  Ticket 01 is DONE: invocation recorded —
+  `.\gradlew.bat :native-download:testDebugUnitTest` (green, 9 tests:
+  DownloadDaoTest smoke + DownloadMigrationTest v1 baseline).

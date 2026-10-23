@@ -5,8 +5,8 @@
  * static mic + status text; your live words show while talking; while
  * the AI replies a block shows a loading spinner + "Playing audio..."
  * + Stop with the reply text below. Layout never moves: the heard
- * line and overlay stay mounted (invisible when idle) and nothing
- * animates except the overlay fade.
+ * line and overlay stay mounted (invisible when idle); only the mic
+ * pulses while listening and the overlay fades.
  */
 
 import { useEffect, useState } from "react";
@@ -58,7 +58,7 @@ export default function VoiceScreen() {
     } else {
       pulse.value = withTiming(1, { duration: 150, easing: motionEasing });
     }
-  }, [phase, pulse]);
+  }, [phase, pulse, motionEasing]);
   const pulseStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulse.value }],
   }));

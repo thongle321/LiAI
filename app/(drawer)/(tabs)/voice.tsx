@@ -9,7 +9,7 @@
  * animates except the overlay fade.
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -20,6 +20,7 @@ import {
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -43,6 +44,24 @@ export default function VoiceScreen() {
   const motionDuration = MOTION_DURATION_MS;
   const replyVisible = phase === "speaking";
   const micPress = usePressFeedback();
+  // Captions: tap the heard line to toggle the live transcript.
+  const [captionsOn, setCaptionsOn] = useState(true);
+  // Gentle pulse while listening — reuses reanimated, no new deps.
+  const pulse = useSharedValue(1);
+  useEffect(() => {
+    if (phase === "listening") {
+      pulse.value = withRepeat(
+        withTiming(1.04, { duration: 900, easing: motionEasing }),
+        -1,
+        true,
+      );
+    } else {
+      pulse.value = withTiming(1, { duration: 150, easing: motionEasing });
+    }
+  }, [phase, pulse]);
+  const pulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulse.value }],
+  }));
 
   // Overlay fades in on reply start, fades out when audio ends.
   // Always mounted — only opacity changes, so nothing ever shifts.
@@ -90,7 +109,8 @@ export default function VoiceScreen() {
                 with concentric Signal Blue rings. Disabled is Mist + Slate,
                 kept findable (DESIGN: disabled is a fill/label change, never
                 opacity on a live element). */}
-            <View
+            <Animated.View
+              style={pulseStyle}
               className={`h-40 w-40 items-center justify-center rounded-full ${
                 modelReady ? (micLive ? "bg-surface-3" : "bg-surface-2") : "bg-surface-2"
               }`}
@@ -103,7 +123,7 @@ export default function VoiceScreen() {
                   color={modelReady ? (micLive ? colors.primary : colors.secondaryText) : colors.secondaryText}
                 />
               </View>
-            </View>
+            </Animated.View>
           </Pressable>
         </Animated.View>
 
@@ -114,10 +134,13 @@ export default function VoiceScreen() {
         >
           {VOICE_STATUS_LABEL[phase]}
         </Animated.Text>
-        {/* Heard slot never unmounts: nbsp holds the line when silent. */}
-        <Text className="mt-3 min-h-12 text-center font-sans text-body-md text-secondary-text">
-          {heard !== "" && phase !== "speaking" ? heard : " "}
-        </Text>
+        {/* Heard slot never unmounts: nbsp holds the line when silent.
+            Tap to toggle captions. */}
+        <Pressable onPress={() => setCaptionsOn((v) => !v)} accessibilityRole="button" accessibilityLabel={captionsOn ? "Hide captions" : "Show captions"}>
+          <Text className="mt-3 min-h-12 text-center font-sans text-body-md text-secondary-text">
+            {captionsOn && heard !== "" && phase !== "speaking" ? heard : " "}
+          </Text>
+        </Pressable>
 
         <Animated.View
           style={overlayStyle}
@@ -179,11 +202,6 @@ export default function VoiceScreen() {
         )}
       </ScrollView>
 
-      {/* The disabled mic carries the no-model state on its own; no warning
-          copy or way-forward button here (the user removed it). */}
-      <Text className="pb-2 text-center font-sans text-body-md text-secondary-text">
-        Tap the mic to talk
-      </Text>
     </SafeAreaView>
   );
 }

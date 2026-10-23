@@ -73,9 +73,9 @@ behavioral consequence, kept on purpose.
 | Events | 4 named events; `onDownloadCancelled` emitted, never handled | 1 `onDownloadEvent` carrying the whole record; **terminal states emitted from the live loop**, re-attach replay stays filtered (`NativeDownloadModule.kt:206`) | same behavior, documented shape |
 | Record fields | `{url, destination, progress, status}` | `{modelId, fileName, expectedTotal, downloadedBytes, errorCode, …}` | better |
 | Transfer / durability | WorkManager + Room | WorkManager + Room | same |
-| Resume safety | `Range` from file length **plus validators**: `If-Range` (strong ETag only, `DownloadEngine.kt:318-319`), a 206 must match `Content-Range` start/total/etag or the transfer restarts (`DownloadEngine.kt:221-236`); `adopt()` reconciles the file on disk with the row (`DownloadEngine.kt:158-176`) | `Range` + quoted `If-Range` + oversize-partial guard; **no 206 `Content-Range` validation** (trusts the response's declared range), no in-place/partial adoption | better on If-Range; **behind** on 206 validation and adoption — ported as tickets 03/04 |
+| Resume safety | `Range` from file length **plus validators**: `If-Range` (strong ETag only, `DownloadEngine.kt:318-319`), a 206 must match `Content-Range` start/total/etag or the transfer restarts (`DownloadEngine.kt:221-236`); `adopt()` reconciles the file on disk with the row (`DownloadEngine.kt:158-176`) | `Range` + quoted `If-Range` + oversize-partial guard; ~~no 206 `Content-Range` validation~~ **RESOLVED by ticket 03 (2026-10-23): 206 validated (start/total/strong-ETag via `CONTENT_RANGE`/`UNSATISFIED_RANGE`), validators adopted via `writeValidators`, 416 resolves a complete part or restarts; single-Restart guard fails `"Remote file changed during download"` (17 worker tests)**; `adopt()`/`.part` staging remains ticket 05 | better on If-Range; ~~behind on 206 validation~~ — validation closed by ticket 03; adoption open as ticket 05 |
 | HTTP status handling | in-process `Attempt.Transient`/`Restart` engine: 408/429/5xx → transient with backoff, 400..499 → `Client error: N`, else `Unexpected response: N` (`DownloadEngine.kt:246-248`); transient ends re-schedule the run QUEUED | 429 + 5xx requeue (row = QUEUED) + WorkManager `Result.retry()`; 401/403 auth-specific copy; ~~408 and every other non-200/206 fail flat "HTTP N" (`DownloadWorker.kt:208-209`)~~ **RESOLVED by ticket 02 (2026-10-23): 408 joins the transient lane, 400..499 → `Client error: N`, else → `Unexpected response: N`, SSLPeerUnverified fails the row (`DownloadWorkerTest.kt`, 9 tests)** | better on 401/403/429/5xx; ~~behind on 408-transient — ported as ticket 02~~ |
-| Total size source | response `Content-Length` (`PW:176-194`); iOS takes raw `contentLength` with no 206 correction | response total, `206 → existing + contentLength`, chunked `-1` falls back to catalog (`DownloadWorker.kt` transfer); legacy driver guards expo's `-1 + N` (`download-service.ts` handleProgress) | same on Android, better on iOS |
+| Total size source | response `Content-Length` (`PW:176-194`); iOS takes raw `contentLength` with no 206 correction | response total, `206 → existing + contentLength`, chunked `-1` falls back to catalog (`DownloadWorker.kt` transfer); legacy driver guards expo's `-1 + N` (`download-service.ts` handleProgress). **[ticket 03 — RESOLVED 2026-10-23: `serverTotal` prefers the validated 206 `rangeTotal` (`*` → null), then Content-Length math (append = existing + remainder), then row totalBytes, then catalog expectedTotal — a chunked 206 no longer inherits `expectedTotal` as a remainder]** | same on Android, better on iOS |
 | Size-mismatch check | none visible — total just follows the response | compares disk against the adopted server total, catalog when the server reported none | same, plus a check |
 | Progress cadence | Room write at 1 Hz + LiveData events | Room write at 1 Hz + events, single writer | same |
 | Terminal delivery | immediate events | immediate events, deduped by `claimTerminal` (`lib/models/download-jobs.ts`) | same |
@@ -274,7 +274,9 @@ in brackets.
   offset == totalBytes : total == offset) else Restart, `totalBytes = offset`
   → Completed (238-244); 408/429/500..599 → Transient (246); 400..499 →
   `Failed("Client error: N")` (247); anything else →
-  `Failed("Unexpected response: N")` (248). [tickets 02/03]
+  `Failed("Unexpected response: N")` (248). [tickets 02/03 — ticket 03
+  RESOLVED 2026-10-23: the 206/416 branches are ported into the worker's
+  response handling (44-test suite green)]
 - `write()` 252-271: `FileOutputStream(part, append)` + 64 KB
   `BufferedOutputStream`; every I/O failure is wrapped by `storage{}` into
   `Failed("Could not write the download: …")`; on Completed the stream is
@@ -338,7 +340,9 @@ scheduling fall through to the WorkManager branch
   `MIGRATION_1_2` (BundledSQLiteDriver-compatible `migrate(SQLiteConnection)`);
   `createdAt` is written at enqueue from `NativeDownloadModule` and preserved
   on REPLACE; ticket 05 still owes the supersede-by-destination consumer of
-  `byDestination`/`createdAt` and any `writeValidators` wiring into responses]
+  `byDestination`/`createdAt`, and the last remaining wiring debt —
+  `writeValidators` into response handling — was cleared by ticket 03
+  (2026-10-23: 206 adoption wired; `If-Range` sends the stored etag)]
 
 ## Known gaps, accepted for now
 

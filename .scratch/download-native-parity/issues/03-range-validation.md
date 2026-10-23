@@ -15,12 +15,21 @@ Ship the ported tests first (MockWebServer): matching 206 appends; 206 with wron
 
 **Blocked by:** 01, 04 (needs the validator columns + writeValidators + single-Restart guard)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 Acceptance:
 
-- [ ] Valid 206 appends from the request offset; validators persisted via writeValidators
-- [ ] Mismatched start/total/etag and malformed Content-Range trigger exactly one restart, then FAIL with "Remote file changed during download"
-- [ ] 416 completes when the offset equals the known total; otherwise restarts
-- [ ] Chunked Content-Length no longer mistaken for a remainder (audit note at `DownloadWorker.kt:221` resolved by the rework)
-- [ ] Ported suite green; `npm run typecheck` clean
+- [x] Valid 206 appends from the request offset; validators persisted via writeValidators
+- [x] Mismatched start/total/etag and malformed Content-Range trigger exactly one restart, then FAIL with "Remote file changed during download"
+- [x] 416 completes when the offset equals the known total; otherwise restarts
+- [x] Chunked Content-Length no longer mistaken for a remainder (audit note at `DownloadWorker.kt:221` resolved by the rework)
+- [x] Ported suite green; `npm run typecheck` clean
+
+## Resolution
+
+- TDD red→green confirmed: red run = 44 tests, 8 failed (exactly the new ticket-03 cases against the pre-change worker), then all green after the worker rework. Final suite: **44 tests, 0 failures** (DownloadDaoTest 16 + DownloadEngineTest 10 + DownloadMigrationTest 1 + DownloadWorkerTest 17). Invocation: `.\gradlew.bat :native-download:testDebugUnitTest`. `npm run typecheck` clean.
+- `DownloadWorkerTest.kt` gains `seedPartial(partialSize, adjust)` + `continuation(contentRange, etag, bodySize, chunked)` helpers and 8 tests (`// --- 206 Content-Range validation / 416 resolve (ticket 03) ---`): valid 206 appends + persists etag/totalBytes via writeValidators; wrong start / mismatched total / mismatched etag / malformed-or-missing Content-Range each restart exactly once into `Failed("Remote file changed during download")` (requestCount == 2, destination deleted, validators cleared); 416 `"bytes */1000"` with a complete part completes (COMPLETED, totalBytes 1000); 416 under total restarts; chunked `bytes 400-999/*` adopts the etag and completes without trusting Content-Length.
+- `DownloadWorker.kt`: oversize guard `>=` → `>` (a part whose size EQUALS expectedTotal is legitimate now — If-Range + range validation keep its contents honest); local `restart()` deletes the part and clears downloadedBytes/etag/totalBytes, returning `Attempt.Restart` (single-Restart guard decides); `If-Range` sent for `record.etag ?: record.ifRange` (stored etag is the validator of the bytes on disk); 206 validated against `CONTENT_RANGE` (start == existing, rangeTotal vs row totalBytes, strong-ETag equality) with `writeValidators` adoption when either validator was missing (`rangeTotal` keeps `*` as null); 416 resolved via `UNSATISFIED_RANGE` headerTotal — complete → COMPLETED row with `totalBytes` adopted + `Attempt.Finished`, else restart(); `serverTotal` prefers the validated `rangeTotal`, then Content-Length math, then row totalBytes, then catalog expectedTotal — chunked responses no longer inherit expectedTotal as a remainder.
+- Deliberate divergence recorded: the reference maps a restart-exhausted run through `dao.fail(REMOTE_CHANGED_ERROR)`; LiAI's engine `End.Failed` reaches `doWork` without any lane having failed the row, so `run()` writes it with a RUNNING-guarded `casStatus(..., FAILED, end.message)` — a no-op when a lane already failed the row with richer copy (e.g. 401/403 auth errorCode preserved).
+- Files: `modules/native-download/android/src/main/java/com/anonymous/liai/download/DownloadWorker.kt`, `src/test/java/com/anonymous/liai/download/DownloadWorkerTest.kt`.
+

@@ -166,6 +166,184 @@ class DownloadWorkerTest {
         assertEquals("peer not verified", row().error)
     }
 
+    // --- 206 Content-Range validation / 416 resolve (ticket 03) -----------
+
+    /** QUEUED row with a partial already on disk: resume truth lives in
+     *  dest.length(), so the file is the offset's source of truth. */
+    private suspend fun seedPartial(
+        partialSize: Int,
+        adjust: (DownloadEntity) -> DownloadEntity = { it },
+    ): DownloadEntity {
+        destination.parentFile?.mkdirs()
+        destination.writeBytes(ByteArray(partialSize) { (it % 251).toByte() })
+        val record = downloadRow(
+            ID,
+            destination.path,
+            status = DownloadState.QUEUED,
+            url = server.url("/model.gguf").toString(),
+            expectedTotal = 1_000,
+            downloadedBytes = partialSize.toLong(),
+        )
+        store.upsert(adjust(record))
+        return record
+    }
+
+    /** A 206 continuation: Content-Range (null = header omitted entirely),
+     *  optional ETag, and a body the size of the stated remainder. */
+    private fun continuation(
+        contentRange: String?,
+        etag: String? = null,
+        bodySize: Int = 600,
+        chunked: Boolean = false,
+    ): MockResponse =
+        MockResponse().apply {
+            setResponseCode(206)
+            if (contentRange != null) setHeader("Content-Range", contentRange)
+            if (etag != null) setHeader("ETag", etag)
+            val buffer = okio.Buffer().write(ByteArray(bodySize) { (it % 251).toByte() })
+            if (chunked) setChunkedBody(buffer, 1) else setBody(buffer)
+        }
+
+    @Test
+    fun valid206AppendsAndPersistsValidators() = runBlocking {
+        seedPartial(400)
+        server.enqueue(continuation("bytes 400-999/1000", etag = "abc"))
+
+        val result = worker(noRetryOnFailure).doWork()
+
+        // The appended part completes the row, AND the response's validator
+        // pair is adopted for later resumes (reference respond() 231-235).
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(DownloadState.COMPLETED, row().status)
+        assertEquals(1_000L, row().downloadedBytes)
+        assertEquals(1_000L, row().totalBytes)
+        assertEquals("abc", row().etag)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun wrongStartRestartsOnceThenFails() = runBlocking {
+        seedPartial(400)
+        server.enqueue(continuation("bytes 500-999/1000", etag = "abc"))
+        // After the restart the offset is 0 again; still misaligned — the
+        // engine's single-Restart guard turns the second one terminal.
+        server.enqueue(continuation("bytes 500-999/1000", etag = "abc"))
+
+        val result = worker(noRetryOnFailure).doWork()
+
+        assertEquals(ListenableWorker.Result.failure(), result)
+        assertEquals(DownloadState.FAILED, row().status)
+        assertEquals("Remote file changed during download", row().error)
+        assertEquals(null, row().etag)
+        assertEquals(0L, row().downloadedBytes)
+        assertEquals(2, server.requestCount)
+        assertEquals(false, destination.exists())
+    }
+
+    @Test
+    fun mismatchedTotalRestartsOnceThenFails() = runBlocking {
+        seedPartial(400) { it.copy(totalBytes = 2_000) }
+        // rangeTotal 1000 != the row's pinned totalBytes 2000.
+        server.enqueue(continuation("bytes 400-999/1000", etag = "abc"))
+        server.enqueue(continuation("bytes 500-999/1000", etag = "abc"))
+
+        val result = worker(noRetryOnFailure).doWork()
+
+        assertEquals(ListenableWorker.Result.failure(), result)
+        assertEquals(DownloadState.FAILED, row().status)
+        assertEquals("Remote file changed during download", row().error)
+        // The restart cleared the validator pin for the cold retry.
+        assertEquals(null, row().totalBytes)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun mismatchedEtagRestartsOnceThenFails() = runBlocking {
+        seedPartial(400) { it.copy(etag = "abc") }
+        server.enqueue(continuation("bytes 400-999/1000", etag = "different"))
+        server.enqueue(continuation("bytes 500-999/1000", etag = "different"))
+
+        val result = worker(noRetryOnFailure).doWork()
+
+        assertEquals(ListenableWorker.Result.failure(), result)
+        assertEquals(DownloadState.FAILED, row().status)
+        assertEquals("Remote file changed during download", row().error)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun malformedContentRangeRestartsOnceThenFails() = runBlocking {
+        seedPartial(400)
+        // Malformed header: no parseable total. A wholly missing header is
+        // the same code path (header()?.let { matchEntire } → null).
+        server.enqueue(continuation("bytes 400-999", etag = "abc"))
+        server.enqueue(continuation("bytes 500-999/1000", etag = "abc"))
+
+        val result = worker(noRetryOnFailure).doWork()
+
+        assertEquals(ListenableWorker.Result.failure(), result)
+        assertEquals(DownloadState.FAILED, row().status)
+        assertEquals("Remote file changed during download", row().error)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun fourSixteenCompletesTheFullPart() = runBlocking {
+        // The part is already the whole file on disk; the server refusing our
+        // out-of-bounds offset is the finish signal, not a failure.
+        seedPartial(1_000)
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(416)
+                .setHeader("Content-Range", "bytes */1000"),
+        )
+
+        val result = worker(noRetryOnFailure).doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(DownloadState.COMPLETED, row().status)
+        assertEquals(1_000L, row().downloadedBytes)
+        assertEquals(1_000L, row().totalBytes)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun fourSixteenUnderTotalRestartsOnceThenFails() = runBlocking {
+        seedPartial(400)
+        // headerTotal 1000 != offset 400: the part no longer lines up —
+        // restart, then a still-wrong continuation trips the guard.
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(416)
+                .setHeader("Content-Range", "bytes */1000"),
+        )
+        server.enqueue(continuation("bytes 500-999/1000", etag = "abc"))
+
+        val result = worker(noRetryOnFailure).doWork()
+
+        assertEquals(ListenableWorker.Result.failure(), result)
+        assertEquals(DownloadState.FAILED, row().status)
+        assertEquals("Remote file changed during download", row().error)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun chunked206AdoptsEtagAndCompletes() = runBlocking {
+        seedPartial(400)
+        // A chunked continuation announces no total ("*/"): Content-Length
+        // is -1 and must never be mistaken for the remainder (chunked is the
+        // audit-fix case). The catalog's size carries completion.
+        server.enqueue(continuation("bytes 400-999/*", etag = "abc", chunked = true))
+
+        val result = worker(noRetryOnFailure).doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(DownloadState.COMPLETED, row().status)
+        assertEquals(1_000L, row().downloadedBytes)
+        assertEquals("abc", row().etag)
+        assertEquals(1, server.requestCount)
+    }
+
     // --- Client copy ------------------------------------------------------
 
     @Test

@@ -188,7 +188,15 @@ class DownloadWorker(
         return when (end) {
             is End.Completed -> Result.success()
             is End.Stopped -> Result.success()
-            is End.Failed -> Result.failure()
+            is End.Failed -> {
+                // The restart-exhausted guard reaches here WITHOUT any lane
+                // having written the row (attempt lanes and failStalled write
+                // it themselves). RUNNING-guarded so a row already FAILED
+                // keeps its richer copy (e.g. the auth errorCode), and a row
+                // settled by a pause is not resurrected.
+                store.casStatus(record.id, listOf(DownloadState.RUNNING), DownloadState.FAILED, end.message)
+                Result.failure()
+            }
             is End.Rescheduled -> Result.retry()
         }
     }
@@ -206,12 +214,26 @@ class DownloadWorker(
             // Resume truth lives on disk, not in memory: this is exactly what
             // survives the process being killed mid-transfer.
             var existing = if (dest.exists()) dest.length() else 0L
-            // A file at or past the expected size is not resumable. Too big
-            // means a previous run appended something it should not have, so
-            // it is discarded rather than extended.
-            if (existing >= record.expectedTotal && record.expectedTotal > 0) {
+            // A file BIGGER than the expected size is not resumable: a
+            // previous run appended something it should not have, so it is
+            // discarded rather than extended. Equality is legitimate — the
+            // part may simply be complete; If-Range keeps its contents
+            // honest, and the 416 resolve below accepts it.
+            if (existing > record.expectedTotal && record.expectedTotal > 0) {
                 dest.delete()
                 existing = 0
+            }
+
+            /** Restart mechanics (reference Transfer.run: part deleted,
+             *  validators cleared — the next attempt is a cold request that
+             *  adopts fresh validators). The engine's single-Restart guard
+             *  turns the SECOND restart into the REMOTE_CHANGED failure. */
+            suspend fun restart(): Attempt {
+                dest.delete()
+                store.mutate(record.id) {
+                    it.copy(downloadedBytes = 0L, etag = null, totalBytes = null)
+                }
+                return Attempt.Restart
             }
 
             val request =
@@ -226,7 +248,11 @@ class DownloadWorker(
                             // server may ignore the whole header, leaving the
                             // splice unprotected. Quoting it is what makes the
                             // server honour it and answer 200 instead of 206.
-                            record.ifRange?.let { header("If-Range", "\"$it\"") }
+                            // The STORED etag is the validator for the bytes on
+                            // disk (adopted from the response that wrote them);
+                            // the catalog's ifRange is the pre-adoption
+                            // fallback.
+                            (record.etag ?: record.ifRange)?.let { header("If-Range", "\"$it\"") }
                         }
                     }.build()
 
@@ -282,12 +308,40 @@ class DownloadWorker(
                         }
 
                         res.code == 416 -> {
-                            // Our copy is longer than the server's: the file
-                            // changed upstream. Delete it and fail for real —
-                            // returning retry() here would leave the row saying
-                            // "failed" while WorkManager quietly re-runs us.
-                            dest.delete()
-                            return@withContext failAttempt(record, "The file changed on the server — tap Retry", null)
+                            // Two meanings (reference respond() 238-244): the
+                            // offset equals the whole file — the finish signal
+                            // raced by a range the server now refuses — or the
+                            // part no longer lines up with the server's file.
+                            // The unsatisfied-range total tells which.
+                            val headerTotal =
+                                res
+                                    .header("Content-Range")
+                                    ?.let {
+                                        UNSATISFIED_RANGE.matchEntire(it)?.groupValues?.get(1)?.toLongOrNull()
+                                    }
+                            val complete =
+                                existing > 0 &&
+                                    (
+                                        record.totalBytes
+                                            ?.takeIf { it > 0 }
+                                            ?.let { existing == it }
+                                            ?: (headerTotal != null && headerTotal == existing)
+                                    )
+                            if (complete) {
+                                val total = record.totalBytes ?: headerTotal ?: existing
+                                store.mutate(record.id) {
+                                    it.copy(
+                                        status = DownloadState.COMPLETED,
+                                        downloadedBytes = existing,
+                                        expectedTotal = total,
+                                        totalBytes = total,
+                                        error = null,
+                                        errorCode = null,
+                                    )
+                                }
+                                return@withContext Attempt.Finished
+                            }
+                            return@withContext restart()
                         }
 
                         res.code in 400..499 -> {
@@ -309,6 +363,45 @@ class DownloadWorker(
 
                     // Everything below this line writes bytes, so the status is
                     // known good and there is nothing left to splice.
+
+                    // --- 206 Content-Range validation (ticket 03; reference
+                    // respond() 221-236). A 206 is only trustable when it
+                    // continues EXACTLY the request we sent: right offset,
+                    // announced total compatible with the pinned one, and etag
+                    // matching the stored validator. Anything else is a
+                    // Restart: the part is dropped, validators cleared, and
+                    // the engine's single-Restart guard decides.
+                    var rangeTotal: Long? = null
+                    if (res.code == 206) {
+                        val match = res.header("Content-Range")?.let { CONTENT_RANGE.matchEntire(it) }
+                        val start = match?.groupValues?.get(1)?.toLongOrNull()
+                        rangeTotal =
+                            match?.groupValues
+                                ?.get(3)
+                                ?.takeUnless { it == "*" }
+                                ?.toLongOrNull()
+                        val respEtag = res.header("ETag")?.takeUnless { it.startsWith("W/") }
+                        val valid =
+                            start == existing &&
+                                (record.totalBytes == null || record.totalBytes <= 0 || rangeTotal == record.totalBytes) &&
+                                (record.etag == null || respEtag == null || respEtag == record.etag)
+                        if (!valid) return@withContext restart()
+
+                        // Adopt the validators the row lacks (reference
+                        // respond() 231-235): the first valid 206 pins what
+                        // every later resume must match.
+                        if ((record.etag == null && respEtag != null) ||
+                            (record.totalBytes == null && rangeTotal != null)
+                        ) {
+                            store.writeValidators(
+                                record.id,
+                                record.etag ?: respEtag,
+                                record.totalBytes ?: rangeTotal,
+                                existing,
+                            )
+                        }
+                    }
+
                     val append = res.code == 206 && existing > 0
                     // A body-less 200/206 is protocol garbage: it still gets a
                     // FAILED row like every other terminal lane, or the row
@@ -320,16 +413,16 @@ class DownloadWorker(
                     // report Size mismatch forever and could never finish. The
                     // end-of-transfer check below compares against THIS value.
                     val contentLength = body.contentLength()
+                    // On a 206 the authoritative total is the validated
+                    // Content-Range; Content-Length is the remainder and is
+                    // only combined with the offset when the header announced
+                    // none (the "*" case). A chunked body (-1) never reaches
+                    // that math — the audit's chunked-mistake is gone.
                     val serverTotal =
-                        when {
-                            // chunked/Xet: keep the catalog's size
-                            contentLength <= 0 -> record.expectedTotal
-
-                            // 206: the response is only the remainder
-                            append -> existing + contentLength
-
-                            else -> contentLength
-                        }
+                        rangeTotal
+                            ?: contentLength.takeIf { it > 0 }?.let { if (append) existing + it else it }
+                            ?: record.totalBytes
+                            ?: record.expectedTotal
                     if (serverTotal > 0 && serverTotal != record.expectedTotal) {
                         store.mutate(record.id) { it.copy(expectedTotal = serverTotal) }
                     }
@@ -504,6 +597,13 @@ class DownloadWorker(
     }
 
     companion object {
+        // Content-Range on a 206 continuation: "bytes <start>-<end>/<total>"
+        // (total may be "*" when the server declines to size the response).
+        private val CONTENT_RANGE = Regex("bytes (\\d+)-(\\d+)/(\\d+|\\*)")
+
+        // ...and on a 416: "bytes */<total>" — one unsatisfied range.
+        private val UNSATISFIED_RANGE = Regex("bytes \\*/(\\d+)")
+
         const val KEY_ID = "download_id"
         const val CHANNEL_ID = "native-download"
         const val PROGRESS_INTERVAL_MS = 1000L

@@ -7,6 +7,12 @@
  * without a native seam.
  */
 
+/** Suffix of the native worker's staging file: in-flight bytes land at
+ *  `destination + PART_SUFFIX` and the final file appears atomically when
+ *  the transfer commits (DownloadWorker.kt). Anything outside the module
+ *  that reads download artifacts must look at BOTH paths. */
+export const PART_SUFFIX = ".part";
+
 /** Resume token for a partial file, or null when a fresh start is correct. */
 export function resumeDataForPartial(
   partialBytes: number,

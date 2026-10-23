@@ -12,6 +12,8 @@ import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -60,6 +62,7 @@ class DownloadWorkerTest {
         val leftovers = runBlocking { store.all() }
         runBlocking { leftovers.forEach { store.delete(it.id) } }
         destination.delete()
+        File(destination.path + PART_SUFFIX).delete()
     }
 
     /** Seed a fresh QUEUED row wired to the loopback server. */
@@ -168,14 +171,14 @@ class DownloadWorkerTest {
 
     // --- 206 Content-Range validation / 416 resolve (ticket 03) -----------
 
-    /** QUEUED row with a partial already on disk: resume truth lives in
-     *  dest.length(), so the file is the offset's source of truth. */
+    /** QUEUED row with a partial already staged: resume truth lives in the
+     *  .part file's length, so the part is the offset's source of truth. */
     private suspend fun seedPartial(
         partialSize: Int,
         adjust: (DownloadEntity) -> DownloadEntity = { it },
     ): DownloadEntity {
         destination.parentFile?.mkdirs()
-        destination.writeBytes(ByteArray(partialSize) { (it % 251).toByte() })
+        File(destination.path + PART_SUFFIX).writeBytes(ByteArray(partialSize) { (it % 251).toByte() })
         val record = downloadRow(
             ID,
             destination.path,
@@ -429,6 +432,144 @@ class DownloadWorkerTest {
         assertEquals(ListenableWorker.Result.success(), result)
         assertEquals(DownloadState.COMPLETED, row().status)
         assertEquals(1_000L, row().downloadedBytes)
+    }
+
+    // --- .part staging + atomic commit (ticket 05) ------------------------
+    //
+    // In-flight bytes land at destination + ".part" (PART_SUFFIX) and the
+    // final path appears by rename at commit — a right-length wrong-contents
+    // GGUF is now impossible, and a completed download is never a half file.
+
+    @Test
+    fun successRenamesThePartIntoPlace() = runBlocking {
+        seed()
+        val content = ByteArray(1_000) { (it % 251).toByte() }
+        server.enqueue(okio.Buffer().write(content).let { r -> MockResponse().setResponseCode(200).setBody(r) })
+
+        val result = worker().doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(DownloadState.COMPLETED, row().status)
+        // The final path holds the whole file; nothing is parked at ".part".
+        assertTrue("final file must exist", destination.exists())
+        assertEquals(1_000L, destination.length())
+        assertFalse("no .part residue", File(destination.path + PART_SUFFIX).exists())
+    }
+
+    @Test
+    fun inFlightBytesSitAtThePartPathNotTheFinal() = runBlocking {
+        // A size mismatch: the row's committed total is 2_000 but only
+        // 600 more bytes arrive, so the failed commit must leave NO final
+        // file and no part residue — whatever was written existed only at
+        // the part path.
+        seedPartial(400, adjust = { it.copy(totalBytes = null) })
+        server.enqueue(
+            continuation(contentRange = "bytes 400-999/2000", etag = "abc"),
+        )
+
+        val result = worker().doWork()
+
+        assertEquals(ListenableWorker.Result.failure(), result)
+        assertEquals("Downloaded file size does not match the expected size", row().error)
+        // The bogus part is deleted by the failed commit...
+        assertFalse(File(destination.path + PART_SUFFIX).exists())
+        // ...and the final path never came into existence.
+        assertFalse(destination.exists())
+    }
+
+    // --- adopt(): reconcile disk with the row at run start ----------------
+
+    @Test
+    fun adoptResumesFromAnExistingPartWithoutCallingTheFinal() = runBlocking {
+        destination.parentFile?.mkdirs()
+        File(destination.path + PART_SUFFIX).writeBytes(ByteArray(400) { (it % 251).toByte() })
+        seed()
+
+        server.enqueue(
+            continuation(contentRange = "bytes 400-999/1000", etag = "abc"),
+        )
+
+        val result = worker().doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(DownloadState.COMPLETED, row().status)
+        assertEquals(1_000L, row().downloadedBytes)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun adoptSupersedesWhenANewerCompletedRowOwnsTheDestination() = runBlocking {
+        destination.parentFile?.mkdirs()
+        destination.writeBytes(ByteArray(700) { (it % 251).toByte() })
+        val record = seed()
+        store.upsert(record.copy(createdAt = 1_000))
+        // A newer finished download already owns this path: our run lost.
+        store.upsert(
+            downloadRow("newer", destination.path, status = DownloadState.COMPLETED).copy(
+                createdAt = 2_000,
+                downloadedBytes = 1_000,
+            ),
+        )
+
+        val result = worker().doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(DownloadState.CANCELLED, row().status)
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun adoptRemovesAnInPlaceFileOfUnknownSize() = runBlocking {
+        destination.parentFile?.mkdirs()
+        destination.writeBytes(ByteArray(700) { (it % 251).toByte() })
+        // No validator known: the in-place file is unverifiable garbage.
+        val record = seed().copy(totalBytes = null, etag = null, ifRange = null)
+        store.upsert(record)
+
+        val content = ByteArray(1_000) { (it % 251).toByte() }
+        server.enqueue(MockResponse().setResponseCode(200).setBody(okio.Buffer().write(content)))
+
+        val result = worker().doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(DownloadState.COMPLETED, row().status)
+        assertTrue(destination.exists())
+        assertEquals(1_000L, destination.length())
+    }
+
+    @Test
+    fun adoptCompletesAnExactSizeFinalFile() = runBlocking {
+        destination.parentFile?.mkdirs()
+        destination.writeBytes(ByteArray(1_000) { (it % 251).toByte() })
+        val record = seed().copy(totalBytes = 1_000L)
+        store.upsert(record)
+
+        val result = worker().doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(DownloadState.COMPLETED, row().status)
+        assertEquals(1_000L, row().downloadedBytes)
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun adoptMovesAnInPlacePartialAsideAndResumes() = runBlocking {
+        destination.parentFile?.mkdirs()
+        destination.writeBytes(ByteArray(400) { (it % 251).toByte() })
+        // The old run stopped with the file at its final path and the total
+        // already known — adopt() parks it at the part path and resumes.
+        val record = seed().copy(totalBytes = 1_000L)
+        store.upsert(record)
+
+        server.enqueue(continuation(contentRange = "bytes 400-999/1000", etag = "abc"))
+
+        val result = worker().doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(DownloadState.COMPLETED, row().status)
+        assertEquals(1_000L, row().downloadedBytes)
+        assertTrue(destination.exists())
+        assertFalse(File(destination.path + PART_SUFFIX).exists())
     }
 
     private companion object {

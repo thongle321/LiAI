@@ -25,7 +25,7 @@ import {
   type DownloadDriver,
 } from "@/services/downloads/download-service";
 import { latestJobForModel } from "@/services/models/download-jobs.ts";
-import { resumeDataForPartial, classifyFileOnDisk } from "@/services/models/resume-state.ts";
+import { resumeDataForPartial, classifyFileOnDisk, PART_SUFFIX } from "@/services/models/resume-state.ts";
 import { findProjectorFile, pairDownloadStep } from "@/services/models/vision-pairing.ts";
 import { readGgufMetadata } from "@/services/models/gguf-header.ts";
 import { modelFitsOnDevice } from "@/utils/storage-fit.ts";
@@ -117,19 +117,29 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
 
     // Bytes on disk per file, so the pair's legs resume independently.
     // A partial file means the app died mid-flight: continue from its
-    // bytes (Range resume) instead of restarting from zero.
+    // bytes (Range resume) instead of restarting from zero. In-flight
+    // bytes live at `name + .part` (native staging, ticket 05); the final
+    // file only ever appears atomically at commit, so final is checked
+    // first and the part stands in only while no final exists — a part is
+    // by construction smaller than the whole file, so pairDownloadStep's
+    // whole-file detection still only fires on real finals.
     const onDiskBytes = async (name: string): Promise<number> => {
-      try {
-        const info = await LegacyFileSystem.getInfoAsync(
-          `${LegacyFileSystem.documentDirectory ?? ""}models/${name}`,
-        );
-        return info.exists && "size" in info && typeof info.size === "number"
-          ? info.size
-          : 0;
-      } catch {
-        // Unreadable destination: the transfer reports the truth.
-        return 0;
+      const paths = [
+        `${LegacyFileSystem.documentDirectory ?? ""}models/${name}`,
+        `${LegacyFileSystem.documentDirectory ?? ""}models/${name}${PART_SUFFIX}`,
+      ];
+      for (const path of paths) {
+        try {
+          const info = await LegacyFileSystem.getInfoAsync(path);
+          if (info.exists && "size" in info && typeof info.size === "number") {
+            return info.size;
+          }
+        } catch {
+          // Unreadable destination: the transfer reports the truth.
+          return 0;
+        }
       }
+      return 0;
     };
     const mainBytes = await onDiskBytes(file.name);
     const projectorBytes = spec.projector
@@ -488,12 +498,21 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
       const file = spec.files[0];
       if (!file || !(file.size > 0)) continue;
       try {
-        const info = await LegacyFileSystem.getInfoAsync(dir + file.name);
-if (!info.exists || !("size" in info) || typeof info.size !== "number") continue;
+        // The worker stages in-flight bytes at `name + .part` (ticket 05);
+        // the final file only appears at commit. Whichever exists IS the
+        // download's state on disk: final first, then the staging part.
+        let statPath = dir + file.name;
+        const info = await LegacyFileSystem.getInfoAsync(statPath);
+        if (!info.exists) {
+          statPath = dir + file.name + PART_SUFFIX;
+        }
+        const onDisk = info.exists ? info : await LegacyFileSystem.getInfoAsync(statPath);
+        if (!onDisk.exists || !("size" in onDisk) || typeof onDisk.size !== "number") continue;
+        const size = onDisk.size;
       // `===`, not `>=`: an oversized file is the fingerprint of an error
       // body appended onto a partial by the native writer, and calling that
       // "completed" hands the user a corrupt model that loads and misbehaves.
-      const state = classifyFileOnDisk(info.size, file.size);
+      const state = classifyFileOnDisk(size, file.size);
       if (state === "complete") {
           // Whole file on disk but never marked: killed at the finish line.
           get().updateModel(spec.id, {
@@ -507,9 +526,10 @@ if (!info.exists || !("size" in info) || typeof info.size !== "number") continue
         } else if (state === "corrupt") {
           // Overshoot: nothing here is resumable and nothing is whole. It
           // used to match neither branch and simply sit on disk forever,
-          // holding gigabytes the user cannot reclaim from the UI. Delete it
-          // and hand the row back so Download works again.
-          await LegacyFileSystem.deleteAsync(dir + file.name, { idempotent: true }).catch(
+          // holding gigabytes the user cannot reclaim from the UI. Delete
+          // whichever path was stat'd above (final or staged part) and hand
+          // the row back so Download works again.
+          await LegacyFileSystem.deleteAsync(statPath, { idempotent: true }).catch(
             () => {
               // Unremovable: leave the row honest about why it cannot load.
             },
@@ -525,8 +545,8 @@ if (!info.exists || !("size" in info) || typeof info.size !== "number") continue
           // Partial file: manual Resume continues it, nothing auto-starts.
           get().updateModel(spec.id, {
             downloadStatus: "paused",
-            downloadProgress: Math.round((info.size / file.size) * 100),
-            downloadedBytes: info.size,
+            downloadProgress: Math.round((size / file.size) * 100),
+            downloadedBytes: size,
             totalBytes: file.size,
             error: undefined,
           });

@@ -19,6 +19,11 @@ import kotlin.math.min
  * LiAI's QUEUED-requeue discipline: the row never reads FAILED while the run
  * can still be re-run.
  */
+/** The staged file a live transfer writes into; the final [destination path]
+ *  only appears once the whole verified body has been renamed into place.
+ *  File-level (not companion) so tests can read it bare from the package. */
+internal const val PART_SUFFIX = ".part"
+
 sealed interface Attempt {
     /** The attempt transferred and verified the whole file. */
     data object Finished : Attempt

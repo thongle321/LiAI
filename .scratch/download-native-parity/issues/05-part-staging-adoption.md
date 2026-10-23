@@ -12,12 +12,24 @@ Ship the ported tests first: adopt() branches (proceed/superseded/remove-unknown
 
 **Blocked by:** 01, 04 (Room v2 columns), 03 (commit relies on validated totals)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 Acceptance:
 
-- [ ] A download in flight writes only `*.part`; the final path appears atomically via rename on success
-- [ ] Size mismatch deletes the part and fails with "Downloaded file size does not match the expected size"; rename failure fails with "Could not move the finished download into place"
-- [ ] adopt() covers all five branches per the reference (proceed / superseded→CANCELLED / remove-unknown / exact→Completed / rename→part)
-- [ ] JS: `onDiskBytes`, `classifyFileOnDisk`, `reconcileInterrupted`, and the retry path are all `.part`-aware; a part classifies as paused (resumable bytes), never as completed
-- [ ] Ported suites green (`gradlew` native + Jest `npm test` for the JS seams); `npm run typecheck` clean
+- [x] A download in flight writes only `*.part`; the final path appears atomically via rename on success
+- [x] Size mismatch deletes the part and fails with "Downloaded file size does not match the expected size"; rename failure fails with "Could not move the finished download into place"
+- [x] adopt() covers all five branches per the reference (proceed / superseded→CANCELLED / remove-unknown / exact→Completed / rename→part)
+- [x] JS: `onDiskBytes`, `classifyFileOnDisk`, `reconcileInterrupted`, and the retry path are all `.part`-aware; a part classifies as paused (resumable bytes), never as completed
+- [x] Ported suites green (`gradlew` native + Jest `npm test` for the JS seams); `npm run typecheck` clean
+
+## Resolution
+
+- TDD verified red→green: native red on unresolved `PART_SUFFIX` (tests written first), then all green — **51 tests, 0 failures** (DownloadDaoTest 16 + DownloadEngineTest 10 + DownloadMigrationTest 1 + DownloadWorkerTest 24, the worker suite growing 17→24 with the seven ticket-05 tests). JS: 9/9 across the two new suites. Invocation: `.\gradlew.bat :native-download:testDebugUnitTest`.
+- `DownloadWorker.kt` writes the transfer to `record.destination + PART_SUFFIX` (`DownloadEngine.kt` file-level `internal const val PART_SUFFIX = ".part"`, file-level so tests read it bare): `existing = part.length()`, oversize/restart/resume-200 guards all target the part, `RandomAccessFile(part, "rw")`.
+- `commit(serverTotal)` ported from reference commit() 295-306: final `writeProgress` (0 → Stopped), size check deletes the part + fails `SIZE_MISMATCH_ERROR`, atomic `part.renameTo(dest)` (`RENAME_ERROR` on failure), then the COMPLETED row write. Both the normal completion AND the 416-resolve path route through commit (reference: commit runs after both).
+- `adopt(record)` ported from reference adopt() 158-176, run ONCE per run (before `engine.run`, after the casStatus claim): proceed when the part exists or the final is absent; a newer COMPLETED row at the same destination (`store.byDestination`, `createdAt >`) casStatus-supersedes the row to CANCELLED (0 → Stopped); unknown-size in-place file removed (`ADOPT_REMOVE_ERROR` if `delete()` fails); final exactly `totalBytes` long → writeProgress + COMPLETED row, no request made; otherwise final renames to the part (`ADOPT_ASIDE_ERROR` on failure) and the run resumes from its bytes.
+- JS seams: `resume-state.ts` exports `PART_SUFFIX` with the staging contract's WHY KDoc; `downloads.ts` `onDiskBytes` stats final-then-part (a part is by construction smaller than the whole, so pairDownloadStep's whole-file detection stays final-only); `reconcileInterrupted` stats final first, then `dir + name + PART_SUFFIX`, classifies whichever exists, and the corrupt branch deletes WHICHEVER path was stat'd — a corrupt part now reclaims its bytes and resets the row.
+- Test-side porting bugs found by our own red suite: `seedPartial` now writes the partial to the PART path (the part is the offset's source of truth) and tearDown deletes it; `adoptMovesAnInPlacePartialAsideAndResumes` needed `totalBytes = 1_000` (null would take the unknown-size DELETE branch instead of rename-aside).
+- One shared close-out fix (separate commit): `npm test` red suites were both PRE-EXISTING at HEAD (proven in a throwaway worktree at 9f18031). Bug A `jest/onboarding-done.test.tsx` load-recursion — its `jest.mock` factory re-required the async-storage specifier that `jest.config.js` moduleNameMapper already redirects to the repo fake, re-entering itself; the redundant factory was deleted. Bug B: six `gatedRunTurn` tests in `store/__tests__/chat-store.test.ts` timed out because `send()` awaits `localCpuDecode()` before reaching the runner, so a synchronous `gate.release()` hit the fixture's still-unassigned stub and the turn promise could never resolve; `gatedRunTurn` now queues pre-runTurn releases and flushes them inside `runTurn`. Both fixes use only committed repo files.
+- Files: `DownloadEngine.kt`, `DownloadWorker.kt`, `DownloadWorkerTest.kt`; `services/models/resume-state.ts`, `store/models/downloads.ts`, `services/models/__tests__/resume-state.test.ts`, `store/models/__tests__/downloads.part-resume.test.ts`; ticket md. JS surface `npm run typecheck` clean.
+- Divergence recorded: the two downloads-store suites duplicate their `expo-file-system/legacy` jest.mock factory, against AGENTS.md's "more than one suite needs it → `__mocks__/external/`" rule. The shared fake was attempted twice (as `__mocks__/external/expo-file-system-legacy.ts` and as a `jest/`-located moduleNameMapper target) — in both cases jest's automock of the mapped module made its named exports (`__fsMockStore`) undefined at the point of import, and the suites went red. Empirically abandoned; the suites keep per-suite factories, and the duplication stands as known follow-up debt.

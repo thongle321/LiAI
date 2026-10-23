@@ -96,11 +96,12 @@ behavioral consequence, kept on purpose.
 These were raised as candidate improvements and **declined**, because
 matching PocketPal is the better answer for each:
 
-1. ~~**No `.part` temp file + atomic rename.**~~ **REVERSED 2026-10-23 — port
-   approved** by the `download-native-parity` "port all" decision, as ticket
-   05 (`.part` + `commit()` atomic rename + `adopt()`). This row is kept only
+1. ~~**No `.part` temp file + atomic rename.**~~ **REVERSED AND RESOLVED
+   2026-10-23** by the `download-native-parity` "port all" decision, as ticket
+   05 (`.part` + `commit()` atomic rename + `adopt()`) — now landed and
+   verified (51 native tests, JS seams `.part`-aware). This row is kept only
    so the reversal is visible. The original decline stands as written below,
-   because it is the exact risk ticket 05 must engineer around: both apps
+   because it is the exact risk ticket 05 engineered around: both apps
    wrote straight to the final `.gguf` and recovered correctness by size, not
    by atomicity, and `reconcileInterrupted` (`downloads.ts:453`) and
    `onDiskBytes():118` stat the **final** path — so the ticket also teaches
@@ -309,7 +310,7 @@ scheduling fall through to the WorkManager branch
 - `DownloadWorker.kt:208-209` — every non-200/206 (including 408) fails flat
   `"HTTP N"`; no transient taxonomy. [ticket 02 — RESOLVED 2026-10-23: transient lane extended to 408, "Client error: N" / "Unexpected response: N" copies landed with the red→green worker suite (9 tests)]
 - `DownloadWorker.kt:238` — `RandomAccessFile(dest, "rw")` writes straight to
-  the final path; no `.part`, no atomic rename, no `adopt()`. [ticket 05]
+  the final path; no `.part`, no atomic rename, no `adopt()`. [ticket 05 — RESOLVED 2026-10-23: transfer + adopt() + commit() ported — bytes stage at `destination + PART_SUFFIX`, the final appears via atomic `renameTo` with `SIZE_MISMATCH_ERROR`/`RENAME_ERROR` handling, and `adopt()` reconciles part/final/newer-completed/unknown-size/exact-size at run start (24 worker tests); JS resume seams (`onDiskBytes`, `reconcileInterrupted`, `PART_SUFFIX`) read final-then-part with the corrupt part reclaimed]
 - `DownloadWorker.kt:186-189` — 429/5xx requeue (row forced to QUEUED) +
   `Result.retry()`; WorkManager owns the backoff curve, the engine has no
   in-process attempt loop. [ticket 04 — RESOLVED 2026-10-23: the engine loop

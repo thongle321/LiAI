@@ -167,6 +167,14 @@ class DownloadWorker(
         if (store.casStatus(record.id, listOf(DownloadState.QUEUED, DownloadState.RUNNING), DownloadState.RUNNING) == 0) {
             return Result.success()
         }
+        // adopt() reconciles disk with the row ONCE, before the loop (reference
+        // DownloadEngine.kt run() 132). Null = proceed to the transfer; any
+        // other outcome already settled the row and says how to exit.
+        when (val seed = adopt(record)) {
+            is Attempt.Failed -> return Result.failure()
+            Attempt.Stopped, Attempt.Finished -> return Result.success()
+            else -> {}
+        }
         val end =
             engine.run(
                 stopped = { isStopped },
@@ -202,6 +210,70 @@ class DownloadWorker(
     }
 
     /**
+     * Reconcile what disk says with what the row says, BEFORE the loop runs
+     * (reference adopt(), DownloadEngine.kt 158-176). Runs once per worker
+     * run. Returns null = proceed to the transfer, or an [Attempt] seed the
+     * caller maps to a Result (the row state is already written).
+     */
+    private suspend fun adopt(record: DownloadEntity): Attempt? {
+        val dest = File(record.destination)
+        val part = File(record.destination + PART_SUFFIX)
+
+        // A live part or a clean slate: the normal resume path.
+        if (part.exists() || !dest.exists()) return null
+
+        // A finished download that owns this path and outdates us means the
+        // destination was re-enqueued after completion — this run lost.
+        val superseded =
+            store.byDestination(record.destination).any {
+                it.id != record.id &&
+                    it.status == DownloadState.COMPLETED &&
+                    it.createdAt > record.createdAt
+            }
+        if (superseded) {
+            // RUNNING-guarded like every settle: a row already parked by its
+            // caller stays where it is.
+            val cancelled =
+                store.casStatus(record.id, listOf(DownloadState.QUEUED, DownloadState.RUNNING), DownloadState.CANCELLED) > 0
+            return if (cancelled) Attempt.Finished else Attempt.Stopped
+        }
+
+        // No validator size known: the in-place file cannot be trusted (its
+        // bytes may be any prior incarnation) — a fresh transfer starts from
+        // the cleanest truth we have, an empty directory.
+        val total = record.totalBytes
+        if (total == null || total <= 0) {
+            if (!dest.delete()) return failAttempt(record, ADOPT_REMOVE_ERROR, null)
+            return null
+        }
+
+        // The file is already the exact size the row committed to: no bytes
+        // have to arrive for this download to be done.
+        if (dest.length() == total) {
+            if (store.writeProgress(record.id, dest.length(), total) == 0) {
+                return Attempt.Stopped
+            }
+            store.mutate(record.id) {
+                it.copy(
+                    status = DownloadState.COMPLETED,
+                    downloadedBytes = total,
+                    totalBytes = total,
+                    error = null,
+                    errorCode = null,
+                )
+            }
+            return Attempt.Finished
+        }
+
+        // Partial at the final path with a known total: park it at the part
+        // path so the transfer's staging rules take over from here.
+        if (!dest.renameTo(part)) {
+            return failAttempt(record, ADOPT_ASIDE_ERROR, null)
+        }
+        return null
+    }
+
+    /**
      * ONE attempt: request → status dispatch → copy bytes → verify. Returns
      * an [Attempt]; row writes for terminal outcomes happen in here, while
      * what happens next (retry, give up, reschedule) is the engine's call.
@@ -209,18 +281,23 @@ class DownloadWorker(
     private suspend fun attemptTransfer(record: DownloadEntity): Attempt =
         withContext(Dispatchers.IO) {
             val dest = File(record.destination)
+            // Live bytes go to the .part path, never the final one: the
+            // destination appears only when the verified body is renamed
+            // into place, so a half-written GGUF never masquerades as a
+            // finished model file (reference DownloadEngine.kt write()).
+            val part = File(record.destination + PART_SUFFIX)
             dest.parentFile?.mkdirs()
 
             // Resume truth lives on disk, not in memory: this is exactly what
             // survives the process being killed mid-transfer.
-            var existing = if (dest.exists()) dest.length() else 0L
-            // A file BIGGER than the expected size is not resumable: a
+            var existing = if (part.exists()) part.length() else 0L
+            // A part BIGGER than the expected size is not resumable: a
             // previous run appended something it should not have, so it is
             // discarded rather than extended. Equality is legitimate — the
             // part may simply be complete; If-Range keeps its contents
             // honest, and the 416 resolve below accepts it.
             if (existing > record.expectedTotal && record.expectedTotal > 0) {
-                dest.delete()
+                part.delete()
                 existing = 0
             }
 
@@ -229,11 +306,43 @@ class DownloadWorker(
              *  adopts fresh validators). The engine's single-Restart guard
              *  turns the SECOND restart into the REMOTE_CHANGED failure. */
             suspend fun restart(): Attempt {
-                dest.delete()
+                part.delete()
                 store.mutate(record.id) {
                     it.copy(downloadedBytes = 0L, etag = null, totalBytes = null)
                 }
                 return Attempt.Restart
+            }
+
+            /** commit() (reference DownloadEngine.kt commit, 295-306): the
+             *  staged part is size-checked once against the total, then
+             *  renamed into place atomically — the final path never exists
+             *  at a length that is neither absent nor the whole file. */
+            suspend fun commit(total: Long?): Attempt {
+                val length = if (part.exists()) part.length() else 0L
+                // RUNNING-guarded row-count write: 0 means a pause/cancel
+                // settled the row before this final write — stop rather
+                // than overwrite the caller's decision.
+                if (store.writeProgress(record.id, length, total) == 0) return Attempt.Stopped
+                if (total != null && total > 0 && length != total) {
+                    // The bogus part is deleted, not renamed: retrying this
+                    // row must re-download, never finish a truncation.
+                    part.delete()
+                    return failAttempt(record, SIZE_MISMATCH_ERROR, null)
+                }
+                if (!part.renameTo(dest)) {
+                    return failAttempt(record, RENAME_ERROR, null)
+                }
+                store.mutate(record.id) {
+                    it.copy(
+                        status = DownloadState.COMPLETED,
+                        downloadedBytes = length,
+                        expectedTotal = total ?: length,
+                        totalBytes = total ?: it.totalBytes,
+                        error = null,
+                        errorCode = null,
+                    )
+                }
+                return Attempt.Finished
             }
 
             val request =
@@ -286,7 +395,7 @@ class DownloadWorker(
                     // the body already in hand IS the file, so re-requesting it
                     // would cost a full WorkManager backoff cycle for nothing.
                     if (res.code == 200 && existing > 0) {
-                        dest.delete()
+                        part.delete()
                         existing = 0
                         store.mutate(record.id) { it.copy(downloadedBytes = 0L) }
                     }
@@ -328,18 +437,10 @@ class DownloadWorker(
                                             ?: (headerTotal != null && headerTotal == existing)
                                     )
                             if (complete) {
-                                val total = record.totalBytes ?: headerTotal ?: existing
-                                store.mutate(record.id) {
-                                    it.copy(
-                                        status = DownloadState.COMPLETED,
-                                        downloadedBytes = existing,
-                                        expectedTotal = total,
-                                        totalBytes = total,
-                                        error = null,
-                                        errorCode = null,
-                                    )
-                                }
-                                return@withContext Attempt.Finished
+                                // The full-size part is verified and renamed
+                                // like any finished transfer — same commit()
+                                // path, one total known to the server.
+                                return@withContext commit(record.totalBytes ?: headerTotal ?: existing)
                             }
                             return@withContext restart()
                         }
@@ -427,7 +528,7 @@ class DownloadWorker(
                         store.mutate(record.id) { it.copy(expectedTotal = serverTotal) }
                     }
                     val bodyStream = body.byteStream()
-                    RandomAccessFile(dest, "rw").use { raf ->
+                    RandomAccessFile(part, "rw").use { raf ->
                         if (append) raf.seek(existing)
                         val buffer = ByteArray(64 * 1024)
                         var lastPublish = 0L
@@ -473,34 +574,12 @@ class DownloadWorker(
                         }
                     }
 
-                    // Trust-but-verify. A short file that reads as complete hands
-                    // the user a model that loads and misbehaves. Compared against
-                    // the SERVER's total (catalog when the server reported none):
-                    // a truncated fixed-length body raises an IOException from
-                    // OkHttp before it reaches here.
-                    val actual = if (dest.exists()) dest.length() else 0L
-                    if (serverTotal > 0 && actual != serverTotal) {
-                        val mismatch = "Size mismatch ($actual of $serverTotal bytes)"
-                        store.mutate(record.id) {
-                            it.copy(
-                                status = DownloadState.FAILED,
-                                downloadedBytes = actual,
-                                error = mismatch,
-                            )
-                        }
-                        return@withContext Attempt.Failed(mismatch)
-                    }
-
-                    store.mutate(record.id) {
-                        it.copy(
-                            status = DownloadState.COMPLETED,
-                            downloadedBytes = actual,
-                            expectedTotal = serverTotal,
-                            error = null,
-                            errorCode = null,
-                        )
-                    }
-                    Attempt.Finished
+                    // Trust-but-verify + atomic commit: the staged part is
+                    // size-checked against the SERVER's total (catalog when
+                    // the server reported none; a truncated fixed-length
+                    // body raises an IOException from OkHttp before reaching
+                    // here), then renamed over the final path.
+                    commit(serverTotal)
                 }
             } catch (ssl: SSLPeerUnverifiedException) {
                 // Permanent by design (caught terminal in doWork): rethrow so
@@ -603,6 +682,12 @@ class DownloadWorker(
 
         // ...and on a 416: "bytes */<total>" — one unsatisfied range.
         private val UNSATISFIED_RANGE = Regex("bytes \\*/(\\d+)")
+
+        // Ticket 05 copies (reference DownloadEngine.kt commit() + adopt()).
+        private const val SIZE_MISMATCH_ERROR = "Downloaded file size does not match the expected size"
+        private const val RENAME_ERROR = "Could not move the finished download into place"
+        private const val ADOPT_REMOVE_ERROR = "Could not remove the previous download"
+        private const val ADOPT_ASIDE_ERROR = "Could not move the partial download aside"
 
         const val KEY_ID = "download_id"
         const val CHANNEL_ID = "native-download"

@@ -1,43 +1,44 @@
 import { useCallback } from "react";
-import { Text, View } from "react-native";
-import { Uniwind, useUniwind } from "uniwind";
+import { View } from "react-native";
+import { Moon } from "lucide-react-native";
+import { Uniwind } from "uniwind";
 
-import { ToggleRow, SettingsSection } from "../settings-rows.tsx";
-import { writeStoredTheme } from "@/services/storage/theme.ts";
+import { SettingsSection, ToggleRow } from "../settings-rows.tsx";
+import { useColorScheme, useColors } from "@/themes/tokens.ts";
+import {
+  writeStoredTheme,
+  type StoredTheme,
+} from "@/services/storage/theme.ts";
 
-/** App Settings card: appearance first (Dark mode), room for app-wide
- *  preferences below it. The toggle drives Uniwind's theme API, which
- *  flips every --color-* token in global.css AND syncs the native
- *  Appearance (so system dialogs and @expo/ui follow). The choice is
- *  persisted; app/_layout.tsx re-applies it on the next cold start.
+/** App Settings card: PocketPal's single Dark Mode row.
  *
- *  The switch reads `theme` directly — no local mirror state. Uniwind is
- *  already the single source of truth, and a shadow `dark` boolean could
- *  drift from it if the theme changes anywhere else (a system-wide
- *  appearance change, another setTheme call). */
+ *  The switch drives Uniwind's theme API, which flips every --color-* token
+ *  in global.css AND syncs native Appearance (system dialogs, @expo/ui).
+ *  Uniwind is the single source of truth: "dark" is the whole preference,
+ *  and app/_layout.tsx re-applies it before first paint on the next launch. */
 export function AppSettings() {
-  const { theme } = useUniwind();
-  const dark = theme === "dark";
+  const scheme = useColorScheme();
+  const colors = useColors();
+  const dark = scheme === "dark";
 
-  const toggle = useCallback(() => {
-    const next = !dark;
-    Uniwind.setTheme(next ? "dark" : "light");
-    void writeStoredTheme(next ? "dark" : "light");
-  }, [dark]);
+  const setDark = useCallback((next: boolean) => {
+    const choice: StoredTheme = next ? "dark" : "light";
+    Uniwind.setTheme(choice);
+    // The switch has already moved; a failed write only costs the preference
+    // on the next launch, so it must not surface or block this one.
+    void writeStoredTheme(choice).catch(() => {});
+  }, []);
 
   return (
-    <View>
-      <Text className="section-title mb-2">App Settings</Text>
-      <SettingsSection description="Appearance and app-wide preferences.">
-        <View className="row">
-          <ToggleRow
-            label="Dark mode"
-            description="Switch the app between light and dark appearance."
-            on={dark}
-            onPress={toggle}
-          />
-        </View>
-      </SettingsSection>
-    </View>
+    <SettingsSection title="App Settings">
+      <View className="row row--titled row--last">
+        <ToggleRow
+          label="Dark Mode"
+          icon={<Moon size={20} color={colors.secondaryText} />}
+          on={dark}
+          onPress={() => setDark(!dark)}
+        />
+      </View>
+    </SettingsSection>
   );
 }

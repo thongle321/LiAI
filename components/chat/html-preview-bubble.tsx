@@ -33,7 +33,7 @@ import * as Haptics from "expo-haptics";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Code2, Copy, Maximize2, Minimize2 } from "lucide-react-native";
 
-import { useColors } from "@/themes/tokens.ts";
+import { useColors, useColorScheme } from "@/themes/tokens.ts";
 import { wrapDocument } from "@/utils/preview-document.ts";
 import { CodeBlock } from "./code-block.tsx";
 
@@ -50,6 +50,7 @@ export function HtmlPreviewBubble({
   title?: string;
 }) {
   const colors = useColors();
+  const scheme = useColorScheme();
   const [showCode, setShowCode] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   // Whether this bubble got a slot in the live-WebView cap. Claimed on
@@ -73,7 +74,7 @@ export function HtmlPreviewBubble({
     };
   }, []);
   const displayTitle = title !== undefined && title !== "" ? title : "Preview";
-  const wrappedHtml = useMemo(() => wrapDocument(html), [html]);
+  const wrappedHtml = useMemo(() => wrapDocument(html, scheme === "dark"), [html, scheme]);
 
   const copyHtml = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});

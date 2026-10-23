@@ -43,6 +43,40 @@ class DownloadStore(
         error: String?,
     ) = dao.updateStatus(id, status, error)
 
+    // --- Ticket 04 surface (facade over the new DAO methods) -----------
+
+    suspend fun casStatus(
+        id: String,
+        entryStates: List<DownloadState>,
+        status: DownloadState,
+        error: String? = null,
+    ): Int = dao.casStatus(id, entryStates, status, error)
+
+    /** Row-count result: 0 means the row left RUNNING under the writer. */
+    suspend fun writeProgress(
+        id: String,
+        bytes: Long,
+        totalBytes: Long?,
+    ): Int = dao.writeProgress(id, bytes, totalBytes)
+
+    suspend fun writeValidators(
+        id: String,
+        etag: String?,
+        totalBytes: Long?,
+        offset: Long,
+    ): Int = dao.writeValidators(id, etag, totalBytes, offset)
+
+    suspend fun byDestination(destination: String): List<DownloadEntity> =
+        dao.byDestination(destination)
+
+    /** QUEUED reschedule carrying the stall count, without failing the row. */
+    suspend fun endTransientRun(
+        id: String,
+        stalledRuns: Int,
+        status: DownloadState,
+        error: String?,
+    ): Int = dao.endTransientRun(id, stalledRuns, status, error)
+
     /**
      * Read-modify-write against the row, in one transaction.
      *

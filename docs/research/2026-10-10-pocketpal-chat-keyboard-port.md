@@ -112,8 +112,8 @@ MobX; empty state as `ListEmptyComponent` (rejected in the 2026-10-08 pass — t
 contentInset would move a centred child again); deleting `KeyboardChatScrollView` (its `whenAtEnd`
 lift, `blankSpace` absorption, tab-bar-aware `offset` and `extraContentPadding` are real
 behaviours PocketPal never needed because it has no tab bar); a composer model-chevron
-(LiAI's documented composer decision: no model chrome in the field; the header routes to /models
-and each message offers "Regenerate with…"). The picker is NOT conditionally mounted (unlike
+(ported on 2026-10-23: the chevron opens `ChatPickerSheet`, PocketPal's Pals/Models tabs,
+and the mic moved beside Send - see `2026-10-23-chat-composer-picker-parity.md`). The picker is NOT conditionally mounted (unlike
 PocketPal's `{open && <Sheet/>}`): TrueSheet lazy-mounts its native view on first present, so a
 closed sheet already has no keyboard interaction, and the conditional pattern's X-button path
 unmounts a presented native sheet.

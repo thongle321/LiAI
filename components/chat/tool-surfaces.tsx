@@ -256,24 +256,18 @@ function ReadUrlSurface({ step }: ToolSurfaceProps) {
   // never asked for. Falls back to `result` for a row predating the split.
   const text =
     typeof step.data?.text === "string" ? step.data.text : (step.result ?? "");
-  // Reported by the seam, never inferred here.
-  const truncated = step.data?.truncated === true;
+  // PocketParity: budgetPage cuts at a word boundary and ends with an
+  // ellipsis — no truncation flag, no extra note (D8).
   if (text === "") return <StaticRow label="No page text" />;
   return (
     <>
       <TriggerRow
         label="Read a page"
-        count={truncated ? "·  cut off" : undefined}
         onPress={() => setOpen(true)}
         accessibilityLabel="Show the page text"
         metrics={step.metrics}
       />
       <Sheet visible={open} onDismiss={() => setOpen(false)}>
-        {truncated && (
-          <Text className="mb-2 font-sans text-micro text-secondary-text">
-            Truncated — this is only the start of the page.
-          </Text>
-        )}
         <Text className="text-quiet">{text}</Text>
       </Sheet>
     </>

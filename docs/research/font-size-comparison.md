@@ -65,12 +65,13 @@ body-lg 16/24 · body-md 14/20 · body-sm 12/16 · caption 12/16.
 | **Drawer — session row preview line** | none — `Drawer.Item` has a single label (`SidebarContent.tsx:110`) | 12 — `text-body-sm`, `SessionList.tsx:98-100` | LiAI-only |
 | **Drawer — section/date label** | 12 — `bodySmall`, `SidebarContent.tsx:479` | 12 — `text-body-sm`, `SessionList.tsx:60-62` ("History") | 0 |
 | **Drawer — version label** | 12 — `SidebarContent/styles.ts:28-33` | 12 — `text-caption`, `AppDrawer.tsx:105-107` | 0 |
-| **Settings — row label** | 16 / lh 24 — `titleMedium`, `pocketpal-ai/src/screens/SettingsScreen/SettingsScreen.tsx:373` (no size override in `styles.ts:44-46`) | 16 / lh 24 — `text-body-lg`, `components/SettingsRows.tsx:30` (`global.css:70-71`) | 0 |
-| **Settings — row description** | 11 / lh 16 — `labelSmall`, `SettingsScreen.tsx:378` (no size override in `styles.ts:47-50`) | 14 / lh 20 — `text-body-md`, `SettingsRows.tsx:32` | **+3** (lh +4) |
-| **Settings — section title** | none — PocketPal settings has no section-title rows (rows are label+description only, `SettingsScreen.tsx:373-382`) | 20 / lh 28 — `text-h3`, `SettingsRows.tsx:57` (`global.css:66-67`) | LiAI-only |
-| **Generation settings — param label** | 11 — `labelSmall`, `pocketpal-ai/src/components/CompletionSettings/CompletionSettings.tsx:40` and `:65` | 16 — `text-body-lg` via `RowLabel`, `SettingsRows.tsx:30`, used by `components/SamplerRows.tsx:58-238` | **+5** |
-| **Generation settings — param description** | 12 — `CompletionSettings/styles.ts:69-74`, slider description `components/InputSlider/styles.ts:11-16` | 14 — `text-body-md`, `SettingsRows.tsx:32` | **+2** |
-| **Generation settings — numeric field value** | 16 — `inputLabel`, `CompletionSettings/styles.ts:51-55` | 14 — `text-body-md`, `SettingsRows.tsx:299` | −2 |
+| **Settings — row label** | 16 / lh 24 — `titleMedium`, `pocketpal-ai/src/screens/SettingsScreen/SettingsScreen.tsx:373` (no size override in `styles.ts:44-46`) | 16 / lh 24 — `text-body-lg`, `components/settings-rows.tsx` `RowSize` default | 0 |
+| **Settings — row description** | 11 / lh 16 — `labelSmall`, `SettingsScreen.tsx:378` (no size override in `styles.ts:47-50`) | 11 / lh 16 — `text-xs`, `components/settings-rows.tsx` `RowSize` default; only on load-bearing rows | 0 |
+| **Settings — card title** | 16 / lh 24 regular — Paper v5 `CardTitle.tsx` (`titleVariant` defaults to `bodyLarge`, `paddingLeft: 16`), rendered unstyled by `SettingsScreen.tsx` | 16 / lh 24 regular — `.card-title`, `global.css`; rendered inside the 16px-padded card by `SettingsSection title` | 0 |
+| **Settings — advanced accordion** | 14 — `accordionTitle`, `pocketpal-ai/src/screens/SettingsScreen/styles.ts:110-113` | 14 / lh 20 — `text-title`, `AdvancedGroup` in `components/settings-rows.tsx` | 0 |
+| **Generation settings — param label** | 11 — `labelSmall`, `pocketpal-ai/src/components/CompletionSettings/CompletionSettings.tsx:40` and `:65` | 11 — `text-xs` via `RowSizeProvider`, `components/chat/sampler-rows.tsx:59` | 0 |
+| **Generation settings — param description** | 12 — `CompletionSettings/styles.ts:69-74`, slider description `components/InputSlider/styles.ts:11-16` | 12 — `text-body-sm` via the same `RowSizeProvider`, `components/chat/sampler-rows.tsx:59` | 0 |
+| **Generation settings — numeric field value** | 16 — `inputLabel`, `CompletionSettings/styles.ts:51-55` | 16 — `text-body-lg`, `SliderRow` input in `components/settings-rows.tsx` | 0 |
 | **Models — section header** | 14 — `accordionTitle`, `pocketpal-ai/src/screens/ModelsScreen/ModelAccordion/styles.ts:10-12`, applied at `ModelAccordion.tsx:41-44` | 16 / lh 24 — `text-h4`, `components/models/ModelAccordion.tsx:52` (`global.css:68-69`) | **+2** |
 | **Models — section header sub-line** | 12 — `accordionDescription`, `ModelAccordion/styles.ts:13-16` | 12 — `text-caption`, `ModelAccordion.tsx:54` | 0 |
 | **Models — card name** | 14 — `titleSmall`, `pocketpal-ai/src/screens/ModelsScreen/ModelCard/ModelCard.tsx:702-703` | 14 — `text-body-md`, `components/models/ModelCard.tsx:80`, `:224` | 0 |
@@ -90,16 +91,20 @@ body-lg 16/24 · body-md 14/20 · body-sm 12/16 · caption 12/16.
    no PocketPal counterpart (`AppDrawer.tsx:63`). Line-height grows with it:
    32 vs 20 (`global.css:64-65` vs `tokens.js:164-165`) = +12px of line box per
    title line.
-2. **Settings descriptions are +3px and taller.** LiAI 14/20 vs PocketPal
-   11/16 (`SettingsRows.tsx:32` vs `SettingsScreen.tsx:378`) — +3px size, +4px
-   line-height, on every settings row.
-3. **Generation-settings labels are +5px.** LiAI reuses the row label at 16
-   (`SettingsRows.tsx:30` via `SamplerRows.tsx`) where PocketPal uses
-   `labelSmall` 11 (`CompletionSettings.tsx:40`, `:65`); descriptions 14 vs 12
-   (`SettingsRows.tsx:32` vs `CompletionSettings/styles.ts:69-74`).
-4. **LiAI adds section titles PocketPal does not have.** `text-h3` 20/28
-   (`SettingsRows.tsx:57`) above each group; PocketPal's settings rows have no
-   section-title element (`SettingsScreen.tsx:373-382`).
+2. **Settings descriptions now match at 11/16.** LiAI renders them at the same
+   `labelSmall` rung (`components/settings-rows.tsx` `text-xs` vs
+   `SettingsScreen.tsx:378`) and only where they carry consequence — consent,
+   cost, errors, limits. The old 14/20 claim in this file was stale.
+3. **Generation-settings labels match at 11/12.** The sheet pins PocketPal's
+   CompletionSettings rungs via `RowSizeProvider label="text-xs"
+   desc="text-body-sm"` (`components/chat/sampler-rows.tsx:59`), the same
+   `labelSmall` 11 and 12px description the reference uses
+   (`CompletionSettings.tsx:40`, `:65`; `CompletionSettings/styles.ts:69-74`).
+   The old 16/14 claim in this file cited the pre-refactor filename.
+4. **Settings card titles are a 0px match.** LiAI restores PocketPal's
+   `Card.Title` at 16/24 regular (`.card-title`, `global.css`) inside the
+   16px-padded card; the reference's is Paper `bodyLarge` (16/24 regular) at
+   the same inset. The previous 20/28 group heading is gone.
 5. **Models section headers +2px** — 16 vs 14 (`ModelAccordion.tsx:52` vs
    `ModelAccordion/styles.ts:10-12`); card names and meta match at 14/12.
 6. **Empty-state placeholder +4px** — 20 vs 16 (`ChatEmptyPlaceholder.tsx:55`
@@ -187,8 +192,8 @@ instead of memory. They are gitignored build/dependency files.
 - `components/chat/ChatEmptyPlaceholder.tsx` (:55, :58)
 - `components/chat/SuggestedPrompts.tsx` (:34)
 - `components/chat/ChatMenu.tsx` (:83)
-- `components/SettingsRows.tsx` (:26-38 RowLabel, :57, :62, :299)
-- `components/SamplerRows.tsx` (:58-238)
+- `components/settings-rows.tsx` (:26-38 RowLabel, :57, :62, SliderRow input)
+- `components/chat/sampler-rows.tsx` (:58-238)
 - `components/models/ModelAccordion.tsx` (:52, :54)
 - `components/models/ModelCard.tsx` (:80, :224, :226)
 - `components/models/ModelCardDetails.tsx` (:105, :110)

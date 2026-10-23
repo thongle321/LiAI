@@ -31,7 +31,11 @@ Frontend concepts are ported, not libraries (Zustand/Uniwind/Expo Router).
 hub-run deep links; on-device inference machinery (llama.rn contexts, draft/MTP,
 mmproj/projection pairing, GPU/thread/context knobs, RAM calibration, native
 download module, ONNX TTS); `render_html` talent (deferred — needs a WebView);
-theme switcher (dark-locked); language switcher (English-only).
+language switcher (English-only).
+
+**In scope since 2026-10-23:** theme is an explicit Dark Mode choice in App
+Settings, persisted as `liai.theme` and snapshotted from the OS on first run —
+PocketPal's single `Dark Mode` switch, never a system-follow mode.
 
 ## 3. Frontend directory (target)
 

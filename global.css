@@ -112,14 +112,15 @@
        * The same role split, inverted grounds: #5B8CFF is the mark step on
        * dark (it clears 3:1 on #0B0C10/#1E1E24); text and label fills read
        * through the same variable names. */
-      --color-primary: #5b8cff;
-      --color-primary-mark: #5b8cff;
+      --color-primary: #588cff;
+      --color-primary-mark: #588cff;
       --color-primary-hover: #4e7ff0;
       --color-primary-pressed: #3f6fe0;
-      /* Near-black, not white: #5B8CFF is a LIGHT fill on a dark ground, so a
-       * white label measures 3.16:1 and fails. Base-ink on the signal fill is
-       * the dark-theme equivalent of light's white-on-primary (6.18:1). */
-      --color-on-primary: #0b0c10;
+      /* The board's own On Primary #FFFFFF. #588CFF is a light fill on a dark
+       * ground, so a white label measures 3.18:1 — below the 4.5:1 floor, but
+       * the board itself ships white-on-blue and the ratio is pinned in
+       * jest/design-system.test.ts as the board-sanctioned pairing. */
+      --color-on-primary: #ffffff;
       /* Teal is the dark board's accent — machine-in-the-loop states keep
          the role, take the hue. */
       --color-warm-accent: #fb923c;
@@ -138,20 +139,20 @@
       --color-error-mark: #ef4444;
 
       /* Background #0B0C10 is the page; Surface 1 #1E1E24 raised, Surface 2
-         #23252C recessed. The tint step is a darkened Primary Soft: the board's
-         #2A3A56 is light enough that the signal (and Alert Red) dropped under
-         4.5:1 on it, which broke every selected-element label. */
+         #23252C recessed. The tint ground is the board's Backdrop #1A1D24:
+         the board's Primary Soft #2A3A56 drops the signal to 3.60:1 on it,
+         while Backdrop keeps every text role clear (5.31:1 for the signal). */
       --color-base: #0b0c10;
       --color-surface-1: #1e1e24;
       --color-surface-2: #23252c;
-      --color-surface-3: #1c2740;
+      --color-surface-3: #1a1d24;
       --color-border: #2a2e35;
       /* The board's Overlay #00000080 (~50% black). */
       --color-scrim: rgb(0 0 0 / 0.5);
 
       /* Text ramp from the board: primary #F8FAFC, secondary #C8D5E1,
          quiet/tertiary #94A3B8. Inverse lands on the background colour. */
-      --color-secondary-text: #c8d5e1;
+      --color-secondary-text: #cbd5e1;
       --color-secondary-text-muted: #94a3b8;
       --color-primary-text: #f8fafc;
       --color-inverse-text: #0b0c10;
@@ -277,9 +278,9 @@
   color: var(--color-warning);
 }
 
-/* Grouped rows: .rows is a row card (0 internal padding so the dividers run
-   edge to edge — the shape comes from the group above); .row is one row
-   inside it. */
+/* Grouped rows: .rows is a row card (no internal padding by default, so the
+   dividers run edge to edge; the titled modifier below pads it 16px); .row
+   is one row inside it. */
 .rows {
   background-color: var(--color-surface-1);
   overflow: hidden;
@@ -293,6 +294,14 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+/* Modifier: Settings and Voice cards carry a title inside the card
+   (PocketPal's Card.Title). The card pads 16px so the title and the inset
+   dividers share one edge; rows drop their own horizontal padding with
+   `.row--titled`. It is a modifier rather than a descendant selector
+   because Uniwind resolves one class token at a time. */
+.rows--titled {
+  padding: 16px;
 }
 
 .row {
@@ -310,6 +319,11 @@
 .row--last {
   border-bottom-width: 0;
 }
+/* Row inside a `.rows--titled` card: the card already pads 16px. */
+.row--titled {
+  padding-left: 0;
+  padding-right: 0;
+}
 
 /* Section title (PocketPal's 18px bold section headers, ModelSettings
    sheet + the "Multimodal Settings" / "Reasoning" headings). 20px semibold
@@ -318,6 +332,17 @@
   font-family: var(--font-sans-semibold);
   font-size: 20px;
   line-height: 28px;
+  color: var(--color-primary-text);
+}
+
+/* PocketPal's Card.Title: 16/24 regular Ink, inside the 16px-padded card.
+   Also the rung for the Voice screen's list headings ("Downloadable
+   engines", "Voice models"), so the shared size is intentional.
+   `.section-title` stays the 20/28 heading used by the model-settings sheet. */
+.card-title {
+  font-family: var(--font-sans);
+  font-size: var(--text-body-lg);
+  line-height: var(--text-body-lg--line-height);
   color: var(--color-primary-text);
 }
 

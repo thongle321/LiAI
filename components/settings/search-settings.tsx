@@ -23,8 +23,8 @@ import {
   MAX_RESULT_COUNT,
   MIN_RESULT_COUNT,
   SEARCH_PROVIDERS,
-  type SearchProviderId,
 } from "@/services/search/search-providers.ts";
+import type { SearchProviderId } from "@/types/api.ts";
 import { useShallow } from "zustand/react/shallow";
 import { useSearch } from "@/store/search.ts";
 import { Sheet } from "../sheet.tsx";
@@ -42,6 +42,18 @@ const CONSENT_TEXT =
 
 function providerName(id: SearchProviderId): string {
   return SEARCH_PROVIDERS.find((p) => p.id === id)?.name ?? id;
+}
+
+/** PocketParity meta: a gated provider lists in the menu (suffix makes
+ *  its state explicit) while the store refuses to activate it. */
+function providerMenuLabel(id: SearchProviderId): string {
+  const meta = SEARCH_PROVIDERS.find((p) => p.id === id);
+  const selectable = meta?.selectable !== false;
+  return selectable ? (meta?.name ?? id) : `${meta?.name ?? id} (coming soon)`;
+}
+
+function providerRequiresKey(id: SearchProviderId): boolean {
+  return SEARCH_PROVIDERS.find((p) => p.id === id)?.requiresKey !== false;
 }
 
 /** The key editor, as a sheet: a secret should not sit on the settings
@@ -180,7 +192,12 @@ function ProviderKeySheet({
         {/* Q8: their sentence, brand-swapped. */}
         {"Let the assistant search the web with its own tools. Bring your own API key — LiAI never holds your keys or routes your queries."}
       </Text>
-      <Text className="mb-1 font-sans text-body-md text-primary-text">API key</Text>
+      <Text className="font-sans-semibold text-body-sm text-primary-text">API key</Text>
+      {providerId !== null && !providerRequiresKey(providerId) && (
+        <Text className="mb-2 font-sans text-micro text-secondary-text">
+          {`Optional for ${providerName(providerId)} — a key only raises the daily limit.`}
+        </Text>
+      )}
       <View className="relative">
         <TextInput
           value={draft}
@@ -267,11 +284,9 @@ export function SearchSettings() {
   const providerIds = SEARCH_PROVIDERS.map((p) => p.id);
 
   return (
-    <SettingsSection
-      description="Searches leave this device. Bring your own key — we never hold it."
-    >
+    <SettingsSection title="Internet Search">
       {hasConsented ? (
-        <View className="row">
+        <View className="row row--titled">
           <ActionRow
             label="Searching the web is enabled"
             description={CONSENT_TEXT}
@@ -281,7 +296,7 @@ export function SearchSettings() {
           />
         </View>
       ) : (
-        <View className="row">
+        <View className="row row--titled">
           <ActionRow
             label="Searches leave your device"
             description={CONSENT_TEXT}
@@ -290,17 +305,16 @@ export function SearchSettings() {
           />
         </View>
       )}
-      <View className="row">
+      <View className="row row--titled">
         <PickerRow<SearchProviderId>
           label="Search provider"
-          description="Which service answers, and which key it uses."
           options={providerIds}
           value={activeProviderId}
           onChange={(next) => setActiveProvider(next)}
-          displayFor={providerName}
+          displayFor={providerMenuLabel}
         />
       </View>
-      <View className="row">
+      <View className="row row--titled">
         <ActionRow
           label="API key"
           description={
@@ -316,10 +330,9 @@ export function SearchSettings() {
           onPress={() => setKeySheetFor(activeProviderId)}
         />
       </View>
-      <View className="row">
+      <View className="row row--titled row--last">
         <SliderRow
           label="Results per search"
-          description="Fewer results keep more room in the model's context."
           display={`${resultCount}`}
           value={resultCount}
           min={MIN_RESULT_COUNT}

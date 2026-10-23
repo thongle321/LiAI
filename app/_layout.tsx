@@ -1,7 +1,8 @@
 import "../global.css";
 import { Stack } from "expo-router";
-import { ThemeProvider, DefaultTheme } from "expo-router/react-navigation";
+import { ThemeProvider, DefaultTheme, DarkTheme } from "expo-router/react-navigation";
 import * as SplashScreen from "expo-splash-screen";
+import * as SystemUI from "expo-system-ui";
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -16,7 +17,7 @@ import { ScopedVariables, Uniwind } from "uniwind";
 
 import { useEffect, useRef } from "react";
 import { useColors, useColorScheme } from "@/themes/tokens.ts";
-import { readStoredTheme } from "@/services/storage/theme.ts";
+import { resolveInitialTheme } from "@/services/storage/theme.ts";
 import { SnackbarProvider } from "@/components/snackbar.tsx";
 import { useKeyboardStore } from "@/store/keyboard.ts";
 import { useEngineOffload } from "@/hooks/useEngineOffload.ts";
@@ -24,14 +25,13 @@ import { useOnboardingGate } from "@/hooks/useOnboardingGate.ts";
 import { useVoiceOffload } from "@/hooks/useVoiceOffload.ts";
 import { useFluidTextVariables } from "@/hooks/useFluidTextScale.ts";
 
-// Seed the persisted appearance (Settings > App Settings > Dark mode)
-// before the first paint. Fire-and-forget: the default "system" theme
-// renders until the read resolves, then switches if the stored choice
-// differs. readStoredTheme owns the storage call AND its failure path
-// (returns null rather than throwing), so a storage error can't surface
-// as an unhandled rejection here.
-void readStoredTheme().then((stored) => {
-  if (stored !== null) Uniwind.setTheme(stored);
+// Seed the persisted appearance (Settings > App Settings > Dark Mode)
+// before the first paint. Fire-and-forget: Uniwind's default "system"
+// theme renders until the resolve lands, then switches to the explicit
+// choice. resolveInitialTheme owns the storage read, the first-run OS
+// snapshot, and every failure path, so nothing here can reject.
+void resolveInitialTheme().then((theme) => {
+  Uniwind.setTheme(theme);
 });
 
 // Keep the native splash visible until the Inter files resolve, so cold
@@ -63,6 +63,14 @@ export default function RootLayout() {
   // content background follow the App Settings toggle.
   const colors = useColors();
   const scheme = useColorScheme();
+
+  // Keep the native root view background in step with the theme so there is
+  // no light flash behind the React tree on a dark app (expo-system-ui was
+  // declared but unused). PocketPal does the equivalent via
+  // useNavigationBarAppearance.
+  useEffect(() => {
+    void SystemUI.setBackgroundColorAsync(colors.base).catch(() => {});
+  }, [colors.base]);
   const [loaded, error] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -138,7 +146,7 @@ export default function RootLayout() {
               overlays for a frame or two (the card that still moved). */}
           <KeyboardVisibilitySync />
           <SnackbarProvider>
-          <ThemeProvider value={DefaultTheme}>
+          <ThemeProvider value={scheme === "dark" ? DarkTheme : DefaultTheme}>
           <Stack
             screenOptions={{
               headerShown: false,

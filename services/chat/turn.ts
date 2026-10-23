@@ -38,6 +38,12 @@ export interface TurnSessionStore {
    *  one string. Optional here exactly as on `SessionStore.append`. */
   append(sessionId: string, turn: StoredTurn, id?: string): Promise<void>;
   setTitleIfEmpty(sessionId: string, title: string): Promise<void>;
+  /** Prior turns, for the read_url allowlist seed (PocketParity
+   *  sessionRows). Optional so existing fakes stay valid; absent or null
+   *  simply seeds nothing. */
+  get?(sessionId: string): Promise<Array<{
+    steps?: Array<{ tool?: string; data?: Record<string, unknown> }>;
+  }> | null>;
   /** Bind the staged companion at session birth, before the first turn's
    *  resolutions read it. Optional so older fakes stay valid. */
   setSessionCompanion?(sessionId: string, companionId: string | null): Promise<unknown>;
@@ -193,8 +199,24 @@ function toAgentMessages(
   return messages;
 }
 
-function userTextsOf(history: ChatMessage[]): string[] {
-  return history.filter((m) => m.role === "user").map((m) => m.text);
+/** PocketPal's sessionRows for the allowlist seed: the steps of THIS
+ *  session's assistant turns already persisted before this run — web
+ *  search hit URLs and read_url links recorded before the last reload
+ *  re-seed it, so a restored conversation still admits the URLs it once
+ *  surfaced. Best-effort: an unreadable store seeds nothing. */
+async function persistedStepsOf(
+  store: TurnSessionStore | null,
+  sessionId: string,
+): Promise<Array<{ tool?: string; data?: Record<string, unknown> }>> {
+  if (!store?.get) return [];
+  try {
+    const turns = await store.get(sessionId);
+    return (turns ?? []).flatMap((turn: { steps?: Array<{ tool?: string; data?: Record<string, unknown> }> }) =>
+      Array.isArray(turn.steps) ? turn.steps : [],
+    );
+  } catch {
+    return [];
+  }
 }
 
 /** Build the store's TurnRunner from injectable seams (tests pass fakes). */
@@ -321,7 +343,7 @@ export function createTurnRunner(deps: TurnDeps) {
         : {}),
       fetchImpl: fetch,
       search,
-      userTexts: userTextsOf(paths.history),
+      sessionSteps: await persistedStepsOf(store, sessionId),
       onEvent: (event) => {
         if (event.type === "token" && event.text !== "") onToken?.(event.text);
         if (event.type === "reasoning" && event.text !== "") {

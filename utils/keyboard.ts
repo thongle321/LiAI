@@ -25,16 +25,19 @@
  * the abs(). A bare `-height.value` in a translate would then move content
  * DOWN by the keyboard height, which is how the vision panel appeared to sink.
  *
- * `insetsBottom` is the view's own bottom ANCHOR, and it is the whole reason
- * this takes an argument. The keyboard height spans the navigation bar, so:
+ * `insetsBottom` is the view's own bottom ANCHOR — its distance above the
+ * physical screen bottom — and it is the whole reason this takes an
+ * argument. The keyboard height spans the navigation bar, so:
  *
- *   - a view anchored at the physical bottom (the chat composer:
- *     `absolute inset-x-0 bottom-0`) must rise by the FULL height. Pass 0.
- *   - a view anchored above the nav bar (the vision panel, positioned with
- *     `style={[{ bottom }, liftStyle]}` where `bottom` is the anchor its
- *     caller passed - `app/vision.tsx` sends `insets.bottom + 12`) must rise
- *     by height MINUS that anchor, or it overshoots and floats a gap above
- *     the keyboard.
+ *   - a view anchored at the physical bottom must rise by the FULL
+ *     height. Pass 0. (No tab screen has one today: the bar stays mounted
+ *     under the keyboard, so its column bottoms out one bar slot up.)
+ *   - a view anchored inside a tab column (the chat composer, the vision
+ *     panel: `bottom` positions plus the lift) rests above the bar, which
+ *     must pass the bar's slot (insets.bottom + measured tabBarHeight) so
+ *     the sharp law `height MINUS anchor` lands the view exactly on the
+ *     keyboard top. Passing 0 for such a view overshoots by the slot and
+ *     leaves it floating above the keyboard — the old composer anchor bug.
  *
  * Getting this wrong is not subtle and was a real bug: the composer was
  * passing insets.bottom while anchored at 0, so it under-lifted by exactly

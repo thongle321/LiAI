@@ -1,4 +1,5 @@
-/** Message input: the composer — text field + attach + thinking shortcut.
+/** Message input: the composer — text field, attach, companion/model picker,
+ * thinking and voice, with send at the trailing edge.
  *
  * Renamed from ChatInput.tsx (message-view refactor): same behavior, new
  * name. The composer attach button opens the camera/gallery picker, and the
@@ -14,7 +15,7 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import { Brain, Camera, Image as ImageIcon, Pencil, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
+import { Brain, Camera, ChevronUp, Image as ImageIcon, Mic, Pencil, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
 import Animated from "react-native-reanimated";
 import { KeyboardControllerNative } from "react-native-keyboard-controller";
 
@@ -25,6 +26,13 @@ import { useChatStore } from "@/store/chat.ts";
 import { useInference } from "@/store/inference.ts";
 import { suspendBackgroundRelease } from "@/services/inference/offload.ts";
 import { useModelReady } from "@/hooks/useModelReady.ts";
+import { useVoiceCapture } from "@/hooks/useVoiceCapture.ts";
+import { asrErrorCopy, hasOpenSettingsAction, OPEN_SETTINGS_LABEL } from "@/services/asr/error-copy.ts";
+import { openMicPermissionSettings } from "@/services/voice/mic-access.ts";
+import { useAsrStore } from "@/store/asr.ts";
+import { useSnackbar } from "@/components/snackbar.tsx";
+import { VoiceRecordingBar } from "@/components/chat/voice-recording-bar.tsx";
+import { useRouter } from "expo-router";
 import { useMultimodalAvailable } from "@/hooks/useMultimodalAvailable.ts";
 import { useModelStore } from "@/store/model-store";
 import { resolveThinking } from "@/services/inference/thinking.ts";
@@ -44,6 +52,9 @@ export function MessageInput({
   onHeightChange,
   editing,
   onCancelEdit,
+  companionName,
+  onOpenPicker,
+  liftAnchor = 0,
 }: {
   sending: boolean;
   /** False with no loaded model: send disables (PocketPal parity). */
@@ -56,6 +67,12 @@ export function MessageInput({
    *  would be dragged up by the keyboard whether it wanted that or not. It
    *  has one caller today; making that conditional is the price of reusing it. */
   className?: string;
+  /** The composer's own bottom anchor above the physical screen bottom —
+   *  the tab bar's slot (safe-area inset + measured bar height). With the
+   *  bar mounted this field rests `liftAnchor` above the physical bottom,
+   *  so the lift rises by the keyboard height MINUS that corridor
+   *  (utils/keyboard.ts). Absent = 0 (anchored at the physical bottom). */
+  liftAnchor?: number;
   /** Reports this box's height. It is the only thing reserving room for a
    *  composer that is out of flow, so it must be measured here at the
    *  outermost level and nowhere shallower. */
@@ -64,13 +81,20 @@ export function MessageInput({
   editing?: boolean;
   /** Leave edit mode, restoring the composer to the turn's own text. */
   onCancelEdit?: () => void;
+  /** The companion bound to this conversation, or null when none is. The
+   *  composer only reads it to label the picker; the route owns the state. */
+  companionName: string | null;
+  /** Open the companion/model picker (PocketPal's composer chevron). */
+  onOpenPicker: () => void;
 }) {
   const colors = useColors();
   // This box is the bottom-anchored surface, so it carries the keyboard lift
   // itself rather than being wrapped in something that does. Same mechanism
   // the library applies internally (`translateY: height.value + offset` in
-  // KeyboardStickyView), minus the extra component.
-  const lift = useKeyboardLift();
+  // KeyboardStickyView), minus the extra component. The anchor comes from the
+  // caller: it is always the caller's job to say how far off the physical
+  // screen bottom this box rests (the chat route passes the tab bar's slot).
+  const lift = useKeyboardLift(liftAnchor);
   // Composer text lives in the chat store (per-session drafts survive
   // switches).
   const draft = useChatStore((s) => s.draft);
@@ -127,6 +151,40 @@ export function MessageInput({
   // rejected before the run.
   const [attached, setAttached] = useState<string[]>([]);
   const [attachIssue, setAttachIssue] = useState<string | null>(null);
+  const captureState = useAsrStore((s) => s.captureState);
+  const asrError = useAsrStore((s) => s.error);
+  const asrAvailable = useAsrStore((s) => s.asrAvailable);
+  const tierReady = useAsrStore((s) => s.isSelectedTierReady);
+  const resetCapture = useAsrStore((s) => s.resetCapture);
+  const router = useRouter();
+  const { showSnackbar } = useSnackbar();
+  const voiceCapture = useVoiceCapture({
+    onTranscript: (text) => {
+      setDraft(draft === "" ? text : `${draft} ${text}`);
+    },
+  });
+  const isRecording = captureState === "recording";
+  const isTranscribing = captureState === "transcribing";
+  // D1 (PocketParity): while capturing — recording OR transcribing — the
+  // bar REPLACES the whole control row; a capture mid-decode still owns
+  // the composer.
+  const voiceCaptureActive = isRecording || isTranscribing;
+  // D8 (PocketParity): ASR errors surface as a snackbar with the mapped
+  // copy, and only a BLOCKED permission gets the Open Settings action.
+  useEffect(() => {
+    if (asrError === null) return;
+    showSnackbar(asrErrorCopy(asrError), {
+      type: "error",
+      ...(hasOpenSettingsAction(asrError)
+        ? {
+            action: {
+              label: OPEN_SETTINGS_LABEL,
+              onPress: () => openMicPermissionSettings(),
+            },
+          }
+        : {}),
+    });
+  }, [asrError, showSnackbar]);
   // G9 (PocketParity): pressing Send with no model fires a warning haptic
   // and a temporary helper line (ChatInput.tsx:228-240). The button KEEPS
   // its disabled look — only `disabled` is dropped, so the press has
@@ -331,9 +389,23 @@ export function MessageInput({
               accessibilityHint={modelReady ? undefined : composerPlaceholder}
             />
           </View>
-          {/* Control bar: left controls (attach) and right controls (thinking,
-              send/stop). No voice controls — voice settings live on the Voice
-              settings screen. */}
+          {/* Control bar: while a voice capture records or transcribes, the
+              whole row IS the VoiceRecordingBar (D1/D2/D3/D10 — its cancel,
+              waveform, timer, stop and language chip). No capture: left
+              controls (attach, companion/model picker), right controls
+              (thinking, mic, send/stop) — PocketPal's split. The mic GATE
+              (D5): hidden when the availability gate is shut; a gate that is
+              open without an installed tier routes to the Voice settings
+              screen (PocketParity mic-button-setup). */}
+          {voiceCaptureActive ? (
+            <VoiceRecordingBar
+              onCancel={() => {
+                voiceCapture.cancel();
+                resetCapture();
+              }}
+              onStop={() => voiceCapture.stop()}
+            />
+          ) : (
           <View className="flex-row items-center justify-between px-4 py-2 min-h-9">
             <View className="flex-row items-center gap-2 flex-1">
               <Animated.View style={plusPress.animatedStyle}>
@@ -356,6 +428,31 @@ export function MessageInput({
                   <Plus size={20} color={modelReady && canSee ? colors.primary : colors.secondaryText} />
                 </Pressable>
               </Animated.View>
+              {/* PocketPal's pal selector (ChatInput.tsx): a chevron that
+                  opens the tabbed companion/model sheet, labelled with the
+                  active companion's name when one is bound. The label only
+                  appears with an active model, as PocketPal's does. */}
+              <Pressable
+                onPress={onOpenPicker}
+                testID="chat-picker-button"
+                className="h-12 shrink flex-row items-center gap-1"
+                accessibilityRole="button"
+                accessibilityLabel={
+                  companionName === null
+                    ? "Choose companion and model"
+                    : `Choose companion and model, current ${companionName}`
+                }
+              >
+                <View className="h-12 w-12 items-center justify-center rounded-full bg-surface-3">
+                  <ChevronUp size={20} color={colors.primary} />
+                </View>
+                {activeModelId !== null && !!companionName && (
+                  <Text numberOfLines={1} className="shrink text-quiet">
+                    Companion:{" "}
+                    <Text className="font-sans-semibold">{companionName}</Text>
+                  </Text>
+                )}
+              </Pressable>
               {plusOpen && (
                 // Anchored to the plus button's wrapper and extending right into
                 // the empty composer space — the plus is leftmost, so w-48 fits
@@ -423,6 +520,34 @@ export function MessageInput({
                   </Text>
                 </Pressable>
               )}
+              {/* Mic sits beside Send, as pocketpal's ChatInput does
+                  (`styles.micBeforeSend`): the two things that finish a turn
+                  are adjacent, and the leading slot belongs to attachment
+                  and the companion/model picker. All voice gates and testIDs
+                  below are unchanged from its old leading position. */}
+              {asrAvailable && (
+                <Pressable
+                  onPress={
+                    tierReady
+                      ? () => (isRecording ? voiceCapture.stop() : voiceCapture.start())
+                      : () => router.push("/voice-settings")
+                  }
+                  testID={tierReady ? "mic-button" : "mic-button-setup"}
+                  className={`h-12 w-12 items-center justify-center rounded-full ${
+                    isRecording || isTranscribing ? "bg-primary" : "bg-surface-3"
+                  }`}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    tierReady
+                      ? isRecording
+                        ? "Stop recording"
+                        : "Start voice input"
+                      : "Set up voice input"
+                  }
+                >
+                  <Mic size={20} color={isRecording || isTranscribing ? colors.onPrimary : colors.primary} />
+                </Pressable>
+              )}
               {/* Send and Stop are siblings, never nested: two nested pressables
                   would be two hit targets and two a11y roles on one control.
                   Send: Primary (Signal Blue fill) when armed, Disabled (Mist) when
@@ -474,6 +599,7 @@ export function MessageInput({
               )}
             </View>
           </View>
+          )}
         </View>
       </View>
     </Animated.View>

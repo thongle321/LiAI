@@ -8,7 +8,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as LegacyFileSystem from "expo-file-system/legacy";
 
 import { numberedFileName } from "@/services/inference/local-model.ts";
-import { useSnackbar } from "@/components/snackbar.tsx";
+import { useSnackbar } from "@/hooks/useSnackbar.ts";
 import { useLoadGuard } from "./useLoadGuard.ts";
 import { useModelStore } from "@/store/model-store";
 

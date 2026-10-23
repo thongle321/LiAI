@@ -10,14 +10,15 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "@/services/storage/storage";
 import { dedupedStorage, toStateStorage } from "@/services/storage/persist-helpers";
+import { resetSearchCache } from "@/services/agent/search-budget.ts";
 import {
   DEFAULT_PROVIDER,
   DEFAULT_RESULT_COUNT,
-  isSearchProviderId,
+  isProviderSelectable,
   parseResultCount,
   searchKeySS,
-  type SearchProviderId,
 } from "@/services/search/search-providers.ts";
+import type { SearchProviderId } from "@/types/api.ts";
 
 export const SEARCH_KEY = "liai_search";
 
@@ -60,7 +61,7 @@ function normalizeSearchSettings(raw: unknown): {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return fallback;
   const r = raw as Record<string, unknown>;
   return {
-    activeProviderId: isSearchProviderId(r.activeProviderId)
+    activeProviderId: isProviderSelectable(r.activeProviderId)
       ? r.activeProviderId
       : DEFAULT_PROVIDER,
     resultCount: parseResultCount(r.resultCount),
@@ -119,16 +120,29 @@ export function createSearchStore(storage: KeyValueStorage, secure: SecureAdapte
             await hydrating;
           },
           setActiveProvider: (id) => {
+            // PocketParity store guard: a gated provider appears in the
+            // picker but can never become the active one.
+            if (!isProviderSelectable(id)) return;
+            // A provider switch invalidates the hit cache: the new
+            // provider's hits must never replay the old provider's rows.
+            resetSearchCache();
             set({ activeProviderId: id });
           },
           setResultCount: (n) => {
             set({ resultCount: parseResultCount(n) });
           },
           setConsented: (consented) => {
+            // PocketParity: consent on/off clears the hit cache; consent
+            // is a privacy gate, and hits fetched under it must not
+            // outlive the grant.
+            resetSearchCache();
             set({ hasConsented: consented });
           },
           setProviderKey: async (id, key) => {
             await guardedSecure(() => secure.setItem(searchKeySS(id), key));
+            // PocketParity: the key is deliberately NOT part of the cache
+            // key, so a key change invalidates explicitly.
+            resetSearchCache();
           },
           getProviderKey: async (id) => {
             try {
@@ -139,6 +153,7 @@ export function createSearchStore(storage: KeyValueStorage, secure: SecureAdapte
           },
           clearProviderKey: async (id) => {
             await guardedSecure(() => secure.removeItem(searchKeySS(id)));
+            resetSearchCache();
           },
         };
       },

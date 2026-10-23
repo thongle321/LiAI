@@ -273,13 +273,21 @@ export function gatedRunTurn(): {
   calls: FakeTurnCalls;
 } {
   const calls: FakeTurnCalls = { texts: [], sessions: [], images: [] };
-  let release: (reply?: string) => void = () => {};
+  // release() can be fired before runTurn() is first called: send() waits
+  // on localCpuDecode (send.ts) before reaching the runner, so `await sent`
+  // in a test that released synchronously would otherwise resolve the
+  // STILL-UNASSIGNED no-op stub and hang the test forever. Queue early
+  // releases; runTurn flushes them the moment it is actually invoked.
+  const pending: Array<string | undefined> = [];
+  const release = (reply?: string) => {
+    pending.push(reply);
+  };
   const runTurn: TurnRunner = (text, paths, onToken) =>
     new Promise((resolve) => {
       calls.texts.push(text);
       calls.sessions.push(paths.sessionId);
       calls.images.push(paths.images);
-      release = (reply = `Echo ${text}`) => {
+      const settle = (reply = `Echo ${text}`) => {
         onToken?.(reply);
         resolve({
           reply,
@@ -289,6 +297,7 @@ export function gatedRunTurn(): {
           completionTokens: 2,
         });
       };
+      while (pending.length > 0) settle(pending.shift());
     });
-  return { runTurn, release: (reply) => release(reply), calls };
+  return { runTurn, release, calls };
 }

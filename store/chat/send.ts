@@ -6,15 +6,48 @@
  */
 
 import type { ApiError } from "@/types/api.ts";
-import type { ChatMessage } from "@/types/chat.ts";
+import { type ChatMessage } from "@/types/chat.ts";
 import { newId } from "@/services/chat/messages.ts";
 import type { SessionStore } from "@/services/chat/session-store.ts";
-import { canSeeImages, loadModelState, multimodalAvailable } from "@/services/inference/mmproj.ts";
+import { useAsrStore } from "@/store/asr.ts";
 import { useVoice } from "../voice.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
+/** Pure: last user message before (excluding) a bubble. */
+export function priorUserTextIn(messages: ChatMessage[], beforeId: string): ChatMessage | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].id === beforeId) {
+      for (let j = i - 1; j >= 0; j -= 1) {
+        if (messages[j].role === "user") return messages[j];
+      }
+      return null;
+    }
+  }
+  const last = [...messages].reverse().find((m) => m.role === "user");
+  return last ?? null;
+}
+
 function llmError(message: string): ApiError {
   return { code: "llm_error", message };
+}
+
+/** Mic-parity D4 (PocketParity `chatBusyOnCpu`): whisper must WAIT while a
+ *  CPU-bound local reply generates, or the segments' decode races the
+ *  llama decode for the same cores. PocketPal reads `context.gpu ===
+ *  false`; our CPU-only semantics are `nGpuLayers === 0` — the setting
+ *  that puts the whole decode on CPU (deviceSelection's CPU-only-phone
+ *  rule). A GPU-loaded model keeps to its cores, so whisper never waits
+ *  there. */
+async function localCpuDecode(): Promise<boolean> {
+  try {
+    const { useModelStore } = await import("../model-store.ts");
+    if (useModelStore.getState().activeProviderType !== "local") return false;
+    const { useInference } = await import("../inference.ts");
+    return useInference.getState().nGpuLayers === 0;
+  } catch {
+    // Unreadable store: no wait (never block a voice turn on a hunch).
+    return false;
+  }
 }
 
 /** Can the ACTIVE engine see an image this turn? Moved to
@@ -187,7 +220,14 @@ export function createSendSlice(
       // TS narrows past the null check (a second get() would not be).
       const stagedCompanionId =
         opts.sessionId === null ? get().stagedCompanionId : null;
-      const outcome = await ctx.runTurn(
+      // D4: while a CPU-only model decodes, on-device transcription
+      // pauses. The finally releases the wait on EVERY exit — success,
+      // failure, stop — so a cleared flag never strands the next volley.
+      const cpuDecode = await localCpuDecode();
+      if (cpuDecode) useAsrStore.getState().setChatBusyOnCpu(true);
+      const outcome = await (async () => {
+        try {
+          return await ctx.runTurn(
         opts.text,
         {
           sessionId: opts.sessionId,
@@ -223,7 +263,11 @@ export function createSendSlice(
           if (gen !== ctx.streamGen) return;
           set({ toolTokenCount: ctx.toolTokens.delta("tool") });
         },
-      );
+          );
+        } finally {
+          useAsrStore.getState().setChatBusyOnCpu(false);
+        }
+      })();
       if (gen !== ctx.streamGen) return;
       updateBubble(opts.assistantId, {
         text: outcome.reply,
@@ -314,17 +358,7 @@ export function createSendSlice(
 
   /** Last user text before (excluding) a bubble — the question to rerun. */
   function priorUserText(beforeId: string): ChatMessage | null {
-    const messages = get().messages;
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      if (messages[i].id === beforeId) {
-        for (let j = i - 1; j >= 0; j -= 1) {
-          if (messages[j].role === "user") return messages[j];
-        }
-        return null;
-      }
-    }
-    const last = [...messages].reverse().find((m) => m.role === "user");
-    return last ?? null;
+    return priorUserTextIn(get().messages, beforeId);
   }
 
   return {

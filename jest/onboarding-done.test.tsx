@@ -39,9 +39,11 @@ import DoneStep from "@/app/onboarding/done.tsx";
 
 import { route } from "./route-cast.ts";
 
-jest.mock("@react-native-async-storage/async-storage", () =>
-  require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
-);
+// No jest.mock for AsyncStorage: jest.config.js moduleNameMapper already
+// redirects the specifier to __mocks__/external/... (added in d97569a). A
+// factory that requires @react-native-async-storage/... would itself be
+// re-mapped onto that fake and recurse — the "Maximum call stack" load
+// failure this file used to have.
 
 /** Mirrors app/_layout.tsx: the drawer group lives behind `Stack.Protected`,
  *  the onboarding flow outside it. */

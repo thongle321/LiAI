@@ -206,8 +206,8 @@ export function HfTokenSettings() {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   return (
-    <SettingsSection>
-      <View className="row">
+    <SettingsSection title="API Settings">
+      <View className="row row--titled">
         <ActionRow
           label="Hugging Face Token"
           description={
@@ -220,10 +220,9 @@ export function HfTokenSettings() {
           onPress={() => setSheetOpen(true)}
         />
       </View>
-      <View className="row">
+      <View className="row row--titled row--last">
         <ToggleRow
           label="Use HF Token"
-          description="Enable to use token for API requests. Disable if token is causing authentication issues."
           on={useHfToken}
           onPress={() => void setUseHfToken(!useHfToken)}
         />

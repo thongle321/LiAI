@@ -33,6 +33,8 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/$1',
     '\\.css$': '<rootDir>/jest/styleMock.js',
     'react-native/setup-env': '<rootDir>/jest/react-native-setup-env.js',
+    '@react-native-async-storage/async-storage':
+      '<rootDir>/__mocks__/external/@react-native-async-storage/async-storage.ts',
     'llama.rn': '<rootDir>/__mocks__/external/llama.rn.ts',
     'react-native-vision-camera':
       '<rootDir>/__mocks__/external/react-native-vision-camera.ts',

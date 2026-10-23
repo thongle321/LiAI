@@ -7,7 +7,13 @@
  * Erasable TypeScript only (no enums) so the files stay strippable.
  */
 
-import type { SearchProviderId } from "@/services/search/search-providers.ts";
+export type SearchProviderId =
+  | "tavily"
+  | "brave"
+  | "exa"
+  | "firecrawl"
+  | "you"
+  | "parallel";
 
 export interface SearchAuth {
   provider: SearchProviderId;

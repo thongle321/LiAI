@@ -252,8 +252,15 @@ export function VisionBottomPanel({
   onToggleInput,
   onTalk,
   modelReady,
+  liftAnchor,
 }: {
   bottom: number;
+  /** The panel's own offset above the physical screen bottom (the tab
+   *  bar's slot + this panel's 12px margin). The lift anchor: with the bar
+   *  mounted the panel is never on the physical bottom, so its rise is the
+   *  keyboard height MINUS this corridor (utils/keyboard.ts). See
+   *  app/(drawer)/(tabs)/vision.tsx for the value. */
+  liftAnchor: number;
   issue: string | null;
   needsSettings: boolean;
   onOpenSettings: () => void;
@@ -287,17 +294,19 @@ export function VisionBottomPanel({
   // the assumption that Android's adjustResize already handled it, which
   // left the draft input under the keyboard on Android.
   //
-  // `bottom` IS the runtime bottom inset, and it is also this panel's anchor:
-  // the panel sits above the navigation bar rather than on it, so it has to
-  // rise by the keyboard height MINUS the inset. That is precisely why the
-  // shared hook takes an anchor — the chat composer is anchored at 0 and
-  // passes nothing. Sharing the hook is what keeps the two screens from
-  // disagreeing about the keyboard.
+  // `liftAnchor` is this panel's distance above the physical screen bottom
+  // (the tab bar's slot + the 12px margin): the panel sits above the bar
+  // rather than on the physical bottom, so it has to rise by the keyboard
+  // height MINUS that corridor. Passing 0 would overshoot by a full bar
+  // slot and land the draft input floating above the keyboard. That is
+  // precisely why the shared hook takes an anchor — the composer and this
+  // panel both state their own, and sharing the hook is what keeps the two
+  // screens from disagreeing about the keyboard.
   //
   // Reading keyboard.height raw here was a separate, earlier bug: the library
   // reports it NEGATIVE while the keyboard is up, so the panel sank instead of
   // rising.
-  const liftStyle = useKeyboardLift(bottom);
+  const liftStyle = useKeyboardLift(liftAnchor);
   return (
     <Animated.View
       className="absolute left-0 right-0 px-5"

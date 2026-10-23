@@ -15,6 +15,9 @@
  *  - The voice store, because `deviceMeetsMemory` is computed during
  *    hydration: unhydrated it reads `false`, so the voice chip is hidden,
  *    `canSpeak` is false and auto-speak never fires (D3-4).
+ *  - The ASR store: its availability gate and per-tier install state
+ *    derive during hydration (PocketPal's init()); unhydrated the mic
+ *    gate reads its fallback and the setup rows show empty state.
  *  - The first-run gate, so a deep link cannot skip onboarding.
  *
  * The native splash stays up until this resolves, so the wait is a held frame
@@ -29,6 +32,7 @@ import {
   createAutoRelease,
   restoreAutoReleasedModel,
 } from "@/services/inference/auto-release.ts";
+import { useAsrStore } from "@/store/asr.ts";
 import { useInference } from "@/store/inference";
 import { useModelStore } from "@/store/model-store";
 import { useOnboardingStore } from "@/store/onboarding";
@@ -47,6 +51,7 @@ export default function IndexGate() {
   const loadInference = useInference((s) => s.load);
   const loadSearch = useSearch((s) => s.load);
   const loadVoice = useVoice((s) => s.load);
+  const loadAsr = useAsrStore((s) => s.load);
   const hydrateOnboarding = useOnboardingStore((s) => s.hydrate);
 
   useEffect(() => {
@@ -62,7 +67,13 @@ export default function IndexGate() {
       // Voice is here because `deviceMeetsMemory` is computed DURING
       // hydration. Unhydrated it reads `false`, so the voice chip is hidden,
       // `canSpeak` is false and auto-speak never fires (D3-4).
-      await Promise.all([loadPersisted(), loadInference(), loadSearch(), loadVoice()]);
+      await Promise.all([
+        loadPersisted(),
+        loadInference(),
+        loadSearch(),
+        loadVoice(),
+        loadAsr(),
+      ]);
       // The model this app auto-released when it was last backgrounded is
       // warmed up HERE, while the splash still covers the wait: the first
       // message then finds a warm engine instead of paying for a
@@ -78,7 +89,7 @@ export default function IndexGate() {
       setReady(true);
       void SplashScreen.hideAsync().catch(() => {});
     })();
-  }, [loadPersisted, loadInference, loadSearch, loadVoice, hydrateOnboarding]);
+  }, [loadPersisted, loadInference, loadSearch, loadVoice, loadAsr, hydrateOnboarding]);
 
   if (!ready || !hydrated) return null;
   return onboarded ? (

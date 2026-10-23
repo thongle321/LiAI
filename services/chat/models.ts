@@ -2,8 +2,8 @@
  *
  * THREE surfaces offer this list: the header menu's "Model" submenu
  * (components/chat/chat-menu.tsx), each message's "Regenerate with…"
- * submenu, and the chat thread's model picker sheet
- * (components/chat/model-picker-sheet.tsx). They must never disagree about
+ * submenu, and the composer's companion/model picker
+ * (components/chat/chat-picker-sheet.tsx). They must never disagree about
  * which models exist or which is active, so no surface builds the list
  * itself.
  *

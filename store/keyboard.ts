@@ -1,22 +1,21 @@
 /** One keyboard-state source for the whole app (store).
  *
- * WHY THIS EXISTS — the remaining "the empty card still moves" mechanism.
- * The tab bar and the chat screen BOTH react to the keyboard (the bar
- * unmounts, the screen compensates the column the bar vacates). Each used
- * to subscribe to useKeyboardState itself, in its own subtree, so the two
- * updates were not guaranteed to land in the same React commit: for a
- * frame or two the column had grown while the compensation had not, and a
- * vertically centred child shifts by half the bar slot. The geometry is
- * exact in source; the race was what survived the static fix.
+ * WHY THIS EXISTS — the keyboard's effects used to be two coordinated
+ * JS-thread steps (the tab bar unmounted on open, the chat screen
+ * compensated the column the bar vacated) whose updates could land in
+ * different React commits. So there is ONE subscriber — KeyboardVisibilitySync
+ * in app/_layout.tsx, mounted once under KeyboardProvider — writing here,
+ * and every consumer reads this store: one notification, one batched commit.
  *
- * So there is ONE subscriber — KeyboardVisibilitySync in app/_layout.tsx,
- * mounted once under KeyboardProvider — writing here, and every consumer
- * reads this store: one notification, one batched commit, the bar's
- * unmount and the screen's compensation are simultaneous by construction.
+ * The steps are gone for good (bar stays mounted; every lift is a Reanimated
+ * translateY), and what survives is the BROADCAST: screens that still need
+ * to know the flag get it without each subscribing to the library's
+ * context, and `tabBarHeight` is the one measured anchor value every
+ * bottom-anchored lift reads (see useKeyboardLift's anchor).
  *
  * `tabBarHeight` is seeded from BottomNav's class-sum constant (TAB_BAR_HEIGHT
  * — its VALUE is device-verified, not test-verified) and replaced by the
- * bar's own onLayout measurement, so the compensation can no longer drift
+ * bar's own onLayout measurement, so the anchor can no longer drift
  * when the bar's classes change. The guard lives in utils/keyboard.ts
  * (resolveTabBarHeight), node-testable there because this file must stay
  * free of React Native imports (see TAB_BAR_HEIGHT_SEED there).

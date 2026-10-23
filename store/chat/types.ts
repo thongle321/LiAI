@@ -16,6 +16,8 @@ export type ChatGet = StoreApi<ChatState>["getState"];
 
 export interface TurnPaths {
   sessionId: string | null;
+  /** True when this turn originated from voice mode. */
+  voiceMode?: boolean;
   /** Photos for this turn, as data-uris (G8: up to MAX_IMAGES). */
   images?: string[];
   /** Current bubbles for agent context (user/assistant texts). */
@@ -200,7 +202,7 @@ export interface ChatState {
   persistDraft: () => Promise<void>;
   loadSession: () => Promise<void>;
   checkHealth: () => Promise<void>;
-  send: (text: string, images?: string[]) => Promise<boolean>;
+  send: (text: string, images?: string[], options?: { voiceMode?: boolean }) => Promise<boolean>;
   /** Stop the live reply; the partial text stays in its bubble. */
   stop: () => void;
   /** Free the loaded model from memory (Unload); the next Load reloads. */

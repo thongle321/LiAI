@@ -24,6 +24,7 @@ import {
   type TalentSearchAuth,
 } from "../agent/registry.ts";
 import { toDataUris } from "../storage/images.ts";
+import { VOICE_MODE_SYSTEM_PROMPT } from "@/constants/voice-mode-prompt.ts";
 
 /** First user message becomes the session title, truncated here. */
 export const SESSION_TITLE_LEN = 48;
@@ -312,7 +313,11 @@ export function createTurnRunner(deps: TurnDeps) {
         now: new Date(),
         maxToolTurns: DEFAULT_MAX_TURNS,
       });
-      const systemMessage = [systemPrompt ?? "", ...fragments]
+      const systemMessage = [
+        systemPrompt ?? "",
+        ...fragments,
+        ...(paths.voiceMode ? [VOICE_MODE_SYSTEM_PROMPT] : []),
+      ]
         .filter((part) => part.trim() !== "")
         .join("\n\n");
       result = await runLocalAgent({

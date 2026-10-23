@@ -72,12 +72,6 @@ export default function VoiceScreen() {
       edges={["top", "left", "right"]}
       style={{ flex: 1, backgroundColor: colors.base }}
     >
-      {/* Voice screen title: Ink, matching the header geometry of every
-          other screen. Blue is reserved for the one live control. */}
-      <View className="h-14 items-center justify-center border-b border-border bg-surface-1 px-5">
-        <Text className="font-sans-semibold text-h2 text-primary-text">Voice</Text>
-      </View>
-
       <ScrollView contentContainerClassName="flex-1 items-center justify-center px-8">
         {/* The hit area IS the visual: a 44px target wrapped around a 160px
             circle would make the outer ring dead to the thumb. */}

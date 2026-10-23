@@ -155,7 +155,7 @@ export function useVoiceLoop() {
       waited += 1;
     }
     const before = useChatStore.getState().messages.length;
-    const ok = await send(said);
+    const ok = await send(said, undefined, { voiceMode: true });
     if (!aliveRef.current) return;
     if (!ok) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);

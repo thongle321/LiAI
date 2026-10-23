@@ -152,6 +152,8 @@ export function createSendSlice(
     userId?: string;
     text: string;
     sessionId: string | null;
+    /** True when this turn originated from voice mode. */
+    voiceMode?: boolean;
     /** Photos for this turn (G8). */
     images?: string[];
     history: ChatMessage[];
@@ -231,6 +233,7 @@ export function createSendSlice(
         opts.text,
         {
           sessionId: opts.sessionId,
+          ...(opts.voiceMode ? { voiceMode: true } : {}),
           ...(images !== undefined ? { images } : {}),
           history: opts.history,
           ...(opts.retry ? { retry: true } : {}),
@@ -429,7 +432,7 @@ export function createSendSlice(
       }));
     },
 
-    send: async (text: string, images?: string[]) => {
+    send: async (text: string, images?: string[], options?: { voiceMode?: boolean }) => {
       const trimmed = text.trim();
       if (trimmed === "" || get().sending) return false;
       const sid = get().sessionId;
@@ -488,6 +491,7 @@ export function createSendSlice(
         text: trimmed,
         sessionId: sid,
         ...(images !== undefined ? { images } : {}),
+        ...(options?.voiceMode ? { voiceMode: true } : {}),
         history,
         clearOnFirst: false,
       });

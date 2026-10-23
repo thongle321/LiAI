@@ -25,6 +25,7 @@ const NOTHING_HEARD = "Didn't hear anything — tap the mic to try again.";
 export function useVoiceLoop() {
   const [phase, setPhase] = useState<VoicePhase>("idle");
   const [heard, setHeard] = useState("");
+  const heardRef = useRef("");
   const [reply, setReply] = useState("");
   const [issue, setIssue] = useState<string | null>(null);
   // Permanent denial never pops the OS dialog again — the issue
@@ -42,6 +43,9 @@ export function useVoiceLoop() {
   // Guards overlapping beginListening calls (double-mount, fast
   // restarts): a second start() while busy errors the session.
   const startingRef = useRef(false);
+  // Auto-finalize a turn after a pause, so a slow-to-finalize
+  // recognizer (or a user who stops talking) doesn't hang on "Listening".
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The stack keeps chat mounted under /voice: ignore recognizer
   // events while unfocused, or both screens process every event.
   const focused = useIsFocused();
@@ -51,6 +55,29 @@ export function useVoiceLoop() {
   function setBoth(next: VoicePhase): void {
     phaseRef.current = next;
     setPhase(next);
+  }
+
+  function clearSilenceTimer(): void {
+    if (silenceTimerRef.current !== null) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  }
+
+  function resetSilenceTimer(): void {
+    clearSilenceTimer();
+    silenceTimerRef.current = setTimeout(() => {
+      if (!aliveRef.current || !focusedRef.current) return;
+      if (phaseRef.current !== "listening") return;
+      clearSilenceTimer();
+      const text = heardRef.current.trim();
+      if (text === "") {
+        handleRecognitionFailure("nomatch");
+      } else if (!sentRef.current) {
+        sentRef.current = true;
+        void handleUtterance(text);
+      }
+    }, 1200);
   }
 
   // ponytail: the native modules are absent when the dev build predates
@@ -90,9 +117,11 @@ export function useVoiceLoop() {
       }
       setNeedsSettings(false);
       sentRef.current = false;
+      heardRef.current = "";
       setHeard("");
       setIssue(null);
       setBoth("listening");
+      resetSilenceTimer();
       void Haptics.selectionAsync();
       ExpoSpeechRecognitionModule.start({
         ...VOICE_LISTEN_OPTS,
@@ -115,6 +144,7 @@ export function useVoiceLoop() {
 
   /** One shared failure path for error + nomatch events. */
   function handleRecognitionFailure(code: string): void {
+    clearSilenceTimer();
     // Permanent: the code goes to the Expo terminal; on screen the streak
     // cap shows clean copy (no raw code), so a deaf recognizer still can't
     // fail silently.
@@ -137,6 +167,7 @@ export function useVoiceLoop() {
   }
 
   async function handleUtterance(text: string): Promise<void> {
+    clearSilenceTimer();
     const said = text.trim();
     safeStopListen();
     if (!aliveRef.current) return;
@@ -177,6 +208,7 @@ export function useVoiceLoop() {
   }
 
   function speak(text: string): void {
+    clearSilenceTimer();
     if (!aliveRef.current) return;
     stopSpeaking();
     setReply(text);
@@ -209,6 +241,7 @@ export function useVoiceLoop() {
         void beginListening();
         return;
       case "stop":
+        clearSilenceTimer();
         safeStopListen();
         setBoth("idle");
         return;
@@ -226,7 +259,9 @@ export function useVoiceLoop() {
     const text = event.results[0]?.transcript ?? "";
     if (text === "") return;
     errorStreakRef.current = 0;
+    heardRef.current = text;
     setHeard(text);
+    if (phaseRef.current === "listening") resetSilenceTimer();
     if (event.isFinal && !sentRef.current) {
       sentRef.current = true;
       void handleUtterance(text);
@@ -250,6 +285,7 @@ export function useVoiceLoop() {
     aliveRef.current = true;
     return () => {
       aliveRef.current = false;
+      clearSilenceTimer();
       safeStopListen();
       stopSpeaking();
     };

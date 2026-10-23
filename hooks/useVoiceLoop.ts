@@ -31,6 +31,9 @@ export function useVoiceLoop() {
   // Permanent denial never pops the OS dialog again — the issue
   // line becomes a link into Settings instead of dead text.
   const [needsSettings, setNeedsSettings] = useState(false);
+  // Hands-free: after a reply finishes, listening restarts on its own.
+  const [handsFree, setHandsFree] = useState(false);
+  const handsFreeRef = useRef(false);
   const send = useChatStore((s) => s.send);
 
   const phaseRef = useRef<VoicePhase>("idle");
@@ -90,7 +93,7 @@ export function useVoiceLoop() {
     }
   }
 
-  async function beginListening(): Promise<void> {
+  async function beginListening(auto = false): Promise<void> {
     if (!aliveRef.current || startingRef.current || !focusedRef.current) return;
     // Shared lockout + never start while a turn is live: both extend bans.
     if (isVoiceThrottled()) {
@@ -116,6 +119,10 @@ export function useVoiceLoop() {
         return;
       }
       setNeedsSettings(false);
+      if (!auto) {
+        handsFreeRef.current = true;
+        setHandsFree(true);
+      }
       sentRef.current = false;
       heardRef.current = "";
       setHeard("");
@@ -190,6 +197,8 @@ export function useVoiceLoop() {
     if (!aliveRef.current) return;
     if (!ok) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      handsFreeRef.current = false;
+      setHandsFree(false);
       setIssue("Couldn't send that. Try again.");
       setBoth("idle");
       return;
@@ -200,6 +209,8 @@ export function useVoiceLoop() {
       .messages.slice(before)
       .find((m) => m.role === "assistant");
     if (replyMsg === undefined) {
+      handsFreeRef.current = false;
+      setHandsFree(false);
       setIssue("No reply came back. Try again.");
       setBoth("idle");
       return;
@@ -216,18 +227,25 @@ export function useVoiceLoop() {
     setIssue(null);
     if (!useVoice.getState().autoSpeak) {
       setBoth("idle");
+      if (handsFreeRef.current) void beginListening(true);
       return;
     }
     setBoth("speaking");
     speakReply(text, {
       onDone: () => {
-        if (aliveRef.current && phaseRef.current === "speaking") setBoth("idle");
+        if (!aliveRef.current || phaseRef.current !== "speaking") return;
+        setBoth("idle");
+        if (handsFreeRef.current) void beginListening(true);
       },
       onStopped: () => {
-        if (aliveRef.current && phaseRef.current === "speaking") setBoth("idle");
+        if (!aliveRef.current || phaseRef.current !== "speaking") return;
+        setBoth("idle");
+        if (handsFreeRef.current) void beginListening(true);
       },
       onError: () => {
         if (!aliveRef.current) return;
+        handsFreeRef.current = false;
+        setHandsFree(false);
         setIssue("Couldn't play the reply. Try again.");
         setBoth("idle");
       },
@@ -241,7 +259,13 @@ export function useVoiceLoop() {
         void beginListening();
         return;
       case "stop":
+        // Tapping the mic while listening ends the conversation in
+        // hands-free mode; in tap-to-talk it just cancels the listen.
         clearSilenceTimer();
+        if (handsFreeRef.current) {
+          handsFreeRef.current = false;
+          setHandsFree(false);
+        }
         safeStopListen();
         setBoth("idle");
         return;
@@ -250,8 +274,19 @@ export function useVoiceLoop() {
       case "interrupt":
         stopSpeaking();
         setBoth("idle");
+        if (handsFreeRef.current) void beginListening(true);
         return;
     }
+  }
+
+  /** Explicitly end a hands-free conversation. */
+  function end(): void {
+    clearSilenceTimer();
+    handsFreeRef.current = false;
+    setHandsFree(false);
+    safeStopListen();
+    stopSpeaking();
+    setBoth("idle");
   }
 
   useSpeechRecognitionEvent("result", (event) => {
@@ -292,5 +327,5 @@ export function useVoiceLoop() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { phase, heard, reply, issue, needsSettings, bargeIn, retry };
+  return { phase, heard, reply, issue, needsSettings, handsFree, bargeIn, retry, end };
 }

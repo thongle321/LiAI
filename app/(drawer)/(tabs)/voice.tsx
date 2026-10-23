@@ -40,7 +40,7 @@ import { useModelReady } from "@/hooks/useModelReady.ts";
 
 export default function VoiceScreen() {
   const colors = useColors();
-  const { phase, heard, reply, issue, needsSettings, bargeIn, retry } = useVoiceLoop();
+  const { phase, heard, reply, issue, needsSettings, handsFree, bargeIn, retry, end } = useVoiceLoop();
   const motionDuration = MOTION_DURATION_MS;
   const replyVisible = phase === "speaking";
   const micPress = usePressFeedback();
@@ -141,6 +141,17 @@ export default function VoiceScreen() {
             {captionsOn && heard !== "" && phase !== "speaking" ? heard : " "}
           </Text>
         </Pressable>
+
+        {handsFree && (
+          <Pressable
+            onPress={end}
+            className="btn btn--ghost active:opacity-80 mt-4 px-5 py-2"
+            accessibilityRole="button"
+            accessibilityLabel="End conversation"
+          >
+            <Text className="font-sans-semibold text-body-md text-primary">End</Text>
+          </Pressable>
+        )}
 
         <Animated.View
           style={overlayStyle}

@@ -1,15 +1,6 @@
 package com.anonymous.liai.download
 
 import android.content.Context
-import androidx.work.BackoffPolicy
-import androidx.work.Constraints
-import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkInfo
-import androidx.work.WorkManager
-import androidx.work.await
-import androidx.work.workDataOf
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
@@ -22,7 +13,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 /**
  * Android-native model downloads.
@@ -41,6 +31,15 @@ import java.util.concurrent.TimeUnit
  * outlasts the JS runtime must be able to report itself when JS comes back,
  * so [getActiveDownloads] reads the same durable store the worker writes and
  * is the source of truth. Events are an optimisation; polling is the contract.
+ *
+ * SCHEDULING (ticket 06): every lifecycle verb hands off to
+ * [DownloadScheduler] instead of touching WorkManager directly. On API 34+
+ * that schedules the run as a JobScheduler user-initiated job first (no
+ * ten-minute cap, the system owns the run) and falls back to WorkManager —
+ * [WorkManagerPort] keeps the exact request shape this module always built,
+ * so the fallback IS yesterday's behavior. Pause/cancel route through
+ * cancelRunners, which stops ALL layers a run can live in (WorkManager
+ * work, the UIDT job, the in-process signal).
  */
 class NativeDownloadModule : Module() {
     /** reactContext is nullable in the API surface; every function here needs a
@@ -49,8 +48,13 @@ class NativeDownloadModule : Module() {
     private val ctx: Context
         get() = requireNotNull(appContext.reactContext) { "no react context" }
 
-    private val workManager: WorkManager
-        get() = WorkManager.getInstance(ctx)
+    /** The one place a run is handed to the OS: schedule prefers a
+     *  user-initiated JobScheduler job on API 34+ and falls back to
+     *  WorkManager inside [DownloadScheduler]; cancelRunners stops every
+     *  layer a run can live in. Fresh per call like the WorkManager getter
+     *  used to be — getInstance is cached, the ports cost nothing to build. */
+    private val scheduler: DownloadScheduler
+        get() = DownloadScheduler(ctx, DownloadRuns.process)
 
     private val store: DownloadStore
         get() = DownloadStore(DownloadDatabase.get(ctx))
@@ -113,18 +117,22 @@ class NativeDownloadModule : Module() {
                         createdAt = existing?.createdAt ?: System.currentTimeMillis(),
                     ),
                 )
-                // REPLACE, not KEEP: the caller owns the lifecycle for one
-                // file at a time, and a stale queued job for the same id would
-                // otherwise race the new one.
-                enqueue(downloadId)
+                // Lifecycle now goes through the scheduler (ticket 06): it
+                // cancels every still-live runner for this id first — the
+                // "REPLACE, not KEEP" race this same-id re-enqueue used to
+                // defend against — then schedules the UIDT-or-WorkManager
+                // host with the catalog total (empty step for estimate).
+                scheduler.schedule(downloadId, record.expectedTotal.toLong())
             }
             AsyncFunction("startDownload") Coroutine startBlock
 
             AsyncFunction("pauseDownload") Coroutine { downloadId: String ->
-                workManager.cancelUniqueWork(workName(downloadId))
-                // CANCELLED_BY_WORK_REQUEST means WorkManager stopped us, which
-                // is what a pause IS — the bytes stay on disk and the record
-                // becomes resumable.
+                scheduler.cancelRunners(downloadId)
+                // CANCELLED_BY_WORK_REQUEST means the OS stopped us, which is
+                // what a pause IS — the bytes stay on disk and the record
+                // becomes resumable. The signal stop (from cancelRunners)
+                // breaks a blocked read at once, so Pause is felt even on a
+                // stalled connection.
                 store.mutate(downloadId) { it.copy(status = DownloadState.PAUSED) }
             }
 
@@ -138,7 +146,10 @@ class NativeDownloadModule : Module() {
                     throw CodedException("download is not resumable")
                 }
                 store.mutate(downloadId) { it.copy(status = DownloadState.QUEUED, error = null) }
-                enqueue(downloadId)
+                // The ADOPTED total (a prior attempt learned it from the
+                // response) is what the scheduler estimates network byte for;
+                // the catalog count is the fallback.
+                scheduler.schedule(downloadId, record.totalBytes ?: record.expectedTotal)
             }
 
             /** Retry after a FAILURE, with no terminal-state guard. PocketPal
@@ -156,11 +167,12 @@ class NativeDownloadModule : Module() {
                         errorCode = null,
                     )
                 }
-                enqueue(downloadId)
+                val record = store.get(downloadId)
+                scheduler.schedule(downloadId, record?.totalBytes ?: record?.expectedTotal ?: 0L)
             }
 
             AsyncFunction("cancelDownload") Coroutine { downloadId: String ->
-                workManager.cancelUniqueWork(workName(downloadId))
+                scheduler.cancelRunners(downloadId)
                 store.get(downloadId)?.let { record ->
                     // Cancel abandons the partial; a paused download keeps it.
                     runCatching { File(record.destination).delete() }
@@ -249,34 +261,8 @@ class NativeDownloadModule : Module() {
             "errorCode" to errorCode,
         )
 
-    /** The one place a transfer is handed to WorkManager, so start,
-     *  resume, and retry cannot drift apart. */
-    private fun enqueue(downloadId: String) {
-        workManager.enqueueUniqueWork(
-            workName(downloadId),
-            ExistingWorkPolicy.REPLACE,
-            OneTimeWorkRequestBuilder<DownloadWorker>()
-                .setInputData(workDataOf(DownloadWorker.KEY_ID to downloadId))
-                .setConstraints(
-                    Constraints
-                        .Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
-                        .build(),
-                ).setBackoffCriteria(
-                    BackoffPolicy.EXPONENTIAL,
-                    WorkRequest_MIN_BACKOFF_MILLIS,
-                    TimeUnit.MILLISECONDS,
-                ).build(),
-        )
-    }
-
-    private fun workName(downloadId: String) = "native-download-$downloadId"
-
     private companion object {
         const val EVENT = "onDownloadEvent"
-
-        /** WorkManager's own floor for exponential backoff. */
-        const val WorkRequest_MIN_BACKOFF_MILLIS = 10_000L
     }
 }
 

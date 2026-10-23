@@ -79,7 +79,7 @@ behavioral consequence, kept on purpose.
 | Size-mismatch check | none visible — total just follows the response | compares disk against the adopted server total, catalog when the server reported none | same, plus a check |
 | Progress cadence | Room write at 1 Hz + LiveData events | Room write at 1 Hz + events, single writer | same |
 | Terminal delivery | immediate events | immediate events, deduped by `claimTerminal` (`lib/models/download-jobs.ts`) | same |
-| 10-minute cap | API 34+ runs a **JobScheduler user-initiated job first** (`setUserInitiated(true)`, `DownloadScheduler.kt:109-119`), falling back to WorkManager — neither carries WorkManager's 10-minute background cap the way an ordinary `CoroutineWorker` does | foreground service + notification, `FOREGROUND_SERVICE_TYPE_DATA_SYNC` + WorkManager only | better (determinate progress); same cap-lifting territory, two mechanisms — the UI overlap is noted, not migrated |
+| 10-minute cap | API 34+ runs a **JobScheduler user-initiated job first** (`setUserInitiated(true)`, `DownloadScheduler.kt:109-119`), falling back to WorkManager — neither carries WorkManager's 10-minute background cap the way an ordinary `CoroutineWorker` does | foreground service + notification, `FOREGROUND_SERVICE_TYPE_DATA_SYNC` + WorkManager only | better (determinate progress); same cap-lifting territory, two mechanisms — the UI overlap is noted, not migrated. **RESOLVED by ticket 06 (2026-10-23): the scheduler port landed — LiAI now schedules UIDT-first on API 34+ (`DownloadScheduler.kt` + `DownloadJobService.kt`) with WorkManager fallback, through the same extracted `DownloadRunner`; the foreground service stays** |
 | Notification progress | none at all | determinate bar re-emitted on every 1 Hz write; spinner only when total unknown | better |
 | `POST_NOTIFICATIONS` request | before every download — `ensureNotificationPermission()` is awaited inside `startAndroidDownload` (`pocketpal-ai/src/utils/androidPermission.ts:58`, called from `DownloadManager.ts:483-500`); prompts once per session, API 34+ only | never requested — removed (2026-10-09) | worse: on Android 13+ the worker's foreground-service notification stays suppressed unless the user grants the permission from system settings (source-verified 2026-10-23; previously rested on the spec) |
 | Paused row at worker entry | `Result.retry()` — burns backoff cycles | `Result.success()`, bytes kept | better |
@@ -303,7 +303,11 @@ API 34+ schedules a **JobScheduler user-initiated job first**
 `NETWORK_TYPE_ANY` 111, 30 s `BACKOFF_POLICY_EXPONENTIAL` 112,
 `setEstimatedNetworkBytes` when the total is known 119), exceptions in
 scheduling fall through to the WorkManager branch
-(`enqueueUniqueWork("download_$id", REPLACE)`, 43). [ticket 06]
+(`enqueueUniqueWork("download_$id", REPLACE)`, 43). [ticket 06 — RESOLVED
+   2026-10-23: ported as `DownloadScheduler.kt`/`DownloadJobService.kt` with
+   cancellable `StopSignal` plumbing through `DownloadRunner.kt` (UIDT-first,
+   cancelRunners three layers, JobService progress + jobFinished parity;
+   `RUN_USER_INITIATED_JOBS` in the module manifest — 63 native tests green)]
 
 ### LiAI side, gap pins (`modules/native-download/android/src/main/java/com/anonymous/liai/download/`)
 

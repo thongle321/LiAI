@@ -12,6 +12,16 @@
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
   <!--
+    Ticket 06: on API 34+ the scheduler prefers a JobScheduler
+    user-initiated job for the transfer. Scheduling one without this
+    permission throws, which the scheduler treats as "fall back to
+    WorkManager" — so without it the new path would never engage at all.
+    Carries through prebuild like POST_NOTIFICATIONS above, no plugin
+    wiring needed.
+  -->
+  <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
+
+  <!--
     Android 14+ (API 34) requires the foreground service type to be declared
     in the manifest. WorkManager declares SystemForegroundService in its own
     manifest WITHOUT a type, so the merge yields 0x00000000 and setForeground()
@@ -29,5 +39,16 @@
         android:name="androidx.work.impl.foreground.SystemForegroundService"
         android:foregroundServiceType="dataSync"
         tools:replace="android:foregroundServiceType" />
+
+    <!--
+      The user-initiated job host (ticket 06): the JobScheduler-only
+      counterpart of the WorkManager worker above. BIND_JOB_SERVICE is what
+      lets the system bind and start it; exported stays false because
+      nothing outside the system asks for it.
+    -->
+    <service
+        android:name="com.anonymous.liai.download.DownloadJobService"
+        android:permission="android.permission.BIND_JOB_SERVICE"
+        android:exported="false" />
   </application>
 </manifest>

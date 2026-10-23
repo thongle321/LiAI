@@ -20,6 +20,7 @@ import okhttp3.Request
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
+import javax.net.ssl.SSLPeerUnverifiedException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
@@ -49,9 +50,18 @@ import kotlin.coroutines.suspendCoroutine
 class DownloadWorker(
     context: Context,
     params: WorkerParameters,
+    /** Injectable for tests: MockWebServer suites pass a client with
+     *  `retryOnConnectionFailure(false)` so a single queued response is not
+     *  consumed by OkHttp's transparent 408/421 retry. Production keeps the
+     *  plain client through the 2-arg constructor below — behavior is
+     *  unchanged from before this parameter existed. */
+    private val client: OkHttpClient = OkHttpClient(),
 ) : CoroutineWorker(context, params) {
     private val store = DownloadStore(DownloadDatabase.get(applicationContext))
-    private val client = OkHttpClient()
+
+    /** The exact two-arg signature WorkManager's default WorkerFactory
+     *  reflects on when the native module enqueues the request. */
+    constructor(context: Context, params: WorkerParameters) : this(context, params, OkHttpClient())
 
     /** The in-flight call, so a stop can break a blocked read.
      *
@@ -77,6 +87,16 @@ class DownloadWorker(
         return try {
             setForeground(createForegroundInfo(record))
             transfer(record)
+        } catch (ssl: SSLPeerUnverifiedException) {
+            // A tampering peer is not a network blip: requeueing would spin
+            // WorkManager against a server that will never verify. Fail the
+            // row with the TLS message instead (reference: DownloadEngine.kt
+            // attempt(), 184-185). Caught BEFORE IOException, which it
+            // extends — the generic requeue below would otherwise hide it.
+            store.mutate(id) {
+                it.copy(status = DownloadState.FAILED, error = ssl.message ?: "TLS peer not verified")
+            }
+            Result.failure()
         } catch (io: IOException) {
             // Network died mid-transfer. WorkManager owns the backoff, so a
             // retry here is the OS-level exponential curve, not our own.
@@ -183,9 +203,10 @@ class DownloadWorker(
                         return@withContext Result.failure()
                     }
 
-                    res.code == 429 || res.code in 500..599 -> {
-                        // Rate limited or the server is unwell. Retry, so the
-                        // row must read QUEUED — see requeue().
+                    res.code == 408 || res.code == 429 || res.code in 500..599 -> {
+                        // Rate limited, the server is unwell, or our request
+                        // timed out (408 is OUR slowness). All retryable, so
+                        // the row must read QUEUED — see requeue().
                         requeue(record.id, "HTTP ${res.code}")
                         return@withContext Result.retry()
                     }
@@ -205,8 +226,21 @@ class DownloadWorker(
                         return@withContext Result.failure()
                     }
 
+                    res.code in 400..499 -> {
+                        // Other client errors (402, 404, ...): no amount of
+                        // retrying changes them — the request itself is the
+                        // problem. The reference names these plainly
+                        // ("Client error: N", DownloadEngine.kt respond());
+                        // 401/403 above keep our richer auth copy instead.
+                        fail(record, "Client error: ${res.code}", null)
+                        return@withContext Result.failure()
+                    }
+
                     res.code != 200 && res.code != 206 -> {
-                        fail(record, "HTTP ${res.code}", null)
+                        // Anything else is not a transfer condition (3xx
+                        // served raw, protocol garbage): name it the way the
+                        // reference does instead of a bare "HTTP N".
+                        fail(record, "Unexpected response: ${res.code}", null)
                         return@withContext Result.failure()
                     }
                 }

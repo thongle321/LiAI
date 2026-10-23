@@ -107,6 +107,10 @@ class NativeDownloadModule : Module() {
                         downloadedBytes = existing?.downloadedBytes ?: 0L,
                         ifRange = record.ifRange,
                         headers = record.headers,
+                        // Creation time never moves on REPLACE: a re-enqueue of
+                        // the same id is an update, not a new birthdate, and
+                        // ticket-05's supersede logic orders by it.
+                        createdAt = existing?.createdAt ?: System.currentTimeMillis(),
                     ),
                 )
                 // REPLACE, not KEEP: the caller owns the lifecycle for one

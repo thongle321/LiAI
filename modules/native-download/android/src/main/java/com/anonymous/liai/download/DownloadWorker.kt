@@ -56,8 +56,17 @@ class DownloadWorker(
      *  plain client through the 2-arg constructor below — behavior is
      *  unchanged from before this parameter existed. */
     private val client: OkHttpClient = OkHttpClient(),
+    /** Injectable for tests (fast engine: instant sleeper, controlled clock).
+     *  Production gets the real clock and a stop-aware stepped sleeper: a
+     *  pause must not sit out a 30 s backoff in one blocking delay. */
+    injectedEngine: DownloadEngine? = null,
 ) : CoroutineWorker(context, params) {
     private val store = DownloadStore(DownloadDatabase.get(applicationContext))
+    private val engine =
+        injectedEngine
+            ?: DownloadEngine(
+                sleeper = { ms -> DownloadEngine.steppedSleep(ms, stopped = { isStopped }) },
+            )
 
     /** The exact two-arg signature WorkManager's default WorkerFactory
      *  reflects on when the native module enqueues the request. */
@@ -86,7 +95,7 @@ class DownloadWorker(
 
         return try {
             setForeground(createForegroundInfo(record))
-            transfer(record)
+            run(record)
         } catch (ssl: SSLPeerUnverifiedException) {
             // A tampering peer is not a network blip: requeueing would spin
             // WorkManager against a server that will never verify. Fail the
@@ -98,8 +107,11 @@ class DownloadWorker(
             }
             Result.failure()
         } catch (io: IOException) {
-            // Network died mid-transfer. WorkManager owns the backoff, so a
-            // retry here is the OS-level exponential curve, not our own.
+            // Backstop for IO escaping [attemptTransfer] — the engine's own
+            // catch turns attempt-internal failures into transients with
+            // in-process backoff. What reaches here is an IO the attempt
+            // could not attribute to itself, and WorkManager retrying it is
+            // the safest move left.
             requeue(id, io.message)
             Result.retry()
         } catch (ce: CancellationException) {
@@ -138,7 +150,55 @@ class DownloadWorker(
         }
     }
 
-    private suspend fun transfer(record: DownloadEntity): Result =
+    /**
+     * Drive one worker run through the engine loop. The engine owns transient
+     * retry policy — exponential backoff, the 120 s no-byte give-up feeding
+     * [DownloadEntity.stalledRuns]; this method owns the row's moves:
+     * QUEUED reschedules land via [DownloadStore.endTransientRun] (never a
+     * FAILED while re-running is possible — see requeue()), and the stall
+     * terminal is the one FAILED the loop can produce.
+     */
+    private suspend fun run(record: DownloadEntity): Result {
+        // Claim the row before the engine spins: the old unconditional
+        // progress write promoted QUEUED → RUNNING implicitly; now progress
+        // is a RUNNING-guarded row count, so the claim must be explicit.
+        // 0 here means somebody settled the row (paused/cancelled) between
+        // doWork's check and this write — nothing live is left to do.
+        if (store.casStatus(record.id, listOf(DownloadState.QUEUED, DownloadState.RUNNING), DownloadState.RUNNING) == 0) {
+            return Result.success()
+        }
+        val end =
+            engine.run(
+                stopped = { isStopped },
+                stalledRuns = { store.get(record.id)?.stalledRuns ?: 0 },
+                attempt = { attemptTransfer(record) },
+                reschedule = { reason, runs ->
+                    // Row-count result: 0 means a pause/cancel settled the row
+                    // while we were between attempts — leave it as the caller
+                    // wrote it instead of resurrecting it QUEUED, and end the
+                    // run as Stopped.
+                    store.endTransientRun(record.id, runs, DownloadState.QUEUED, reason) > 0
+                },
+                failStalled = {
+                    // RUNNING-guarded like every terminal write: a row settled
+                    // by its caller (paused/cancelled) must not read FAILED.
+                    store.casStatus(record.id, listOf(DownloadState.RUNNING), DownloadState.FAILED, DownloadEngine.STALLED_ERROR)
+                },
+            )
+        return when (end) {
+            is End.Completed -> Result.success()
+            is End.Stopped -> Result.success()
+            is End.Failed -> Result.failure()
+            is End.Rescheduled -> Result.retry()
+        }
+    }
+
+    /**
+     * ONE attempt: request → status dispatch → copy bytes → verify. Returns
+     * an [Attempt]; row writes for terminal outcomes happen in here, while
+     * what happens next (retry, give up, reschedule) is the engine's call.
+     */
+    private suspend fun attemptTransfer(record: DownloadEntity): Attempt =
         withContext(Dispatchers.IO) {
             val dest = File(record.destination)
             dest.parentFile?.mkdirs()
@@ -176,173 +236,190 @@ class DownloadWorker(
             // thing a blocking socket read actually reacts to.
             currentCoroutineContext().job.invokeOnCompletion { currentCall?.cancel() }
 
-            val call = client.newCall(request)
-            currentCall = call
-            val response =
-                try {
-                    call.await()
-                } finally {
-                    currentCall = null
-                }
-            response.use { res ->
-                // A 200 on a resume means the server ignored our Range and is
-                // sending the WHOLE file. Appending it to the partial is how a
-                // right-length, wrong-contents GGUF happens, so the partial is
-                // dropped and this response is written from zero. No retry:
-                // the body already in hand IS the file, so re-requesting it
-                // would cost a full WorkManager backoff cycle for nothing.
-                if (res.code == 200 && existing > 0) {
-                    dest.delete()
-                    existing = 0
-                    store.mutate(record.id) { it.copy(downloadedBytes = 0L) }
-                }
-
-                when {
-                    res.code == 401 || res.code == 403 -> {
-                        fail(record, authMessage(res.code), if (res.code == 401) "authentication" else null)
-                        return@withContext Result.failure()
+            // Byte bookkeeping for the engine's progress signals: attemptStart
+            // is the resume offset this request was sent with (post
+            // resume-guard, since a fresh 200 discards the offset), and
+            // `written` counts absolute file bytes so the catch below can
+            // report the NET new bytes an interrupted attempt produced.
+            var attemptStart = 0L
+            var written = 0L
+            try {
+                val call = client.newCall(request)
+                currentCall = call
+                val response =
+                    try {
+                        call.await()
+                    } finally {
+                        currentCall = null
                     }
-
-                    res.code == 408 || res.code == 429 || res.code in 500..599 -> {
-                        // Rate limited, the server is unwell, or our request
-                        // timed out (408 is OUR slowness). All retryable, so
-                        // the row must read QUEUED — see requeue().
-                        requeue(record.id, "HTTP ${res.code}")
-                        return@withContext Result.retry()
-                    }
-
-                    res.code == 416 -> {
-                        // Our copy is longer than the server's: the file
-                        // changed upstream. Delete it and fail for real —
-                        // returning retry() here would leave the row saying
-                        // "failed" while WorkManager quietly re-runs us.
+                response.use { res ->
+                    // A 200 on a resume means the server ignored our Range and is
+                    // sending the WHOLE file. Appending it to the partial is how a
+                    // right-length, wrong-contents GGUF happens, so the partial is
+                    // dropped and this response is written from zero. No retry:
+                    // the body already in hand IS the file, so re-requesting it
+                    // would cost a full WorkManager backoff cycle for nothing.
+                    if (res.code == 200 && existing > 0) {
                         dest.delete()
+                        existing = 0
+                        store.mutate(record.id) { it.copy(downloadedBytes = 0L) }
+                    }
+                    attemptStart = existing
+                    written = existing
+
+                    when {
+                        res.code == 401 || res.code == 403 -> {
+                            val code = if (res.code == 401) "authentication" else null
+                            return@withContext failAttempt(record, authMessage(res.code), code)
+                        }
+
+                        res.code == 408 || res.code == 429 || res.code in 500..599 -> {
+                            // Rate limited, the server is unwell, or our request
+                            // timed out (408 is OUR slowness). Transient: the
+                            // engine backs off and re-attempts in-process, so
+                            // the row stays RUNNING — no QUEUED write here.
+                            return@withContext Attempt.Transient("HTTP ${res.code}", 0)
+                        }
+
+                        res.code == 416 -> {
+                            // Our copy is longer than the server's: the file
+                            // changed upstream. Delete it and fail for real —
+                            // returning retry() here would leave the row saying
+                            // "failed" while WorkManager quietly re-runs us.
+                            dest.delete()
+                            return@withContext failAttempt(record, "The file changed on the server — tap Retry", null)
+                        }
+
+                        res.code in 400..499 -> {
+                            // Other client errors (402, 404, ...): no amount of
+                            // retrying changes them — the request itself is the
+                            // problem. The reference names these plainly
+                            // ("Client error: N", DownloadEngine.kt respond());
+                            // 401/403 above keep our richer auth copy instead.
+                            return@withContext failAttempt(record, "Client error: ${res.code}", null)
+                        }
+
+                        res.code != 200 && res.code != 206 -> {
+                            // Anything else is not a transfer condition (3xx
+                            // served raw, protocol garbage): name it the way the
+                            // reference does instead of a bare "HTTP N".
+                            return@withContext failAttempt(record, "Unexpected response: ${res.code}", null)
+                        }
+                    }
+
+                    // Everything below this line writes bytes, so the status is
+                    // known good and there is nothing left to splice.
+                    val append = res.code == 206 && existing > 0
+                    // A body-less 200/206 is protocol garbage: it still gets a
+                    // FAILED row like every other terminal lane, or the row
+                    // would sit RUNNING with no copy while doWork fails.
+                    val body = res.body ?: return@withContext failAttempt(record, "Empty response body", null)
+
+                    // The server's total, not the catalog's: a file re-quantized
+                    // upstream (or an LFS object that changed) would otherwise
+                    // report Size mismatch forever and could never finish. The
+                    // end-of-transfer check below compares against THIS value.
+                    val contentLength = body.contentLength()
+                    val serverTotal =
+                        when {
+                            // chunked/Xet: keep the catalog's size
+                            contentLength <= 0 -> record.expectedTotal
+
+                            // 206: the response is only the remainder
+                            append -> existing + contentLength
+
+                            else -> contentLength
+                        }
+                    if (serverTotal > 0 && serverTotal != record.expectedTotal) {
+                        store.mutate(record.id) { it.copy(expectedTotal = serverTotal) }
+                    }
+                    val bodyStream = body.byteStream()
+                    RandomAccessFile(dest, "rw").use { raf ->
+                        if (append) raf.seek(existing)
+                        val buffer = ByteArray(64 * 1024)
+                        var lastPublish = 0L
+                        while (true) {
+                            if (isStopped) {
+                                // Paused or cancelled from JS. Keep every byte we
+                                // have; the partial is the whole point.
+                                store.mutate(record.id) { it.copy(downloadedBytes = written) }
+                                return@withContext Attempt.Stopped
+                            }
+                            val read = bodyStream.read(buffer)
+                            if (read == -1) break
+                            raf.write(buffer, 0, read)
+                            written += read
+
+                            // Throttle the durable write to ~1 Hz. The JS side
+                            // reads progress once a second at most, and a write
+                            // per 64 KB chunk would be ~40/s per download.
+                            val now = System.currentTimeMillis()
+                            if (now - lastPublish > PROGRESS_INTERVAL_MS) {
+                                lastPublish = now
+                                // RUNNING-guarded row-count write: 0 means the
+                                // row left RUNNING under us (a pause/cancel
+                                // raced this publish) — stop rather than fight.
+                                if (store.writeProgress(record.id, written, serverTotal) == 0) {
+                                    return@withContext Attempt.Stopped
+                                }
+                                // Refresh the OS notification on the same 1 Hz
+                                // cadence. It was built once before transfer(),
+                                // and setProgress(indeterminate = true) ignores
+                                // its percent argument — so the bar sat at 0%
+                                // for a 4 GB pull while the card showed 90%.
+                                setForeground(
+                                    createForegroundInfo(
+                                        record.copy(
+                                            status = DownloadState.RUNNING,
+                                            downloadedBytes = written,
+                                            expectedTotal = serverTotal,
+                                        ),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+
+                    // Trust-but-verify. A short file that reads as complete hands
+                    // the user a model that loads and misbehaves. Compared against
+                    // the SERVER's total (catalog when the server reported none):
+                    // a truncated fixed-length body raises an IOException from
+                    // OkHttp before it reaches here.
+                    val actual = if (dest.exists()) dest.length() else 0L
+                    if (serverTotal > 0 && actual != serverTotal) {
+                        val mismatch = "Size mismatch ($actual of $serverTotal bytes)"
                         store.mutate(record.id) {
                             it.copy(
                                 status = DownloadState.FAILED,
-                                error = "The file changed on the server — tap Retry",
+                                downloadedBytes = actual,
+                                error = mismatch,
                             )
                         }
-                        return@withContext Result.failure()
+                        return@withContext Attempt.Failed(mismatch)
                     }
 
-                    res.code in 400..499 -> {
-                        // Other client errors (402, 404, ...): no amount of
-                        // retrying changes them — the request itself is the
-                        // problem. The reference names these plainly
-                        // ("Client error: N", DownloadEngine.kt respond());
-                        // 401/403 above keep our richer auth copy instead.
-                        fail(record, "Client error: ${res.code}", null)
-                        return@withContext Result.failure()
-                    }
-
-                    res.code != 200 && res.code != 206 -> {
-                        // Anything else is not a transfer condition (3xx
-                        // served raw, protocol garbage): name it the way the
-                        // reference does instead of a bare "HTTP N".
-                        fail(record, "Unexpected response: ${res.code}", null)
-                        return@withContext Result.failure()
-                    }
-                }
-
-                // Everything below this line writes bytes, so the status is
-                // known good and there is nothing left to splice.
-                val append = res.code == 206 && existing > 0
-                val body = res.body ?: return@withContext Result.failure()
-
-                // The server's total, not the catalog's: a file re-quantized
-                // upstream (or an LFS object that changed) would otherwise
-                // report Size mismatch forever and could never finish. The
-                // end-of-transfer check below compares against THIS value.
-                val contentLength = body.contentLength()
-                val serverTotal =
-                    when {
-                        // chunked/Xet: keep the catalog's size
-                        contentLength <= 0 -> record.expectedTotal
-
-                        // 206: the response is only the remainder
-                        append -> existing + contentLength
-
-                        else -> contentLength
-                    }
-                if (serverTotal > 0 && serverTotal != record.expectedTotal) {
-                    store.mutate(record.id) { it.copy(expectedTotal = serverTotal) }
-                }
-                val bodyStream = body.byteStream()
-                RandomAccessFile(dest, "rw").use { raf ->
-                    if (append) raf.seek(existing)
-                    val buffer = ByteArray(64 * 1024)
-                    var written = if (append) existing else 0L
-                    var lastPublish = 0L
-                    while (true) {
-                        if (isStopped) {
-                            // Paused or cancelled from JS. Keep every byte we
-                            // have; the partial is the whole point.
-                            store.mutate(record.id) { it.copy(downloadedBytes = written) }
-                            return@withContext Result.success()
-                        }
-                        val read = bodyStream.read(buffer)
-                        if (read == -1) break
-                        raf.write(buffer, 0, read)
-                        written += read
-
-                        // Throttle the durable write to ~1 Hz. The JS side
-                        // reads progress once a second at most, and a write
-                        // per 64 KB chunk would be ~40/s per download.
-                        val now = System.currentTimeMillis()
-                        if (now - lastPublish > PROGRESS_INTERVAL_MS) {
-                            lastPublish = now
-                            store.mutate(record.id) {
-                                it.copy(
-                                    status = DownloadState.RUNNING,
-                                    downloadedBytes = written,
-                                )
-                            }
-                            // Refresh the OS notification on the same 1 Hz
-                            // cadence. It was built once before transfer(),
-                            // and setProgress(indeterminate = true) ignores
-                            // its percent argument — so the bar sat at 0%
-                            // for a 4 GB pull while the card showed 90%.
-                            setForeground(
-                                createForegroundInfo(
-                                    record.copy(
-                                        status = DownloadState.RUNNING,
-                                        downloadedBytes = written,
-                                        expectedTotal = serverTotal,
-                                    ),
-                                ),
-                            )
-                        }
-                    }
-                }
-
-                // Trust-but-verify. A short file that reads as complete hands
-                // the user a model that loads and misbehaves. Compared against
-                // the SERVER's total (catalog when the server reported none):
-                // a truncated fixed-length body raises an IOException from
-                // OkHttp before it reaches here.
-                val actual = if (dest.exists()) dest.length() else 0L
-                if (serverTotal > 0 && actual != serverTotal) {
                     store.mutate(record.id) {
                         it.copy(
-                            status = DownloadState.FAILED,
+                            status = DownloadState.COMPLETED,
                             downloadedBytes = actual,
-                            error = "Size mismatch ($actual of $serverTotal bytes)",
+                            expectedTotal = serverTotal,
+                            error = null,
+                            errorCode = null,
                         )
                     }
-                    return@withContext Result.failure()
+                    Attempt.Finished
                 }
-
-                store.mutate(record.id) {
-                    it.copy(
-                        status = DownloadState.COMPLETED,
-                        downloadedBytes = actual,
-                        expectedTotal = serverTotal,
-                        error = null,
-                        errorCode = null,
-                    )
-                }
-                Result.success()
+            } catch (ssl: SSLPeerUnverifiedException) {
+                // Permanent by design (caught terminal in doWork): rethrow so
+                // the generic IO catch below can never requeue it.
+                throw ssl
+            } catch (io: IOException) {
+                // Network died mid-attempt (call setup, blocked read, closed
+                // socket). Transient, with the net bytes this attempt moved:
+                // the engine turns that into backoff / stall accounting and
+                // re-attempts in-process — WorkManager retry() is no longer
+                // the curve for a dead connection.
+                Attempt.Transient(io.message ?: "Network error", written - attemptStart)
             }
         }
 
@@ -358,6 +435,18 @@ class DownloadWorker(
                 errorCode = code,
             )
         }
+    }
+
+    /** Terminal lanes in one step: settle the row, then return the engine the
+     *  same message as the [Attempt.Failed] payload (payload kept for
+     *  [End.Failed] tests, the row copy is the user-visible one). */
+    private suspend fun failAttempt(
+        record: DownloadEntity,
+        message: String,
+        code: String?,
+    ): Attempt.Failed {
+        fail(record, message, code)
+        return Attempt.Failed(message)
     }
 
     private fun authMessage(code: Int): String =

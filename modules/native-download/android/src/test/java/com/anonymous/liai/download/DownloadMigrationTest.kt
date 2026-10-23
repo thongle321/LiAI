@@ -8,21 +8,20 @@ import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Migration baseline (ticket 01, .scratch/download-native-parity).
+/** Migration suite (ticket 01 baseline + ticket 04 v1→v2, .scratch/download-native-parity).
  *
  *  The v1 database is built BY HAND — the exact DDL Room generates for the
- *  current [DownloadEntity] (`version = 1, exportSchema = false`, so there
- *  is no exported schema file to load) — which is the same idiom
- *  pocketpal-ai's DownloadMigrationTest.kt:24-40 uses. Tickets 04/05 add
- *  `MIGRATION_1_2` (validator columns + stalledRuns) to DownloadDatabase and
- *  extend this suite to: rebuild the seed at user_version = 1, open with the
- *  migration attached, and assert every surviving row carries empty
+ *  current [DownloadEntity] (`exportSchema = false`, so there is no exported
+ *  schema file to load) — the same idiom pocketpal-ai's
+ *  DownloadMigrationTest.kt:24-40 uses. The test below opens that seed with
+ *  `MIGRATION_1_2` attached and asserts every surviving row carries empty
  *  validators / 0 stalledRuns.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -69,12 +68,14 @@ class DownloadMigrationTest {
     }
 
     @Test
-    fun rowsSurviveBeingOpenedByTheCurrentSchema() = runBlocking {
-        // No addMigrations today: the shipped database IS version 1. The
-        // assertion is the migration-test skeleton — the opening/build steps
-        // tickets 04/05 keep, with MIGRATION_1_2 added to the builder.
+    fun migrationToV2CarriesRowsWithValidatorDefaults() = runBlocking {
+        // The entity is version 2 with MIGRATION_1_2 declared on
+        // DownloadDatabase; the hand-built v1 file enters through it and the
+        // rows must survive untouched with empty validator/stall history —
+        // nothing invented for rows that predate the columns.
         val database = Room.databaseBuilder(context, DownloadDatabase::class.java, path.absolutePath)
             .setDriver(BundledSQLiteDriver())
+            .addMigrations(DownloadDatabase.MIGRATION_1_2)
             .build()
         val dao = database.downloadDao()
 
@@ -84,10 +85,15 @@ class DownloadMigrationTest {
         assertEquals(1_000L, inFlight.expectedTotal)
         assertEquals("\"abc\"", inFlight.ifRange)
         assertEquals("Bearer faketoken", inFlight.headers["Authorization"])
+        assertEquals(0, inFlight.stalledRuns)
+        assertNull(inFlight.etag)
+        assertNull(inFlight.totalBytes)
+        assertEquals(0L, inFlight.createdAt)
 
         val done = dao.get("done")!!
         assertEquals(DownloadState.COMPLETED, done.status)
         assertEquals(2_000L, done.downloadedBytes)
+        assertEquals(0, done.stalledRuns)
         database.close()
     }
 

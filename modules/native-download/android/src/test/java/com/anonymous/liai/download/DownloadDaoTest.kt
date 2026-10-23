@@ -111,4 +111,119 @@ class DownloadDaoTest {
             )
         }
     }
+
+    // --- Ticket 04 surface (reference DownloadDao.kt semantics) ------------
+
+    @Test
+    fun casStatusClaimsARowFromAnEntryState() = runBlocking {
+        dao.upsert(downloadRow("a", "/m/a.gguf"))
+
+        val claimed = dao.casStatus(
+            "a",
+            entryStates = listOf(DownloadState.QUEUED, DownloadState.RUNNING),
+            status = DownloadState.RUNNING,
+        )
+
+        assertEquals(1, claimed)
+        assertEquals(DownloadState.RUNNING, dao.get("a")!!.status)
+    }
+
+    @Test
+    fun casStatusIgnoresARowOutsideTheEntryStates() = runBlocking {
+        dao.upsert(downloadRow("a", "/m/a.gguf", status = DownloadState.PAUSED))
+
+        val claimed = dao.casStatus(
+            "a",
+            entryStates = listOf(DownloadState.QUEUED, DownloadState.RUNNING),
+            status = DownloadState.FAILED,
+            error = "late write",
+        )
+
+        // The compare-and-set is the whole point: a row the user paused is
+        // invisible to a stale run trying to write a terminal state.
+        assertEquals(0, claimed)
+        val row = dao.get("a")!!
+        assertEquals(DownloadState.PAUSED, row.status)
+        assertNull(row.error)
+    }
+
+    @Test
+    fun writeProgressAdvancesBytesAndHealsStalledRuns() = runBlocking {
+        dao.upsert(downloadRow("a", "/m/a.gguf", status = DownloadState.RUNNING, expectedTotal = 4_000))
+        dao.upsert(dao.get("a")!!.copy(stalledRuns = 2))
+
+        val written = dao.writeProgress("a", 500, 4_000L)
+
+        assertEquals(1, written)
+        val row = dao.get("a")!!
+        assertEquals(500L, row.downloadedBytes)
+        assertEquals(0, row.stalledRuns)
+    }
+
+    @Test
+    fun writeProgressRefusesANonRunningRow() = runBlocking {
+        dao.upsert(downloadRow("a", "/m/a.gguf", status = DownloadState.PAUSED))
+
+        val written = dao.writeProgress("a", 500, 4_000L)
+
+        assertEquals(0, written)
+        assertEquals(0L, dao.get("a")!!.downloadedBytes)
+    }
+
+    @Test
+    fun writeValidatorsPinsEtagTotalAndOffset() = runBlocking {
+        dao.upsert(downloadRow("a", "/m/a.gguf"))
+
+        val written = dao.writeValidators("a", "\"abc\"", 4_000L, 100)
+
+        assertEquals(1, written)
+        val row = dao.get("a")!!
+        assertEquals("\"abc\"", row.etag)
+        assertEquals(4_000L, row.totalBytes)
+        assertEquals(100L, row.downloadedBytes)
+    }
+
+    @Test
+    fun byDestinationOrdersNewestFirst() = runBlocking {
+        dao.upsert(downloadRow("a", "/m/shared.gguf").copy(createdAt = 1_000))
+        dao.upsert(downloadRow("b", "/m/shared.gguf").copy(createdAt = 2_000))
+
+        // Ticket 05's superseded-record logic walks from the newest sibling.
+        assertEquals(listOf("b", "a"), dao.byDestination("/m/shared.gguf").map { it.id })
+    }
+
+    @Test
+    fun endTransientRunReschedulesWithTheStallCount() = runBlocking {
+        dao.upsert(downloadRow("a", "/m/a.gguf", status = DownloadState.RUNNING))
+
+        val written = dao.endTransientRun(
+            "a",
+            stalledRuns = 3,
+            status = DownloadState.QUEUED,
+            error = "timeout",
+        )
+
+        assertEquals(1, written)
+        val row = dao.get("a")!!
+        assertEquals(DownloadState.QUEUED, row.status)
+        assertEquals(3, row.stalledRuns)
+        assertEquals("timeout", row.error)
+    }
+
+    @Test
+    fun endTransientRunRefusesANonRunningRow() = runBlocking {
+        // A pause settled the row first; a late reschedule must not
+        // resurrect it QUEUED.
+        dao.upsert(downloadRow("a", "/m/a.gguf", status = DownloadState.PAUSED))
+
+        val written = dao.endTransientRun(
+            "a",
+            stalledRuns = 3,
+            status = DownloadState.QUEUED,
+            error = "timeout",
+        )
+
+        assertEquals(0, written)
+        assertEquals(DownloadState.PAUSED, dao.get("a")!!.status)
+    }
 }

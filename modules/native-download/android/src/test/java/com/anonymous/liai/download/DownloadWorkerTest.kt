@@ -82,7 +82,17 @@ class DownloadWorkerTest {
         return record
     }
 
-    private fun worker(client: OkHttpClient = OkHttpClient()): DownloadWorker =
+    /** Real clock, instant sleeper: in-process recovery does not pay a
+     *  literal 2 s backoff inside the suite. */
+    private val fastEngine = DownloadEngine(
+        clock = { System.currentTimeMillis() },
+        sleeper = { },
+    )
+
+    private fun worker(
+        client: OkHttpClient = OkHttpClient(),
+        engine: DownloadEngine = fastEngine,
+    ): DownloadWorker =
         TestListenableWorkerBuilder<DownloadWorker>(context)
             .setInputData(workDataOf(DownloadWorker.KEY_ID to ID))
             .setWorkerFactory(object : WorkerFactory() {
@@ -90,38 +100,49 @@ class DownloadWorkerTest {
                     appContext: Context,
                     workerClassName: String,
                     workerParameters: WorkerParameters,
-                ) = DownloadWorker(appContext, workerParameters, client)
+                ) = DownloadWorker(appContext, workerParameters, client, engine)
             })
             .build()
 
     private suspend fun row(): DownloadEntity = store.get(ID)!!
 
-    // --- Transient lane ---------------------------------------------------
+    // --- Transient lane (in-process, ticket 04) ----------------------------
 
     @Test
-    fun requestTimeoutRequeuesInsteadOfFlatFailing() = runBlocking {
+    fun aTimeoutRecoveringIntoAnHonestResponseCompletesInsideOneRun() = runBlocking {
         seed()
         server.enqueue(MockResponse().setResponseCode(408).setBody("timeout"))
 
         // noRetryOnFailure: the default client transparently re-runs a 408
         // and would consume queued responses before our transfer sees one.
-        val result = worker(noRetryOnFailure).doWork()
+        val content = ByteArray(1_000) { (it % 251).toByte() }
+        server.enqueue(MockResponse().setResponseCode(200).setBody(okio.Buffer().write(content)))
 
-        assertEquals(ListenableWorker.Result.retry(), result)
-        assertEquals(DownloadState.QUEUED, row().status)
-        assertEquals("HTTP 408", row().error)
+        val result = worker(noRetryOnFailure, fastEngine).doWork()
+
+        // The transient is handled IN-PROCESS (fast engine, no WorkManager
+        // backoff): the next attempt re-requests and completes the row.
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(DownloadState.COMPLETED, row().status)
+        assertEquals(1_000L, row().downloadedBytes)
+        assertEquals(2, server.requestCount)
     }
 
     @Test
-    fun serverErrorStaysInTheTransientLane() = runBlocking {
+    fun aTransientDoesNotEndTheRunSoTheNextAttemptStillWritesTheCopy() = runBlocking {
         seed()
         server.enqueue(MockResponse().setResponseCode(500).setBody("boom"))
+        server.enqueue(MockResponse().setResponseCode(404).setBody("gone"))
 
         val result = worker().doWork()
 
-        assertEquals(ListenableWorker.Result.retry(), result)
-        assertEquals(DownloadState.QUEUED, row().status)
-        assertEquals("HTTP 500", row().error)
+        // The run did not stop at the 500 (old behavior: requeue +
+        // Result.retry, row QUEUED "HTTP 500"): the second attempt executed
+        // and its terminal copy won. Proves transients stay in the loop here.
+        assertEquals(ListenableWorker.Result.failure(), result)
+        assertEquals(DownloadState.FAILED, row().status)
+        assertEquals("Client error: 404", row().error)
+        assertEquals(2, server.requestCount)
     }
 
     // --- SSL terminal, never retried --------------------------------------

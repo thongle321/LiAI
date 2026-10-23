@@ -240,7 +240,9 @@ in brackets.
   (92-99); Failed → `dao.fail(keptBytes)` (100-103); GaveUp →
   `stalledRuns = wroteBytes ? 0 : row.stalledRuns + 1`, and at
   `MAX_STALLED_RUNS` (5) `dao.fail(STALLED_ERROR)` else QUEUED + RESCHEDULE
-  (104-114). [ticket 04]
+  (104-114). [ticket 04 — RESOLVED 2026-10-23: ported as the engine's
+  give-up branch; the fail-then-terminal path is `failStalled` + `End.Failed`,
+  the requeue path is `endTransientRun` + `End.Rescheduled` (never dao.fail)]
 - `Transfer.run()` 131-156: `adopt()` first (132); one in-run restart at most
   → `part.delete()` + `End.Failed(REMOTE_CHANGED_ERROR)` and the void/etag
   state resets (133-146); backoff loop: resets to `INITIAL_BACKOFF_MS` when
@@ -308,7 +310,22 @@ scheduling fall through to the WorkManager branch
   the final path; no `.part`, no atomic rename, no `adopt()`. [ticket 05]
 - `DownloadWorker.kt:186-189` — 429/5xx requeue (row forced to QUEUED) +
   `Result.retry()`; WorkManager owns the backoff curve, the engine has no
-  in-process attempt loop. [ticket 04]
+  in-process attempt loop. [ticket 04 — RESOLVED 2026-10-23: the engine loop
+  landed (`DownloadEngine.kt`); 408/429/5xx and attempt-internal IOExceptions
+  now retry in-process with 2 s → 30 s exponential backoff (reset on
+  progress), the 120 s stall watchdog feeds `stalledRuns` (0-byte run
+  increments, writing run heals; ≥ 5 → FAILED "Download stalled: no data
+  received", else `endTransientRun` → QUEUED reschedule), and WorkManager's
+  `Result.retry()` is the process-death backstop only. Silver: the
+  `stalledRuns` accounting splits like the reference (`endTransientRun` /
+  `writeProgress`-heals); divergence recorded — plain transients keep the row
+  RUNNING rather than pausing through QUEUED requeues mid-run. Suite at 36
+  green (16 DAO + 10 engine-loop + 1 migration + 9 worker); code-review
+  hardening: 250 ms stop-aware sleep steps real (`steppedSleep` + worker
+  default engine), `lastByteAt` re-anchors on marginal progress only (stale-
+  offset rewrites still give up), RUNNING-guarded `endTransientRun` consumed
+  as a Boolean (lost reschedule race → `End.Stopped`), RUNNING-guarded
+  `failStalled`.]
 - `DownloadEntity.kt` — Room v1 (112), columns
   id/modelId/url/fileName/destination/expectedTotal/downloadedBytes/status/
   error/errorCode/ifRange/headers (:50); no `createdAt`/`etag`/`totalBytes`/
@@ -316,7 +333,12 @@ scheduling fall through to the WorkManager branch
   `writeProgress` / `writeValidators` / `byDestination` / `endTransientRun`
   (the reference has all five: `DownloadDao.kt:18,30,45,48,54`; its
   `DownloadEntity.kt:17` carries `createdAt`). Tickets 04/05 therefore also
-  port the DAO surface and add the v1→v2 migration.
+  port the DAO surface and add the v1→v2 migration. [ticket 04 (2026-10-23):
+  the columns + the five DAO methods landed and the DB is v2 via
+  `MIGRATION_1_2` (BundledSQLiteDriver-compatible `migrate(SQLiteConnection)`);
+  `createdAt` is written at enqueue from `NativeDownloadModule` and preserved
+  on REPLACE; ticket 05 still owes the supersede-by-destination consumer of
+  `byDestination`/`createdAt` and any `writeValidators` wiring into responses]
 
 ## Known gaps, accepted for now
 

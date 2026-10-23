@@ -25,12 +25,14 @@ import { keyboardOcclusion } from "@/utils/keyboard.ts";
 
 /** Animated style that translates a bottom-anchored view up by the keyboard.
  *
- * `insetsBottom` MUST be the view's own bottom anchor, and 0 for anything
- * anchored at the physical screen bottom. Passing insets.bottom for such a
- * view is the bug that kept the chat composer under the keyboard: it is
- * anchored at 0, so it has to rise by the keyboard's full height. utils/keyboard.ts
- * explains the arithmetic; the short version is that the keyboard height
- * already spans the navigation bar.
+ * `insetsBottom` MUST be the view's own bottom anchor — its distance above
+ * the physical screen bottom. 0 is right ONLY when the view rests on the
+ * physical bottom; anything anchored inside a tab column rests above the
+ * tab bar, which stays mounted while the keyboard opens, so it must pass
+ * the bar's slot (insets.bottom + measured tabBarHeight) or it rises a full
+ * slot too far and floats above the keyboard. utils/keyboard.ts explains
+ * the arithmetic; the short version is that the keyboard height already
+ * spans the navigation bar.
  */
 export function useKeyboardLift(insetsBottom = 0) {
   const keyboard = useReanimatedKeyboardAnimation();

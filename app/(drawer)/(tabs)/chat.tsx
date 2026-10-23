@@ -237,12 +237,16 @@ export default function ChatRoute() {
   // when editing either side.
   const ready = connection === "up";
   // The empty placeholder ("Activate Model To Get Started" / "No Models
-  // Available") is list content (PocketParity, ChatView.tsx:990), so the
-  // empty view scrolls instead of being pinned as an overlay. The composer
-  // clearance is a marginBottom on the placeholder (PocketPal's
-  // bottomComponentHeight), not a keyboard inset — that is what keeps it
-  // from re-centring as the keyboard rises. It renders only with no model
-  // and no conversation.
+  // Available") is an overlay BESIDE the list, as it was before the
+  // ListEmptyComponent experiment: as scroll content it sits inside
+  // KeyboardChatScrollView's dynamic contentInset, and a centred card
+  // re-centres while the keyboard rises — precisely the reported "empty
+  // view moves with the keyboard". As an overlay the box it centres in
+  // never changes, so nothing can move it; the keyboard covers what it
+  // covers, like pocketpal-ai's does. PocketPal's ListEmptyComponent
+  // placement is a forced divergence for us (docs/specs/2026-09-27-pocketpal-
+  // keyboard-ui-parity.md): their list adds no keyboard inset, ours does.
+  // It renders only with no model and no conversation.
   const emptyState = messages.length === 0 && query.trim() === "";
   // PocketPal's single-source gate: the placeholder asks whether a MODEL is
   // active, not whether the transport is healthy. Gating it on `connection`
@@ -331,31 +335,17 @@ export default function ChatRoute() {
   // replaced by its measured height (store/keyboard.ts), so a class change
   // cannot silently drift the compensation again.
   const tabBarHeight = useKeyboardStore((s) => s.tabBarHeight);
+  // The bar's slot: the distance from any bottom-anchored view in this
+  // column to the physical screen bottom. The bar stays MOUNTED while the
+  // keyboard opens — PocketPal parity ("nothing unmounts"; the
+  // edge-to-edge keyboard simply covers it, pane by pane) — so this value
+  // is the SAME in both keyboard states and nothing on this screen is
+  // keyed to a store flag any more. The only responses to the keyboard on
+  // this route are Reanimated lifts; that invariance is what removes both
+  // reported symptoms (the compensating step and the unmount's column
+  // growth were the ones that made the empty card move and the composer
+  // flash).
   const keyboardOffset = insets.bottom + tabBarHeight;
-  // The tab bar renders null while the keyboard is up ((tabs)/_layout.tsx:42),
-  // so the screen — and this column with it — GROWS by exactly that much. A
-  // vertically centred child would then slide down by half of it, which is
-  // what made the "No Models Available" card look like it moved when the
-  // keyboard opened. The keyboard height is not the cause; this is. Give the
-  // two column-anchored overlays the same bottom back so their centring box is
-  // identical in both states. The screen-anchored ones need nothing.
-  //
-  // PocketPal solves this by NOT HAVING the moving part: their navigation is
-  // a drawer, so nothing unmounts on keyboard open and their centring box is
-  // invariant by construction rather than by compensation
-  // (pocketpal-ai/src/components/ChatView/ChatView.tsx:1175, styles.ts:70-75).
-  // We keep the tab bar, so the column grows by one bar slot — and that
-  // growth is a STEP, not a ramp: `keyboardVisible` is a JS-thread store flag
-  // that flips once, and `(tabs)/_layout.tsx` returns null in that commit.
-  //
-  // So the compensation MUST be a step in that same commit. An earlier
-  // attempt animated it off `keyboard.height` to "match the composer's
-  // curve" and that was wrong in a way this comment exists to prevent: for
-  // the whole rise the overlay was a bar slot too tall, so the centred card
-  // sat low and then snapped up. A step matched to a ramp is a worse version
-  // of the flash it was meant to remove.
-  const keyboardVisible = useKeyboardStore((s) => s.isVisible);
-  const tabBarCompensation = keyboardVisible ? keyboardOffset : 0;
   const [composerHeight, setComposerHeight] = useState(0);
   // Hold the list's keyboard inset steady while a sheet is open.
   const freeze = useSharedValue(false);
@@ -371,11 +361,12 @@ export default function ChatRoute() {
   // pushed up and the response has somewhere to appear.
   const blankSpace = useSharedValue(0);
 
-  // The composer floats and lifts ITSELF — MessageInput calls useKeyboardLift,
-  // so there is no wrapper box between this screen and the input. The only
-  // thing left to lift here is the jump-to-latest overlay, and it uses the
-  // same hook so the two rise welded together instead of tracking the
-  // keyboard independently and drifting apart.
+  // The composer floats and lifts ITSELF — MessageInput calls useKeyboardLift
+  // with the anchor handed to it below, so there is no wrapper box between
+  // this screen and the input. The overlays that must ride WITH it (the
+  // jump pill, the snackbar/banner row) use the same hook and the SAME
+  // anchor, so they rise welded together instead of tracking the keyboard
+  // independently and drifting apart.
   //
   // No KeyboardAvoidingView on this screen: the library's own guide lists four
   // ways it falls short on chat layouts and ships KeyboardChatScrollView for
@@ -384,7 +375,13 @@ export default function ChatRoute() {
   // the accessory follows the drag, but it is not exported in 1.21.9 (the docs
   // are on main/1.22). Interactive dismissal still works via keyboardDismissMode
   // on the scroll view; only the composer tracking the finger needs 1.22+.
-  const composerLift = useKeyboardLift();
+  //
+  // The anchor is keyboardOffset, not the default 0: with the bar mounted the
+  // composer rests keyboardOffset above the physical screen bottom, so it has
+  // to rise by the keyboard height MINUS that corridor (utils/keyboard.ts
+  // documents the arithmetic). Passing 0 now OVERSHOOTS by exactly a bar
+  // slot and parks the composer floating above the keyboard.
+  const composerLift = useKeyboardLift(keyboardOffset);
 
   const handleComposerHeight = useCallback(
     (event: LayoutChangeEvent) => {
@@ -512,21 +509,6 @@ export default function ChatRoute() {
             freeze={freeze}
             extraContentPadding={extraContentPadding}
             blankSpace={blankSpace}
-            listEmpty={
-              showPlaceholder ? (
-                <ChatEmptyPlaceholder
-                  bottomInset={composerHeight + tabBarCompensation}
-                  onSelectModel={() => setPickerOpen(true)}
-                />
-              ) : greeting !== undefined && activeCompanion !== undefined ? (
-                // The greeting bubble is LIST content (PocketPal renders it
-                // in the empty view), so it clears the floating composer the
-                // same way the placeholder does.
-                <View style={{ paddingTop: composerHeight + tabBarCompensation }}>
-                  <GreetingBubble companionName={activeCompanion.name} greeting={greeting.text} />
-                </View>
-              ) : null
-            }
             onEndVisibleChange={setAtEnd}
             streaming={streaming}
             renderRow={(row, widths) =>
@@ -549,6 +531,43 @@ export default function ChatRoute() {
             }
           />
         </View>
+        {/* The empty-chat states — the no-model placeholder and the
+            companion greeting — as an overlay BESIDE the list, not scroll
+            content. The list is a KeyboardChatScrollView, which adds the
+            keyboard height to itself as a dynamic contentInset, and a
+            centred child inside that re-centring inset visibly moves as
+            the keyboard rises — the reported symptom. As an overlay the
+            centring band below spans from the column's top to the
+            composer's RESTING position and never changes size in either
+            keyboard state, so the content is geometrically impossible to
+            move; the keyboard covers what it covers, like pocketpal-ai's
+            does. No keyboard term appears in this anchor, ever: that is
+            the whole fix. showPlaceholder and greeting are exclusive by
+            construction (greeting requires !showPlaceholder). */}
+        {(showPlaceholder ||
+          (greeting !== undefined && activeCompanion !== undefined)) && (
+          <Animated.View
+            className="absolute inset-x-0 top-0"
+            style={{ bottom: composerHeight }}
+            pointerEvents="box-none"
+          >
+            {showPlaceholder ? (
+              <ChatEmptyPlaceholder
+                onSelectModel={() => setPickerOpen(true)}
+              />
+            ) : greeting !== undefined && activeCompanion !== undefined ? (
+              // The bubbles' own horizontal padding lives inside
+              // GreetingBubble (px-4); px-5 here matches the list's p-5 so
+              // the bubble keeps the margin it had as list content.
+              <View className="flex-1 justify-center px-5">
+                <GreetingBubble
+                  companionName={activeCompanion.name}
+                  greeting={greeting.text}
+                />
+              </View>
+            ) : null}
+          </Animated.View>
+        )}
         {/* Jump to latest: an overlay pinned to the content column's
             bottom-right, above the floating composer — pocketpal's FAB
             placement. It lifts on the same hook as the composer so the two
@@ -563,7 +582,7 @@ export default function ChatRoute() {
             gone, the accessibility label carries the whole meaning. */}
         {!atEnd && messages.length > 0 && (
           <Animated.View
-            style={[composerLift, { bottom: composerHeight + tabBarCompensation }]}
+            style={[composerLift, { bottom: composerHeight }]}
             className="absolute right-5"
             pointerEvents="box-none"
           >
@@ -579,30 +598,11 @@ export default function ChatRoute() {
         )}
       </View>
 
-      {/* Keyboard strip. While the keyboard animates in, the frames between
-          the tab bar unmounting and the keyboard covering its slot would
-          show this screen's base colour where the bar's Clean White used to
-          be — a colour flash on every open and close (most exposed with a
-          model loaded, because then the strip is visible rather than covered
-          by the placeholder card). This is the bar's own colour and height,
-          flipped by the SAME store in the SAME commit as the bar's unmount,
-          so no frame mixes the two. Behind the fully open keyboard it is
-          invisible; it exists only for the transition.
-
-          Paint order is load-bearing: it sits BEFORE the composer and the
-          overlay group precisely so they paint OVER it. Those are lifted by
-          the keyboard, so for the transition frames their lower edges cross
-          this band — and the composer's control row carries coloured
-          buttons (the send fill). A strip above them would hide the send
-          button for the length of the keyboard animation. pointerEvents is
-          none, so the only thing this box can do is paint. */}
-      {keyboardVisible && (
-        <View
-          className="absolute inset-x-0 bottom-0 bg-surface-1"
-          style={{ height: keyboardOffset }}
-          pointerEvents="none"
-        />
-      )}
+      {/* No "keyboard strip": there is no longer a frame in which the bar
+          slot paints base colour, because the bar never unmounts — the
+          real bar is there until the keyboard covers it, pane by pane.
+          The step it masked was the other half of the reported composer
+          flash. */}
 
       {/* The composer. It IS the floating box: absolutely positioned, out of
           the column's flow, lifting itself, and reporting its own height.
@@ -613,6 +613,7 @@ export default function ChatRoute() {
           still, and how the earlier padding/translation split broke the lift. */}
       <MessageInput
         className="absolute inset-x-0 bottom-0"
+        liftAnchor={keyboardOffset}
         sending={sending}
         ready={ready}
         editing={editingTurnId !== null}

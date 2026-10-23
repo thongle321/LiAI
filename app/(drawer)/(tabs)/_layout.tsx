@@ -1,8 +1,12 @@
 /** Bottom tabs (JavaScript tabs per the Expo Router tabs guide).
  *
  * Chat + voice + vision share one router-owned bar — the existing
- * BottomNav design, unchanged. The bar hides only for the keyboard;
- * vision shows it like every other tab.
+ * BottomNav design, unchanged. The bar stays MOUNTED while the keyboard
+ * opens (PocketPal parity: nothing on screen unmounts in response to the
+ * keyboard — pocketpal-ai/src/components/ChatView/ChatView.tsx composition
+ * notes); edge-to-edge means the keyboard simply covers it, pane by pane,
+ * so there is no unmount gap to mask and no column growth to compensate.
+ * Every keyboard response left in the app is a Reanimated translateY.
  */
 
 import { View } from "react-native";
@@ -37,18 +41,8 @@ export default function TabLayout() {
  */
 function TabBar({ state }: { state: { index: number; routeNames: string[] } }) {
   const insets = useSafeAreaInsets();
-  // Same store as the chat screen (store/keyboard.ts): one writer at the
-  // root, so the bar's unmount and the screen's column compensation
-  // commit together instead of a frame apart.
-  const keyboardVisible = useKeyboardStore((s) => s.isVisible);
   const setTabBarHeight = useKeyboardStore((s) => s.setTabBarHeight);
-  // Hidden on the keyboard only: it would sit directly on top of it and
-  // steal height from whatever input opened it. Hidden here rather than
-  // via screenOptions.tabBarHideOnKeyboard because this app supplies a
-  // custom tabBar, and React Navigation only applies that option inside
-  // its own BottomTabBar.
   const focusedRoute = state.routeNames[state.index] ?? "chat";
-  if (keyboardVisible) return null;
   const active: ChatTab =
     focusedRoute === "voice"
       ? "voice"

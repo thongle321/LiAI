@@ -54,6 +54,7 @@ export function MessageInput({
   onCancelEdit,
   companionName,
   onOpenPicker,
+  liftAnchor = 0,
 }: {
   sending: boolean;
   /** False with no loaded model: send disables (PocketPal parity). */
@@ -66,6 +67,12 @@ export function MessageInput({
    *  would be dragged up by the keyboard whether it wanted that or not. It
    *  has one caller today; making that conditional is the price of reusing it. */
   className?: string;
+  /** The composer's own bottom anchor above the physical screen bottom —
+   *  the tab bar's slot (safe-area inset + measured bar height). With the
+   *  bar mounted this field rests `liftAnchor` above the physical bottom,
+   *  so the lift rises by the keyboard height MINUS that corridor
+   *  (utils/keyboard.ts). Absent = 0 (anchored at the physical bottom). */
+  liftAnchor?: number;
   /** Reports this box's height. It is the only thing reserving room for a
    *  composer that is out of flow, so it must be measured here at the
    *  outermost level and nowhere shallower. */
@@ -84,8 +91,10 @@ export function MessageInput({
   // This box is the bottom-anchored surface, so it carries the keyboard lift
   // itself rather than being wrapped in something that does. Same mechanism
   // the library applies internally (`translateY: height.value + offset` in
-  // KeyboardStickyView), minus the extra component.
-  const lift = useKeyboardLift();
+  // KeyboardStickyView), minus the extra component. The anchor comes from the
+  // caller: it is always the caller's job to say how far off the physical
+  // screen bottom this box rests (the chat route passes the tab bar's slot).
+  const lift = useKeyboardLift(liftAnchor);
   // Composer text lives in the chat store (per-session drafts survive
   // switches).
   const draft = useChatStore((s) => s.draft);

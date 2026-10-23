@@ -84,21 +84,22 @@ export default function VisionScreen() {
     if (focused && !hasPermission) void requestPermission();
   }, [focused, hasPermission, requestPermission]);
   const insets = useSafeAreaInsets();
-  // The tab bar owns the bottom inset ("applied once, at the bar"), so the
-  // panel anchors 12px above the bar top. When the keyboard opens the bar
-  // hides and the screen grows by the bar's height — the same shift chat's
-  // overlays compensate for — so the anchor carries that height back while
-  // the keyboard is up, or the panel visibly jumps as the bar disappears.
-  // The value doubles as the panel's lift anchor, so the draft input still
-  // lands exactly on the keyboard top (see VisionBottomPanel).
-  // Same store as the chat screen (store/keyboard.ts): the bar's MEASURED
-  // height, not the seed constant — the label scales with the OS font
-  // setting, so the real bar can be taller than the class sum, and the
-  // anchor must track it or the panel drifts when large text is on.
-  const keyboardVisible = useKeyboardStore((s) => s.isVisible);
+  // The tab bar owns the bottom inset ("applied once, at the bar") and —
+  // PocketParity — stays MOUNTED while the keyboard opens, so the panel
+  // anchors 12px above the bar top in BOTH keyboard states. The geometry no
+  // longer carries a keyboard term at all: the keyboard simply covers the
+  // bar and the panel's lower margin, which is what stops the jump the old
+  // keyboardVisible compensation made.
+  // What the panel DOES still do is rise with the keyboard, and its lift
+  // must know how far off the physical screen bottom it rests: the bar's
+  // slot (inset + measured height) plus its own 12px margin. Same store as
+  // the chat screen (store/keyboard.ts): the bar's MEASURED height, not the
+  // seed constant — the label scales with the OS font setting, so the real
+  // bar can be taller than the class sum, and the anchor must track it or
+  // the panel drifts when large text is on (see VisionBottomPanel).
   const tabBarHeight = useKeyboardStore((s) => s.tabBarHeight);
-  const panelBottom =
-    12 + (keyboardVisible ? tabBarHeight + insets.bottom : 0);
+  const panelBottom = 12;
+  const panelLiftAnchor = panelBottom + insets.bottom + tabBarHeight;
   // Two dead ends land on the same system screen: a denied camera and a
   // blocked mic. One handler for both.
   const goToSettings = () => void openSettings().catch(() => {});
@@ -170,6 +171,7 @@ export default function VisionScreen() {
 
             <VisionBottomPanel
               bottom={panelBottom}
+              liftAnchor={panelLiftAnchor}
               issue={issue ?? (visionOff ? "Vision is off for this model." : null)}
               issueAction={
                 visionOff && issue === null

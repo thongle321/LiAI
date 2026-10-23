@@ -4,9 +4,11 @@
  * line naming the next move, and one primary button. Shown only while no
  * model is active — it unmounts the moment one loads.
  *
- * Rendered as the message list's ListEmptyComponent (PocketParity:
- * ChatView.tsx:990), which is what makes the empty view scrollable rather
- * than a fixed overlay the keyboard could bury.
+ * Rendered as an overlay BESIDE the message list (chat.tsx), never as its
+ * ListEmptyComponent: the list is a KeyboardChatScrollView whose dynamic
+ * contentInset re-centres a centred child while the keyboard rises. In this
+ * overlay there is no inset that can move it — the keyboard covers it
+ * instead, which is what pocketpal-ai's centre does for their list.
  */
 
 import { Image, Pressable, Text, View } from "react-native";
@@ -16,17 +18,8 @@ import { images } from "@/constants/images.ts";
 import { useModelStore } from "@/store/model-store";
 
 export function ChatEmptyPlaceholder({
-  bottomInset,
   onSelectModel,
 }: {
-  /** Room to leave for the floating composer, so the card sits above it
-   *  instead of behind it. PocketParity: pocketpal-ai's placeholder takes
-   *  the same value as `bottomComponentHeight` and spends it on a
-   *  `marginBottom` (ChatEmptyPlaceholder.tsx:86) rather than on a keyboard
-   *  inset. That distinction is the point — the list below still rides
-   *  KeyboardChatScrollView's dynamic inset, but this card's placement no
-   *  longer depends on it, so the keyboard can't drag it around. */
-  bottomInset: number;
   /** Opens the in-chat companion/model picker (PocketPal's
    *  ChatPalModelPickerSheet). Absent falls back to the /models route. */
   onSelectModel?: () => void;
@@ -74,11 +67,11 @@ export function ChatEmptyPlaceholder({
   }
 
   return (
-    // Centring belongs to the list's content container now (flex-grow +
-    // justify-content while empty), so this is a plain block that grows to
-    // its content and overflows into a scroll when it outgrows the
-    // viewport — that overflow is what makes the empty view scrollable.
-    <View className="items-center px-8" style={{ marginBottom: bottomInset }}>
+    // Centring lives HERE, inside the band overlay the chat screen draws:
+    // the band spans the column above the composer's resting position and
+    // never changes size in either keyboard state, so this card is
+    // geometrically impossible to move with the keyboard.
+    <View className="flex-1 items-center justify-center px-8">
       <View className="h-24 w-24 items-center justify-center rounded-full bg-surface-2">
         {/* The adaptive-icon FOREGROUND (arrow on transparent), not images.icon:
             the full icon carries its own light-blue SQUARE background, and a

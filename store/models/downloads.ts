@@ -263,7 +263,37 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
     // Per-job subscribers (Phase 2.1): the store subscribes to this job's
     // updates by id, so concurrent downloads never clobber each other through
     // a shared global callback.
-    const unsubscribe = downloadService.subscribe(job.id, (downloadJob) => {
+    //
+    // The subscription outlives the `startDownload` PROMISE: the Android
+    // driver resolves that promise when the transfer is ENQUEUED (the native
+    // upsert returns; WorkManager streams afterwards), so unsubscribing on
+    // resolve killed the only live event channel and every row froze at its
+    // pre-start write — 0%, "0 B (0.00 MB/s)", no error, until cancel. The
+    // detach happens on the TERMINAL status arriving through the subscription
+    // instead; the drivers both emit it (legacy when the awaited transfer
+    // settles, native via the Room write).
+    let unsubscribe: (() => void) | null = null;
+    let detached = false;
+    const detach = () => {
+      if (detached) return;
+      detached = true;
+      unsubscribe?.();
+    };
+    unsubscribe = downloadService.subscribe(job.id, (downloadJob) => {
+      if (downloadJob.status === "cancelled") {
+        // Mirror the row reset cancelModelDownload performs after the
+        // service resolves: the native driver's cancelled event can land
+        // AFTER that reset (Room Flow re-delivery is not ordered against
+        // the JS await), and a bare status write would overwrite the
+        // "idle" the card expects with a status nobody renders.
+        get().updateModel(downloadJob.modelId, {
+          downloadStatus: "idle",
+          downloadProgress: 0,
+          downloadedBytes: 0,
+        });
+        detach();
+        return;
+      }
       const prevStatus = get().getModel(downloadJob.modelId)?.downloadStatus;
       if (prevStatus !== downloadJob.status) {
         get().updateModel(downloadJob.modelId, {
@@ -289,6 +319,7 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
             specNow.files[0],
             get().activeHfToken() ?? undefined,
           );
+          detach();
           return;
         }
         const mainFile = specNow?.files[0];
@@ -307,6 +338,7 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
           // The persist middleware owns the disk; this only moves the state.
           set({ largestSuccessfulBytes: mainSize });
         }
+        detach();
       } else if (downloadJob.status === "failed") {
         const specNow = get().getModel(downloadJob.modelId);
         const message =
@@ -319,14 +351,15 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
           error: message,
           errorCode: downloadJob.errorCode,
         });
+        detach();
       }
     });
 
     try {
       await downloadService.startDownload(job, undefined, undefined, resume ?? undefined);
-      unsubscribe();
+      // Deliberately NOT unsubscribed here — see the subscriber comment.
     } catch (error) {
-      unsubscribe();
+      detach();
       get().updateModel(specId, {
         downloadStatus: "failed",
         error: error instanceof Error ? error.message : "Download failed",

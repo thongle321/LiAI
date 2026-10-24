@@ -28,23 +28,33 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "@/services/storage/storage.ts";
 import { dedupedStorage, gatedStorage, toStateStorage } from "@/services/storage/persist-helpers";
-import { DEVICE_DEFAULT_VOICE, type NeuralEngineId, type Voice } from "@/services/tts/types.ts";
+import {
+  DEVICE_DEFAULT_VOICE,
+  type NeuralEngineId,
+  type StreamingHandle,
+  type Voice,
+} from "@/services/tts/types.ts";
+import { ThinkingStripper, pickThinkingPlaceholder } from "@/services/tts/thinkingStripper.ts";
+import { stripForSpeech } from "@/utils/strip-for-speech.ts";
+import type { SupertonicLanguage } from "@pocketpalai/react-native-speech";
+import type { SupertonicSteps } from "@/services/tts/types.ts";
 import { ENGINE_ORDER, NEURAL_ENGINE_META } from "@/services/tts/engineMeta.ts";
-import { ttsDownloads, type TtsModelStatus } from "@/services/tts/download.ts";
+import type { TtsModelStatus } from "@/services/tts/types.ts";
+import { getEngine } from "@/services/tts/engineRegistry.ts";
 import { ttsRuntime } from "@/services/tts/runtime.ts";
 import { playVoice } from "@/services/tts/voice-engine.ts";
 import { readTotalMemory } from "@/services/models/device-tiers.ts";
 
 export const VOICE_KEY = "liai_voice";
 
-/** The kokoro model id, kept as a named export because the spec pins it and
- *  the tests assert it. The value's single home is the engine table. */
-export const KOKORO_MODEL_ID = NEURAL_ENGINE_META.kokoro.modelId;
-
 /** PocketPal's gate: neural TTS needs a 4 GiB device (spec Q14). */
 export const RAM_GATE_BYTES = 4 * 1024 * 1024 * 1024;
+export const VOICE_FIRST_CHUNK_HOLD_MS = 1200;
 
-export type PlaybackState = { mode: "idle" } | { mode: "playing"; messageId?: string };
+export type PlaybackState =
+  | { mode: "idle" }
+  | { mode: "playing"; messageId?: string }
+  | { mode: "streaming"; messageId: string; handle: StreamingHandle };
 
 /** Every downloadable engine's download state. `null` per engine means
  *  UNKNOWN (node, or an unreadable disk) — never "not installed"; the two
@@ -56,6 +66,7 @@ export const EMPTY_DOWNLOADS: EngineDownloads = {
   kitten: null,
   kokoro: null,
   supertonic: null,
+  phonon: null,
 };
 
 /** A voice id stashed for an engine whose model was removed, restored the
@@ -67,6 +78,10 @@ export interface VoiceState {
   /** null ≡ the device-default system voice. */
   currentVoice: Voice | null;
   autoSpeak: boolean;
+  voiceOutputActive: boolean;
+  holdFirstChunk: boolean;
+  supertonicSteps: SupertonicSteps;
+  supertonicLanguage: SupertonicLanguage;
   /** null = no user decision; true/false forces availability. */
   userTTSOverride: boolean | null;
   playbackState: PlaybackState;
@@ -86,6 +101,10 @@ export interface VoiceState {
   isTTSAvailable: () => boolean;
   setCurrentVoice: (voice: Voice | null) => void;
   setAutoSpeak: (autoSpeak: boolean) => void;
+  setVoiceOutputActive: (active: boolean) => void;
+  setHoldFirstChunk: (hold: boolean) => void;
+  setSupertonicSteps: (steps: SupertonicSteps) => void;
+  setSupertonicLanguage: (language: SupertonicLanguage) => void;
   setUserTTSOverride: (override: boolean | null) => void;
   /** Record that `messageId` was spoken, so repeats do not re-speak it. */
   markSpoken: (messageId: string) => void;
@@ -96,6 +115,9 @@ export interface VoiceState {
   /** Speak `text` through the selected engine (spec Q14 "one API"). */
   play: (text: string, options?: { messageId?: string; voice?: Voice; speed?: number }) => Promise<void>;
   stop: () => Promise<void>;
+  onAssistantMessageStart: (messageId: string) => void;
+  onAssistantMessageChunk: (messageId: string, chunkText: string, reasoningDelta?: string) => void;
+  onAssistantMessageComplete: (messageId: string, text: string, opts?: { hadReasoning?: boolean }) => Promise<void>;
   /** Download one engine's model, reporting state transitions. Resolves
    *  with the local path, or null when the user paused it. */
   startEngineDownload: (engine: NeuralEngineId) => Promise<string | null>;
@@ -131,7 +153,7 @@ function toVoice(value: unknown): Voice | null {
 function sanitizeVoice(voice: Voice | null): Voice {
   if (voice === null) return DEVICE_DEFAULT_VOICE;
   if (voice.engine === "system") return DEVICE_DEFAULT_VOICE;
-  return NEURAL_ENGINE_META[voice.engine].voices.some((v) => v.id === voice.id)
+  return NEURAL_ENGINE_META[voice.engine]!.voices.some((v) => v.id === voice.id)
     ? voice
     : DEVICE_DEFAULT_VOICE;
 }
@@ -189,7 +211,7 @@ export function reconcileVoice(
 /** The other half of the reconcile: a stashed id becomes a voice again
  *  only while still curated in ITS engine, or null when the list moved on. */
 export function restoreVoice(stashed: string, engine: NeuralEngineId): Voice | null {
-  return NEURAL_ENGINE_META[engine].voices.find((v) => v.id === stashed) ?? null;
+  return NEURAL_ENGINE_META[engine]!.voices.find((v) => v.id === stashed) ?? null;
 }
 
 interface VoiceStoreApi {
@@ -203,6 +225,10 @@ export function createVoiceStore(storage: KeyValueStorage) {
   let hydrating: Promise<void> | null = null;
   let api: VoiceStoreApi | null = null;
   let persistEnabled = false;
+  let streamStripper: ThinkingStripper | null = null;
+  let streamPlaceholderEmitted = false;
+  let voiceStream: { messageId: string; held: string[] | null; holdTimer: ReturnType<typeof setTimeout> | null; chars: number } | null = null;
+  let voiceSpeechStarted: string | null = null;
 
   const gated = gatedStorage(dedupedStorage(storage), () => persistEnabled);
 
@@ -244,7 +270,10 @@ export function createVoiceStore(storage: KeyValueStorage) {
         const downloads: EngineDownloads = { ...EMPTY_DOWNLOADS };
         for (const id of ENGINE_ORDER) {
           try {
-            downloads[id] = await ttsDownloads.status(NEURAL_ENGINE_META[id].modelId);
+            const installed = await getEngine(id).isInstalled();
+            downloads[id] = installed
+              ? { state: "ready", percent: 100 }
+              : { state: "not_installed", percent: 0 };
           } catch {
             downloads[id] = null;
           }
@@ -255,23 +284,8 @@ export function createVoiceStore(storage: KeyValueStorage) {
           currentVoice: reconciled.voice,
           pendingVoiceRestore: reconciled.stashed,
         });
-        // A transfer the manager still holds from a previous session (paused,
-        // or interrupted by a kill) reads as paused, so the card offers
-        // Resume instead of starting a second transfer over the same path.
-        try {
-          const pending = await ttsDownloads.incomplete();
-          const resumed: EngineDownloads = { ...get().downloads };
-          for (const id of ENGINE_ORDER) {
-            const modelId = NEURAL_ENGINE_META[id].modelId;
-            const percent = pending[modelId];
-            if (percent !== undefined && resumed[id]?.state === "not_installed") {
-              resumed[id] = { state: "paused", percent };
-            }
-          }
-          set({ downloads: resumed });
-        } catch {
-          // No native module (node) — the disk states above stand.
-        }
+        // PocketPal engines manage their own downloads; no cross-session
+        // resume probe is available here. Disk state above stands.
         try {
           const total = await readTotalMemory();
           set({ deviceMeetsMemory: total !== null && total >= RAM_GATE_BYTES });
@@ -287,6 +301,10 @@ export function createVoiceStore(storage: KeyValueStorage) {
     return {
       currentVoice: null,
       autoSpeak: false,
+      voiceOutputActive: false,
+      holdFirstChunk: false,
+      supertonicSteps: 5,
+      supertonicLanguage: "na" as SupertonicLanguage,
       userTTSOverride: null,
       playbackState: { mode: "idle" },
       lastSpokenMessageId: null,
@@ -320,6 +338,18 @@ export function createVoiceStore(storage: KeyValueStorage) {
       setAutoSpeak: (autoSpeak) => {
         set({ autoSpeak });
       },
+      setVoiceOutputActive: (voiceOutputActive) => {
+        set({ voiceOutputActive });
+      },
+      setHoldFirstChunk: (holdFirstChunk) => {
+        set({ holdFirstChunk });
+      },
+      setSupertonicSteps: (supertonicSteps) => {
+        set({ supertonicSteps });
+      },
+      setSupertonicLanguage: (supertonicLanguage) => {
+        set({ supertonicLanguage });
+      },
       setUserTTSOverride: (userTTSOverride) => {
         set({ userTTSOverride });
       },
@@ -346,42 +376,197 @@ export function createVoiceStore(storage: KeyValueStorage) {
         }
       },
 
-      stop: () => ttsRuntime.stop(),
+      stop: () => {
+        const state = get().playbackState;
+        if (state.mode === "streaming") {
+          if (voiceStream?.holdTimer) clearTimeout(voiceStream.holdTimer);
+          voiceStream = null;
+          voiceSpeechStarted = null;
+          void state.handle.cancel();
+          set({ playbackState: { mode: "idle" } });
+          streamStripper = null;
+          streamPlaceholderEmitted = false;
+        } else if (state.mode === "playing") {
+          set({ playbackState: { mode: "idle" } });
+        }
+        return ttsRuntime.stop();
+      },
+
+      onAssistantMessageStart: (messageId) => {
+        if (!get().autoSpeak || !get().isTTSAvailable()) return;
+        if (get().lastSpokenMessageId === messageId) return;
+        const voice = get().currentVoice ?? DEVICE_DEFAULT_VOICE;
+        const stopDone = get().stop().catch(() => undefined);
+        set({ lastSpokenMessageId: messageId });
+        streamStripper = new ThinkingStripper();
+        streamPlaceholderEmitted = false;
+
+        // Voice-mode hold: buffer the first chunk briefly so a voice reply
+        // doesn't start speaking before the model's first sentence lands.
+        let streamOpts: { firstChunk?: "clause"; onProgress?: (e: { chunkIndex: number; chunkText: string }) => void } | undefined;
+        if (get().voiceOutputActive && get().holdFirstChunk) {
+          voiceStream = {
+            messageId,
+            held: [],
+            holdTimer: setTimeout(() => {
+              // release held text
+              const vs = voiceStream;
+              const st = get().playbackState;
+              if (!vs || vs.messageId !== messageId || !vs.held) return;
+              if (vs.holdTimer) clearTimeout(vs.holdTimer);
+              vs.holdTimer = null;
+              const held = vs.held;
+              vs.held = null;
+              if (st.mode !== "streaming" || st.messageId !== messageId) return;
+              for (const t of held) st.handle.appendText(t);
+            }, VOICE_FIRST_CHUNK_HOLD_MS),
+            chars: 0,
+          };
+          streamOpts = {
+            firstChunk: "clause",
+            onProgress: () => {
+              if (voiceStream?.messageId === messageId) {
+                voiceSpeechStarted = messageId;
+              }
+            },
+          };
+        } else {
+          voiceStream = null;
+        }
+
+        const engine = getEngine(voice.engine);
+        const supertonicOpts =
+          voice.engine === "supertonic"
+            ? {
+                language: get().supertonicLanguage,
+                inferenceSteps: get().supertonicSteps,
+                ...streamOpts,
+              }
+            : streamOpts;
+        const handle = engine.playStreaming(voice, stopDone, supertonicOpts);
+        set({ playbackState: { mode: "streaming", messageId, handle } });
+      },
+
+      onAssistantMessageChunk: (messageId, chunkText, reasoningDelta) => {
+        const state = get().playbackState;
+        if (state.mode !== "streaming") return;
+        if (state.messageId !== messageId) return;
+        const stripper = streamStripper;
+        const appendReply = (text: string): void => {
+          if (voiceStream?.held) {
+            voiceStream.held.push(text);
+            voiceStream.chars += text.length;
+          } else {
+            state.handle.appendText(text);
+          }
+        };
+        if (!stripper) {
+          if (chunkText) appendReply(chunkText);
+          return;
+        }
+        if (reasoningDelta) stripper.noteReasoning(reasoningDelta);
+        const cleaned = chunkText ? stripper.feed(chunkText) : "";
+        if (
+          stripper.hadNonEmptyThink() &&
+          !streamPlaceholderEmitted &&
+          cleaned.length === 0 &&
+          chunkText.length > 0
+        ) {
+          streamPlaceholderEmitted = true;
+          appendReply(`${pickThinkingPlaceholder()} `);
+          return;
+        }
+        if (cleaned.length > 0) {
+          if (stripper.hadNonEmptyThink() && !streamPlaceholderEmitted) {
+            streamPlaceholderEmitted = true;
+            appendReply(`${pickThinkingPlaceholder()} `);
+          }
+          appendReply(cleaned);
+        }
+      },
+
+      onAssistantMessageComplete: async (messageId, text, opts) => {
+        const state = get().playbackState;
+        if (state.mode === "streaming" && state.messageId === messageId) {
+          const stripper = streamStripper;
+          // Release any held first-chunk text before finalizing.
+          if (voiceStream && voiceStream.messageId === messageId && voiceStream.held) {
+            if (voiceStream.holdTimer) clearTimeout(voiceStream.holdTimer);
+            voiceStream.holdTimer = null;
+            const held = voiceStream.held;
+            voiceStream.held = null;
+            for (const t of held) state.handle.appendText(t);
+          }
+          if (stripper) {
+            const leftover = stripper.flush();
+            if (leftover.length > 0) {
+              if (stripper.hadNonEmptyThink() && !streamPlaceholderEmitted) {
+                streamPlaceholderEmitted = true;
+                state.handle.appendText(`${pickThinkingPlaceholder()} `);
+              }
+              state.handle.appendText(leftover);
+            }
+          }
+          try {
+            await state.handle.finalize();
+          } catch (err) {
+            console.warn("[voice] finalize failed:", err);
+          } finally {
+            const ps = get().playbackState;
+            if (ps.mode === "streaming" && ps.messageId === messageId) {
+              set({ playbackState: { mode: "idle" } });
+              streamStripper = null;
+              streamPlaceholderEmitted = false;
+              voiceStream = null;
+              voiceSpeechStarted = null;
+            }
+          }
+          return;
+        }
+        // Fallback replay path (missed start or non-streaming).
+        if (!get().autoSpeak || !get().isTTSAvailable()) return;
+        if (get().lastSpokenMessageId === messageId) return; // already handled by streaming
+        set({ lastSpokenMessageId: messageId });
+        if (text.trim() === "") return;
+        void get().play(stripForSpeech(text), {
+          messageId,
+          voice: get().currentVoice ?? DEVICE_DEFAULT_VOICE,
+        });
+      },
 
       startEngineDownload: async (engineId) => {
-        const { modelId } = NEURAL_ENGINE_META[engineId];
         set({ activeEngineId: engineId });
         try {
-          return await ttsDownloads.download(modelId, (status) =>
-            applyEngineStatus(engineId, status),
+          const engine = getEngine(engineId) as unknown as {
+            downloadModel: (cb?: (p: number) => void) => Promise<void>;
+            reclaimLegacySpace?: () => Promise<void>;
+          };
+          await engine.reclaimLegacySpace?.();
+          await engine.downloadModel((p) =>
+            applyEngineStatus(engineId, { state: "downloading", percent: p * 100 }),
           );
+          applyEngineStatus(engineId, { state: "ready", percent: 100 });
+          return null;
+        } catch (err) {
+          applyEngineStatus(engineId, { state: "error", percent: 0, error: String(err) });
+          throw err;
         } finally {
           if (get().activeEngineId === engineId) set({ activeEngineId: null });
         }
       },
 
       pauseEngineDownload: async (engineId) => {
-        const { modelId } = NEURAL_ENGINE_META[engineId];
-        // Pause, never abort: the manager's abort path deletes the partial
-        // archive. `download` settles with a paused status on PauseError.
-        await ttsDownloads.pause(modelId);
+        // PocketPal engines do not support pause; no-op.
+        void engineId;
       },
 
       resumeEngineDownload: async (engineId) => {
-        const { modelId } = NEURAL_ENGINE_META[engineId];
-        set({ activeEngineId: engineId });
-        try {
-          return await ttsDownloads.resume(modelId, (status) =>
-            applyEngineStatus(engineId, status),
-          );
-        } finally {
-          if (get().activeEngineId === engineId) set({ activeEngineId: null });
-        }
+        return await get().startEngineDownload(engineId);
       },
 
       removeEngineModel: async (engineId) => {
-        const { modelId } = NEURAL_ENGINE_META[engineId];
-        await ttsDownloads.remove(modelId);
+        const engine = getEngine(engineId) as unknown as { deleteModel: () => Promise<void> };
+        await engine.deleteModel();
         // A neural voice cannot survive its model, so stash it for the next
         // successful download of THIS engine and fall back meanwhile.
         const voice = get().currentVoice;
@@ -404,6 +589,8 @@ export function createVoiceStore(storage: KeyValueStorage) {
     partialize: (state: VoiceState) => ({
       currentVoice: state.currentVoice,
       autoSpeak: state.autoSpeak,
+      supertonicSteps: state.supertonicSteps,
+      supertonicLanguage: state.supertonicLanguage,
       userTTSOverride: state.userTTSOverride,
     }),
     merge: (persistedState, currentState) => {
@@ -426,6 +613,10 @@ export function createVoiceStore(storage: KeyValueStorage) {
         currentVoice,
         autoSpeak:
           typeof r.autoSpeak === "boolean" ? r.autoSpeak : currentState.autoSpeak,
+        supertonicSteps:
+          typeof r.supertonicSteps === "number" ? (r.supertonicSteps as SupertonicSteps) : currentState.supertonicSteps,
+        supertonicLanguage:
+          typeof r.supertonicLanguage === "string" ? (r.supertonicLanguage as SupertonicLanguage) : currentState.supertonicLanguage,
         userTTSOverride:
           typeof r.userTTSOverride === "boolean" ? r.userTTSOverride : currentState.userTTSOverride,
         loaded: currentState.loaded,

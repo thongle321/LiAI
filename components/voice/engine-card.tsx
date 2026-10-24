@@ -43,6 +43,7 @@ import {
   Pause,
   Play,
   RotateCcw,
+  Sparkles,
   Square,
   Trash2,
 } from "lucide-react-native";
@@ -57,7 +58,7 @@ import { RadioDot } from "./radio-dot.tsx";
 
 /** The engine's glyph. Lucide only — no bundled logo PNGs, which is what
  *  lets one card serve every engine. */
-const ENGINE_ICON = { kitten: Cat, kokoro: AudioLines, supertonic: Gauge } as const;
+const ENGINE_ICON = { kitten: Cat, kokoro: AudioLines, supertonic: Gauge, phonon: Sparkles } as const;
 
 /** Ring diameter. The glyph pill is 40, and the ring's own stroke eats 3 of
  *  that radius, so it needs 48 for the arc to clear the pill rather than sit

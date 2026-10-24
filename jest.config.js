@@ -65,6 +65,10 @@ module.exports = {
     '^expo-speech$': '<rootDir>/__mocks__/external/expo-speech.ts',
     '^expo-speech-recognition$':
       '<rootDir>/__mocks__/external/expo-speech-recognition.ts',
+    '^@pocketpalai/react-native-speech$':
+      '<rootDir>/__mocks__/external/@pocketpalai/react-native-speech.ts',
+    '^@pocketpalai/react-native-speech-phonon$':
+      '<rootDir>/__mocks__/external/@pocketpalai/react-native-speech-phonon.ts',
     '^expo-sqlite$': '<rootDir>/__mocks__/external/expo-sqlite.ts',
     '^whisper.rn$': '<rootDir>/__mocks__/external/whisper.rn.ts',
     '^expo-linking$': '<rootDir>/__mocks__/external/expo-linking.ts',

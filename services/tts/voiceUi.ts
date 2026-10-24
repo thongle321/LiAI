@@ -10,8 +10,12 @@
  * a set of voices.
  */
 
-import type { NeuralEngineId, Voice } from "./types.ts";
-import { clampPercent, type TtsModelStatus } from "./download.ts";
+import type { NeuralEngineId, TtsModelStatus, Voice } from "./types.ts";
+
+export function clampPercent(percent: number): number {
+  if (!Number.isFinite(percent)) return 0;
+  return Math.min(100, Math.max(0, percent));
+}
 
 /** An engine card's expanded body, derived from its download status. */
 export type EngineGroupState =

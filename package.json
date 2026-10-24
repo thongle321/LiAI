@@ -9,6 +9,8 @@
     "@expo/ui": "~57.0.26",
     "@kesha-antonov/react-native-background-downloader": "^4.6.3",
     "@lodev09/react-native-true-sheet": "^3.11.18",
+    "@pocketpalai/react-native-speech": "^2.8.2",
+    "@pocketpalai/react-native-speech-phonon": "^0.1.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@siteed/audio-studio": "^3.2.1",
     "@tailwindcss/postcss": "^4.3.3",

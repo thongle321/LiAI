@@ -59,5 +59,8 @@ export const ASR_TIERS: Record<AsrTier, AsrTierManifest> = {
   },
 };
 
-export const ASR_DEFAULT_TIER: AsrTier = "small";
+// PocketParity #1017: base is the shared default for dictation AND voice
+// mode — "fast on every measured phone". A ready, explicitly-chosen tier
+// (persisted selectedTier) is never overridden by this default.
+export const ASR_DEFAULT_TIER: AsrTier = "base";
 export const ASR_TIER_ORDER: AsrTier[] = ["base", "small", "large-turbo"];

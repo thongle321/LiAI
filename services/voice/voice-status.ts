@@ -77,3 +77,28 @@ export function bargeActionFor(phase: VoicePhase): BargeAction {
       return "begin";
   }
 }
+
+// ---------------------------------------------------------------------------
+// Unified Whisper voice mode (ported from PocketPal useVoiceMode; #1017).
+// The old OS-STT block above now serves only hooks/useVisionTurn.ts (its
+// last consumer after the voice tab moved onto the controller below);
+// hooks/useVoiceLoop.ts, its other consumer, is gone.
+// ---------------------------------------------------------------------------
+
+/** One voice session's phase. `closed` = no session (tap to start). */
+export type VoiceModePhase =
+  | "closed"
+  | "starting"
+  | "listening"
+  | "transcribing"
+  | "thinking"
+  | "speaking";
+
+export const VOICE_MODE_LABEL: Record<VoiceModePhase, string> = {
+  closed: "Tap to talk",
+  starting: "Loading voice…",
+  listening: "Listening…",
+  transcribing: "Transcribing…",
+  thinking: "Thinking…",
+  speaking: "Speaking…",
+};

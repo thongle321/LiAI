@@ -15,7 +15,7 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import { Brain, Camera, ChevronUp, Image as ImageIcon, Mic, Pencil, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
+import { Brain, Camera, ChevronUp, Image as ImageIcon, Pencil, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
 import Animated from "react-native-reanimated";
 import { KeyboardControllerNative } from "react-native-keyboard-controller";
 
@@ -30,9 +30,9 @@ import { useVoiceCapture } from "@/hooks/useVoiceCapture.ts";
 import { asrErrorCopy, hasOpenSettingsAction, OPEN_SETTINGS_LABEL } from "@/services/asr/error-copy.ts";
 import { openMicPermissionSettings } from "@/services/voice/mic-access.ts";
 import { useAsrStore } from "@/store/asr.ts";
+import { MicButton } from "@/components/voice/mic-button.tsx";
 import { useSnackbar } from "@/components/snackbar.tsx";
 import { VoiceRecordingBar } from "@/components/chat/voice-recording-bar.tsx";
-import { useRouter } from "expo-router";
 import { useMultimodalAvailable } from "@/hooks/useMultimodalAvailable.ts";
 import { useModelStore } from "@/store/model-store";
 import { resolveThinking } from "@/services/inference/thinking.ts";
@@ -154,9 +154,7 @@ export function MessageInput({
   const captureState = useAsrStore((s) => s.captureState);
   const asrError = useAsrStore((s) => s.error);
   const asrAvailable = useAsrStore((s) => s.asrAvailable);
-  const tierReady = useAsrStore((s) => s.isSelectedTierReady);
   const resetCapture = useAsrStore((s) => s.resetCapture);
-  const router = useRouter();
   const { showSnackbar } = useSnackbar();
   const voiceCapture = useVoiceCapture({
     onTranscript: (text) => {
@@ -523,30 +521,14 @@ export function MessageInput({
               {/* Mic sits beside Send, as pocketpal's ChatInput does
                   (`styles.micBeforeSend`): the two things that finish a turn
                   are adjacent, and the leading slot belongs to attachment
-                  and the companion/model picker. All voice gates and testIDs
-                  below are unchanged from its old leading position. */}
+                  and the companion/model picker. Self-gating: gates, setup
+                  sheet and testIDs live in the component. */}
               {asrAvailable && (
-                <Pressable
-                  onPress={
-                    tierReady
-                      ? () => (isRecording ? voiceCapture.stop() : voiceCapture.start())
-                      : () => router.push("/voice-settings")
+                <MicButton
+                  onStart={() =>
+                    isRecording ? voiceCapture.stop() : voiceCapture.start()
                   }
-                  testID={tierReady ? "mic-button" : "mic-button-setup"}
-                  className={`h-12 w-12 items-center justify-center rounded-full ${
-                    isRecording || isTranscribing ? "bg-primary" : "bg-surface-3"
-                  }`}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    tierReady
-                      ? isRecording
-                        ? "Stop recording"
-                        : "Start voice input"
-                      : "Set up voice input"
-                  }
-                >
-                  <Mic size={20} color={isRecording || isTranscribing ? colors.onPrimary : colors.primary} />
-                </Pressable>
+                />
               )}
               {/* Send and Stop are siblings, never nested: two nested pressables
                   would be two hit targets and two a11y roles on one control.

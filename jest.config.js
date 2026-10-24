@@ -66,6 +66,7 @@ module.exports = {
     '^expo-speech-recognition$':
       '<rootDir>/__mocks__/external/expo-speech-recognition.ts',
     '^expo-sqlite$': '<rootDir>/__mocks__/external/expo-sqlite.ts',
+    '^whisper.rn$': '<rootDir>/__mocks__/external/whisper.rn.ts',
     '^expo-linking$': '<rootDir>/__mocks__/external/expo-linking.ts',
     '^expo-font$': '<rootDir>/__mocks__/external/expo-font.ts',
   },

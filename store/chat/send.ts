@@ -161,10 +161,12 @@ export function createSendSlice(
     clearOnFirst: boolean;
   }): Promise<void> {
     const gen = (ctx.streamGen += 1);
+    let prevReasoning = "";
     set({ turnStartedAt: Date.now() });
     // A rerun reuses the bubble id: forget any spoken mark from the
     // previous run, or the new reply would be silenced by it (ticket 05).
     useVoice.getState().clearSpoken(opts.assistantId);
+    useVoice.getState().onAssistantMessageStart(opts.assistantId);
     // Ticket 03: each turn's tool-call token count starts from zero.
     ctx.toolTokens.turnStart();
     set({ toolTokenCount: 0 });
@@ -246,10 +248,16 @@ export function createSendSlice(
         (token) => {
           if (gen !== ctx.streamGen) return;
           updateBubble(opts.assistantId, (m) => ({ text: m.text + token }));
+          useVoice.getState().onAssistantMessageChunk(opts.assistantId, token);
         },
         (cumulative) => {
           if (gen !== ctx.streamGen) return;
           updateBubble(opts.assistantId, { reasoning: cumulative });
+          const delta = cumulative.startsWith(prevReasoning)
+            ? cumulative.slice(prevReasoning.length)
+            : cumulative;
+          prevReasoning = cumulative;
+          useVoice.getState().onAssistantMessageChunk(opts.assistantId, "", delta);
         },
         (toolName) => {
           if (gen !== ctx.streamGen) return;
@@ -296,32 +304,13 @@ export function createSendSlice(
           .catch(() => null);
         set({ stagedCompanionId: null, ...(bornCompanion !== null ? { sessionCompanionId: bornCompanion } : {}) });
       }
-      // Auto-speak: the finished reply, read aloud (ticket 05 / spec
-      // Q3 + Q14) — spoken once per message, only when the user opted
-      // in and the device passes the availability gate. Stopping first
-      // is what keeps a still-playing previous reply from talking over
-      // this one.
-      // voiceSpeak is imported lazily (expo-speech pulls expo-modules-core,
-      // whose .ts sources node cannot load) and a failed load means no
-      // auto-speak — the same degradation speakReply already has when the
-      // native module is missing.
-      const voice = useVoice.getState();
-      if (
-        voice.autoSpeak &&
-        voice.isTTSAvailable() &&
-        outcome.reply.trim() !== "" &&
-        voice.lastSpokenMessageId !== opts.assistantId
-      ) {
-        voice.markSpoken(opts.assistantId);
-        void import("../../services/voice/voice-speak.ts")
-          .then((m) => {
-            m.stopSpeaking();
-            m.speakReply(outcome.reply);
-          })
-          .catch(() => {
-            // No speech this turn; the reply still renders.
-          });
-      }
+      // Streaming TTS: finalize the handle opened at message start, or fall
+      // back to a full replay if streaming never started.
+      void useVoice
+        .getState()
+        .onAssistantMessageComplete(opts.assistantId, outcome.reply, {
+          hadReasoning: !!outcome.reasoning,
+        });
       set({ sending: false, turnStartedAt: null, pendingToolName: null });
       // Released with the turn. The `gen` guard above means a superseded
       // run never reaches this, so a NEW turn's lock is never stomped.

@@ -93,8 +93,8 @@ export function ChatPickerSheet({
   }
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Companion & Model">
-      <View className="flex-row gap-2 pb-3">
+    <Sheet visible={visible} onClose={onClose}>
+      <View className="flex-row h-[50px] items-center gap-2 border-b border-border px-2 pb-0">
         {TABS.map((t) => {
           const active = tab === t.id;
           return (
@@ -102,15 +102,13 @@ export function ChatPickerSheet({
               key={t.id}
               onPress={() => setTab(t.id)}
               testID={`chat-picker-tab-${t.id}`}
-              className={`min-h-12 justify-center rounded-lg px-4 ${
-                active ? "bg-surface-3" : "bg-surface-2"
-              }`}
+              className="min-h-12 justify-center px-4"
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
             >
               <Text
                 className={`font-sans text-title ${
-                  active ? "text-primary-text" : "text-secondary-text"
+                  active ? "text-primary-text font-sans-semibold" : "text-secondary-text"
                 }`}
               >
                 {t.label}
@@ -128,7 +126,7 @@ export function ChatPickerSheet({
                 void setActiveCompanion(null);
                 onClose();
               }}
-              className="min-h-12 justify-center rounded-lg border border-border bg-surface-1 px-3 active:bg-surface-3"
+              className="min-h-12 justify-center rounded-lg border border-border bg-surface-1 px-4 py-4 active:bg-surface-3"
               accessibilityRole="button"
               accessibilityLabel="No companion"
             >
@@ -149,7 +147,7 @@ export function ChatPickerSheet({
                     void activate(companion);
                     onClose();
                   }}
-                  className={`min-h-12 flex-row items-center gap-3 rounded-lg border border-border px-3 ${
+                  className={`min-h-12 flex-row items-center gap-3 rounded-lg border border-border px-4 py-4 ${
                     selected ? "bg-surface-2" : "bg-surface-1"
                   }`}
                   accessibilityRole="button"
@@ -194,7 +192,7 @@ export function ChatPickerSheet({
             <Pressable
               key={m.id}
               onPress={() => selectModel(m.id, m.host)}
-              className={`min-h-12 flex-row items-center gap-3 rounded-lg px-2 py-2 ${
+              className={`min-h-12 flex-row items-center gap-3 rounded-lg px-4 py-4 ${
                 m.active ? "bg-surface-2" : ""
               }`}
               accessibilityRole="button"

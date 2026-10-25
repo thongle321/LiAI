@@ -58,6 +58,8 @@ The mobile application is responsible for:
 
 - react-native-reanimated
 - react-native-worklets-core
+- @shopify/react-native-skia
+- expo-thinking-orbs
 
 - expo-file-system
 - expo-document-picker
@@ -218,7 +220,8 @@ until someone runs the app.
 **docs/** holds research, specs and agent docs (see Agent skills below).
 **__mocks__/** holds the module-boundary fakes `jest.config.js` maps by name —
 `__mocks__/external/*` stands in for the native packages a suite cannot load
-(llama.rn, vision-camera, sherpa-onnx, SQLite, and the rest). Add a fake here
+(llama.rn, vision-camera, expo-thinking-orbs through Skia, SQLite, and the
+rest). Add a fake here
 rather than a per-suite `jest.mock` factory when more than one suite needs it.
 **prompt_material/** is the design board the visual system derives from — four
 screenshots cited as provenance by `global.css`, `themes/tokens.ts` and

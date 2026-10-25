@@ -32,6 +32,7 @@ import { chatVoicePort, type VoiceChatPort } from "@/services/voice/chat-port.ts
 import { voiceMemoryFit, type DeviceMemory } from "@/services/voice/memory-fit.ts";
 import { Endpointer } from "@/services/voice/endpointer.ts";
 import { VOICE_CAPTURE_SETTLE_MS, VOICE_MIC_WATCHDOG_MS, VOICE_START_TIMEOUT_MS } from "@/services/voice/constants.ts";
+import { int16PcmToFloat32 } from "@/services/asr/energyVad.ts";
 import type {
   VoiceEngine,
   VoiceTurn,
@@ -74,6 +75,10 @@ export interface VoiceModeDeps {
   chatBytes?: () => Promise<number>;
   /** Route away to the model picker (no model loaded for a voice turn). */
   openModels?: () => void;
+  /** Every live mic chunk as -1..1 float samples (50 ms at 16 kHz) —
+   *  the level feed for the voice orb's SharedValues. UI-only: the
+   *  endpointer still consumes the raw bytes; this never gates a turn. */
+  onMicAudio?: (pcm: Float32Array) => void;
 }
 
 export interface VoiceCaptions {
@@ -413,6 +418,13 @@ class VoiceModeController {
     if (session !== this.session) return;
     this.clearMicWatchdog();
     this.micRetried = false;
+    // The orb's level feed runs on every chunk; it must not be able to
+    // throw into the turn path.
+    try {
+      this.deps.onMicAudio(int16PcmToFloat32(pcm));
+    } catch {
+      // A level consumer dying must never take the session down.
+    }
     if (this.endpointer.push(pcm) === "endpoint") {
       this.endUtterance(session, "auto");
     }
@@ -519,6 +531,7 @@ function resolveDeps(deps: VoiceModeDeps, recorder: ReturnType<typeof useAudioRe
     }),
     chatBytes: deps.chatBytes ?? activeChatModelBytes,
     openModels: deps.openModels ?? (() => {}),
+    onMicAudio: deps.onMicAudio ?? (() => {}),
   };
 }
 

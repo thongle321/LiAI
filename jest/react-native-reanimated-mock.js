@@ -66,6 +66,13 @@ module.exports = {
     inOut: (fn) => fn,
   },
   useSharedValue: (initial) => ({ value: initial }),
+  // Frame callbacks exist but never fire under Jest — nothing animates at
+  // the boundary. The only call surface the components under test make is
+  // `setActive` (gating a callback on a phase toggle).
+  useFrameCallback: (cb) => {
+    void cb;
+    return { setActive: (_active) => {}, update: () => {} };
+  },
   useAnimatedStyle: (styleFn) => styleFn(),
   // Run the worklet body against a plain event so the component still
   // exercises it. Shared values are mutable objects in this mock, so the

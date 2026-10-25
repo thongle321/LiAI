@@ -23,7 +23,7 @@ module.exports = {
   ],
   coverageReporters: ['text-summary'],
   transformIgnorePatterns: [
-    'node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|expo-(.*)|@expo|@expo-(.*)|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation|uniwind|tailwindcss|react-native-vision-camera|react-native-reanimated|react-native-worklets|react-native-gesture-handler|@lodev09/react-native-true-sheet|llama\\.rn|@dr\\.pogodin/react-native-fs|react-native-keyboard-controller|react-native-marked|react-native-code-highlighter|react-native-sherpa-onnx|tinybase)/)',
+    'node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|expo-(.*)|@expo|@expo-(.*)|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation|uniwind|tailwindcss|react-native-vision-camera|react-native-reanimated|react-native-worklets|react-native-gesture-handler|@lodev09/react-native-true-sheet|llama\\.rn|@dr\\.pogodin/react-native-fs|react-native-keyboard-controller|react-native-marked|react-native-code-highlighter|tinybase)/)',
     'node_modules/react-native-reanimated/plugin/',
     'node_modules/@react-native/babel-preset/',
   ],
@@ -55,8 +55,10 @@ module.exports = {
       '<rootDir>/__mocks__/external/react-native-marked.js',
     'react-native-code-highlighter':
       '<rootDir>/__mocks__/external/react-native-code-highlighter.js',
-    'react-native-sherpa-onnx':
-      '<rootDir>/__mocks__/external/react-native-sherpa-onnx.js',
+    // Renders through React Native Skia (native): the fake mirrors the
+    // View/label contract the voice UI consumes. See the file for scope.
+    'expo-thinking-orbs':
+      '<rootDir>/__mocks__/external/expo-thinking-orbs.tsx',
     '@kesha-antonov/react-native-background-downloader':
       '<rootDir>/__mocks__/external/@kesha-antonov/react-native-background-downloader.js',
     // Anchored: subpath imports (`@expo/ui/jetpack-compose`) resolve to the

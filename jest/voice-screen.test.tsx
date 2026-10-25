@@ -58,9 +58,15 @@ function surface(
 }
 
 let mockSurface = surface();
+const hookDeps = {
+  last: null as null | (Parameters<typeof useVoiceMode>[0] & object),
+};
 
 jest.mock("@/hooks/useVoiceMode.ts", () => ({
-  useVoiceMode: () => mockSurface,
+  useVoiceMode: (deps?: Parameters<typeof useVoiceMode>[0]) => {
+    hookDeps.last = deps ?? null;
+    return mockSurface;
+  },
 }));
 
 function armStores(): void {
@@ -71,6 +77,7 @@ function armStores(): void {
 beforeEach(() => {
   armStores();
   jest.clearAllMocks();
+  hookDeps.last = null;
   mockSurface = surface();
 });
 
@@ -82,6 +89,8 @@ describe("VoiceScreen", () => {
     fireEvent.press(screen.getByLabelText("Tap to speak"));
     expect(actions.requestEntry).toHaveBeenCalledTimes(1);
     expect(actions.tapCloud).not.toHaveBeenCalled();
+    // The mic capsule is wired to the controller as the orb's level feed.
+    expect(typeof hookDeps.last?.onMicAudio).toBe("function");
   });
 
   it("listening: the label gains the phase; the mic press is the cloud tap", () => {

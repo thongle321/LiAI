@@ -11,7 +11,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.liai.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "LiAI needs the camera to see what you see."
+        "NSCameraUsageDescription": "LiAI needs the camera to see what you see.",
+        "CADisableMinimumFrameDuration": true
       }
     },
     "android": {

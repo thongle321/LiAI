@@ -20,6 +20,7 @@ import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
+import { VoiceOrb, useVoiceAmplitude, useVoiceLevels } from "expo-thinking-orbs";
 
 describe("@expo/ui stub", () => {
   it("renders children through the native control stubs", () => {
@@ -79,5 +80,31 @@ describe("native SDK boundary mocks", () => {
     const [loaded, error] = Font.useFonts({ Inter: {} });
     expect(loaded).toBe(true);
     expect(error).toBe(null);
+  });
+
+  it("expo-thinking-orbs renders the orb shell as a labelled View", () => {
+    // The hooks exist and hand back level-shaped values, so the voice UI's
+    // wiring loads under Jest without the native Skia module.
+    function Harness(): React.ReactElement {
+      const mic = useVoiceLevels({ sampleRate: 16_000 });
+      const agent = useVoiceAmplitude();
+      mic.setSamples(new Float32Array(1600), 16_000);
+      agent.set(0.5);
+      return (
+        <VoiceOrb
+          state="listening"
+          inputAmplitude={mic.level}
+          outputAmplitude={agent.level}
+          inputLevels={mic}
+          size={64}
+        />
+      );
+    }
+    const { getByLabelText } = render(
+      <View>
+        <Harness />
+      </View>,
+    );
+    expect(getByLabelText("Listening…")).toBeOnTheScreen();
   });
 });

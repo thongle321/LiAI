@@ -493,6 +493,50 @@ describe("turn wiring", () => {
   });
 });
 
+describe("mic audio seam", () => {
+  it("every capture chunk hands the UI its samples without detouring the utterance", async () => {
+    // The orb's level feed: the SAME chunks the endpointer sees, decoded
+    // to -1..1 floats so the caller can drive SharedValues without
+    // re-rendering React.
+    const onMicAudio = jest.fn();
+    const rig = makeRig({ onMicAudio });
+    await enterOpen(rig);
+
+    act(() => {
+      rig.capture.deliver(voicedPcm(50));
+    });
+    expect(onMicAudio).toHaveBeenCalledTimes(1);
+    const floats = onMicAudio.mock.calls[0]![0] as Float32Array;
+    expect(floats).toBeInstanceOf(Float32Array);
+    expect(floats.length).toBe(50 * 16); // 50 ms at 16 kHz, int16 halves it
+    expect(Math.abs(floats[0]!)).toBeCloseTo(0.1, 3);
+
+    // The endpointer's path is untouched: the same stream still lands.
+    deliverUtterance(rig);
+    await waitFor(() => {
+      expect(rig.engine.utterances.length).toBe(1);
+    });
+  });
+
+  it("the flow stops when the capture does — nothing leaks past a turn", async () => {
+    const onMicAudio = jest.fn();
+    const rig = makeRig({ onMicAudio });
+    await enterOpen(rig);
+
+    deliverUtterance(rig);
+    await waitFor(() => {
+      expect(rig.result.current.phase).toBe("transcribing");
+    });
+    const soFar = onMicAudio.mock.calls.length;
+
+    // No chunks can arrive while the capture is down; nothing fakes one.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(onMicAudio.mock.calls.length).toBe(soFar);
+  });
+});
+
 describe("exits", () => {
   it("End releases the engine, stops the capture and closes", async () => {
     const rig = makeRig();
@@ -506,6 +550,7 @@ describe("exits", () => {
     expect(rig.engine.released).toBe(1);
     expect(rig.capture.stopped).toBe(1);
   });
+
 
   it(
     "a mic that delivers nothing restarts once, then ends the session",

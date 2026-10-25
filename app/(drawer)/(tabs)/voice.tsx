@@ -2,21 +2,22 @@
  *  session controller (hooks/useVoiceMode — ported from PocketPal's
  *  useVoiceMode, one Whisper tier for dictation + voice mode).
  *
- *  Its own tab, so no X button — the bottom tab bar switches away. Big
- *  static mic + status label; your live words show while talking; while
- *  the AI replies a block shows a loading spinner + "Playing audio..."
- *  + Stop with the reply text below. Layout never moves: the heard line
- *  and overlay stay mounted (invisible when idle); only the mic pulses
- *  while listening and the overlay fades.
+ *  Redesigned around the expo-thinking-orbs shell (docs/specs/
+ *  2026-10-25-voice-tab-orb-redesign.md): the mic disc it replaces is now
+ *  components/voice/voice-orb-hero.tsx — a VoiceOrb that resolves its
+ *  behaviour from the session phase and swells with the live audio. The
+ *  orb IS the hero: centered, and the hit area — closed it enters the
+ *  gates, a live session taps the cloud (end-of-utterance / interrupt).
  *
- *  Entry is the controller's: model → tier (sheets here) → mic → memory
- *  fit (sheet here) → listening. A tap mid-session is the cloud tap
- *  (end-of-utterance / interrupt); End ends the session outright.
+ *  Below it the label + heard line never move: the caption and overlay
+ *  stay mounted (invisible when idle) so layout never shifts; the reply
+ *  overlay still shows "Playing audio…" + Stop while the machine speaks,
+ *  and the End button is the explicit way out (the tab bar switches
+ *  away otherwise). Sheets are the controller's pre-entry gates.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   Text,
@@ -25,32 +26,36 @@ import {
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withRepeat,
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { openSettings } from "expo-linking";
 import { useRouter } from "expo-router";
-import { Mic } from "lucide-react-native";
 
+import { ASR_SAMPLE_RATE } from "@/services/asr/constants.ts";
 import { useColors } from "@/themes/tokens.ts";
 import {
   MOTION_DURATION_MS,
   fadeEntering,
   motionEasing,
-  usePressFeedback,
 } from "@/utils/motion.ts";
 import { useVoiceMode } from "@/hooks/useVoiceMode.ts";
 import { VOICE_MODE_LABEL } from "@/services/voice/voice-status.ts";
 import { useModelStore } from "@/store/model-store.ts";
 import { VoiceSetupSheet } from "@/components/voice/voice-setup-sheet.tsx";
 import { VoiceMemorySheet } from "@/components/voice/voice-memory-sheet.tsx";
+import { VoiceOrbHero } from "@/components/voice/voice-orb-hero.tsx";
+import { useVoiceLevels } from "expo-thinking-orbs";
 
 export default function VoiceScreen() {
   const colors = useColors();
   const router = useRouter();
+  // The mic capsule lives here (not the hero) so the controller's
+  // onMicAudio seam fills it every 50 ms chunk while listening.
+  const mic = useVoiceLevels({ sampleRate: ASR_SAMPLE_RATE });
   const voice = useVoiceMode({
     openModels: () => router.push("/models"),
+    onMicAudio: mic.setSamples,
   });
   const {
     phase,
@@ -74,27 +79,20 @@ export default function VoiceScreen() {
   const models = useModelStore((s) => s.models);
   const chatModelName =
     models.find((m) => m.id === activeModelId)?.name ?? "this chat model";
-  const motionDuration = MOTION_DURATION_MS;
   const speaking = phase === "speaking";
-  const micPress = usePressFeedback();
+  // An issue with no live session is a dead gate — the orb freezes as
+  // `failed`. Mid-session problems keep the shell live; the text explains.
+  const failed = issue !== null && !open;
+  const orbPress = (): void => {
+    if (open) {
+      tapCloud();
+    } else {
+      void requestEntry();
+    }
+  };
+
   // Captions: tap the heard line to toggle the live transcript.
   const [captionsOn, setCaptionsOn] = useState(true);
-  // Gentle pulse while listening — reuses reanimated, no new deps.
-  const pulse = useSharedValue(1);
-  useEffect(() => {
-    if (phase === "listening") {
-      pulse.value = withRepeat(
-        withTiming(1.04, { duration: 900, easing: motionEasing }),
-        -1,
-        true,
-      );
-    } else {
-      pulse.value = withTiming(1, { duration: 150, easing: motionEasing });
-    }
-  }, [phase, pulse, motionEasing]);
-  const pulseStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pulse.value }],
-  }));
 
   // Overlay fades in on reply start, fades out when audio ends.
   // Always mounted — only opacity changes, so nothing ever shifts.
@@ -105,15 +103,9 @@ export default function VoiceScreen() {
       easing: motionEasing,
     });
   }, [speaking, overlayOpacity]);
-
   const overlayStyle = useAnimatedStyle(() => ({
     opacity: overlayOpacity.value,
   }));
-
-  // Speech is live (mouth or machine): the mic sits in the ringed, colored
-  // state. Every other phase keeps the plain circle — a session loading
-  // model weights looks different from idle by its LABEL, not its layout.
-  const micLive = phase === "listening" || phase === "speaking";
 
   return (
     <SafeAreaView
@@ -121,39 +113,16 @@ export default function VoiceScreen() {
       style={{ flex: 1, backgroundColor: colors.base }}
     >
       <ScrollView contentContainerClassName="flex-1 items-center justify-center px-8">
-        {/* The hit area IS the visual: a 44px target wrapped around a 160px
-            circle would make the outer ring dead to the thumb. */}
-        <Animated.View style={micPress.animatedStyle}>
-          <Pressable
-            onPress={open ? tapCloud : () => void requestEntry()}
-            onPressIn={micPress.onPressIn}
-            onPressOut={micPress.onPressOut}
-            className="h-40 w-40 items-center justify-center rounded-full"
-            accessibilityRole="button"
-            accessibilityLabel={open ? "Tap to stop or take the turn" : "Tap to speak"}
-          >
-            {/* Listening is a machine-in-the-loop state: a Surface Tint circle
-                with concentric Signal Blue rings. Disabled is never used — a
-                tap always does something now (entry routes the gates). */}
-            <Animated.View
-              style={pulseStyle}
-              className={`h-40 w-40 items-center justify-center rounded-full ${
-                micLive ? "bg-surface-3" : "bg-surface-2"
-              }`}
-            >
-              <View className="h-32 w-32 items-center justify-center rounded-full border border-border">
-                <Mic
-                  size={56}
-                  color={micLive ? colors.primary : colors.secondaryText}
-                />
-              </View>
-            </Animated.View>
-          </Pressable>
-        </Animated.View>
+        <VoiceOrbHero
+          phase={phase}
+          failed={failed}
+          mic={mic}
+          onTap={orbPress}
+        />
 
         <Animated.Text
           key={phase}
-          entering={fadeEntering(motionDuration)}
+          entering={fadeEntering(MOTION_DURATION_MS)}
           className="mt-6 text-center font-sans-semibold text-h3 text-primary-text"
         >
           {VOICE_MODE_LABEL[phase]}
@@ -171,41 +140,38 @@ export default function VoiceScreen() {
           </Text>
         </Pressable>
 
+        {/* While the machine speaks the orb IS the indicator: the overlay
+            is just the way to stop it, riding the cloud tap. */}
+        <Animated.View
+          style={overlayStyle}
+          pointerEvents={speaking ? "auto" : "none"}
+          className="absolute bottom-8 left-8 right-8"
+        >
+          <View className="surface bg-surface-1 flex-row items-center p-4">
+            <Text className="flex-1 font-sans text-body-md text-primary-text">
+              Playing audio…
+            </Text>
+            <Pressable
+              onPress={tapCloud}
+              className="btn btn--ghost active:opacity-80 px-5 py-2"
+              accessibilityRole="button"
+              accessibilityLabel="Stop playback"
+            >
+              <Text className="font-sans-semibold text-body-md text-primary">Stop</Text>
+            </Pressable>
+          </View>
+        </Animated.View>
+
         {open && (
           <Pressable
             onPress={() => void end()}
-            className="btn btn--ghost active:opacity-80 mt-4 px-5 py-2"
+            className="btn btn--ghost active:opacity-80 mt-6 px-6 py-2"
             accessibilityRole="button"
             accessibilityLabel="End conversation"
           >
             <Text className="font-sans-semibold text-body-md text-primary">End</Text>
           </Pressable>
         )}
-
-        <Animated.View
-          style={overlayStyle}
-          pointerEvents={speaking ? "auto" : "none"}
-          className="mt-6 w-full"
-        >
-          <View className="surface bg-surface-1 w-full p-5">
-            <View className="flex-row items-center">
-              <View className="h-10 w-10 items-center justify-center rounded-full bg-surface-3">
-                <ActivityIndicator size="small" color={colors.primary} />
-              </View>
-              <Text className="ml-3 flex-1 font-sans text-body-md text-primary-text">
-                Playing audio…
-              </Text>
-              <Pressable
-                onPress={tapCloud}
-                className="btn btn--ghost active:opacity-80 px-5 py-2"
-                accessibilityRole="button"
-                accessibilityLabel="Stop playback"
-              >
-                <Text className="font-sans-semibold text-body-md text-primary">Stop</Text>
-              </Pressable>
-            </View>
-          </View>
-        </Animated.View>
 
         {reply !== null && reply !== "" && (
           <Text className="mt-4 text-center font-sans text-body-md text-primary-text">

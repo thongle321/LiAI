@@ -1,9 +1,11 @@
 /** ChatPickerSheet: PocketPal's tabbed pal/model picker, LiAI shape.
  *
- *  These tests pin the four behaviours the port is judged on: Models is the
+ *  These tests pin the behaviours the port is judged on: Models is the
  *  opening tab (PocketPal's `activeTab='models'`), the Companions tab lists
- *  installed companions, selecting either kind closes the sheet, and the
- *  "No companion" unbind row only appears while one is actually bound.
+ *  installed companions with a capability subtitle (never the description),
+ *  selecting either kind closes the sheet, the "No companion" unbind row
+ *  only appears while one is actually bound, and the active companion
+ *  carries the selection state without inventing a management gear.
  */
 
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
@@ -30,22 +32,14 @@ jest.mock("react-native-keyboard-controller", () => ({
 // The companions store persists through AsyncStorage, whose dynamic import
 // cannot run under Jest's CJS VM. Only reads are used here, so a selector
 // stub is both sufficient and faster than turning persistence back on.
-jest.mock("@/store/companions.ts", () => {
-  const { PIP_COMPANION: seed } = jest.requireActual(
-    "@/services/companions/builtins.ts",
-  ) as { PIP_COMPANION: Record<string, unknown> };
-  const companion = {
-    ...seed,
-    id: "pip",
-    created_at: "2026-01-01T00:00:00.000Z",
-    updated_at: "2026-01-01T00:00:00.000Z",
-  };
-  return {
-    ensureCompanionsLoaded: jest.fn(),
-    useCompanions: (selector: (state: { companions: unknown[] }) => unknown) =>
-      selector({ companions: [companion] }),
-  };
-});
+// `mockCompanionSeed` starts as a self-contained literal (the factory runs
+// while this file's imports are still resolving) and each setup() swaps it.
+let mockCompanionSeed: unknown = { id: "pip", name: "Pip" };
+jest.mock("@/store/companions.ts", () => ({
+  ensureCompanionsLoaded: jest.fn(),
+  useCompanions: (selector: (state: { companions: unknown[] }) => unknown) =>
+    selector({ companions: [mockCompanionSeed] }),
+}));
 
 const onClose = jest.fn();
 
@@ -54,6 +48,13 @@ const pip: Companion = {
   id: "pip",
   created_at: "2026-01-01T00:00:00.000Z",
   updated_at: "2026-01-01T00:00:00.000Z",
+};
+
+const lookie: Companion = {
+  ...pip,
+  id: "lookie",
+  name: "Lookie",
+  capabilities: { video: true },
 };
 
 function readySpec(id: string, name: string) {
@@ -65,7 +66,8 @@ function readySpec(id: string, name: string) {
   });
 }
 
-function setup(companionId: string | null = "pip") {
+function setup(companionId: string | null = "pip", companion: Companion = pip) {
+  mockCompanionSeed = companion;
   act(() => {
     useModelStore.setState({
       models: [readySpec("alpha", "Alpha"), readySpec("beta", "Beta")],
@@ -133,5 +135,38 @@ describe("ChatPickerSheet", () => {
     setup(null);
     fireEvent.press(screen.getByTestId("chat-picker-tab-companions"));
     expect(screen.queryByText("No companion")).toBeNull();
+  });
+
+  it("reads the capability, not the description, as the row subtitle", () => {
+    setup();
+    fireEvent.press(screen.getByTestId("chat-picker-tab-companions"));
+    // Pip carries a description AND the assistant fallback: the row must
+    // show "Assistant" (reference getCapabilityText), never the prose.
+    expect(screen.getByText("Assistant")).toBeTruthy();
+    expect(screen.queryByText(PIP_COMPANION.description ?? "")).toBeNull();
+  });
+
+  it("names a video-capable companion 'Video'", () => {
+    setup("lookie", lookie);
+    fireEvent.press(screen.getByTestId("chat-picker-tab-companions"));
+    expect(screen.getByText("Video")).toBeTruthy();
+    expect(screen.queryByText("Assistant")).toBeNull();
+  });
+
+  it("marks the active companion row through the selection state only", () => {
+    // No PalsHub here, so the reference's settings gear has no surface to
+    // live on (management is the Companions screen) — the tint pair is the
+    // ONLY active signal, and the accessibility state stays truthful.
+    setup("pip");
+    fireEvent.press(screen.getByTestId("chat-picker-tab-companions"));
+    const row = screen.getByLabelText("Use companion Pip");
+    expect(row.props.accessibilityState).toMatchObject({ selected: true });
+  });
+
+  it("keeps the active row unmarked for the rest", () => {
+    setup(null);
+    fireEvent.press(screen.getByTestId("chat-picker-tab-companions"));
+    const row = screen.getByLabelText("Use companion Pip");
+    expect(row.props.accessibilityState).toMatchObject({ selected: false });
   });
 });

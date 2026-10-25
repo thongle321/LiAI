@@ -5,10 +5,10 @@
  * Filter chips cover what is meaningful WITHOUT PalsHub: every companion here
  * is local, so the honest split is by tools (which ones carry a pact).
  *
- * "Use" follows PocketPal's activatePalWithModel: bind the companion (staged
- * for an unsent conversation, bound in place otherwise), take its
+ * Activation lives ON the card's avatar badge (the reference runs
+ * activatePalWithModel from the badge too): bind the companion, take its
  * downloaded model when one is free, ask before leaving a different
- * model, then land on Chat.
+ * model, then land on Chat. The tap surface opens the editor.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -19,7 +19,6 @@ import { Plus, FolderOpen } from "lucide-react-native";
 import { useColors } from "@/themes/tokens.ts";
 import { ScreenHeader } from "@/components/screen-header.tsx";
 import { CompanionCard } from "@/components/companions/companion-card.tsx";
-import { useActivateCompanion } from "@/hooks/useActivateCompanion.ts";
 import { useCompanions, ensureCompanionsLoaded } from "@/store/companions.ts";
 import { pickCompanionsFile } from "@/services/companions/share-companions.ts";
 import {
@@ -61,14 +60,6 @@ export function CompanionsScreen({
     const withTools = (p: Companion) => (p.pact?.talents.length ?? 0) > 0;
     return companions.filter((p) => (filter === "tools" ? withTools(p) : !withTools(p)));
   }, [companions, filter]);
-
-  const activateCompanion = useActivateCompanion();
-
-  async function useCompanion(companion: Companion): Promise<void> {
-    // One orchestrator with the in-chat picker: bind, resolve the model,
-    // land on Chat (hooks/useActivateCompanion.ts).
-    await activateCompanion(companion);
-  }
 
   function addMenu(): void {
     Alert.alert("New Companion", "Pick a template", [
@@ -161,7 +152,7 @@ export function CompanionsScreen({
           columnWrapperStyle={{ gap: GAP }}
           renderItem={({ item }) => (
             <View style={{ width: cardWidth }}>
-              <CompanionCard companion={item} onOpen={() => onOpen(item)} onUse={() => void useCompanion(item)} />
+              <CompanionCard companion={item} onOpen={() => onOpen(item)} />
             </View>
           )}
         />

@@ -20,6 +20,7 @@ import type {
 import type { VoiceChatPort } from "@/services/voice/chat-port.ts";
 import { useAsrStore } from "@/store/asr.ts";
 import { useVoice } from "@/store/voice.ts";
+import { PHONON_VOICES } from "@/services/tts/engines/phonon/voices";
 
 jest.mock("@/services/voice/mic-access.ts", () => ({
   ensureMicAccess: jest.fn(async () => "granted"),
@@ -370,6 +371,41 @@ describe("entry gates", () => {
     });
 
     expect(rig.result.current.phase === "listening").toBe(true);
+  });
+
+  it("the fit counts the selected voice engine's runtime bytes as the tts row", async () => {
+    // chat 1 GB + whisper base 330 MB fits a 3 GB phone's 45% budget
+    // (1.33B vs 1.35B) but adding Phonon's measured 200 MiB runtime
+    // overshoots — the sheet says tight, with a tts row that names the
+    // reference's figure (PocketPal's TTS_ENGINE_RUNTIME_BYTES.phonon).
+    const PHONON_RUNTIME = 200 * 1024 * 1024;
+    // Seed: a selected Phonon voice (via phonon.ts's own curated table).
+    useVoice.setState({
+      currentVoice: {
+        id: PHONON_VOICES[0]!.id,
+        name: PHONON_VOICES[0]!.name,
+        engine: "phonon",
+      },
+    });
+    const rig = makeRig({
+      deviceMemory: async () => ({ os: "android", totalBytes: 3_000_000_000 }),
+      chatBytes: async () => 1_000_000_000,
+    });
+    armStore();
+
+    await act(async () => {
+      await rig.result.current.requestEntry();
+    });
+
+    const sheet = rig.result.current.sheet;
+    expect(sheet).not.toBeNull();
+    expect(sheet!.kind).toBe("memory");
+    if (sheet!.kind !== "memory") return;
+    expect(sheet!.fit.status).toBe("tight");
+    expect(sheet!.fit.breakdown.rows).toContainEqual({
+      kind: "tts",
+      bytes: PHONON_RUNTIME,
+    });
   });
 });
 

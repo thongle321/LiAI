@@ -32,6 +32,7 @@ import { chatVoicePort, type VoiceChatPort } from "@/services/voice/chat-port.ts
 import { voiceMemoryFit, type DeviceMemory } from "@/services/voice/memory-fit.ts";
 import { Endpointer } from "@/services/voice/endpointer.ts";
 import { VOICE_CAPTURE_SETTLE_MS, VOICE_MIC_WATCHDOG_MS, VOICE_START_TIMEOUT_MS } from "@/services/voice/constants.ts";
+import { TTS_ENGINE_RUNTIME_BYTES } from "@/services/tts/constants.ts";
 import { int16PcmToFloat32 } from "@/services/asr/energyVad.ts";
 import type {
   VoiceEngine,
@@ -186,12 +187,19 @@ class VoiceModeController {
       return;
     }
     const tier = asrStore.selectedTier;
+    // The selected TTS voice's measured runtime bytes (PocketPal's
+    // TTS_ENGINE_RUNTIME_BYTES table); the system voice has none (0 row,
+    // omitted from the breakdown). Replaces item 1's placeholder.
+    const voice = useVoice.getState().currentVoice;
+    const ttsBytes =
+      voice !== null && voice.engine !== "system"
+        ? TTS_ENGINE_RUNTIME_BYTES[voice.engine]
+        : 0;
     const fit = voiceMemoryFit({
       memory: await this.deps.deviceMemory(),
       chatBytes: await this.deps.chatBytes(),
       sttTier: tier,
-      // LiAI: no measured engine RAM exists, so no tts row (divergence).
-      ttsBytes: 0,
+      ttsBytes,
     });
     if (fit.status === "fits") {
       this.hooks.sheet(null);

@@ -25,7 +25,6 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { AsyncStorageStatic } from "@react-native-async-storage/async-storage";
 import type { KeyValueStorage } from "@/services/storage/storage.ts";
 import { dedupedStorage, gatedStorage, toStateStorage } from "@/services/storage/persist-helpers";
 import {
@@ -37,10 +36,11 @@ import {
 import { ThinkingStripper, pickThinkingPlaceholder } from "@/services/tts/thinkingStripper.ts";
 import { stripForSpeech } from "@/utils/strip-for-speech.ts";
 import type { SupertonicLanguage } from "@pocketpalai/react-native-speech";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { SupertonicSteps } from "@/services/tts/types.ts";
 import { ENGINE_ORDER, NEURAL_ENGINE_META } from "@/services/tts/engineMeta.ts";
 import type { TtsModelStatus } from "@/services/tts/types.ts";
-import { getEngine } from "@/services/tts/engineRegistry.ts";
+import { getEngine, getPhononSupport } from "@/services/tts/engineRegistry.ts";
 import { ttsRuntime } from "@/services/tts/runtime.ts";
 import { playVoice } from "@/services/tts/voice-engine.ts";
 import { readTotalMemory } from "@/services/models/device-tiers.ts";
@@ -95,10 +95,20 @@ export interface VoiceState {
    *  runtime is one-slot, so other cards must not start a transfer. */
   activeEngineId: NeuralEngineId | null;
   deviceMeetsMemory: boolean;
+  phononSupported: boolean;
   loaded: boolean;
   load: () => Promise<void>;
   /** override ?? deviceMeetsMemory — the single availability rule. */
   isTTSAvailable: () => boolean;
+  /** PocketPal's offering gate: true for every neural engine; for Phonon,
+   *  true only while the add-on probe reports the engine supported. */
+  isEngineOffered: (engine: NeuralEngineId) => boolean;
+  /** Re-probe Phonon support (reference's refreshPhononSupport): sets
+   *  `phononSupported`, and when the probe says unsupported while a Phonon
+   *  voice is selected, stops playback and falls back to the device
+   *  default WITHOUT stashing the id — the files stay on disk and the
+   *  stash path belongs to downloads, not support loss. */
+  refreshPhononSupport: () => Promise<void>;
   setCurrentVoice: (voice: Voice | null) => void;
   setAutoSpeak: (autoSpeak: boolean) => void;
   setVoiceOutputActive: (active: boolean) => void;
@@ -286,6 +296,15 @@ export function createVoiceStore(storage: KeyValueStorage) {
         });
         // PocketPal engines manage their own downloads; no cross-session
         // resume probe is available here. Disk state above stands.
+        // PocketPal's init-reconcile for Phonon: the add-on probe decides
+        // whether the engine is offered on this device at all. Runs through
+        // refreshPhononSupport so an unsupported probe also clears a
+        // persisted Phonon voice (without stashing it).
+        try {
+          await get().refreshPhononSupport();
+        } catch {
+          set({ phononSupported: false });
+        }
         try {
           const total = await readTotalMemory();
           set({ deviceMeetsMemory: total !== null && total >= RAM_GATE_BYTES });
@@ -312,6 +331,7 @@ export function createVoiceStore(storage: KeyValueStorage) {
       downloads: { ...EMPTY_DOWNLOADS },
       activeEngineId: null,
       deviceMeetsMemory: false,
+      phononSupported: false,
       loaded: false,
 
       load: async () => {
@@ -330,6 +350,27 @@ export function createVoiceStore(storage: KeyValueStorage) {
       isTTSAvailable: () => {
         const { userTTSOverride, deviceMeetsMemory } = get();
         return userTTSOverride ?? deviceMeetsMemory;
+      },
+
+      isEngineOffered: (engine) => {
+        const { phononSupported } = get();
+        return engine !== "phonon" || phononSupported;
+      },
+
+      refreshPhononSupport: async () => {
+        let supported: boolean;
+        try {
+          supported = (await getPhononSupport()).supported;
+        } catch {
+          supported = false;
+        }
+        set({ phononSupported: supported });
+        if (supported) return;
+        if (get().currentVoice?.engine !== "phonon") return;
+        await get().stop().catch(() => {});
+        if (get().currentVoice?.engine === "phonon") {
+          set({ currentVoice: DEVICE_DEFAULT_VOICE });
+        }
       },
 
       setCurrentVoice: (voice) => {
@@ -369,6 +410,9 @@ export function createVoiceStore(storage: KeyValueStorage) {
           await playVoice(text, voice, { speed: options.speed }, { stop: () => get().stop() });
         } catch {
           // A failed play must not wedge the state machine.
+          if (voice.engine === "phonon") {
+            void get().refreshPhononSupport();
+          }
         } finally {
           if (get().playbackState.mode === "playing") {
             set({ playbackState: { mode: "idle" } });
@@ -549,6 +593,9 @@ export function createVoiceStore(storage: KeyValueStorage) {
           return null;
         } catch (err) {
           applyEngineStatus(engineId, { state: "error", percent: 0, error: String(err) });
+          if (engineId === "phonon") {
+            void get().refreshPhononSupport();
+          }
           throw err;
         } finally {
           if (get().activeEngineId === engineId) set({ activeEngineId: null });
@@ -628,20 +675,17 @@ export function createVoiceStore(storage: KeyValueStorage) {
   return created;
 }
 
-async function rnStorage(): Promise<AsyncStorageStatic> {
-  const mod = await import("@react-native-async-storage/async-storage");
-  // SAFETY: the module's default export is the AsyncStorage instance; the
-  // interop wrapper returns the namespace on some bundlers.
-  return (mod.default ?? mod) as unknown as AsyncStorageStatic;
-}
-
-/** App singleton backed on-device AsyncStorage. */
+/* App singleton backed on-device AsyncStorage. AsyncStorage is a static,
+ * module-mapped import (the ASR store's pattern): it is a pure JS KV with a
+ * jest fake, and a dynamic import here throws in node ("dynamic import
+ * callback without --experimental-vm-modules"), which any hydrate on the
+ * jested singleton would hit. */
 export const useVoice = createVoiceStore({
-  getItem: async (key) => (await rnStorage()).getItem(key),
+  getItem: async (key) => await AsyncStorage.getItem(key),
   setItem: async (key, value) => {
-    await (await rnStorage()).setItem(key, value);
+    await AsyncStorage.setItem(key, value);
   },
   removeItem: async (key) => {
-    await (await rnStorage()).removeItem(key);
+    await AsyncStorage.removeItem(key);
   },
 });

@@ -10,7 +10,7 @@ import {
   ringFraction,
   type EngineGroupState,
 } from "../voiceUi";
-import type { TtsModelStatus } from "../download";
+import type { TtsModelStatus } from "../types";
 
 const KOKORO_BYTES = 103_248_205;
 

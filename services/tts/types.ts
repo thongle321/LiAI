@@ -1,52 +1,76 @@
-/** TTS engine layer types (ticket 03 / spec Q2, Q15a).
+/** TTS engine layer types — PocketPal-shaped, on LiAI's stack.
  *
- * PocketPal-shaped (`services/tts/types.ts`) with the v1 surface only:
- * id / isInstalled / getVoices / loadInto / play / stop. The streaming
- * path (`playStreaming` + StreamingHandle) is phase 2 (spec Q3).
+ *  Adds the streaming path (`playStreaming` + `StreamingHandle`) that the
+ *  v1 oneshot-only layer lacked, plus the `NeuralEngine` download surface
+ *  so the store drives installs through the engine instead of a sherpa
+ *  bridge.
  */
 
-/** The downloadable (neural) engines. `system` is the no-download default
- *  and is never one of these — every card in the "Downloadable engines"
- *  list is keyed by a `NeuralEngineId`. */
-export type NeuralEngineId = "kokoro" | "kitten" | "supertonic";
+import type { FirstChunkMode, StreamProgressEvent } from "@pocketpalai/react-native-speech";
 
-export type EngineId = "system" | NeuralEngineId;
+export type EngineId = "system" | "kitten" | "kokoro" | "supertonic" | "phonon";
 
-export interface Voice {
-  /** Stable identifier used to look up the voice on the engine. */
-  id: string;
-  /** Human-readable display name. */
-  name: string;
-  /** Engine that owns this voice. */
-  engine: EngineId;
-  /** Optional language code (BCP-47 or engine-specific). */
-  language?: string;
+/** Engines whose model files the app downloads and manages. */
+export type NeuralEngineId = Exclude<EngineId, "system">;
+
+export type SupertonicSteps = 1 | 2 | 3 | 5 | 10 | 20;
+export type SupertonicLanguage = string;
+
+export type TtsModelState =
+  | "not_installed"
+  | "downloading"
+  | "paused"
+  | "ready"
+  | "error";
+
+export interface TtsModelStatus {
+  state: TtsModelState;
+  percent: number;
+  phase?: string;
+  error?: string;
 }
 
-/** Synthesis knobs; the system engine ignores both. */
-export interface PlayOptions {
-  /** Speaker id override. Each neural engine's curated voice list is in sid
-   *  order, so the default is the voice's index in that list. */
-  sid?: number;
-  speed?: number;
+export interface Voice {
+  id: string;
+  name: string;
+  engine: EngineId;
+  language?: string;
+  gender?: "f" | "m";
+}
+
+export interface SpeakOptions {
+  voice?: Voice;
+}
+
+export interface StreamingHandle {
+  appendText(chunk: string): void;
+  finalize(): Promise<void>;
+  cancel(): Promise<void>;
+}
+
+export interface StreamOptions {
+  firstChunk?: FirstChunkMode;
+  onProgress?: (event: StreamProgressEvent) => void;
 }
 
 export interface Engine {
   readonly id: EngineId;
-  /** Whether the engine can play now (models installed, OS TTS present). */
   isInstalled(): Promise<boolean>;
-  /** Voices this engine offers. */
   getVoices(): Promise<Voice[]>;
-  /** Claim the single native slot. Called by the runtime, once per swap. */
   loadInto(): Promise<void>;
-  /** Speak `text`; resolves when playback ends or is stopped. */
-  play(text: string, voice: Voice, options?: PlayOptions): Promise<void>;
-  /** Stop in-flight playback. Safe to call when idle. */
+  play(text: string, voice: Voice): Promise<void>;
+  playStreaming(voice: Voice, waitFor?: Promise<void>, streamOpts?: StreamOptions): StreamingHandle;
   stop(): Promise<void>;
 }
 
-/** The one System row (Q15a): OS TTS with no voice pinning (Q9 — system
- *  voices are never enumerated, so nothing carries an OS voice id). */
+export interface NeuralEngine extends Engine {
+  readonly id: NeuralEngineId;
+  downloadModel(onProgress?: (progress: number) => void): Promise<void>;
+  deleteModel(): Promise<void>;
+  reclaimLegacySpace?(): Promise<void>;
+}
+
+/** The one System row (Q9): OS TTS with no voice pinning. */
 export const DEVICE_DEFAULT_VOICE: Voice = {
   id: "device-default",
   name: "Device default voice",

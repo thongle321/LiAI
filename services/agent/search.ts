@@ -265,6 +265,7 @@ export async function tavilySearch(
   key: string,
   query: string,
   count: number,
+  signal?: AbortSignal,
 ): Promise<SearchResult[]> {
   requireKey(key, "Tavily");
   const payload = await providerJson(
@@ -279,6 +280,7 @@ export async function tavilySearch(
         max_results: count,
         search_depth: "basic",
       }),
+      signal,
     },
     { retryOn429: true },
   );
@@ -306,6 +308,7 @@ export async function braveSearch(
   key: string,
   query: string,
   count: number,
+  signal?: AbortSignal,
 ): Promise<SearchResult[]> {
   requireKey(key, "Brave");
   const url =
@@ -320,6 +323,7 @@ export async function braveSearch(
         Accept: "application/json",
         "X-Subscription-Token": key.trim(),
       },
+      signal,
     },
     { retryOn429: true },
   );
@@ -362,6 +366,7 @@ export async function exaSearch(
   key: string,
   query: string,
   count: number,
+  signal?: AbortSignal,
 ): Promise<SearchResult[]> {
   requireKey(key, "Exa");
   const payload = await providerJson(
@@ -375,6 +380,7 @@ export async function exaSearch(
         numResults: count,
         contents: { highlights: true, summary: true },
       }),
+      signal,
     },
     { retryOn429: true },
   );
@@ -402,6 +408,7 @@ export async function exaRead(
   fetchImpl: HttpFetch,
   key: string,
   url: string,
+  signal?: AbortSignal,
 ): Promise<PageContent> {
   requireKey(key, "Exa");
   const payload = await providerJson(
@@ -411,6 +418,7 @@ export async function exaRead(
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": key.trim() },
       body: JSON.stringify({ urls: [url], text: true }),
+      signal,
     },
   );
   const results = (payload as { results?: ExaResult[] })?.results;
@@ -432,7 +440,7 @@ async function firecrawlPost(
   key: string,
   path: string,
   body: Record<string, unknown>,
-  retryOn429?: boolean,
+  { retryOn429, signal }: { retryOn429?: boolean; signal?: AbortSignal } = {},
 ): Promise<unknown> {
   requireKey(key, "Firecrawl");
   return providerJson(
@@ -445,6 +453,7 @@ async function firecrawlPost(
         Authorization: `Bearer ${key.trim()}`,
       },
       body: JSON.stringify({ ...body, origin: FIRECRAWL_ORIGIN }),
+      signal,
     },
     { retryOn429 },
   );
@@ -455,13 +464,14 @@ export async function firecrawlSearch(
   key: string,
   query: string,
   count: number,
+  signal?: AbortSignal,
 ): Promise<SearchResult[]> {
   const payload = await firecrawlPost(
     fetchImpl,
     key,
     "/search",
     { query, limit: count },
-    true,
+    { retryOn429: true, signal },
   );
   const data = (payload as { success?: boolean; data?: { web?: unknown } }) ?? {};
   if (data.success !== true || !data.data) {
@@ -484,6 +494,7 @@ export async function firecrawlRead(
   fetchImpl: HttpFetch,
   key: string,
   url: string,
+  signal?: AbortSignal,
 ): Promise<PageContent> {
   const payload = await firecrawlPost(
     fetchImpl,
@@ -495,6 +506,7 @@ export async function firecrawlRead(
       onlyMainContent: true,
       timeout: SCRAPE_SERVER_TIMEOUT_MS,
     },
+    { signal },
   );
   const data = (payload as { success?: boolean; data?: {
     markdown?: string;
@@ -543,6 +555,7 @@ export async function youSearch(
   key: string,
   query: string,
   count: number,
+  signal?: AbortSignal,
 ): Promise<SearchResult[]> {
   const trimmed = (key ?? "").trim();
   const params = `query=${encodeURIComponent(query)}&count=${count}`;
@@ -558,7 +571,7 @@ export async function youSearch(
     payload = await providerJson(
       fetchImpl,
       `${trimmed !== "" ? YOU_KEYED_URL : YOU_FREE_URL}?${params}`,
-      { method: "GET", headers },
+      { method: "GET", headers, signal },
       { retryOn429: true },
     );
   } catch (e) {
@@ -591,6 +604,7 @@ export async function parallelSearch(
   key: string,
   query: string,
   count: number,
+  signal?: AbortSignal,
 ): Promise<SearchResult[]> {
   requireKey(key, "Parallel");
   const payload = await providerJson(
@@ -600,6 +614,7 @@ export async function parallelSearch(
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": key.trim() },
       body: JSON.stringify({ objective: query, max_results: count }),
+      signal,
     },
     { retryOn429: true },
   );
@@ -632,6 +647,7 @@ export type SearchFetcher = (
   key: string,
   query: string,
   count: number,
+  signal?: AbortSignal,
 ) => Promise<SearchResult[]>;
 
 export const FETCHERS: Record<string, SearchFetcher> = {
@@ -652,12 +668,13 @@ export async function searchWeb(
   key: string,
   query: string,
   count: number = 5,
+  signal?: AbortSignal,
 ): Promise<SearchResult[]> {
   const fetcher = FETCHERS[provider];
   if (!fetcher) throw new ProviderError(`unknown search provider: ${provider}`);
   if (query.trim() === "") return [];
   const clamped = Math.max(MIN_COUNT, Math.min(MAX_COUNT, count));
-  return fetcher(fetchImpl, key, query.trim(), clamped);
+  return fetcher(fetchImpl, key, query.trim(), clamped, signal);
 }
 
 /** Fallback reader for providers without a native read(): r.jina.ai
@@ -665,9 +682,11 @@ export async function searchWeb(
 export async function readWithDefaultReader(
   fetchImpl: HttpFetch,
   url: string,
+  signal?: AbortSignal,
 ): Promise<PageContent> {
   const text = await fetchText(fetchImpl, `https://r.jina.ai/${encodeURI(url)}`, {
     method: "GET",
+    signal,
   });
   return { url, text };
 }
@@ -679,8 +698,9 @@ export async function readPage(
   provider: string,
   key: string,
   url: string,
+  signal?: AbortSignal,
 ): Promise<PageContent> {
-  if (provider === "exa") return exaRead(fetchImpl, key, url);
-  if (provider === "firecrawl") return firecrawlRead(fetchImpl, key, url);
-  return readWithDefaultReader(fetchImpl, url);
+  if (provider === "exa") return exaRead(fetchImpl, key, url, signal);
+  if (provider === "firecrawl") return firecrawlRead(fetchImpl, key, url, signal);
+  return readWithDefaultReader(fetchImpl, url, signal);
 }

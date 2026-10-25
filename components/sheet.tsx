@@ -123,7 +123,7 @@ export function Sheet({
 }: {
   visible: boolean;
   onClose: () => void;
-  title: string;
+  title?: string;
   /** Pinned below the scrolling body, e.g. a reset action. PocketPal's
    *  `Sheet.Actions`: a plain in-flow row, the last child of the sheet's
    *  column. Sheets without commit actions pass none. */
@@ -195,19 +195,23 @@ export function Sheet({
       onLayout={onHeaderLayout}
       className="flex-row items-center justify-between px-4 pb-2 pt-4"
     >
-      <Text
-        className="flex-1 mr-2 font-sans-semibold text-body-lg text-primary-text"
-        numberOfLines={titleEllipsize ? 1 : undefined}
-        ellipsizeMode={titleEllipsize ? "middle" : undefined}
-      >
-        {title}
-      </Text>
+      {title ? (
+        <Text
+          className="flex-1 mr-2 font-sans-semibold text-body-lg text-primary-text"
+          numberOfLines={titleEllipsize ? 1 : undefined}
+          ellipsizeMode={titleEllipsize ? "middle" : undefined}
+        >
+          {title}
+        </Text>
+      ) : (
+        <View className="flex-1" />
+      )}
       <Pressable
         onPress={onClose}
         className="icon-btn"
         hitSlop={4}
         accessibilityRole="button"
-        accessibilityLabel={`Close ${title}`}
+        accessibilityLabel={title ? `Close ${title}` : "Close sheet"}
       >
         <X size={20} color={colors.secondaryText} />
       </Pressable>

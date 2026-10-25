@@ -152,6 +152,8 @@ export function createSendSlice(
     userId?: string;
     text: string;
     sessionId: string | null;
+    /** True when this turn originated from voice mode. */
+    voiceMode?: boolean;
     /** Photos for this turn (G8). */
     images?: string[];
     history: ChatMessage[];
@@ -159,10 +161,18 @@ export function createSendSlice(
     clearOnFirst: boolean;
   }): Promise<void> {
     const gen = (ctx.streamGen += 1);
+    let prevReasoning = "";
+    // The turn's own abort switch. Stop and abandoning the conversation
+    // both flip it, so a talent parked on a fetch or a 429 wait unwinds
+    // with the turn instead of outliving it.
+    const toolAbort = new AbortController();
+    const handle = { cancel: () => toolAbort.abort() };
+    ctx.active.handle = handle;
     set({ turnStartedAt: Date.now() });
     // A rerun reuses the bubble id: forget any spoken mark from the
     // previous run, or the new reply would be silenced by it (ticket 05).
     useVoice.getState().clearSpoken(opts.assistantId);
+    useVoice.getState().onAssistantMessageStart(opts.assistantId);
     // Ticket 03: each turn's tool-call token count starts from zero.
     ctx.toolTokens.turnStart();
     set({ toolTokenCount: 0 });
@@ -231,7 +241,9 @@ export function createSendSlice(
         opts.text,
         {
           sessionId: opts.sessionId,
+          ...(opts.voiceMode ? { voiceMode: true } : {}),
           ...(images !== undefined ? { images } : {}),
+          signal: toolAbort.signal,
           history: opts.history,
           ...(opts.retry ? { retry: true } : {}),
           // The bubble ids ARE the row ids: minted up front so there is
@@ -243,10 +255,16 @@ export function createSendSlice(
         (token) => {
           if (gen !== ctx.streamGen) return;
           updateBubble(opts.assistantId, (m) => ({ text: m.text + token }));
+          useVoice.getState().onAssistantMessageChunk(opts.assistantId, token);
         },
         (cumulative) => {
           if (gen !== ctx.streamGen) return;
           updateBubble(opts.assistantId, { reasoning: cumulative });
+          const delta = cumulative.startsWith(prevReasoning)
+            ? cumulative.slice(prevReasoning.length)
+            : cumulative;
+          prevReasoning = cumulative;
+          useVoice.getState().onAssistantMessageChunk(opts.assistantId, "", delta);
         },
         (toolName) => {
           if (gen !== ctx.streamGen) return;
@@ -293,32 +311,13 @@ export function createSendSlice(
           .catch(() => null);
         set({ stagedCompanionId: null, ...(bornCompanion !== null ? { sessionCompanionId: bornCompanion } : {}) });
       }
-      // Auto-speak: the finished reply, read aloud (ticket 05 / spec
-      // Q3 + Q14) — spoken once per message, only when the user opted
-      // in and the device passes the availability gate. Stopping first
-      // is what keeps a still-playing previous reply from talking over
-      // this one.
-      // voiceSpeak is imported lazily (expo-speech pulls expo-modules-core,
-      // whose .ts sources node cannot load) and a failed load means no
-      // auto-speak — the same degradation speakReply already has when the
-      // native module is missing.
-      const voice = useVoice.getState();
-      if (
-        voice.autoSpeak &&
-        voice.isTTSAvailable() &&
-        outcome.reply.trim() !== "" &&
-        voice.lastSpokenMessageId !== opts.assistantId
-      ) {
-        voice.markSpoken(opts.assistantId);
-        void import("../../services/voice/voice-speak.ts")
-          .then((m) => {
-            m.stopSpeaking();
-            m.speakReply(outcome.reply);
-          })
-          .catch(() => {
-            // No speech this turn; the reply still renders.
-          });
-      }
+      // Streaming TTS: finalize the handle opened at message start, or fall
+      // back to a full replay if streaming never started.
+      void useVoice
+        .getState()
+        .onAssistantMessageComplete(opts.assistantId, outcome.reply, {
+          hadReasoning: !!outcome.reasoning,
+        });
       set({ sending: false, turnStartedAt: null, pendingToolName: null });
       // Released with the turn. The `gen` guard above means a superseded
       // run never reaches this, so a NEW turn's lock is never stomped.
@@ -347,6 +346,9 @@ export function createSendSlice(
     } finally {
       // Success, failure or supersede: idle must hold no timer.
       endStreamYield();
+      // Only THIS turn's handle leaves the slot: a newer turn already
+      // installing its own must keep it.
+      if (ctx.active.handle === handle) ctx.active.handle = null;
       // A stopped turn acknowledging goes clear exactly when ITS loop
       // exits — a later turn's finally must not clear a NEWER stop.
       if (ctx.stoppingGen === gen) {
@@ -406,6 +408,10 @@ export function createSendSlice(
       // The partial reply stays in its bubble as the turn's text.
       ctx.streamGen += 1;
       ctx.stopEngine();
+      // Stop reaches the tools too: a fetch or provider read in flight is
+      // cancelled, and a queued call never leaves the queue.
+      ctx.active.handle?.cancel();
+      ctx.active.handle = null;
       // Aborting the run aborts its audio too (ticket 05 / spec Q14):
       // a half-spoken reply must not keep talking over the stop.
       void useVoice.getState().stop();
@@ -429,7 +435,7 @@ export function createSendSlice(
       }));
     },
 
-    send: async (text: string, images?: string[]) => {
+    send: async (text: string, images?: string[], options?: { voiceMode?: boolean }) => {
       const trimmed = text.trim();
       if (trimmed === "" || get().sending) return false;
       const sid = get().sessionId;
@@ -488,6 +494,7 @@ export function createSendSlice(
         text: trimmed,
         sessionId: sid,
         ...(images !== undefined ? { images } : {}),
+        ...(options?.voiceMode ? { voiceMode: true } : {}),
         history,
         clearOnFirst: false,
       });

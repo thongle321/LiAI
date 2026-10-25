@@ -24,9 +24,5 @@ export async function playVoice(
     await deps.stop();
     return;
   }
-  await ttsRuntime.acquire(engine, () =>
-    engine.play(text, voice, {
-      ...(options.speed !== undefined ? { speed: options.speed } : {}),
-    }),
-  );
+  await ttsRuntime.acquire(engine, () => engine.play(text, voice));
 }

@@ -24,6 +24,22 @@ export async function ensureMicAccess(): Promise<MicAccess> {
   }
 }
 
+/** The mic's state WITHOUT prompting (voice-mode entry's gate reads this;
+ *  asking is the setup sheet's job, matching the reference's
+ *  isSetupComplete-then-VoiceSetupSheet shape). */
+export type MicCheck = "granted" | "settings" | "undetermined" | "unavailable";
+
+export async function checkMicAccess(): Promise<MicCheck> {
+  try {
+    const current = await ExpoSpeechRecognitionModule.getPermissionsAsync();
+    if (current.granted) return "granted";
+    return current.canAskAgain ? "undetermined" : "settings";
+  } catch {
+    // Native module absent (stale dev build): nothing to check.
+    return "unavailable";
+  }
+}
+
 /** Straight to this app's OS settings — the only affordance a PERMANENT
  *  mic denial gets (PocketPal openMicSettings). Fire-and-forget: a failed
  *  open leaves the error snackbar's affordance inert, nothing worse. */

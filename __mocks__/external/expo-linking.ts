@@ -25,6 +25,8 @@ export const addEventListener = jest.fn(() => ({ remove: jest.fn() }));
 export const removeEventListener = jest.fn(() => {});
 export const sendIntent = jest.fn(() => {});
 export const getLinkingURL = jest.fn((): string => "exp://127.0.0.1:8081");
+/** OS Settings deep link (App-Prefs), used by the mic-blocked issue line. */
+export const openSettings = jest.fn(async (): Promise<void> => {});
 
 export default {
   createURL,
@@ -36,4 +38,5 @@ export default {
   removeEventListener,
   sendIntent,
   getLinkingURL,
+  openSettings,
 };

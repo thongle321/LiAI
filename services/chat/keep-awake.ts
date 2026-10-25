@@ -17,20 +17,25 @@
  * the user just asked for.
  */
 
-/** Tag, so this lock can never collide with another holder's. */
+/** Tag, so this lock can never collide with another holder's. Each holder
+ *  creates its own lock over the SAME native module but a distinct tag:
+ *  releasing the chat turn's lock leaves a voice session's hold intact. */
 const TAG = "liai-chat-turn";
 
 export type KeepAwake = typeof import("expo-keep-awake");
 
 /**
- * The lock, built over an injected loader.
+ * The lock, built over an injected loader and tag.
  *
  * The loader is a parameter purely so the race below is testable — the
  * five cases in tests/chat-keep-awake.test.ts exercise the STORE's
  * ordering, and they inject `keepAwake`, so without this seam nothing
  * would cover the module's own logic. Production passes the real loader.
  */
-export function createKeepAwake(load: () => Promise<KeepAwake>) {
+export function createKeepAwake(
+  load: () => Promise<KeepAwake>,
+  tag: string = TAG,
+) {
   /** The loaded module, kept after the first success: re-importing per
    *  turn buys nothing and makes the release path depend on the import
    *  resolving again. */
@@ -53,11 +58,11 @@ export function createKeepAwake(load: () => Promise<KeepAwake>) {
     try {
       mod ??= await load();
       if (ticket !== epoch) return;
-      await mod.activateKeepAwakeAsync(TAG);
+      await mod.activateKeepAwakeAsync(tag);
       if (ticket !== epoch) {
         // Released while activating: undo the lock we just took, or it is
         // held with no owner left to release it.
-        mod.deactivateKeepAwake(TAG);
+        mod.deactivateKeepAwake(tag);
         return;
       }
       held = true;
@@ -74,7 +79,7 @@ export function createKeepAwake(load: () => Promise<KeepAwake>) {
     if (!held) return;
     held = false;
     try {
-      mod?.deactivateKeepAwake(TAG);
+      mod?.deactivateKeepAwake(tag);
     } catch {
       // Nothing to release if the module never loaded.
     }

@@ -13,6 +13,13 @@
  * Provenance: user override beats detected, exactly as resolveThinking does
  * for the on/off axis (services/inference//thinking.ts).
  *
+ * The resolved effort is clamped to the active model's supported levels
+ * (PocketPal #1002): a stored effort can outlive the model it was saved
+ * against, so an override the model cannot grade is snapped to the nearest
+ * lower supported level (falling back to the lowest), and a model that
+ * grades no effort resolves to nothing (no kwarg — the model's own default
+ * reasoning depth stands).
+ *
  * ONE DIVERGENCE FROM POCKETPAL, and why: PocketPal stores a SET of levels
  * a model supports (chips multi-select) and cycles a current level on its
  * composer pill. LiAI has no effort cycle on the pill by design (see the
@@ -66,9 +73,24 @@ export function isEffortLevel(value: unknown): value is EffortLevel {
  *  - "off" is NOT this function's business: axis 1 (the thinking toggle)
  *    decides that, and when thinking is off the caller sends NO kwarg at
  *    all (services/inference//thinking.ts).
+ *  - an override the model does not support is clamped down (PocketPal
+ *    #1002): stored efforts can outlive the model they were saved against,
+ *    so the resolved level is snapped into the model's supported set.
+ *    Without a declared support list the armed override is kept as-is.
  */
 export function resolveEffort(
   override: EffortLevel | null | undefined,
+  supported?: readonly EffortLevel[],
 ): EffortLevel | undefined {
-  return override ?? undefined;
+  const effort = override ?? undefined;
+  if (effort === undefined) return undefined;
+  // Absent support = the spec never declared capacity; keep the armed
+  // intent. An explicit empty set means the model grades no effort.
+  if (supported === undefined) return effort;
+  if (supported.length === 0) return undefined;
+  if (supported.includes(effort)) return effort;
+  const rank = (level: EffortLevel): number => EFFORT_LEVELS.indexOf(level);
+  const lower = supported.filter((level) => rank(level) < rank(effort));
+  const clamped = lower.length > 0 ? lower[lower.length - 1] : supported[0];
+  return clamped;
 }

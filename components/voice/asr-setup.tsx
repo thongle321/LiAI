@@ -7,8 +7,10 @@
  *  The tiers are PocketPal's flat rows: label + size on the left, the
  *  download action on the right, no cards or radio column. Installing a
  *  tier selects it (store/downloadModel), and tapping an installed row
- *  switches to it — the one addition to PocketPal's set, which only has
- *  install/remove. Rows stay hidden while Voice input is off. */
+ *  switches to it via the store's public `selectTier` — the ready-gated
+ *  switch (#1017). Names and hints are the shared copy in
+ *  utils/asr-tier-label.ts, the same strings the setup sheets show.
+ *  Rows stay hidden while Voice input is off. */
 
 import { useEffect } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -26,14 +28,8 @@ import {
   ASR_TIERS,
 } from "@/services/asr/constants.ts";
 import { insufficientStorageCopy } from "@/services/asr/error-copy.ts";
+import { ASR_TIER_LABEL, ASR_TIER_HINT } from "@/utils/asr-tier-label.ts";
 import type { AsrTier } from "@/services/asr/types.ts";
-
-/** Human tier names — PocketPal's tier* strings, verbatim. */
-const TIER_LABEL: Record<AsrTier, string> = {
-  base: "Base (multilingual, smallest)",
-  small: "Small (recommended)",
-  "large-turbo": "Large Turbo (best quality)",
-};
 
 function TierRow({ tier, last }: { tier: AsrTier; last: boolean }) {
   const colors = useColors();
@@ -42,7 +38,7 @@ function TierRow({ tier, last }: { tier: AsrTier; last: boolean }) {
   const state = useAsrStore((s) => s.downloadStates[tier]);
   const progress = useAsrStore((s) => s.downloadProgress[tier]);
   const error = useAsrStore((s) => s.downloadError[tier]);
-  const setSelectedTier = useAsrStore((s) => s.setSelectedTier);
+  const selectTier = useAsrStore((s) => s.selectTier);
   const deleteModel = useAsrStore((s) => s.deleteModel);
   const downloadModel = useAsrStore((s) => s.downloadModel);
   const freeDiskBytes = useAsrStore((s) => s.freeDiskBytes);
@@ -54,20 +50,20 @@ function TierRow({ tier, last }: { tier: AsrTier; last: boolean }) {
     <View className={last ? "row row--titled row--last" : "row row--titled"}>
       <View className="flex-row items-center gap-3">
         <Pressable
-          onPress={installed ? () => setSelectedTier(tier) : undefined}
+          onPress={installed ? () => selectTier(tier) : undefined}
           disabled={!installed}
           accessibilityRole="radio"
           accessibilityState={{ checked: installed && selected, disabled: !installed }}
-          accessibilityLabel={TIER_LABEL[tier]}
+          accessibilityLabel={ASR_TIER_LABEL[tier]}
           className="flex-1 flex-row items-center"
           testID={`asr-tier-${tier}`}
         >
           <View className="flex-1 pr-3">
             <Text className="font-sans text-body-md text-primary-text">
-              {TIER_LABEL[tier]}
+              {ASR_TIER_LABEL[tier]}
             </Text>
             <Text className="mt-1 font-sans text-xs text-secondary-text">
-              {formatBytes(manifest.estimatedBytes, 0)}
+              {ASR_TIER_HINT[tier]} · {formatBytes(manifest.estimatedBytes, 0)}
               {downloading ? ` — ${Math.round(progress * 100)}%` : ""}
             </Text>
             {failed && error === ASR_INSUFFICIENT_STORAGE && (
@@ -111,7 +107,7 @@ function TierRow({ tier, last }: { tier: AsrTier; last: boolean }) {
             onPress={() => void deleteModel(tier)}
             className="btn btn--secondary active:opacity-80"
             accessibilityRole="button"
-            accessibilityLabel={`Remove ${TIER_LABEL[tier]}`}
+            accessibilityLabel={`Remove ${ASR_TIER_LABEL[tier]}`}
             testID={`asr-remove-${tier}`}
           >
             <Text className="text-body">Remove</Text>

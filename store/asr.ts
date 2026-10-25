@@ -104,6 +104,9 @@ export interface AsrState extends AsrPersisted {
 
   load: () => Promise<void>;
   setUserASROverride: (override: boolean | null) => void;
+  /** PUBLIC surface (#1017): switch the in-use tier, ONLY to a ready one. */
+  selectTier: (tier: AsrTier) => void;
+  /** INTERNAL write: reconcile, first-install select and delete fallback. */
   setSelectedTier: (tier: AsrTier) => void;
   setCaptureState: (s: CaptureState) => void;
   pushInputLevel: (level: number) => void;
@@ -114,6 +117,7 @@ export interface AsrState extends AsrPersisted {
   setChatBusyOnCpu: (v: boolean) => void;
   hasMemoryForCapture: () => Promise<boolean>;
   downloadModel: (tier: AsrTier) => Promise<void>;
+  retryDownload: (tier: AsrTier) => Promise<void>;
   deleteModel: (tier: AsrTier) => Promise<void>;
 }
 
@@ -149,6 +153,18 @@ function firstReadyTier(
     ASR_TIER_ORDER.find((tier) => tier !== except && states[tier] === "ready") ??
     null
   );
+}
+
+/** #1017: the tier a setup sheet offers — the in-use tier once it is
+ *  ready, otherwise the DEFAULT tier (never a stale uninstalled selection).
+ *  Pure so both the store façade and the sheets resolve it identically. */
+export function setupTierFor(
+  selectedTier: AsrTier,
+  downloadStates: Record<AsrTier, AsrDownloadState>,
+): AsrTier {
+  return downloadStates[selectedTier] === "ready"
+    ? selectedTier
+    : ASR_DEFAULT_TIER;
 }
 
 export function createAsrStore(storage: KeyValueStorage, deps: AsrDeps) {
@@ -252,6 +268,13 @@ export function createAsrStore(storage: KeyValueStorage, deps: AsrDeps) {
           setUserASROverride: (override) => {
             set({ userASROverride: override, asrAvailable: override ?? get().deviceSupported });
           },
+          // PocketParity selectTier: the PUBLIC switch. Only an installed
+          // tier commits — the reconcile writes below are the private lane.
+          selectTier: (tier) => {
+            if (get().downloadStates[tier] !== "ready") return;
+            set({ selectedTier: tier });
+            void refreshTierReadiness();
+          },
           setSelectedTier: (tier) => {
             set({ selectedTier: tier });
             void refreshTierReadiness();
@@ -291,6 +314,9 @@ export function createAsrStore(storage: KeyValueStorage, deps: AsrDeps) {
             });
           },
           downloadModel: async (tier) => {
+            // PocketParity: a second download request for an in-flight tier
+            // is a no-op, not a queue.
+            if (get().downloadStates[tier] === "downloading") return;
             set((st) => ({
               downloadStates: { ...st.downloadStates, [tier]: "downloading" },
               downloadProgress: { ...st.downloadProgress, [tier]: 0 },
@@ -316,13 +342,21 @@ export function createAsrStore(storage: KeyValueStorage, deps: AsrDeps) {
                   downloadProgress: { ...st.downloadProgress, [tier]: p },
                 }));
               });
-              // PocketParity: the tier you just installed becomes the active
-              // one — the settings row set has no separate picker.
-              set((st) => ({
-                downloadStates: { ...st.downloadStates, [tier]: "ready" },
-                downloadProgress: { ...st.downloadProgress, [tier]: 1 },
-                selectedTier: tier,
-              }));
+              // PocketParity #1017: the tier you just installed becomes the
+              // in-use one ONLY when nothing was ready — the first install.
+              // A later download leaves an in-use tier in control.
+              set((st) => {
+                const firstInstall = ASR_TIER_ORDER.every(
+                  (other) => other === tier || st.downloadStates[other] !== "ready",
+                );
+                return {
+                  downloadStates: { ...st.downloadStates, [tier]: "ready" },
+                  downloadProgress: { ...st.downloadProgress, [tier]: 1 },
+                  ...(firstInstall && st.downloadStates[tier] !== "ready"
+                    ? { selectedTier: tier }
+                    : {}),
+                };
+              });
               await refreshTierReadiness();
             } catch (err) {
               set((st) => ({
@@ -336,7 +370,14 @@ export function createAsrStore(storage: KeyValueStorage, deps: AsrDeps) {
               }));
             }
           },
+          retryDownload: (tier) => {
+            // PocketParity retryDownload: the sheets retry through the SAME
+            // download policy, guards included.
+            return get().downloadModel(tier);
+          },
           deleteModel: async (tier) => {
+            // PocketParity: an in-flight download is not interruptible here.
+            if (get().downloadStates[tier] === "downloading") return;
             await (await deps.engine()).deleteModel(tier);
             set((st) => {
               const states = { ...st.downloadStates, [tier]: "not_installed" as const };
@@ -443,6 +484,15 @@ export const asrStore = {
   get downloadStates() {
     return useAsrStore.getState().downloadStates;
   },
+  // #1017: what a setup sheet offers (in-use tier once ready, else default).
+  get setupTier(): AsrTier {
+    const s = useAsrStore.getState();
+    return setupTierFor(s.selectedTier, s.downloadStates);
+  },
+  selectTier: (tier: AsrTier) => useAsrStore.getState().selectTier(tier),
+  downloadModel: (tier: AsrTier) => useAsrStore.getState().downloadModel(tier),
+  retryDownload: (tier: AsrTier) => useAsrStore.getState().retryDownload(tier),
+  deleteModel: (tier: AsrTier) => useAsrStore.getState().deleteModel(tier),
   setCaptureState: (s: CaptureState) => useAsrStore.getState().setCaptureState(s),
   resetCapture: () => useAsrStore.getState().resetCapture(),
   setError: (kind: AsrErrorKind) => useAsrStore.getState().setError(kind),

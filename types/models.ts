@@ -1,5 +1,7 @@
 /** Model types for the LiAI model management system. */
 
+import type { EffortLevel } from "@/utils/reasoning-capability.ts";
+
 export type ModelOrigin = "preset" | "huggingface" | "local" | "remote_api";
 
 export type ModelType = "llm" | "vision" | "projection";
@@ -75,6 +77,15 @@ export interface ModelSpec {
    *  free-form `capabilities` above. User overrides live in the
    *  inference store's thinkingOverrides, not here. */
   reasoning?: boolean;
+  /** Whether this model grades reasoning effort, and to which levels
+   *  (PocketPal axis-2 parity, #1002): true = known effort-grading model,
+   *  false = known NON-effort-grading, absent = unknown. The supported
+   *  LEVELS ride along with the capability: a turn clamps the resolved
+   *  effort to this set, so a stored effort that outlived its model is
+   *  snapped instead of sent (see utils/reasoning-capability.ts). Typed
+   *  on purpose; user overrides live in the inference store's
+   *  effortOverrides, not here. */
+  effortValues?: EffortLevel[];
   /** Whether this model can call tools at all (PocketPal parity): true =
    *  known tool-capable, false = known NOT, absent = unknown — probed
    *  from llama.rn's jinja metadata when the model loads. A model that

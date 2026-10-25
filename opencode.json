@@ -1,0 +1,10 @@
+{
+  "mcp": {
+    "servers": {
+      "donsetch": {
+        "type": "local",
+        "command": [ "donsetch", "mcp", "--supervised" ]
+      }
+    }
+  }
+}

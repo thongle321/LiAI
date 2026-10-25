@@ -194,11 +194,18 @@ export class WhisperAsrEngine implements AsrEngine {
     return promise;
   }
 
+  /** PocketParity #1017: voice mode warms the tier up before its first
+   *  turn — a load of up to ~20 s on a mid-range phone must not sit inside
+   *  the listening loop. Same dedup + generation guard as transcribe. */
+  async preload(tier: AsrTier): Promise<void> {
+    await this.ensureContext(tier);
+  }
+
   async transcribe(
     pcmBase64Int16: string,
-    opts?: { tier: AsrTier; language?: string; prompt?: string },
+    opts: { tier: AsrTier; language?: string; prompt?: string },
   ): Promise<AsrTranscript> {
-    const tier = opts?.tier ?? "small";
+    const tier = opts.tier;
     if (!(await this.isInstalled(tier))) {
       throw new Error(`ASR model not installed for tier ${tier}`);
     }

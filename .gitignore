@@ -70,3 +70,6 @@ yarn-error.*
 
 # TypeScript
 *.tsbuildinfo
+
+# Vendored reference app (read-only, never shipped)
+pocketpal-ai/

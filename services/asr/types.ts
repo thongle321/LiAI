@@ -49,9 +49,14 @@ export interface AsrEngine {
   downloadModel(tier: AsrTier, onProgress?: AsrProgressCallback): Promise<void>;
   deleteModel(tier: AsrTier): Promise<void>;
   reclaimLegacySpace(tier: AsrTier): Promise<void>;
+  /** Loads the context for `tier` WITHOUT transcribing: the voice-mode
+   *  cascade awaits this so turn one does not pay model load latency. */
+  preload(tier: AsrTier): Promise<void>;
   transcribe(
     pcmBase64Int16: string,
-    opts?: { tier: AsrTier; language?: string; prompt?: string },
+    // PocketParity #1017: opts REQUIRED — a caller must name its tier; the
+    // old silent 'small' fallback is gone.
+    opts: { tier: AsrTier; language?: string; prompt?: string },
   ): Promise<AsrTranscript>;
   cancelTranscription(): Promise<void>;
   release(): Promise<void>;

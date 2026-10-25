@@ -7,8 +7,8 @@ import {
   ASR_INSUFFICIENT_STORAGE,
   ASR_TIERS,
 } from "@/services/asr/constants.ts";
-import type { AsrEngine, AsrTier } from "@/services/asr/types.ts";
-import { createAsrStore, ASR_KEY } from "../asr";
+import type { AsrDownloadState, AsrEngine, AsrTier } from "@/services/asr/types.ts";
+import { createAsrStore, ASR_KEY, setupTierFor } from "../asr";
 import { memoryStorage } from "@/jest/storage";
 
 function fakeEngine(over: Partial<AsrEngine> = {}): AsrEngine {
@@ -17,6 +17,7 @@ function fakeEngine(over: Partial<AsrEngine> = {}): AsrEngine {
     downloadModel: async () => {},
     deleteModel: async () => {},
     reclaimLegacySpace: async () => {},
+    preload: async () => {},
     transcribe: async () => ({ text: "", language: "en" }),
     cancelTranscription: async () => {},
     release: async () => {},
@@ -103,17 +104,17 @@ describe("download preflight (PocketParity disk rule)", () => {
     const useStore = createAsrStore(
       memoryStorage(),
       deps({
-        readFreeDisk: async () => ASR_TIERS.small.estimatedBytes * 1.1, // < 1.2×
+        readFreeDisk: async () => ASR_TIERS.base.estimatedBytes * 1.1, // < 1.2×
       }).deps,
     );
     await useStore.getState().load();
-    await useStore.getState().downloadModel("small");
+    await useStore.getState().downloadModel("base");
     const s = useStore.getState();
-    expect(s.downloadStates.small).toBe("error");
-    expect(s.downloadError.small).toBe(ASR_INSUFFICIENT_STORAGE);
+    expect(s.downloadStates.base).toBe("error");
+    expect(s.downloadError.base).toBe(ASR_INSUFFICIENT_STORAGE);
     expect(s.freeDiskBytes).toBe(
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      ASR_TIERS.small.estimatedBytes * 1.1,
+      ASR_TIERS.base.estimatedBytes * 1.1,
     );
   });
 
@@ -154,7 +155,153 @@ describe("download preflight (PocketParity disk rule)", () => {
   });
 });
 
-describe("installing a tier selects it (PocketParity)", () => {
+describe("tier selection policy (#1017: one model in use)", () => {
+  /** Nothing installed at load; the engine adds tiers as they download. */
+  function installingStore(storage = memoryStorage()) {
+    const installed = new Set<AsrTier>();
+    const useStore = createAsrStore(
+      storage,
+      deps({
+        engine: async () =>
+          fakeEngine({
+            isInstalled: async (tier) => installed.has(tier),
+            downloadModel: async (tier) => void installed.add(tier),
+            deleteModel: async (tier) => void installed.delete(tier),
+          }),
+      }).deps,
+    );
+    return { useStore, installed };
+  }
+
+  it("defaults to base (PocketParity: fast on every measured phone)", async () => {
+    const { useStore } = installingStore();
+    await useStore.getState().load();
+    expect(ASR_DEFAULT_TIER).toBe("base");
+    expect(useStore.getState().selectedTier).toBe("base");
+  });
+
+  it("the FIRST install becomes the in-use tier; later ones do not switch it", async () => {
+    const { useStore } = installingStore();
+    await useStore.getState().load();
+    await useStore.getState().downloadModel("base");
+    expect(useStore.getState().selectedTier).toBe("base");
+    expect(useStore.getState().isSelectedTierReady).toBe(true);
+
+    // Small finishes while base is already in use: base stays.
+    await useStore.getState().downloadModel("small");
+    expect(useStore.getState().downloadStates.small).toBe("ready");
+    expect(useStore.getState().selectedTier).toBe("base");
+  });
+
+  it("selectTier switches only to a READY tier", async () => {
+    const { useStore } = installingStore();
+    await useStore.getState().load();
+    await useStore.getState().downloadModel("base");
+
+    // Not installed: the press does nothing.
+    useStore.getState().selectTier("small");
+    expect(useStore.getState().selectedTier).toBe("base");
+
+    // Installed: the switch commits.
+    await useStore.getState().downloadModel("small");
+    useStore.getState().selectTier("small");
+    expect(useStore.getState().selectedTier).toBe("small");
+    expect(useStore.getState().isSelectedTierReady).toBe(true);
+  });
+
+  it("a download already in flight is left alone (re-entrant guard)", async () => {
+    let downloads = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const useStore = createAsrStore(
+      memoryStorage(),
+      deps({
+        readFreeDisk: async () => 10_000_000_000,
+        engine: async () =>
+          fakeEngine({
+            isInstalled: async () => false,
+            downloadModel: async () => {
+              downloads += 1;
+              await gate;
+            },
+          }),
+      }).deps,
+    );
+    await useStore.getState().load();
+    const first = useStore.getState().downloadModel("base");
+    await useStore.getState().downloadModel("base"); // no-op
+    release();
+    await first;
+    expect(downloads).toBe(1);
+    expect(useStore.getState().downloadStates.base).toBe("ready");
+  });
+
+  it("deleteModel ignores a tier that is downloading", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const useStore = createAsrStore(
+      memoryStorage(),
+      deps({
+        readFreeDisk: async () => 10_000_000_000,
+        engine: async () =>
+          fakeEngine({
+            isInstalled: async () => false,
+            downloadModel: async () => {
+              await gate;
+            },
+            deleteModel: async () => {},
+          }),
+      }).deps,
+    );
+    await useStore.getState().load();
+    const download = useStore.getState().downloadModel("base");
+    await useStore.getState().deleteModel("base"); // ignored
+    expect(useStore.getState().downloadStates.base).toBe("downloading");
+    release();
+    await download;
+  });
+
+  it("retryDownload re-attempts a failed tier (PocketParity retry)", async () => {
+    let fail = true;
+    const installed = new Set<AsrTier>();
+    const useStore = createAsrStore(
+      memoryStorage(),
+      deps({
+        readFreeDisk: async () => (fail ? 0 : 10_000_000_000),
+        engine: async () =>
+          fakeEngine({
+            isInstalled: async (tier) => installed.has(tier),
+            downloadModel: async (tier) => void installed.add(tier),
+          }),
+      }).deps,
+    );
+    await useStore.getState().load();
+    await useStore.getState().downloadModel("base");
+    expect(useStore.getState().downloadStates.base).toBe("error");
+
+    fail = false;
+    await useStore.getState().retryDownload("base");
+    expect(useStore.getState().downloadStates.base).toBe("ready");
+    expect(useStore.getState().selectedTier).toBe("base"); // first install
+  });
+});
+
+describe("setupTier (the tier a setup sheet offers)", () => {
+  it("is the in-use tier once ready, else the default — never a stale one", () => {
+    const none: Record<AsrTier, AsrDownloadState> = {
+      base: "not_installed",
+      small: "not_installed",
+      "large-turbo": "not_installed",
+    };
+    expect(setupTierFor("small", none)).toBe("base"); // stale small
+    const baseReady = { ...none, base: "ready" as const };
+    expect(setupTierFor("small", baseReady)).toBe("base");
+    const smallReady = { ...none, small: "ready" as const };
+    expect(setupTierFor("small", smallReady)).toBe("small");
+  });
+});
+
+describe("installing the first tier selects it (PocketParity)", () => {
   it("makes the downloaded tier the selected, ready one", async () => {
     const installed = new Set<AsrTier>();
     const useStore = createAsrStore(
@@ -168,7 +315,7 @@ describe("installing a tier selects it (PocketParity)", () => {
       }).deps,
     );
     await useStore.getState().load();
-    // The default is small, but base is the tier being installed.
+    // Nothing installed yet: the selection is the DEFAULT tier (base).
     expect(useStore.getState().selectedTier).toBe(ASR_DEFAULT_TIER);
 
     await useStore.getState().downloadModel("base");
@@ -192,7 +339,7 @@ describe("deleteModel reselection (PocketParity fallback)", () => {
     );
     await useStore.getState().load();
     // Nothing selects a missing tier: start from the default, then pick.
-    useStore.getState().setSelectedTier("large-turbo");
+    useStore.getState().selectTier("large-turbo");
     await new Promise((r) => setTimeout(r, 0));
     expect(useStore.getState().isSelectedTierReady).toBe(true);
 
@@ -212,7 +359,9 @@ describe("deleteModel reselection (PocketParity fallback)", () => {
       }).deps,
     );
     await useStore.getState().load();
-    expect(useStore.getState().selectedTier).toBe(ASR_DEFAULT_TIER);
+    // Reconcile keeps the only installed tier in use; deleting it then
+    // falls back to the DEFAULT (base), with nothing ready.
+    expect(useStore.getState().selectedTier).toBe("small");
     await useStore.getState().deleteModel("small");
     expect(useStore.getState().selectedTier).toBe(ASR_DEFAULT_TIER); // fallback target
   });
@@ -308,10 +457,10 @@ describe("switching tiers", () => {
     // The default is installed, so it stays selected.
     expect(useStore.getState().selectedTier).toBe(ASR_DEFAULT_TIER);
 
-    useStore.getState().setSelectedTier("base");
+    useStore.getState().selectTier("base");
     expect(useStore.getState().selectedTier).toBe("base");
 
-    useStore.getState().setSelectedTier("small");
+    useStore.getState().selectTier("small");
     expect(useStore.getState().selectedTier).toBe("small");
   });
 });

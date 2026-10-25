@@ -18,12 +18,17 @@
  * ours does not belong in a spec line.
  */
 
-import type { TTSModelType } from "react-native-sherpa-onnx/tts";
-
 import { formatBytes } from "../models/progress.ts";
-import { KITTEN_VOICES } from "./engines/kitten.ts";
-import { KOKORO_VOICES } from "./engines/kokoro.ts";
-import { SUPERTONIC_VOICES } from "./engines/supertonic.ts";
+import { KITTEN_VOICES } from "./engines/kitten/voices.ts";
+import { KOKORO_VOICES } from "./engines/kokoro/voices.ts";
+import { SUPERTONIC_VOICES } from "./engines/supertonic/voices.ts";
+import { PHONON_VOICES } from "./engines/phonon/voices.ts";
+import {
+  KITTEN_MODEL_ESTIMATED_BYTES,
+  KOKORO_MODEL_ESTIMATED_BYTES,
+  SUPERTONIC_MODEL_ESTIMATED_BYTES,
+  PHONON_MODEL_ESTIMATED_BYTES,
+} from "./constants.ts";
 import type { NeuralEngineId, Voice } from "./types.ts";
 
 export interface EngineMeta {
@@ -38,15 +43,16 @@ export interface EngineMeta {
   spec: string;
   /** One line on what this engine is FOR, shown in the expanded body. */
   tagline: string;
-  /** Registry id in sherpa-onnx's `tts-models` GitHub release. */
-  modelId: string;
+  /** Registry id in sherpa-onnx's `tts-models` GitHub release. Only for
+   *  sherpa-based engines; Phonon manages its own files. */
+  modelId?: string;
   /** Archive size in bytes: drives the low-disk preflight and the spec line. */
   modelBytes: number;
-  /** sherpa-onnx model type, and the native engine this instantiates. */
-  modelType: TTSModelType;
-  /** Inference threads. sherpa defaults to 2; TTS bursts alongside a chat
-   *  turn, so the heavier models get 4 and the 15M one does not need it. */
-  numThreads: number;
+  /** sherpa-onnx model type, and the native engine this instantiates. Only
+   *  for sherpa-based engines; Phonon is a different native module. */
+  modelType?: string;
+  /** Inference threads. Only for sherpa-based engines. */
+  numThreads?: number;
   /** Curated voices, in sid order. */
   voices: Voice[];
 }
@@ -57,6 +63,7 @@ export const ENGINE_ORDER: readonly NeuralEngineId[] = [
   "kitten",
   "kokoro",
   "supertonic",
+  "phonon",
 ];
 
 function describe(voices: Voice[], modelBytes: number): string {
@@ -74,11 +81,7 @@ const TABLE: Record<NeuralEngineId, Omit<EngineMeta, "spec">> = {
     badge: "LIGHTWEIGHT",
     warmBadge: true,
     tagline: "Smallest footprint. Reliable. Best on older devices.",
-    // 31,220,690 B — kitten-nano-en-v0_8-int8.tar.bz2 in the tts-models release.
-    modelId: "kitten-nano-en-v0_8-int8",
-    modelBytes: 31_220_690,
-    modelType: "kitten",
-    numThreads: 2,
+    modelBytes: KITTEN_MODEL_ESTIMATED_BYTES,
     voices: KITTEN_VOICES,
   },
   kokoro: {
@@ -87,11 +90,7 @@ const TABLE: Record<NeuralEngineId, Omit<EngineMeta, "spec">> = {
     badge: "NATURAL",
     warmBadge: false,
     tagline: "Highest quality. Slower to start. Some voices may not work on all devices.",
-    // 103,248,205 B — kokoro-int8-en-v0_19.tar.bz2, our existing tracer model.
-    modelId: "kokoro-int8-en-v0_19",
-    modelBytes: 103_248_205,
-    modelType: "kokoro",
-    numThreads: 4,
+    modelBytes: KOKORO_MODEL_ESTIMATED_BYTES,
     voices: KOKORO_VOICES,
   },
   supertonic: {
@@ -101,12 +100,17 @@ const TABLE: Record<NeuralEngineId, Omit<EngineMeta, "spec">> = {
     // Warm chip is Kitten's alone (see EngineMeta.warmBadge).
     warmBadge: false,
     tagline: "Fastest to start. Uses more RAM. May occasionally drop words.",
-    // 128,774,318 B — sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2.
-    modelId: "sherpa-onnx-supertonic-3-tts-int8-2026-05-11",
-    modelBytes: 128_774_318,
-    modelType: "supertonic",
-    numThreads: 4,
+    modelBytes: SUPERTONIC_MODEL_ESTIMATED_BYTES,
     voices: SUPERTONIC_VOICES,
+  },
+  phonon: {
+    id: "phonon",
+    title: "Phonon",
+    badge: "LIGHTWEIGHT",
+    warmBadge: false,
+    tagline: "Fast startup, low memory. English only.",
+    modelBytes: PHONON_MODEL_ESTIMATED_BYTES,
+    voices: PHONON_VOICES,
   },
 };
 

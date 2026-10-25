@@ -13,7 +13,7 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
 
 import { EngineCard } from "../engine-card.tsx";
-import type { TtsModelStatus } from "@/services/tts/download.ts";
+import type { TtsModelStatus } from "@/services/tts/types.ts";
 import { DEVICE_DEFAULT_VOICE } from "@/services/tts/types.ts";
 import { EMPTY_DOWNLOADS, useVoice } from "@/store/voice.ts";
 

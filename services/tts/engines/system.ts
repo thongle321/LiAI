@@ -7,7 +7,7 @@
  * expo-speech statically through the app wiring in engineRegistry.
  */
 
-import type { Engine } from "../types.ts";
+import type { Engine, StreamingHandle, StreamOptions, Voice } from "../types.ts";
 import { DEVICE_DEFAULT_VOICE } from "../types.ts";
 
 export interface SystemSpeakOptions {
@@ -72,6 +72,57 @@ export function createSystemEngine(load: () => Promise<SpeechApi>): Engine {
           onError: fail,
         });
       });
+    },
+
+    playStreaming(voice: Voice, waitFor?: Promise<void>, _streamOpts?: StreamOptions): StreamingHandle {
+      // expo-speech has no native streaming; buffer text and speak it on
+      // finalize. cancel drops the buffer and stops any in-flight speech.
+      const buffer: string[] = [];
+      let dead = false;
+      const ready = (waitFor ?? Promise.resolve()).catch(() => undefined);
+      const speakBuffered = async (): Promise<void> => {
+        const text = buffer.join("");
+        buffer.length = 0;
+        if (text.trim() === "") return;
+        await new Promise<void>((resolve) => {
+          void (async () => {
+            try {
+              const api = await load();
+              api.speak(text, {
+                language: "en-US",
+                onDone: () => resolve(),
+                onStopped: () => resolve(),
+                onError: () => resolve(),
+              });
+            } catch {
+              resolve();
+            }
+          })();
+        });
+      };
+      return {
+        appendText(chunk: string) {
+          if (dead) return;
+          buffer.push(chunk);
+        },
+        async finalize() {
+          if (dead) return;
+          await ready;
+          await speakBuffered();
+        },
+        async cancel() {
+          if (dead) return;
+          dead = true;
+          buffer.length = 0;
+          try {
+            const api = await load();
+            api.stop();
+          } catch {
+            // nothing live to stop
+          }
+          settle?.();
+        },
+      };
     },
 
     async stop(): Promise<void> {

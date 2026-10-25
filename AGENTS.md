@@ -58,6 +58,8 @@ The mobile application is responsible for:
 
 - react-native-reanimated
 - react-native-worklets-core
+- @shopify/react-native-skia
+- expo-thinking-orbs
 
 - expo-file-system
 - expo-document-picker
@@ -115,7 +117,6 @@ If something is unclear or could be improved, suggest a better
 approach. If a new library would significantly help, recommend it,
 explain why, and ask before adding it.
 Do not install new libraries without approval.
-
 
 ## Architecture
 
@@ -213,13 +214,14 @@ test file has no default component to render. Route-level suites
 `jest/`, and `jest/architecture-conventions.test.ts` asserts `app/` holds no
 test file or `__tests__` folder.
 **modules/** holds local Expo native modules (e.g. `native-download`, Kotlin
-+ TypeScript). Their Kotlin is unreachable from `npm test` — nothing in this
++ TypeScript). Their Kotlin is unreachable from `bun run test` — nothing in this
 repo exercises it on a device today, so treat Kotlin changes as unverified
 until someone runs the app.
 **docs/** holds research, specs and agent docs (see Agent skills below).
 **__mocks__/** holds the module-boundary fakes `jest.config.js` maps by name —
 `__mocks__/external/*` stands in for the native packages a suite cannot load
-(llama.rn, vision-camera, sherpa-onnx, SQLite, and the rest). Add a fake here
+(llama.rn, vision-camera, expo-thinking-orbs through Skia, SQLite, and the
+rest). Add a fake here
 rather than a per-suite `jest.mock` factory when more than one suite needs it.
 **prompt_material/** is the design board the visual system derives from — four
 screenshots cited as provenance by `global.css`, `themes/tokens.ts` and
@@ -260,7 +262,6 @@ When building from an attached design image:
 - match layout structure
 - use consistent reusable styles
 - make the UI responsive for different screen sizes
-
 
 ### Style Exception List
 
@@ -329,7 +330,6 @@ Do not import image assets directly inside screens or components.
 
 - SecureStore for user-provided secret keys. 
 
----
 
 ## TypeScript
 
@@ -356,12 +356,7 @@ When building a feature:
 
 6. Make sure the feature works end to end.
 
-7. Fix type errors before finishing (`npm run typecheck`), and run `npm test`.
-
-   There is **no linter** — that is a recorded decision, not an omission (see
-   `docs/architecture-divergences.md`). Style is held by
-   `jest/architecture-conventions.test.ts` and `jest/design-system.test.ts`,
-   plus the prose in this file.
+7. Fix type errors before finishing (`bun run typecheck`), and run `bun run test`.
 
 ## Secrets
 
@@ -376,8 +371,6 @@ When building a feature:
 - If a backend lands, tokens and AI calls move behind server routes. Until then
   the app calls HuggingFace, Tavily, Brave and Jina directly — that is the
   recorded position, not an oversight to be "fixed" by inventing a server.
-
-
 
 ## Communication
 
@@ -396,7 +389,6 @@ Before every feature:
 
 - Replicate UI exactly when designs are provided.
 
-
 ## PocketPal parity
 
 `pocketpal-ai/` is the vendored PocketPal AI reference app, and feature
@@ -404,18 +396,3 @@ parity work is measured against it. Read its source for the reference
 behavior, record verdicts and findings in `docs/research/`, and check
 `docs/specs/` before starting parity work.
 
----
-
-## Agent skills
-
-### Issue tracker
-
-Issues live as local markdown files under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-The five canonical triage roles, default label strings. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.

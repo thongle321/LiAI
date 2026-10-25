@@ -45,13 +45,14 @@ export function VoiceSettings() {
   const colors = useColors();
   // Named selector: the screen only reads these five, so subscribing to the
   // whole store would re-render it on every voice-store write.
-  const { currentVoice, autoSpeak, load, setCurrentVoice, setAutoSpeak } = useVoice(
+  const { currentVoice, autoSpeak, load, setCurrentVoice, setAutoSpeak, isEngineOffered } = useVoice(
     useShallow((s) => ({
       currentVoice: s.currentVoice,
       autoSpeak: s.autoSpeak,
       load: s.load,
       setCurrentVoice: s.setCurrentVoice,
       setAutoSpeak: s.setAutoSpeak,
+      isEngineOffered: s.isEngineOffered,
     })),
   );
   const [previewing, setPreviewing] = useState(false);
@@ -144,7 +145,7 @@ export function VoiceSettings() {
         <FreeStorageLine />
       </View>
 
-      {ENGINE_ORDER.map((id) => (
+      {ENGINE_ORDER.filter(isEngineOffered).map((id) => (
         <EngineCard key={id} engineId={id} />
       ))}
 

@@ -368,4 +368,56 @@ describe("createTurnRunner", () => {
     );
     expect(seen[0]).toEqual(["q"]);
   });
+
+  it("forwards the turn's Stop to the agent, so its tools cancel", async () => {
+    // Stop is owned by the store, but the talent network calls live
+    // behind the runner: unless the turn hands the signal over, a
+    // stopped turn keeps searching (and keeps its 429 wait) running.
+    const controller = new AbortController();
+    const toolCall = (id: string, query: string) => ({
+      id,
+      name: "web_search",
+      arguments: JSON.stringify({ query }),
+    });
+    const engine: CompletionEngine = {
+      completion: async () => {
+        controller.abort();
+        return {
+          text: "",
+          toolCalls: [toolCall("c1", "one"), toolCall("c2", "two")],
+          promptTokens: 1,
+          completionTokens: 1,
+          stoppedEarly: false,
+        };
+      },
+      stopCompletion: async () => {},
+    };
+    const store = memoryStore();
+    const runTurn = createTurnRunner({
+      ...deps(),
+      store: {
+        ...deps().store,
+        getStore: async () => store,
+        getSearch: async () => ({ provider: "brave", key: "k", count: 5 }) as const,
+      },
+      prompt: {
+        getSystemPrompt: async () => undefined,
+        getTalentNames: async () => ["web_search"],
+      },
+      engine: { ...deps().engine, ensureEngine: async () => engine },
+    });
+
+    const out = await runTurn(
+      "search please",
+      { sessionId: "s1", history: [], signal: controller.signal },
+      undefined,
+    );
+
+    expect(out.steps.map((s) => [s.tool, s.ok, s.result])).toEqual([
+      ["web_search", false, "web_search: cancelled"],
+      ["web_search", false, "web_search: cancelled"],
+    ]);
+    // A stop is not a failed reply: the cancelled step list still lands.
+    expect(store.turns.map((t) => t.role)).toEqual(["user", "assistant"]);
+  });
 });

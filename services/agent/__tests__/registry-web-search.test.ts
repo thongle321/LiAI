@@ -13,6 +13,7 @@ import {
 } from "../registry.ts";
 import { getCachedHits, resetSearchCache } from "../search-budget.ts";
 import type { HttpFetch } from "../search.ts";
+import { flushTick, hangingFetch as hangingTransport } from "@/jest/fixtures/search-transport.ts";
 
 const AUTH = { provider: "brave", key: "bk", count: 5 };
 
@@ -38,6 +39,10 @@ function braved(hits: unknown[]): Response {
 
 const search = (fetchImpl: HttpFetch, query: string, auth = AUTH) =>
   runTalent("web_search", JSON.stringify({ query }), { fetchImpl, search: auth });
+
+/** The same call with the turn's Stop attached. */
+const searchOn = (fetchImpl: HttpFetch, query: string, signal: AbortSignal) =>
+  runTalent("web_search", JSON.stringify({ query }), { fetchImpl, search: AUTH, signal });
 
 beforeEach(() => {
   resetSearchCache();
@@ -163,6 +168,60 @@ describe("web_search failures are outcomes, not throws", () => {
     const fetchImpl = fakeFetch(async () => braved([]));
     await search(fetchImpl, "q");
     expect(isReadUrlAllowed("https://anywhere.example")).toBe(false);
+  });
+});
+
+describe("web_search cancellation (PocketPal #999)", () => {
+  const tick = flushTick;
+
+  it("a stopped search is a failed outcome, never a throw", async () => {
+    const controller = new AbortController();
+    const pending = searchOn(hangingTransport().fetchImpl, "stopped query", controller.signal);
+    await tick();
+    controller.abort();
+
+    const out = await pending;
+    expect(out.ok).toBe(false);
+    expect(out.content).toEqual("web_search: cancelled");
+  });
+
+  it("caches and allows nothing, and leaves no dead in-flight entry", async () => {
+    const controller = new AbortController();
+    const pending = searchOn(hangingTransport().fetchImpl, "stopped query", controller.signal);
+    await tick();
+    controller.abort();
+    await pending;
+
+    expect(getCachedHits("brave", "stopped query", 5)).toBeUndefined();
+    expect(isReadUrlAllowed("https://hit.example/a")).toBe(false);
+
+    // The next identical search must reach the provider itself: a cached
+    // entry (or a shared promise the abort killed) would answer instead.
+    let calls = 0;
+    const fetchImpl = fakeFetch(async () => {
+      calls += 1;
+      return braved([{ title: "x", url: "https://hit.example/a", description: "d" }]);
+    });
+    const retried = await search(fetchImpl, "stopped query");
+    expect(retried.ok).toBe(true);
+    expect(calls).toBe(1);
+    expect(isReadUrlAllowed("https://hit.example/a")).toBe(true);
+  });
+
+  it("still shares one request between identical concurrent queries", async () => {
+    const controller = new AbortController();
+    let calls = 0;
+    const fetchImpl = fakeFetch(async () => {
+      calls += 1;
+      return braved([{ title: "x", url: "https://hit.example/b", description: "d" }]);
+    });
+    const [a, b] = await Promise.all([
+      searchOn(fetchImpl, "shared query", controller.signal),
+      searchOn(fetchImpl, "shared query", controller.signal),
+    ]);
+    expect(a.ok).toBe(true);
+    expect(b.ok).toBe(true);
+    expect(calls).toBe(1);
   });
 });
 

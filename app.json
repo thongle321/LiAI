@@ -11,7 +11,13 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.liai.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "LiAI needs the camera to see what you see."
+        "NSCameraUsageDescription": "LiAI needs the camera to see what you see.",
+        "CADisableMinimumFrameDuration": true,
+        "NSSpeechRecognitionUsageDescription": "LiAI needs speech recognition to transcribe your voice.",
+        "NSMicrophoneUsageDescription": "LiAI needs the microphone to hear your questions."
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
       }
     },
     "android": {
@@ -25,9 +31,12 @@
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "com.anonymous.liai"
+      "package": "com.anonymous.liai",
+      "runtimeVersion": "1.0.0"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -104,6 +113,9 @@
     },
     "experiments": {
       "typedRoutes": true
+    },
+    "updates": {
+      "url": "https://u.expo.dev/bac1850f-bdb6-44f4-b3b5-d7036c8a0fb0"
     }
   }
 }

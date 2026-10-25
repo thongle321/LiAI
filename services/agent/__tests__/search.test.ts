@@ -7,6 +7,7 @@ import {
   braveSearch,
   exaRead,
   exaSearch,
+  fetchText,
   firecrawlRead,
   firecrawlSearch,
   parallelSearch,
@@ -57,30 +58,6 @@ describe("providerJson transport", () => {
     expect(MAX_BODY_BYTES).toEqual(2 * 1024 * 1024);
   });
 
-  it("retries a 429 once and succeeds (retryOn429)", async () => {
-    let calls = 0;
-    const fetchImpl = fakeFetch(async () => {
-      calls += 1;
-      if (calls === 1) return jsonResponse("rate limited", 429);
-      return jsonResponse({ ok: true });
-    });
-    const out = await providerJson(fetchImpl, "https://t.example", { method: "GET" }, { retryOn429: true });
-    expect(calls).toEqual(2);
-    expect(out).toEqual({ ok: true });
-  });
-
-  it("does not retry a 429 when retryOn429 is off", async () => {
-    let calls = 0;
-    const fetchImpl = fakeFetch(async () => {
-      calls += 1;
-      return jsonResponse("", 429);
-    });
-    await expect(
-      providerJson(fetchImpl, "https://t.example", { method: "GET" }),
-    ).rejects.toThrow("request failed (429)");
-    expect(calls).toEqual(1);
-  });
-
   it("aborts the upstream fetch when its own deadline fires", async () => {
     const fetchImpl = fakeFetch(
       (_url, init) =>
@@ -115,6 +92,289 @@ describe("providerJson transport", () => {
     await expect(
       providerJson(fetchImpl, "https://t.example", { method: "GET" }),
     ).rejects.toThrow("response too large");
+  });
+});
+
+describe("429 retry (PocketPal #999 matrix)", () => {
+  const url = "https://t.example/s";
+  const response = (status: number, headers: Record<string, string> = {}): Response =>
+    new Response(JSON.stringify({ ok: true }), {
+      status,
+      headers: { "Content-Type": "application/json", ...headers },
+    });
+  /** One queued response per call; the mock records every call. */
+  function fetchReturning(...responses: Response[]) {
+    const mock = jest.fn<Promise<Response>, [string, RequestInit]>();
+    responses.forEach((r) => mock.mockResolvedValueOnce(r));
+    const fetchImpl: HttpFetch = (u, init) => mock(u, init);
+    return { fetchImpl, mock };
+  }
+  const outcome = (call: Promise<unknown>) =>
+    call.then(
+      () => "resolved",
+      (e: Error) => e.message,
+    );
+  const searchRequest = (fetchImpl: HttpFetch, signal?: AbortSignal) =>
+    providerJson(
+      fetchImpl,
+      url,
+      { method: "GET", ...(signal ? { signal } : {}) },
+      { retryOn429: true },
+    );
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("is off by default", async () => {
+    const { fetchImpl, mock } = fetchReturning(response(429), response(200));
+
+    const result = outcome(providerJson(fetchImpl, url, { method: "GET" }));
+    await jest.advanceTimersByTimeAsync(5000);
+
+    expect(await result).toBe("request failed (429)");
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries once after Retry-After and leaves no listener or timer behind", async () => {
+    const { fetchImpl, mock } = fetchReturning(
+      response(429, { "retry-after": "1" }),
+      response(200),
+    );
+    const caller = new AbortController();
+    const add = jest.spyOn(caller.signal, "addEventListener");
+    const remove = jest.spyOn(caller.signal, "removeEventListener");
+
+    const result = searchRequest(fetchImpl, caller.signal);
+    await jest.advanceTimersByTimeAsync(999);
+    expect(mock).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(mock).toHaveBeenCalledTimes(2);
+
+    expect(await result).toEqual({ ok: true });
+    // Two attempts + the wait: each add has exactly one matching remove.
+    expect(add).toHaveBeenCalledTimes(3);
+    expect(remove).toHaveBeenCalledTimes(3);
+    add.mock.calls.forEach(([type, handler], i) => {
+      expect(remove.mock.calls[i]).toEqual([type, handler]);
+    });
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it("returns the original error when the retry also gets 429", async () => {
+    const { fetchImpl, mock } = fetchReturning(response(429), response(429));
+
+    const result = outcome(searchRequest(fetchImpl));
+    await jest.advanceTimersByTimeAsync(999);
+    expect(mock).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(1);
+
+    expect(await result).toBe("request failed (429)");
+    expect(mock).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels the wait on abort and never sends the retry", async () => {
+    const { fetchImpl, mock } = fetchReturning(
+      response(429, { "x-ratelimit-reset": "1" }),
+      response(200),
+    );
+    const caller = new AbortController();
+
+    const result = outcome(searchRequest(fetchImpl, caller.signal));
+    await jest.advanceTimersByTimeAsync(500);
+    caller.abort();
+    expect(jest.getTimerCount()).toBe(0);
+
+    expect(await result).toBe("cancelled");
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["Retry-After: 30", { "retry-after": "30" }],
+    ["X-RateLimit-Reset: 5", { "x-ratelimit-reset": "5" }],
+    ["an epoch-style reset", { "x-ratelimit-reset": "1767225600" }],
+  ])("fails at once without a retry when the hint is over 2 s (%s)", async (_label, headers) => {
+    const { fetchImpl, mock } = fetchReturning(response(429, headers), response(200));
+
+    expect(await outcome(searchRequest(fetchImpl))).toBe("request failed (429)");
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [
+      "an HTTP-date 1 s ahead",
+      { "retry-after": "Thu, 01 Jan 2026 00:00:01 GMT" },
+      1000,
+    ],
+    ["a past HTTP-date", { "retry-after": "Wed, 31 Dec 2025 23:59:00 GMT" }, 1000],
+    ["an unparseable Retry-After", { "retry-after": "soon" }, 1000],
+    ["a negative reset", { "x-ratelimit-reset": "-1" }, 1000],
+    ["Retry-After over a reset header", { "retry-after": "2", "x-ratelimit-reset": "1" }, 2000],
+    [
+      "X-RateLimit-Reset over RateLimit-Reset",
+      { "x-ratelimit-reset": "1", "ratelimit-reset": "5" },
+      1000,
+    ],
+    ["RateLimit-Reset alone", { "ratelimit-reset": "2" }, 2000],
+    ["the smallest value of a reset list", { "x-ratelimit-reset": "1, 1419704" }, 1000],
+    ["a reset list whose smaller value comes second", { "x-ratelimit-reset": "5, 1" }, 1000],
+  ])("retries after the hinted wait for %s", async (_label, headers, waitMs) => {
+    const { fetchImpl, mock } = fetchReturning(response(429, headers), response(200));
+
+    const result = outcome(searchRequest(fetchImpl));
+    await jest.advanceTimersByTimeAsync((waitMs as number) - 1);
+    expect(mock).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(1);
+
+    expect(mock).toHaveBeenCalledTimes(2);
+    expect(await result).toBe("resolved");
+  });
+
+  it.each([500, 503])("does not retry a %i", async (status) => {
+    const { fetchImpl, mock } = fetchReturning(response(status), response(200));
+
+    expect(await outcome(searchRequest(fetchImpl))).toBe(`request failed (${status})`);
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends no retry when Stop lands as the 429 arrives", async () => {
+    const caller = new AbortController();
+    const mock = jest.fn<Promise<Response>, [string, RequestInit]>();
+    mock
+      .mockImplementationOnce(async () => {
+        caller.abort();
+        return response(429, { "retry-after": "1" });
+      })
+      .mockResolvedValueOnce(response(200));
+    const fetchImpl: HttpFetch = (u, init) => mock(u, init);
+
+    expect(await outcome(searchRequest(fetchImpl, caller.signal))).toBe("cancelled");
+    expect(jest.getTimerCount()).toBe(0);
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry a network error", async () => {
+    const mock = jest
+      .fn<Promise<Response>, [string, RequestInit]>()
+      .mockRejectedValueOnce(new TypeError("Network request failed"))
+      .mockResolvedValueOnce(response(200));
+    const fetchImpl: HttpFetch = (u, init) => mock(u, init);
+
+    const result = outcome(searchRequest(fetchImpl));
+    await jest.advanceTimersByTimeAsync(5000);
+
+    expect(await result).toBe("Network request failed");
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry a timeout", async () => {
+    const mock = jest.fn<Promise<Response>, [string, RequestInit]>(
+      (_u, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () => reject(new Error("aborted upstream")));
+        }),
+    );
+    const fetchImpl: HttpFetch = (u, init) => mock(u, init);
+
+    const result = outcome(
+      providerJson(fetchImpl, url, { method: "GET" }, { timeoutMs: 100, retryOn429: true }),
+    );
+    await jest.advanceTimersByTimeAsync(5000);
+
+    expect(await result).toBe("timed out");
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns the retry error when the retry fails another way", async () => {
+    const { fetchImpl, mock } = fetchReturning(response(429), response(500));
+
+    const result = outcome(searchRequest(fetchImpl));
+    await jest.advanceTimersByTimeAsync(1000);
+
+    expect(await result).toBe("request failed (500)");
+    expect(mock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects without fetching when the caller is already stopped", async () => {
+    const { fetchImpl, mock } = fetchReturning(response(200));
+    const caller = new AbortController();
+    caller.abort();
+
+    await expect(searchRequest(fetchImpl, caller.signal)).rejects.toThrow("cancelled");
+    expect(mock).not.toHaveBeenCalled();
+  });
+
+  it("hands fetch its own signal and never aborts the caller's", async () => {
+    const { fetchImpl, mock } = fetchReturning(response(200));
+    const caller = new AbortController();
+
+    await searchRequest(fetchImpl, caller.signal);
+
+    const passed = mock.mock.calls[0][1].signal;
+    expect(passed).not.toBe(caller.signal);
+    expect(caller.signal.aborted).toBe(false);
+  });
+});
+
+describe("429 handling by kind", () => {
+  it("a search retries a 429 once, then answers", async () => {
+    let calls = 0;
+    const fetchImpl: HttpFetch = async () => {
+      calls += 1;
+      if (calls === 1) {
+        // Zero wait: the retry is what this test is about, not the clock.
+        return jsonResponse("", 429, { "Retry-After": "0" });
+      }
+      return jsonResponse({
+        web: { results: [{ title: "T", url: "https://a.example", description: "s" }] },
+        type: "search",
+      });
+    };
+    const out = await braveSearch(fetchImpl, "k", "q", 5);
+    expect(out.map((r) => r.url)).toEqual(["https://a.example"]);
+    expect(calls).toBe(2);
+  });
+
+  it.each([
+    ["exa", (f: HttpFetch) => exaRead(f, "k", "https://a.example")],
+    ["firecrawl", (f: HttpFetch) => firecrawlRead(f, "k", "https://a.example")],
+    ["default", (f: HttpFetch) => readWithDefaultReader(f, "https://a.example")],
+  ])("a %s read never retries a 429", async (_name, run) => {
+    let calls = 0;
+    const fetchImpl: HttpFetch = async () => {
+      calls += 1;
+      return jsonResponse("", 429, { "Retry-After": "0" });
+    };
+    await expect(run(fetchImpl)).rejects.toThrow("request failed (429)");
+    expect(calls).toBe(1);
+  });
+});
+
+describe("transport credentials", () => {
+  it("omits cookies on JSON and text requests, even when asked to include them", async () => {
+    const seen: Array<RequestInit["credentials"]> = [];
+    const fetchImpl: HttpFetch = async (_url, init) => {
+      seen.push(init.credentials);
+      return new Response("{}", { headers: { "Content-Type": "application/json" } });
+    };
+
+    await providerJson(fetchImpl, "https://t.example", {
+      method: "GET",
+      credentials: "include",
+    });
+    await fetchText(fetchImpl, "https://r.jina.ai/x", {
+      method: "GET",
+      credentials: "include",
+    });
+
+    expect(seen).toEqual(["omit", "omit"]);
   });
 });
 

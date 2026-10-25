@@ -13,7 +13,7 @@ import { router } from "expo-router";
 
 import { useChatStore } from "@/store/chat.ts";
 import { useModelStore } from "@/store/model-store.ts";
-import { resolveCompanionModelAction } from "@/services/companions/activate.ts";
+import { downloadedSpecs, resolveCompanionModelAction } from "@/services/companions/activate.ts";
 import type { Companion } from "@/types/companion.ts";
 
 export function useActivateCompanion(): (companion: Companion) => Promise<void> {
@@ -24,7 +24,7 @@ export function useActivateCompanion(): (companion: Companion) => Promise<void> 
     // and answering it must not race the bind.
     await setActiveCompanion(companion.id);
     const m = useModelStore.getState();
-    const downloaded = m.models.filter((spec) => spec.downloadStatus === "completed");
+    const downloaded = downloadedSpecs(m.models);
     const action = resolveCompanionModelAction(companion.defaultModel, downloaded, m.activeModelId);
     if (action.kind === "select") {
       await m.setActiveModel(action.model.id, "local");

@@ -17,6 +17,24 @@ export type CompanionModelAction =
   /** A DIFFERENT model is active: ask before switching. */
   | { kind: "ask"; model: ModelSpec };
 
+export const isDownloaded = (spec: ModelSpec): boolean =>
+  spec.downloadStatus === "completed";
+
+export function downloadedSpecs(models: readonly ModelSpec[]): ModelSpec[] {
+  return models.filter(isDownloaded);
+}
+
+/** The one readiness test for a companion's recommended model (PocketPal's
+ *  `modelStore.isModelAvailable`): present in the catalog AND downloaded.
+ *  The card's warning pill and the activation flow must never disagree, so
+ *  both read THIS file's rule and never re-derive it inline. */
+export function isModelReady(
+  id: string | undefined,
+  models: readonly ModelSpec[],
+): boolean {
+  return id !== undefined && models.some((m) => m.id === id && isDownloaded(m));
+}
+
 /** What activating a companion implies for the loaded model.
  *
  *  Downloaded-only lookup, exactly like PocketPal's availableModels

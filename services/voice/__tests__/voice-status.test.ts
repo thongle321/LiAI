@@ -6,6 +6,7 @@ import {
   bargeActionFor,
   showsReplyOverlay,
   voiceErrorAction,
+  voiceOrbStateFor,
   VOICE_STATUS_LABEL,
 } from "../voice-status";
 
@@ -64,5 +65,32 @@ describe("bargeActionFor", () => {
     expect(bargeActionFor("listening")).toEqual("stop");
     expect(bargeActionFor("thinking")).toEqual("ignore");
     expect(bargeActionFor("idle")).toEqual("begin");
+  });
+});
+
+/** VoiceOrbState via voiceOrbStateFor: expo-thinking-orbs' type is a type-only
+ *  import here, so the suite pins the nine literals by string value. */
+describe("voiceOrbStateFor", () => {
+  it("a closed session breathes at idle; a dead one freezes as failed", () => {
+    expect(voiceOrbStateFor("closed", false)).toEqual("idle");
+    // An issue with no session is a dead gate (mic-blocked, no model,
+    // failed start) — the frozen state matching it.
+    expect(voiceOrbStateFor("closed", true)).toEqual("failed");
+  });
+
+  it("starting assembles the shell; live turn phases pass through", () => {
+    expect(voiceOrbStateFor("starting", false)).toEqual("initializing");
+    expect(voiceOrbStateFor("listening", false)).toEqual("listening");
+    // Transcribing and thinking are both the in-flight wait.
+    expect(voiceOrbStateFor("transcribing", false)).toEqual("thinking");
+    expect(voiceOrbStateFor("thinking", false)).toEqual("thinking");
+    expect(voiceOrbStateFor("speaking", false)).toEqual("speaking");
+  });
+
+  it("an issue mid-session does NOT freeze — the turn is still live", () => {
+    // Transcribe failures set an issue and keep listening; the orb
+    // tracks the machine, the text under it carries the problem.
+    expect(voiceOrbStateFor("listening", true)).toEqual("listening");
+    expect(voiceOrbStateFor("speaking", true)).toEqual("speaking");
   });
 });

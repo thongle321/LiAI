@@ -2,6 +2,8 @@
 
 import { createChatStore } from "../chat.ts";
 import { startStreamYield } from "../chat/send.ts";
+import type { TurnRunner } from "../chat/types.ts";
+import { flushTick } from "@/jest/fixtures/search-transport.ts";
 import {
   fakeRunTurn,
   fakeSessionStore,
@@ -987,6 +989,95 @@ describe("multimodal warning (G12)", () => {
     useStore.getState().startEdit(useStore.getState().messages[0].id);
     expect(await useStore.getState().send("typo fixed", [image])).toBe(true);
     expect(calls.images).toEqual([[image]]);
+  });
+});
+
+describe("tool cancellation (PocketPal #999)", () => {
+  /** A turn that stays in flight, capturing the signal it was handed.
+   *  Stop must reach the runner through that signal, not only through
+   *  the engine: a tool call already on the network has no other way to
+   *  learn the user walked away. */
+  function stoppableTurn() {
+    const signals: Array<AbortSignal | undefined> = [];
+    const gates: Array<() => void> = [];
+    const runTurn: TurnRunner = (text, paths, onToken) =>
+      new Promise((resolve) => {
+        signals.push(paths.signal);
+        gates.push(() => {
+          onToken?.("partial");
+          resolve({
+            reply: "partial",
+            sessionId: paths.sessionId ?? "s-new",
+            steps: [],
+            promptTokens: 1,
+            completionTokens: 1,
+          });
+        });
+      });
+    const release = () => {
+      gates.splice(0).forEach((open) => open());
+    };
+    return { runTurn, signals, release };
+  }
+  // send() awaits the CPU-decode probe before it reaches the runner.
+  const tick = flushTick;
+
+  it("hands each turn a live signal and aborts it on Stop", async () => {
+    const turn = stoppableTurn();
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn: turn.runTurn,
+    });
+    const sent = useStore.getState().send("hi");
+    await tick();
+    expect(turn.signals).toHaveLength(1);
+    expect(turn.signals[0]?.aborted).toBe(false);
+
+    useStore.getState().stop();
+    expect(turn.signals[0]?.aborted).toBe(true);
+
+    turn.release();
+    await sent;
+  });
+
+  it("aborts the tools when the conversation is abandoned", async () => {
+    const turn = stoppableTurn();
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn: turn.runTurn,
+    });
+    const sent = useStore.getState().send("hi");
+    await tick();
+
+    await useStore.getState().newConversation();
+    expect(turn.signals[0]?.aborted).toBe(true);
+
+    turn.release();
+    await sent;
+  });
+
+  it("gives the next turn a fresh signal after a Stop", async () => {
+    // An aborted controller must not be reused: the second turn would
+    // cancel itself before it began.
+    const turn = stoppableTurn();
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn: turn.runTurn,
+    });
+    const first = useStore.getState().send("one");
+    await tick();
+    useStore.getState().stop();
+    turn.release();
+    await first;
+
+    const second = useStore.getState().send("two");
+    await tick();
+    expect(turn.signals).toHaveLength(2);
+    expect(turn.signals[1]).not.toBe(turn.signals[0]);
+    expect(turn.signals[1]?.aborted).toBe(false);
+
+    turn.release();
+    await second;
   });
 });
 

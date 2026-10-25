@@ -337,6 +337,7 @@ export function createTurnRunner(deps: TurnDeps) {
       // data URIs (OpenAI content arrays — a server can't read our files).
       ...(imagePaths ? { imagePaths } : {}),
       ...(remoteDataUris !== undefined ? { imageDataUris: remoteDataUris } : {}),
+      ...(paths.signal !== undefined ? { signal: paths.signal } : {}),
       ...(thinking !== undefined ? { enableThinking: thinking } : {}),
       ...(effort !== undefined ? { reasoningEffort: effort } : {}),
       ...(jinja !== undefined ? { jinja } : {}),

@@ -428,20 +428,24 @@ async function defaultEffort(
 ): Promise<EffortLevel | undefined> {
   try {
     const custom = await sessionCustomOverride(sessionId);
-    if (custom?.effort !== undefined) return custom.effort;
     const { useInference } = await import("../inference.ts");
     const { useModelStore } = await import("../model-store.ts");
     const m = useModelStore.getState();
     const id = m.activeModelId;
+    const spec = id === null ? undefined : m.models.find((model) => model.id === id);
+    // The active model's supported effort levels gate the resolved effort
+    // (PocketPal #1002): a stored effort can outlive the model it was saved
+    // against, so the override is clamped into the model's own set.
+    const supported = spec?.effortValues;
+    if (custom?.effort !== undefined) return resolveEffort(custom.effort, supported);
     if (id === null) return undefined;
-    const spec = m.models.find((model) => model.id === id);
     const thinkingOn = resolveThinking({
       modelId: id,
       reasoning: spec?.reasoning,
       overrides: useInference.getState().thinkingOverrides,
     }).enabled;
     if (thinkingOn !== true) return undefined;
-    return resolveEffort(useInference.getState().effortOverrides[id]);
+    return resolveEffort(useInference.getState().effortOverrides[id], supported);
   } catch {
     return undefined;
   }

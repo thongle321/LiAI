@@ -20,6 +20,9 @@ export interface TurnPaths {
   voiceMode?: boolean;
   /** Photos for this turn, as data-uris (G8: up to MAX_IMAGES). */
   images?: string[];
+  /** The turn's Stop. A tool call already on the network has no other
+   *  way to learn the user walked away (PocketPal #999). */
+  signal?: AbortSignal;
   /** Current bubbles for agent context (user/assistant texts). */
   history: ChatMessage[];
   /** Re-answer: skip the user append (question already stored). */

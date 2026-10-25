@@ -23,7 +23,6 @@ export function CompanionCard({
   onUse: () => void;
 }) {
   const colors = useColors();
-  const tools = companion.pact?.talents.length ?? 0;
   return (
     <Pressable
       onPress={onOpen}
@@ -35,10 +34,6 @@ export function CompanionCard({
         <View
           className="h-1.5 flex-1"
           style={{ backgroundColor: companion.color?.[0] ?? colors.primary }}
-        />
-        <View
-          className="h-1.5 flex-1"
-          style={{ backgroundColor: companion.color?.[1] ?? colors.surface3 }}
         />
       </View>
       <View className="gap-1 p-3">
@@ -54,10 +49,7 @@ export function CompanionCard({
             {companion.description}
           </Text>
         ) : null}
-        <View className="mt-1 flex-row items-center justify-between">
-          <Text className="text-body-sm text-quiet">
-            {tools > 0 ? `${tools} tool${tools === 1 ? "" : "s"}` : "No tools"}
-          </Text>
+        <View className="mt-1 flex-row items-center justify-end">
           <Pressable
             onPress={onUse}
             className="btn btn--primary min-h-9 px-3 active:opacity-80"

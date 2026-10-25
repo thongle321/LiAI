@@ -106,7 +106,7 @@ budgeting next to Whisper + chat model.
 
 ---
 
-## 3. Run tool calls concurrently (#999) — NEW
+## 3. Run tool calls concurrently (#999) — DONE
 
 Commit: `aad09f8a` — 18 files, +1807/-92.
 
@@ -117,18 +117,17 @@ Stop cancels in-flight tools; opts into one-time 429 retry in search providers
 (Retry-After / rate-limit reset header); shares one in-flight request between
 identical searches.
 
-LiAI current state: `services/agent/runner.ts` runs tool calls SEQUENTIALLY in
-a `for (const call of allowed)` loop with `await runTalent(...)`. Search in
-`services/agent/search.ts` has no 429 retry and no request dedup.
+Ported 2026-10-25: concurrency + call-order settle, runner-owned signal
+threaded through `runTalent` → `searchWeb` / `readPage`, Stop and
+conversation-abandon aborting the turn's tools, plus the full 429 / dedupe /
+cancellation test matrix. LiAI's 429 retry and in-flight dedupe already existed
+and were pinned, not rewritten. Details and deliberate divergences:
+`docs/research/2026-10-25-pocketpal-concurrent-tools-parity.md`.
 
-Verdict: medium effort, self-contained in runner + search. Clear perf/UX win for
-multi-tool replies. Port the concurrency + signal + 429 retry + dedup.
-
-Files likely touched: `services/agent/runner.ts`, `services/agent/search.ts`,
-`services/agent/registry.ts`, `services/agent/__tests__/*`.
-
-Risks: event-ordering tests; need to preserve tool_call_started/finished order
-for the UI; AbortSignal plumbing through `runTalent`.
+Files touched: `services/agent/runner.ts`, `services/agent/search.ts`,
+`services/agent/registry.ts`, `store/chat/send.ts`, `store/chat/types.ts`,
+`services/chat/turn.ts`, `services/agent/__tests__/*`,
+`store/__tests__/chat-store.test.ts`, `services/chat/__tests__/local-turn.test.ts`.
 
 ---
 
@@ -157,7 +156,7 @@ Risks: only worth doing if the crash/unload is reproducible on device.
 
 ---
 
-## 5. Clamp effort to model-supported levels (#1002) — PARTIAL/NOT APPLICABLE
+## 5. Clamp effort to model-supported levels (#1002) — PORTED (2026-10-25, device verification pending)
 
 Commit: `fac8f0e1` — 7 files, +252/-21.
 
@@ -176,6 +175,16 @@ can't grade) requires adding `effortValues` to model metadata, which LiAI
 doesn't have. Low priority; skip unless effort mis-grading is observed.
 If done: add `effortValues?: EffortLevel[]` to model type, clamp in
 `resolveEffort`/`getEffort`.
+
+Ported 2026-10-25: `resolveEffort(override, supported?)` now clamps (utils/reasoning-
+capability.ts); `ModelSpec.effortValues?: EffortLevel[]` added (types/models.ts);
+`defaultEffort` passes the active spec's levels (store/chat/index.ts). Composer
+effort pill ported too (components/chat/message-input.tsx) — graded models cycle
+off -> level0 -> ... -> off; effort-less models toggle on/off. Cycle set = declared
+`effortValues` when present, else the full canonical set (turn clamps at send
+time). No pill-grade "derivation" beyond the clamped value. Research note:
+docs/research/2026-10-25-pocketpal-effort-clamp-parity.md. typecheck clean;
+npm test 98 suites / 920 tests green (device verification pending).
 
 Files likely touched: `types/*` (model), `utils/reasoning-capability.ts`,
 `store/inference.ts`, `services/chat/turn.ts`.

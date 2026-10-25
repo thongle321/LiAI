@@ -25,6 +25,9 @@ export interface TalentSearchAuth {
 export interface TalentContext {
   fetchImpl: HttpFetch;
   search: TalentSearchAuth | null;
+  /** The run's Stop. Network talents hand it to their transport so an
+   *  in-flight request (and a 429 wait) ends with the turn. */
+  signal?: AbortSignal;
 }
 
 /** PocketParity (talents/searchAccess.ts): the consent copy the MODEL
@@ -360,7 +363,14 @@ export async function runTalent(
       } else if (shared) {
         hits = await shared;
       } else {
-        const request = searchWeb(ctx.fetchImpl, provider, key, query, count);
+        const request = searchWeb(
+          ctx.fetchImpl,
+          provider,
+          key,
+          query,
+          count,
+          ctx.signal,
+        );
         inFlight.set(cache, request);
         try {
           hits = await request;
@@ -446,7 +456,13 @@ export async function runTalent(
   }
   let page;
   try {
-    page = await readPage(ctx.fetchImpl, ctx.search.provider, ctx.search.key, targetUrl);
+    page = await readPage(
+      ctx.fetchImpl,
+      ctx.search.provider,
+      ctx.search.key,
+      targetUrl,
+      ctx.signal,
+    );
   } catch (err) {
     return fail(
       `read_url: ${err instanceof Error ? err.message : String(err)}`,

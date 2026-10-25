@@ -16,7 +16,11 @@ import type {
 import type { SamplerParams } from "../inference/sampler.ts";
 import type { EffortLevel } from "@/utils/reasoning-capability.ts";
 import type { TurnOutcomeFlags, ToolMetrics, TurnBlock } from "@/types/chat.ts";
-import { runTalent, type TalentSearchAuth } from "./registry.ts";
+import {
+  runTalent,
+  type TalentOutcome,
+  type TalentSearchAuth,
+} from "./registry.ts";
 import { seedReadUrlAllowlist } from "./allowlist.ts";
 
 export interface AgentStep {
@@ -72,6 +76,9 @@ export interface AgentRunOptions {
   engine: CompletionEngine;
   messages: CompletionMessage[];
   tools: ToolDefinition[];
+  /** The consumer's Stop. Aborts every dispatched talent (network
+   *  requests included) and prevents the loop from starting more. */
+  signal?: AbortSignal;
   /** Local file paths for a multimodal first turn (llama media_paths). */
   imagePaths?: string[];
   /** Remote vision (04): the turn's images as data URIs for OpenAI
@@ -104,8 +111,23 @@ export interface AgentRunOptions {
 
 export const DEFAULT_MAX_TURNS = 5;
 
+/** PocketPal #999: one reply may name several tools, and they are network
+ *  work — four at a time keeps the reply responsive without tripping the
+ *  providers' rate limits. */
+const MAX_IN_FLIGHT_TOOL_CALLS = 4;
+
 const BUDGET_EXHAUSTED_NUDGE =
   "(Tool budget exhausted. Answer now using only the information gathered above.)";
+
+const NO_FUNCTION_NAME = "Unknown talent (no function name)";
+
+/** A call that never ran, as an outcome the step list can carry. */
+function cancelledOutcome(call: EngineToolCall): TalentOutcome {
+  return {
+    ok: false,
+    content: `${call.name || NO_FUNCTION_NAME}: cancelled`,
+  };
+}
 
 function advertisedName(call: EngineToolCall, tools: ToolDefinition[]): boolean {
   return tools.some((t) => t.function.name === call.name);
@@ -131,6 +153,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
     search,
     sessionSteps,
     maxTurns = DEFAULT_MAX_TURNS,
+    signal,
     onEvent,
   } = options;
   let messages = options.messages;
@@ -139,6 +162,26 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
   let completionTokens = 0;
   let text = "";
   let reasoning = "";
+  // Runner-owned: every early exit (Stop, a thrown turn, the end of the
+  // run) aborts what is still in flight, without mutating the caller's
+  // signal. The consumer's signal only ever turns this one on.
+  const toolController = new AbortController();
+  const started: Promise<TalentOutcome>[] = [];
+  // The runner is the one layer holding both the signal and the engine, so
+  // it owns the abort → stopCompletion translation (PocketPal #999). The
+  // store's Stop also stops the engine directly; this covers the other
+  // abort paths (abandoning the conversation) and keeps a stopped turn from
+  // decoding on behind a view that is already gone.
+  let pendingCompletion: Promise<unknown> | null = null;
+  const onAbort = () => {
+    toolController.abort();
+    if (pendingCompletion !== null) void engine.stopCompletion();
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
+  if (signal?.aborted) toolController.abort();
+  // Without a caller signal the talents see exactly what they saw before:
+  // no signal at all (PocketPal's `signal ? toolController.signal : undefined`).
+  const toolSignal = signal !== undefined ? toolController.signal : undefined;
   // Ordered narrative. A tool call ends the current text/reasoning
   // segment: text spoken after the call is a NEW block, not more of the
   // same paragraph. Tool segments reference the same id the flat steps
@@ -186,7 +229,7 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
       textSeg = null;
       reasoningSeg = null;
       try {
-        outcome = await engine.completion(
+        const completion = engine.completion(
           {
             messages: requestMessages,
             ...(forcedFinal ? {} : tools.length > 0 ? { tools } : {}),
@@ -253,6 +296,12 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
             },
           },
         );
+        pendingCompletion = completion;
+        try {
+          outcome = await completion;
+        } finally {
+          pendingCompletion = null;
+        }
       } catch (err) {
         onEvent({
           type: "run_failed",
@@ -372,15 +421,61 @@ endFlags = {
           tool_calls: allowed,
         },
       ];
+      // Start events for the WHOLE reply land first: the UI flips to the
+      // tool phase once, then rows settle as results arrive. Outcomes are
+      // still consumed in call order, so the model's tool messages match
+      // the assistant's tool_calls regardless of network order.
       for (const call of allowed) {
         onEvent({ type: "tool_call_started", call });
+      }
+      const slots = allowed.map(() => {
+        let resolve!: (outcome: TalentOutcome) => void;
+        let reject!: (error: unknown) => void;
+        const promise = new Promise<TalentOutcome>((res, rej) => {
+          resolve = res;
+          reject = rej;
+        });
+        // `await` on a slot is the only consumer; an unhandled rejection
+        // before that await must not trip the runner's own handlers.
+        promise.catch(() => {});
+        return { promise, resolve, reject };
+      });
+      let nextCall = 0;
+      let inFlight = 0;
+      const pump = () => {
+        while (nextCall < allowed.length) {
+          // A Stop lands before the next slot leaves the queue: the call
+          // never runs, and its outcome still occupies the call's slot.
+          if (toolController.signal.aborted) {
+            for (; nextCall < allowed.length; nextCall += 1) {
+              slots[nextCall].resolve(cancelledOutcome(allowed[nextCall]));
+            }
+            return;
+          }
+          if (inFlight >= MAX_IN_FLIGHT_TOOL_CALLS) return;
+          const slot = slots[nextCall];
+          const call = allowed[nextCall];
+          const pending = runTalent(call.name, call.arguments, {
+            fetchImpl,
+            search,
+            ...(toolSignal !== undefined ? { signal: toolSignal } : {}),
+          });
+          nextCall += 1;
+          inFlight += 1;
+          started.push(pending);
+          pending.then(slot.resolve, slot.reject).then(() => {
+            inFlight -= 1;
+            pump();
+          });
+        }
+      };
+      pump();
+      for (let index = 0; index < allowed.length; index += 1) {
+        const call = allowed[index];
         // Named `talent`, not `outcome`: the engine's `outcome` is already
         // in scope from the loop above, and shadowing it is how two very
         // different results get confused for each other.
-        const talent = await runTalent(call.name, call.arguments, {
-          fetchImpl,
-          search,
-        });
+        const talent = await slots[index].promise;
         const input = parseArgs(call.arguments);
         steps.push({
           id: call.id,
@@ -410,9 +505,26 @@ endFlags = {
           tool_call_id: call.id,
         });
       }
+      // A stopped reply ends where the user stopped it: no tool messages
+      // for a turn the next generation will never be asked to continue.
+      if (toolController.signal.aborted) break;
       messages = [...requestMessages, ...toolMessages];
       // Loop continues; the forced-final pass answers next iteration.
     }
+    // Only an aborted run reaches here (every other exit returns from
+    // inside the loop). It ended the way the user asked: partial text and
+    // the cancelled calls, never a forced final answer.
+    onEvent({ type: "run_finished" });
+    return {
+      text,
+      ...(reasoning !== "" ? { reasoning } : {}),
+      steps,
+      promptTokens,
+      completionTokens,
+      hitMaxTurns: false,
+      ...(endFlags !== undefined ? { outcome: endFlags } : {}),
+      ...(blocks.length > 0 ? { blocks } : {}),
+    };
   } catch (err) {
     onEvent({
       type: "run_failed",
@@ -428,5 +540,11 @@ endFlags = {
       ...(endFlags !== undefined ? { outcome: endFlags } : {}),
       ...(blocks.length > 0 ? { blocks } : {}),
     };
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+    toolController.abort();
+    // An exit before every slot was awaited must not leave a fetch
+    // running against an unloaded context.
+    await Promise.allSettled(started);
   }
 }

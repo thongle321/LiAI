@@ -37,6 +37,11 @@ import { useMultimodalAvailable } from "@/hooks/useMultimodalAvailable.ts";
 import { useModelStore } from "@/store/model-store";
 import { resolveThinking } from "@/services/inference/thinking.ts";
 import {
+  EFFORT_LABELS,
+  EFFORT_LEVELS,
+  type EffortLevel,
+} from "@/utils/reasoning-capability.ts";
+import {
   MAX_IMAGES,
   pickImages,
   type ImageSource,
@@ -109,6 +114,8 @@ export function MessageInput({
   // engine cannot honour.
   const thinkingOverrides = useInference((s) => s.thinkingOverrides);
   const setThinkingOverride = useInference((s) => s.setThinkingOverride);
+  const effortOverrides = useInference((s) => s.effortOverrides);
+  const setEffortOverride = useInference((s) => s.setEffortOverride);
   const activeModelId = useModelStore((s) => s.activeModelId);
   const activeModels = useModelStore((s) => s.models);
   const thinkingLocal =
@@ -129,6 +136,11 @@ export function MessageInput({
   // pill can only appear where a real value exists, so this is the one
   // case that never renders while undefined.
   const thinkingEnabled = resolved.enabled ?? false;
+  // Graded effort for the active model (PocketPal axis-2 parity): armed via
+  // the model-settings sheet. Drives the pill's cycle and its label.
+  const effortLevel: EffortLevel | null =
+    activeModelId === null ? null : (effortOverrides[activeModelId] ?? null);
+  const effortArmed = effortLevel !== null;
   // Visibility: a model that KNOWNLY reasons, or one the user already
   // set an override for (nobody loses a control they are using). A model
   // that is known not to reason — and one nobody has classified — gets no
@@ -137,6 +149,17 @@ export function MessageInput({
     thinkingLocal &&
     (activeSpec?.reasoning === true ||
       (activeModelId !== null && thinkingOverrides[activeModelId] !== undefined));
+  // Graded effort levels the pill cycles through (PocketPal parity): declared
+  // by the model spec when known, otherwise the full canonical set so the pill
+  // stays useful for any reasoning model (the turn clamps at send time).
+  const declaredLevels = activeSpec?.effortValues ?? [];
+  const levels: EffortLevel[] =
+    declaredLevels.length > 0
+      ? declaredLevels
+      : thinkingSupported
+        ? [...EFFORT_LEVELS]
+        : [];
+  const supportsEffort = levels.length > 0;
   // A switch's label names the THING, not the action: VoiceOver reads
   // "label, switch, checked". An imperative label that flipped to
   // "Disable thinking" announced "Disable thinking, switch, on" -- an
@@ -144,6 +167,27 @@ export function MessageInput({
   // in the hint instead, so the label never moves.
   let thinkingHint: string | undefined;
   if (!modelReady) thinkingHint = "Load a model to use thinking";
+  // Graded pill cycle (PocketPal parity): off -> level0 -> ... -> levelN -> off.
+  const handleEffortCycle = () => {
+    if (activeModelId === null || levels.length === 0) return;
+    let nextEnabled: boolean;
+    let nextEffort: EffortLevel | null;
+    if (!thinkingEnabled) {
+      nextEnabled = true;
+      nextEffort = levels[0] ?? null;
+    } else {
+      const idx = effortLevel ? levels.indexOf(effortLevel) : -1;
+      if (idx < 0 || idx >= levels.length - 1) {
+        nextEnabled = false;
+        nextEffort = null;
+      } else {
+        nextEnabled = true;
+        nextEffort = levels[idx + 1] ?? null;
+      }
+    }
+    setThinkingOverride(activeModelId, nextEnabled);
+    setEffortOverride(activeModelId, nextEffort);
+  };
   const stop = useChatStore((s) => s.stop);
   const [plusOpen, setPlusOpen] = useState(false);
   // Photos attached to the NEXT message (G8: up to MAX_IMAGES). The camera
@@ -476,20 +520,17 @@ export function MessageInput({
                 // status colour with a glyph and a word" rule -- so it never
                 // depends on colour alone.
                 //
-                // NO effort cycle. PocketPal's pill double-taps through graded
-                // reasoning effort; LiAI has no effort concept anywhere, and
-                // inventing levels here would ship a control with nothing
-                // behind it.
+                // Graded models (axis-2) cycle off -> level0 -> ... -> levelN ->
+                // off on a single press; effort-less models just toggle on/off.
+                // The label shows the current effort when graded and on.
                 <Pressable
                   onPress={
                     modelReady && activeModelId !== null
-                      ? () => {
-                          // A press is a PER-MODEL decision, both directions.
-                          // There is no global fallback any more: an
-                          // unclassified model sends no flag at all, so the
-                          // template decides (services/inference//thinking.ts).
-                          setThinkingOverride(activeModelId, !resolved.enabled);
-                        }
+                      ? supportsEffort
+                        ? handleEffortCycle
+                        : () => {
+                            setThinkingOverride(activeModelId, !resolved.enabled);
+                          }
                       : undefined
                   }
                   disabled={!modelReady}
@@ -498,9 +539,17 @@ export function MessageInput({
                       ? "h-12 flex-row items-center gap-1.5 rounded-full bg-surface-2 pl-3.5 pr-3.5"
                       : "h-12 flex-row items-center gap-1.5 rounded-full bg-surface-3 pl-3.5 pr-3.5"
                   }
-                  accessibilityRole="switch"
-                  accessibilityState={{ checked: thinkingEnabled, disabled: !modelReady }}
-                  accessibilityLabel="Thinking"
+                  accessibilityRole={supportsEffort ? "button" : "switch"}
+                  accessibilityState={
+                    supportsEffort
+                      ? { disabled: !modelReady }
+                      : { checked: thinkingEnabled, disabled: !modelReady }
+                  }
+                  accessibilityLabel={
+                    supportsEffort && thinkingEnabled && effortLevel
+                      ? `Thinking effort: ${EFFORT_LABELS[effortLevel]}`
+                      : "Thinking"
+                  }
                   accessibilityHint={thinkingHint}
                 >
                   <Brain
@@ -514,7 +563,9 @@ export function MessageInput({
                         : "text-quiet"
                     }
                   >
-                    Think
+                    {supportsEffort && thinkingEnabled && effortLevel
+                      ? EFFORT_LABELS[effortLevel]
+                      : "Think"}
                   </Text>
                 </Pressable>
               )}

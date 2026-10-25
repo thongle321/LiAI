@@ -22,6 +22,11 @@
 import React, { type ReactElement } from "react";
 import { View } from "react-native";
 
+/** Anything the caller feeds us is accepted and ignored. */
+interface MockBands {
+  [key: string]: unknown;
+}
+
 export type MockSharedNumber = { value: number };
 
 export interface MockVoiceLevels {
@@ -53,14 +58,9 @@ export interface MockVoiceOrbProps {
   accessibilityLabel?: string;
   inputAmplitude?: MockSharedNumber;
   outputAmplitude?: MockSharedNumber;
-  inputLevels?: UnknownBands;
-  outputLevels?: UnknownBands;
+  inputLevels?: MockBands;
+  outputLevels?: MockBands;
   color?: string;
-  [key: string]: unknown;
-}
-
-/** Anything the caller feeds us is accepted and ignored. */
-interface UnknownBands {
   [key: string]: unknown;
 }
 
@@ -111,3 +111,4 @@ export function useVoiceAmplitude(): {
     setSamples: (): void => {},
   };
 }
+

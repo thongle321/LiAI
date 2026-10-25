@@ -1,5 +1,7 @@
 /** Voice-mode turn phases and their status-line labels. */
 
+import type { VoiceOrbState } from "expo-thinking-orbs";
+
 export type VoicePhase = "idle" | "listening" | "thinking" | "speaking";
 
 export const VOICE_STATUS_LABEL: Record<VoicePhase, string> = {
@@ -84,8 +86,6 @@ export function bargeActionFor(phase: VoicePhase): BargeAction {
 // last consumer after the voice tab moved onto the controller below);
 // hooks/useVoiceLoop.ts, its other consumer, is gone.
 // ---------------------------------------------------------------------------
-
-import type { VoiceOrbState } from "expo-thinking-orbs";
 
 /** One voice session's phase. `closed` = no session (tap to start). */
 export type VoiceModePhase =

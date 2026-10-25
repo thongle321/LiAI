@@ -21,7 +21,7 @@
  */
 
 import { useEffect, type ReactElement } from "react";
-import { Pressable, type StyleProp, type ViewStyle } from "react-native";
+import { Pressable } from "react-native";
 import Animated, {
   useFrameCallback,
   useSharedValue,
@@ -39,8 +39,9 @@ import {
   type VoiceModePhase,
 } from "@/services/voice/voice-status.ts";
 
-/** The mark's points. 192 = `h-48 w-48` on the Pressable: one number to
- *  change, and the className above to keep in step. */
+/** The mark's points — ONE source of truth: the Pressable's inline width/
+ *  height below uses this constant. 192 doubles as a 44px-scale target on
+ *  every axis; resize with care. */
 const ORB_SIZE = 192;
 
 interface VoiceOrbHeroProps {
@@ -93,12 +94,13 @@ export function VoiceOrbHero({
   const speech = useSynthSpeechLevel(phase === "speaking");
 
   return (
-    <Animated.View style={press.animatedStyle as StyleProp<ViewStyle>}>
+    <Animated.View style={press.animatedStyle}>
       <Pressable
         onPress={onTap}
         onPressIn={press.onPressIn}
         onPressOut={press.onPressOut}
-        className="h-48 w-48 items-center justify-center"
+        className="items-center justify-center"
+        style={{ width: ORB_SIZE, height: ORB_SIZE }}
         accessibilityRole="button"
         accessibilityLabel={open ? "Tap to stop or take the turn" : "Tap to speak"}
       >

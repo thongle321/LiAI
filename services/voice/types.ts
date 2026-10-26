@@ -48,6 +48,8 @@ export interface VoiceEngine {
   prepare(tier: AsrTier): Promise<void>;
   /** Frees them; resolves once any in-flight decode has stopped. */
   release(): Promise<void>;
+  /** The reason the most recent turn failed to reply, if any. */
+  lastReplyError?: string | null;
   runTurn(
     utterance: Uint8Array,
     port: VoiceTurnPort,

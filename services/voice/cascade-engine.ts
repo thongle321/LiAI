@@ -50,6 +50,7 @@ function watchSpeech(
 export class CascadeVoiceEngine implements VoiceEngine {
   readonly id = "cascade" as const;
   private tier: AsrTier | null = null;
+  lastReplyError: string | null = null;
 
   async prepare(tier: AsrTier): Promise<void> {
     this.tier = tier;
@@ -140,8 +141,11 @@ export class CascadeVoiceEngine implements VoiceEngine {
       sending = port
         .send(text, () => {})
         .then(
-          () => {},
+          () => {
+            this.lastReplyError = null;
+          },
           (err) => {
+            this.lastReplyError = err instanceof Error ? err.message : String(err);
             console.warn("[voiceMode] reply failed:", err);
             throw err;
           },

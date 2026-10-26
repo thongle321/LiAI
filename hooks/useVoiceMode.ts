@@ -474,6 +474,13 @@ class VoiceModeController {
           void Haptics.notificationAsync(
             Haptics.NotificationFeedbackType.Success,
           ).catch(() => {});
+        } else if (outcome === "reply_failed") {
+          const reason = this.deps.engine.lastReplyError;
+          this.notifyError(
+            reason
+              ? `Couldn't send that: ${reason}. Try again.`
+              : "Couldn't send that. Try again.",
+          );
         } else {
           const message = FAILURES[outcome];
           if (message) this.notifyError(message);

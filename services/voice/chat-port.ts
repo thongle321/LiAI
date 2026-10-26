@@ -82,10 +82,11 @@ export function createChatTurnPort(hand: VoiceChatHand): VoiceChatPort {
 }
 
 /** A chat turn may still be running (a typed send beat us to the model);
- *  give it up to ten seconds, like the old voice loop did. */
+ *  give it up to thirty seconds, so a slow model doesn't get reported as
+ *  "send refused". */
 async function waitForChatIdle(): Promise<void> {
   const waited = 100;
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 300; i++) {
     if (!useChatStore.getState().sending) return;
     await new Promise((resolve) => setTimeout(resolve, waited));
   }

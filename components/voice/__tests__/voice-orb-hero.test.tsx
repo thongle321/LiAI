@@ -37,22 +37,22 @@ function renderHero(
 }
 
 describe("VoiceOrbHero", () => {
-  it("closed: the shell breathes at idle and the tap enters the gates", () => {
+  it("closed: the shell uses disconnected and the tap enters the gates", () => {
     const onTap = jest.fn();
     renderHero("closed", { onTap });
 
-    expect(screen.getByLabelText("Ready")).toBeOnTheScreen();
+    expect(screen.getByLabelText("Disconnected")).toBeOnTheScreen();
     fireEvent.press(screen.getByLabelText("Tap to speak"));
     expect(onTap).toHaveBeenCalledTimes(1);
   });
 
   it("live phases resolve the orb's behaviour; the tap is always on", () => {
     const cases: Array<[VoiceModeState["phase"], string]> = [
-      ["starting", "Connecting…"],
-      ["listening", "Listening…"],
-      ["transcribing", "Thinking…"],
-      ["thinking", "Thinking…"],
-      ["speaking", "Speaking…"],
+      ["starting", "Connecting"],
+      ["listening", "Listening"],
+      ["transcribing", "Processing"],
+      ["thinking", "Thinking"],
+      ["speaking", "Speaking"],
     ];
     for (const [phase, label] of cases) {
       const onTap = jest.fn();

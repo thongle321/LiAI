@@ -40,7 +40,11 @@ import {
   motionEasing,
 } from "@/utils/motion.ts";
 import { useVoiceMode } from "@/hooks/useVoiceMode.ts";
-import { VOICE_MODE_LABEL } from "@/services/voice/voice-status.ts";
+import {
+  VOICE_MODE_LABEL,
+  VOICE_MODE_STATE_LABEL,
+  VOICE_MODE_VERB_LABEL,
+} from "@/services/voice/voice-status.ts";
 import { useModelStore } from "@/store/model-store.ts";
 import { VoiceSetupSheet } from "@/components/voice/voice-setup-sheet.tsx";
 import { VoiceMemorySheet } from "@/components/voice/voice-memory-sheet.tsx";
@@ -120,12 +124,20 @@ export default function VoiceScreen() {
           onTap={orbPress}
         />
 
+        {/* Two-line label: uppercase state name + verb (matches expo-thinking-orbs example) */}
         <Animated.Text
           key={phase}
           entering={fadeEntering(MOTION_DURATION_MS)}
-          className="mt-6 text-center font-sans-semibold text-h3 text-primary-text"
+          className="mt-6 text-center font-sans-bold text-h3 text-primary-text uppercase tracking-wide"
         >
-          {VOICE_MODE_LABEL[phase]}
+          {VOICE_MODE_STATE_LABEL[phase]}
+        </Animated.Text>
+        <Animated.Text
+          key={phase + "-verb"}
+          entering={fadeEntering(MOTION_DURATION_MS)}
+          className="mt-1 text-center font-sans text-body-md text-secondary-text"
+        >
+          {VOICE_MODE_VERB_LABEL[phase]}
         </Animated.Text>
         {/* Heard slot never unmounts: nbsp holds the line when silent.
             Tap to toggle captions. Hidden while the machine speaks — the

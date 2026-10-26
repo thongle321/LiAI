@@ -82,10 +82,11 @@ beforeEach(() => {
 });
 
 describe("VoiceScreen", () => {
-  it("closed: Tap to talk; the mic press enters the gates", () => {
+  it("closed: Waiting; the mic press enters the gates", () => {
     renderScreen();
 
-    expect(screen.getByText("Tap to talk")).toBeOnTheScreen();
+    expect(screen.getByText("WAITING")).toBeOnTheScreen();
+    expect(screen.getByText("Waiting")).toBeOnTheScreen();
     fireEvent.press(screen.getByLabelText("Tap to speak"));
     expect(actions.requestEntry).toHaveBeenCalledTimes(1);
     expect(actions.tapCloud).not.toHaveBeenCalled();
@@ -97,7 +98,8 @@ describe("VoiceScreen", () => {
     mockSurface = surface({ phase: "listening", heard: "hello" });
     renderScreen();
 
-    expect(screen.getByText("Listening…")).toBeOnTheScreen();
+    expect(screen.getByText("LISTENING")).toBeOnTheScreen();
+    expect(screen.getByText("Listening")).toBeOnTheScreen();
     expect(screen.getByText("hello")).toBeOnTheScreen();
     fireEvent.press(screen.getByLabelText("Tap to stop or take the turn"));
     expect(actions.tapCloud).toHaveBeenCalledTimes(1);
@@ -111,18 +113,22 @@ describe("VoiceScreen", () => {
   it("phases keep their labels: starting and transcribing are new", () => {
     mockSurface = surface({ phase: "starting" });
     const { unmount } = renderScreen();
-    expect(screen.getByText("Loading voice…")).toBeOnTheScreen();
+    expect(screen.getByText("CONNECTING")).toBeOnTheScreen();
+    expect(screen.getByText("Connecting")).toBeOnTheScreen();
     unmount();
 
     mockSurface = surface({ phase: "transcribing" });
     renderScreen();
-    expect(screen.getByText("Transcribing…")).toBeOnTheScreen();
+    expect(screen.getByText("PROCESSING")).toBeOnTheScreen();
+    expect(screen.getByText("Processing")).toBeOnTheScreen();
   });
 
   it("speaking: the Playing-audio overlay with Stop riding the cloud tap", () => {
     mockSurface = surface({ phase: "speaking", reply: "Here is the answer." });
     renderScreen();
 
+    expect(screen.getByText("SPEAKING")).toBeOnTheScreen();
+    expect(screen.getByText("Speaking")).toBeOnTheScreen();
     expect(screen.getByText("Playing audio…")).toBeOnTheScreen();
     expect(screen.getByText("Here is the answer.")).toBeOnTheScreen();
     fireEvent.press(screen.getByLabelText("Stop playback"));

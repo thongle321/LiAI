@@ -6,9 +6,9 @@ export type VoicePhase = "idle" | "listening" | "thinking" | "speaking";
 
 export const VOICE_STATUS_LABEL: Record<VoicePhase, string> = {
   idle: "Tap to talk",
-  listening: "Listening…",
-  thinking: "Thinking…",
-  speaking: "Speaking…",
+  listening: "Listening",
+  thinking: "Thinking",
+  speaking: "Speaking",
 };
 
 /** The "Playing audio…" block renders only while the AI replies. */
@@ -96,13 +96,34 @@ export type VoiceModePhase =
   | "thinking"
   | "speaking";
 
+/** Verb-style labels matching expo-thinking-orbs example (no ellipsis). */
 export const VOICE_MODE_LABEL: Record<VoiceModePhase, string> = {
-  closed: "Tap to talk",
-  starting: "Loading voice…",
-  listening: "Listening…",
-  transcribing: "Transcribing…",
-  thinking: "Thinking…",
-  speaking: "Speaking…",
+  closed: "Waiting",
+  starting: "Connecting",
+  listening: "Listening",
+  transcribing: "Processing",
+  thinking: "Thinking",
+  speaking: "Speaking",
+};
+
+/** Uppercase state names for the main label (matches expo-thinking-orbs example style). */
+export const VOICE_MODE_STATE_LABEL: Record<VoiceModePhase, string> = {
+  closed: "WAITING",
+  starting: "CONNECTING",
+  listening: "LISTENING",
+  transcribing: "PROCESSING",
+  thinking: "THINKING",
+  speaking: "SPEAKING",
+};
+
+/** Verb/description for the secondary label line. */
+export const VOICE_MODE_VERB_LABEL: Record<VoiceModePhase, string> = {
+  closed: "Waiting",
+  starting: "Connecting",
+  listening: "Listening",
+  transcribing: "Processing",
+  thinking: "Thinking",
+  speaking: "Speaking",
 };
 
 /** Which expo-thinking-orbs behaviour matches the session right now. The
@@ -115,16 +136,18 @@ export function voiceOrbStateFor(
   phase: VoiceModePhase,
   failed: boolean,
 ): VoiceOrbState {
-  if (phase === "closed") return failed ? "failed" : "idle";
+  if (phase === "closed") return failed ? "failed" : "disconnected";
   switch (phase) {
     case "starting":
-      return "initializing";
+      return "connecting";
     case "listening":
       return "listening";
     case "speaking":
       return "speaking";
+    case "transcribing":
+      return "pre-connect-buffering";
     default:
-      // transcribing + thinking are one behaviour: the in-flight wait.
+      // thinking is the in-flight wait
       return "thinking";
   }
 }

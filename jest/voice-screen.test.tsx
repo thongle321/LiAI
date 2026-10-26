@@ -18,6 +18,59 @@ import type { VoiceModeSheet } from "@/hooks/useVoiceMode.ts";
 import { useVoice } from "@/store/voice.ts";
 import { useModelStore } from "@/store/model-store.ts";
 
+/** Focus, read at render time; the vision swap resets on blur. Pinned so
+ *  the bare render (no router) doesn't die on useIsFocused. */
+let focusNow = true;
+
+jest.mock("expo-router", () => ({
+  ...jest.requireActual("expo-router"),
+  useIsFocused: () => focusNow,
+}));
+
+import type { ModelSpec } from "@/types/models.ts";
+
+/** A minimal completed local model (the fixture the engine gates on). */
+function completedModel(
+  over: Partial<ModelSpec> = {},
+): ModelSpec {
+  return {
+    id: "m1",
+    name: "Gemma 3 1B",
+    author: "ggml-org",
+    description: "Test fixture",
+    origin: "huggingface",
+    type: "llm",
+    files: [
+      {
+        name: "gemma.gguf",
+        size: 999,
+        downloadUrl: "https://example.com/gemma.gguf",
+      },
+    ],
+    downloadStatus: "completed",
+    downloadProgress: 100,
+    downloadedBytes: 999,
+    totalBytes: 999,
+    ...over,
+  };
+}
+
+function mmprojFile(): ModelSpec["projector"] {
+  return {
+    name: "mmproj.gguf",
+    size: 999,
+    downloadUrl: "https://example.com/mmproj.gguf",
+  };
+}
+
+function armModels(models: ModelSpec[]): void {
+  useModelStore.setState({
+    models,
+    activeModelId: "m1",
+    activeProviderType: "local",
+  });
+}
+
 /** The shared wrapper: the screen's sheets read safe-area insets. */
 function renderScreen(): ReturnType<typeof render> {
   return render(
@@ -199,6 +252,87 @@ describe("VoiceScreen", () => {
     expect(actions.continueAnyway).toHaveBeenCalledTimes(1);
     fireEvent.press(screen.getByTestId("voice-memory-smaller-model"));
     expect(actions.openModels).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("VoiceScreen vision swap", () => {
+  it("the Eye button is always here; entering with a live session ends it", () => {
+    mockSurface = surface({ phase: "listening", heard: "what do you see" });
+    renderScreen();
+
+    expect(screen.getByLabelText("Open vision")).toBeOnTheScreen();
+    fireEvent.press(screen.getByLabelText("Open vision"));
+    // Cleanup before the camera: the session stop happens on entry.
+    expect(actions.end).toHaveBeenCalledTimes(1);
+    // The orb UI gave way to the camera HUD; nothing of voice remains.
+    expect(screen.queryByText("LISTENING")).not.toBeOnTheScreen();
+    expect(screen.getByLabelText("Stop vision")).toBeOnTheScreen();
+  });
+
+  it("entering from closed ends nothing; Stop vision returns to the orb", () => {
+    renderScreen();
+
+    fireEvent.press(screen.getByLabelText("Open vision"));
+    expect(actions.end).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Stop vision")).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByLabelText("Stop vision"));
+    expect(screen.getByText("WAITING")).toBeOnTheScreen();
+  });
+
+  it("a text-only model says so up front and keeps the mic dead", () => {
+    armModels([completedModel()]); // no projector, no vision switch
+    renderScreen();
+
+    fireEvent.press(screen.getByLabelText("Open vision"));
+
+    expect(screen.getByText("This model can't see images.")).toBeOnTheScreen();
+    expect(
+      screen.queryByText("Vision is off for this model."),
+    ).not.toBeOnTheScreen();
+    expect(screen.getByLabelText("Talk").props.accessibilityState.disabled).toBe(
+      true,
+    );
+  });
+
+  it("a toggled-off model keeps its fixable card; Open Models is the action", () => {
+    armModels([
+      completedModel({ projector: mmprojFile(), visionEnabled: false }),
+    ]);
+    renderScreen();
+
+    fireEvent.press(screen.getByLabelText("Open vision"));
+
+    expect(screen.getByText("Vision is off for this model.")).toBeOnTheScreen();
+    expect(
+      screen.queryByText("This model can't see images."),
+    ).not.toBeOnTheScreen();
+    expect(screen.getByLabelText("Open Models")).toBeOnTheScreen();
+    // Fixable, but the mic is still dead until the flag is back on: the
+    // blind model cannot answer "what do you see?".
+    expect(screen.getByLabelText("Talk").props.accessibilityState.disabled).toBe(
+      true,
+    );
+  });
+
+  it("a vision-capable model shows neither card, and the mic is live", () => {
+    armModels([
+      completedModel({ projector: mmprojFile(), visionEnabled: true }),
+    ]);
+    renderScreen();
+
+    fireEvent.press(screen.getByLabelText("Open vision"));
+
+    expect(
+      screen.queryByText("Vision is off for this model."),
+    ).not.toBeOnTheScreen();
+    expect(
+      screen.queryByText("This model can't see images."),
+    ).not.toBeOnTheScreen();
+    expect(screen.getByText("Tap the mic and ask about what you see")).toBeOnTheScreen();
+    expect(screen.getByLabelText("Talk").props.accessibilityState.disabled).toBe(
+      false,
+    );
   });
 });
 

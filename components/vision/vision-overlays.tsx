@@ -253,13 +253,14 @@ export function VisionBottomPanel({
   onTalk,
   modelReady,
   liftAnchor,
+  visionSupported = true,
 }: {
   bottom: number;
   /** The panel's own offset above the physical screen bottom (the tab
    *  bar's slot + this panel's 12px margin). The lift anchor: with the bar
    *  mounted the panel is never on the physical bottom, so its rise is the
    *  keyboard height MINUS this corridor (utils/keyboard.ts). See
-   *  app/(drawer)/(tabs)/vision.tsx for the value. */
+   *  components/voice/voice-vision-mode.tsx for the value. */
   liftAnchor: number;
   issue: string | null;
   needsSettings: boolean;
@@ -280,12 +281,22 @@ export function VisionBottomPanel({
   onTalk: () => void;
   /** No active model: talk + type are disabled and greyed. */
   modelReady: boolean;
+  /** The loaded model cannot see images (no paired projector, or a remote
+   *  probe without vision): the mic is greyed even though a model IS
+   *  loaded — asking "what do you see" cannot be answered here. PocketPal
+   *  parity in spirit: its composer greys the plus button out the same way.
+   *  Text input stays available (the turn degrades to text-only). */
+  visionSupported?: boolean;
 }) {
   const colors = useColors();
   const retryPress = usePressFeedback();
   const settingsPress = usePressFeedback();
   const sendPress = usePressFeedback();
   const toggleInputPress = usePressFeedback();
+  // The mic needs MORE than a loaded model: it needs a model that can see.
+  // Text input keeps the plain modelReady gate — a question typed here is
+  // not vision-specific, so the ordinary (text-only) turn path stands.
+  const talkReady = modelReady && visionSupported;
   const talkPress = usePressFeedback();
   // The panel lifts by the keyboard height so the draft input clears it,
   // leaving the camera preview full-bleed (the screen's documented rule).
@@ -422,13 +433,13 @@ export function VisionBottomPanel({
         </Animated.View>
         <Animated.View style={talkPress.animatedStyle}>
           <Pressable
-            onPress={modelReady ? () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onTalk(); } : undefined}
+            onPress={talkReady ? () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onTalk(); } : undefined}
             onPressIn={talkPress.onPressIn}
             onPressOut={talkPress.onPressOut}
-            disabled={!modelReady}
+            disabled={!talkReady}
             className="h-20 w-20 items-center justify-center"
             accessibilityRole="button"
-            accessibilityState={{ disabled: !modelReady }}
+            accessibilityState={{ disabled: !talkReady }}
             accessibilityLabel={phase === "idle" ? "Talk" : "Stop talking"}
           >
           {/* Disabled on the camera ground: the scrim disc is the fill
@@ -437,12 +448,12 @@ export function VisionBottomPanel({
               and only the muted icon remains. */}
           <View
             className={`h-20 w-20 items-center justify-center rounded-full ${
-              !modelReady ? "bg-scrim" : phase === "idle" ? "border border-primary bg-scrim" : "bg-surface-3"
+              !talkReady ? "bg-scrim" : phase === "idle" ? "border border-primary bg-scrim" : "bg-surface-3"
             }`}
 
           >
-            {phase !== "idle" && modelReady && <VisionActiveFrame side={22} />}
-            <Mic size={30} color={modelReady ? colors.primary : colors.secondaryText} />
+            {phase !== "idle" && talkReady && <VisionActiveFrame side={22} />}
+            <Mic size={30} color={talkReady ? colors.primary : colors.secondaryText} />
           </View>
           </Pressable>
         </Animated.View>

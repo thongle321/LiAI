@@ -18,7 +18,7 @@
 import { readSource } from "./source.ts";
 
 const BAR = readSource("app/(drawer)/(tabs)/_layout.tsx");
-const VISION = readSource("app/(drawer)/(tabs)/vision.tsx");
+const VISION = readSource("components/voice/voice-vision-mode.tsx");
 const CHAT = readSource("app/(drawer)/(tabs)/chat.tsx");
 const LIST = readSource("components/chat/message-list.tsx");
 const PLACEHOLDER = readSource("components/chat/chat-empty-placeholder.tsx");

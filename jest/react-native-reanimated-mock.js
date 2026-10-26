@@ -66,6 +66,10 @@ module.exports = {
     inOut: (fn) => fn,
   },
   useSharedValue: (initial) => ({ value: initial }),
+  // A derived value re-evaluates on read: shared values are plain objects
+  // in this mock, so the worklet body runs live on every .value access —
+  // useKeyboardLift's occlusion arithmetic reads true numbers.
+  useDerivedValue: (fn) => ({ get value() { return fn(); } }),
   // Frame callbacks exist but never fire under Jest — nothing animates at
   // the boundary. The only call surface the components under test make is
   // `setActive` (gating a callback on a phase toggle).

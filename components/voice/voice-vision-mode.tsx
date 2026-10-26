@@ -1,21 +1,25 @@
-/** Vision tab: full-screen live camera above the shared tab bar.
+/** The voice tab's vision mode: full-screen live camera above the
+ *  shared tab bar.
  *
- * A real Tabs.Screen (moved from app/vision.tsx): the bottom tab bar
- * shows here exactly like on chat/voice, and the camera preview lives
- * in the column above it. Top: exit (left), camera flip + VISION label
- * (right) — no nav bar. Center: the live preview, never frozen, never
- * covered except by the floats. Bottom: compact status area, big mic in
- * the center, small keyboard button opening a floating input. Exit
- * always lands on Chat — vision's only entry point is the tab bar, so
- * there is no "previous screen" to return to.
+ *  Extracted from app/(drawer)/(tabs)/vision.tsx when vision lost its
+ *  third tab: it is now an in-screen mode of the voice tab (the Eye
+ *  toggle), mounted by VoiceScreen while the router is on /voice —
+ *  the bottom tab bar shows here exactly like on chat/voice. There is
+ *  no exit route inside this mode: the caller passes `onExit` (back to
+ *  the voice orb), which is the only way out besides the bar itself.
  *
- * Question rule: one frame per question — snapshot-on-question. A voice
- * or text question snapshots the CURRENT frame at ask time and sends it
- * through the ordinary chat turn (no frame stream, no capture timer —
- * the chat pipeline carries the image), then speaks the answer back.
- * Watch mode (opt-in, 05) keeps a rolling buffer of recent frames so the
- * next question can ride the window — still nothing is inferred until
- * the user asks. The preview itself never freezes.
+ *  Top: exit (left), camera flip + VISION label (right) — no nav bar.
+ *  Center: the live preview, never frozen, never covered except by the
+ *  floats. Bottom: compact status area, big mic in the center, small
+ *  keyboard button opening a floating input.
+ *
+ *  Question rule: one frame per question — snapshot-on-question. A voice
+ *  or text question snapshots the CURRENT frame at ask time and sends it
+ *  through the ordinary chat turn (no frame stream, no capture timer —
+ *  the chat pipeline carries the image), then speaks the answer back.
+ *  Watch mode (opt-in, 05) keeps a rolling buffer of recent frames so the
+ *  next question can ride the window — still nothing is inferred until
+ *  the user asks. The preview itself never freezes.
  */
 
 import { useState, useEffect } from "react";
@@ -34,13 +38,14 @@ import { useVisionTurn } from "@/hooks/useVisionTurn.ts";
 import { useWatchMode } from "@/hooks/useWatchMode.ts";
 import { useModelReady } from "@/hooks/useModelReady.ts";
 import { useModelStore } from "@/store/model-store";
+import { cannotSeeKind } from "@/services/inference/mmproj.ts";
 import {
   VisionBottomPanel,
   VisionPreview,
   VisionTopFloat,
 } from "@/components/vision/vision-overlays.tsx";
 
-export default function VisionScreen() {
+export function VisionMode({ onExit }: { onExit: () => void }) {
   const colors = useColors();
   const [position, setPosition] = useState<"back" | "front">("back");
   const [camLive, setCamLive] = useState(false);
@@ -51,17 +56,38 @@ export default function VisionScreen() {
   // No model: talk and type are disabled so the mic can't open a turn that
   // can never answer.
   const modelReady = useModelReady();
-  // Vision switched off on the active model: the frame would go out and
-  // come back unprocessed, so the tab says so up front and offers the one
-  // place that can fix it (Q5).
-  const visionOff = useModelStore(
-    (s) =>
-      s.activeProviderType === "local" &&
-      s.activeModelId !== null &&
-      s.models.find(
-        (m) => m.id === s.activeModelId && m.downloadStatus === "completed",
-      )?.visionEnabled === false,
+  // The engine's OWN verdict AND its split (services/inference/mmproj.ts
+  // is the one owner; the send gate reads the same module). "Can't see"
+  // becomes TWO notices:
+  //  - a toggled-off flag with the projector on disk is fixable in Models —
+  //    the "Vision is off for this model." card; the mic is greyed too,
+  //    because a blind model cannot answer "what do you see?" even before
+  //    the flag is fixed;
+  //  - any other cannot-see (no projector paired, or a remote probe that
+  //    recorded no vision) just is: grey the mic the way PocketPal disables
+  //    its plus button instead of warning after the turn already went out.
+  const models = useModelStore((s) => s.models);
+  const remoteCaps = useModelStore((s) => s.remoteCaps);
+  const activeModelId = useModelStore((s) => s.activeModelId);
+  const activeProviderType = useModelStore(
+    (s) => s.activeProviderType,
   );
+  const cannotSee = cannotSeeKind({
+    models,
+    remoteCaps,
+    activeModelId,
+    activeProviderType,
+  });
+  // No-model-at-all keeps its own dead state here (grey mic, no notice):
+  // the can't-see card only speaks when a model is loaded and still blind.
+  const visionUnsupported = cannotSee === "noVision" && modelReady;
+  const visionCard =
+    cannotSee === "toggledOff"
+      ? "Vision is off for this model."
+      : visionUnsupported
+        ? "This model can't see images."
+        : null;
+  const seesImages = cannotSee === "sees";
 
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice(position);
@@ -73,11 +99,11 @@ export default function VisionScreen() {
     () => camLive && device !== undefined,
     focused && camLive,
   );
-  // Android owns the permission prompt: opening this tab is the intent to
+  // Android owns the permission prompt: entering this mode is the intent to
   // use the camera, so the system dialog is raised here instead of behind
-  // an in-app button the user has to find. Re-entering the tab after a
-  // denial asks again (the OS allows that unless "don't ask again" was
-  // chosen), and a permanently-denied user gets the Open settings path.
+  // an in-app button the user has to find. Re-entering after a denial asks
+  // again (the OS allows that unless "don't ask again" was chosen), and a
+  // permanently-denied user gets the Open settings path.
   // useCameraPermission re-checks on app foreground, so returning from
   // system settings lights the camera up with no extra plumbing.
   useEffect(() => {
@@ -126,11 +152,11 @@ export default function VisionScreen() {
   }
 
   function exit(): void {
+    // Cleanup before handing back: recognizer, speech and the watch
+    // buffer all die here; the unmount cleanup is the backstop.
     stopAll();
     watch.stopWatch();
-    // A tab has no "back": the only way in is the tab bar, so the only
-    // way out is a known tab. Chat is the home tab.
-    router.navigate("/chat");
+    onExit();
   }
 
   function sendDraft(): void {
@@ -172,9 +198,9 @@ export default function VisionScreen() {
             <VisionBottomPanel
               bottom={panelBottom}
               liftAnchor={panelLiftAnchor}
-              issue={issue ?? (visionOff ? "Vision is off for this model." : null)}
+              issue={issue ?? visionCard}
               issueAction={
-                visionOff && issue === null
+                cannotSee === "toggledOff" && issue === null
                   ? { label: "Open Models", onPress: () => router.navigate("/models") }
                   : null
               }
@@ -192,6 +218,7 @@ export default function VisionScreen() {
               onToggleInput={() => setInputOpen((o) => !o)}
               onTalk={() => void bargeIn()}
               modelReady={modelReady}
+              visionSupported={seesImages}
             />
           </>
         ) : null}

@@ -107,8 +107,7 @@
       [
         "expo-navigation-bar",
         {
-          "enforceContrast": false,
-          "style": "auto"
+          "enforceContrast": false
         }
       ]
     ],

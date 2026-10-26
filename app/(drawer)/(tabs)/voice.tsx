@@ -56,6 +56,9 @@ import { useVoiceLevels } from "expo-thinking-orbs";
 export default function VoiceScreen() {
   const colors = useColors();
   const router = useRouter();
+  // The corner Eye anchors to the REAL top inset: a fixed offset put it
+  // under the status bar on the device (overlapped and untappable).
+  const insets = useSafeAreaInsets();
   // The mic capsule lives here (not the hero) so the controller's
   // onMicAudio seam fills it every 50 ms chunk while listening.
   const mic = useVoiceLevels({ sampleRate: ASR_SAMPLE_RATE });
@@ -254,7 +257,8 @@ export default function VoiceScreen() {
           this model" notice); a late press hands over to the camera HUD. */}
       <Pressable
         onPress={enterVision}
-        className="absolute top-2 right-4 h-12 w-12 items-center justify-center active:opacity-80"
+        className="absolute right-4 h-12 w-12 items-center justify-center active:opacity-80"
+        style={{ top: insets.top + 8 }}
         accessibilityRole="button"
         accessibilityLabel="Open vision"
       >

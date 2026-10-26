@@ -37,7 +37,7 @@ import {
 } from "@/services/inference/deviceSelection.ts";
 import { createRemoteEngine } from "@/services/inference/remote-engine.ts";
 import { resolveImage } from "@/services/storage/images.ts";
-import { createTurnRunner } from "@/services/chat/turn.ts";
+import { createTurnRunner, type TurnDeps } from "@/services/chat/turn.ts";
 import { holdScreen, releaseScreen } from "@/services/chat/keep-awake.ts";
 import type { SessionStore, SessionOverride } from "@/services/chat/session-store.ts";
 import type { ModelStore } from "../model-store.ts";
@@ -580,26 +580,45 @@ async function resolveTurnInputs(sessionId: string | null): Promise<import("@/se
   };
 }
 
+/** The live engine/prompt/media deps every real turn shares (chat send
+ *  and the vision tab's ephemeral runner alike — one owner each for the
+ *  projector-aware ensure, the consolidated input resolver, and the
+ *  attachment resolver). */
+function liveTurnDeps(): Omit<TurnDeps, "store"> {
+  return {
+    engine: {
+      ensureEngine: async (source: EngineSource) =>
+        // The projector rides the same resolution the image gate uses
+        // (services/inference//mmproj.ts): the slot key includes it, so a model
+        // whose pair arrived mid-session cannot reuse the blind context.
+        getManager().ensure(
+          source,
+          source.kind === "local"
+            ? await projectorPathForFileName(source.fileName)
+            : undefined,
+          // Same resolver as the loader: a settings change makes a new
+          // key, the warm context misses, and the next turn reloads at
+          // the settings the user just chose (finding 1).
+          source.kind === "local" ? await resolveInit() : undefined,
+        ),
+      getEngineSource: () => defaultEngineSource(),
+    },
+    prompt: {
+      getTurnInputs: (sid) => resolveTurnInputs(sid),
+    },
+    media: {
+      // Attachment → file for the engine. Lives in services/storage/images
+      // so the borrowed-path pass-through and the legacy data-uri decode
+      // have one owner (D5-4).
+      resolveImage,
+    },
+  };
+}
+
 function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner {
   return (text, paths, onToken, onReasoning, onToolStart, onToolDelta) => {
     const runTurn = createTurnRunner({
-      engine: {
-        ensureEngine: async (source: EngineSource) =>
-          // The projector rides the same resolution the image gate uses
-          // (services/inference//mmproj.ts): the slot key includes it, so a model
-          // whose pair arrived mid-session cannot reuse the blind context.
-          getManager().ensure(
-            source,
-            source.kind === "local"
-              ? await projectorPathForFileName(source.fileName)
-              : undefined,
-            // Same resolver as the loader: a settings change makes a new
-            // key, the warm context misses, and the next turn reloads at
-            // the settings the user just chose (finding 1).
-            source.kind === "local" ? await resolveInit() : undefined,
-          ),
-        getEngineSource: () => defaultEngineSource(),
-      },
+      ...liveTurnDeps(),
       store: {
         getStore: () => defaultGetStore(),
         getSearch: async () => {
@@ -607,14 +626,30 @@ function defaultRunTurn(getSearch: () => Promise<SearchAuth | null>): TurnRunner
           return auth ? { provider: auth.provider, key: auth.key, count: auth.count } : null;
         },
       },
-      prompt: {
-        getTurnInputs: (sid) => resolveTurnInputs(sid),
-      },
-      media: {
-        // Attachment → file for the engine. Lives in services/storage/images
-        // so the borrowed-path pass-through and the legacy data-uri decode
-        // have one owner (D5-4).
-        resolveImage,
+    });
+    return runTurn(text, paths, onToken, onReasoning, onToolStart, onToolDelta);
+  };
+}
+
+/** The vision tab's turn runner: the full chat pipeline, STORE-LESS.
+ *
+ *  A live-camera Q&A must leave no chat session behind (no minted row,
+ *  no active-pointer move, no history append). `getStore` returning null
+ *  makes that true by construction — services/chat/turn.ts skips every
+ *  persistence best-effort — while the engine (projector-aware ensure),
+ *  prompt resolution and attachment handling stay the shared live ones.
+ *  The search auth is nulled too: a vision glance runs no web talents.
+ */
+export function createVisionTurnRunner(over: Partial<TurnDeps> = {}): TurnRunner {
+  return (text, paths, onToken, onReasoning, onToolStart, onToolDelta) => {
+    const live = liveTurnDeps();
+    const runTurn = createTurnRunner({
+      engine: over.engine ?? live.engine,
+      prompt: over.prompt ?? live.prompt,
+      media: over.media ?? live.media,
+      store: over.store ?? {
+        getStore: async () => null,
+        getSearch: async () => null,
       },
     });
     return runTurn(text, paths, onToken, onReasoning, onToolStart, onToolDelta);

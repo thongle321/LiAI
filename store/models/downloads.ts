@@ -9,12 +9,13 @@ import type { StateCreator } from "zustand";
 import * as LegacyFileSystem from "expo-file-system/legacy";
 
 import type { DownloadsSlice, ModelStore } from "./types";
-import type { DownloadJob, PresetModel } from "@/types/models";
+import type { DownloadJob, HFModelFile, PresetModel } from "@/types/models";
 import type { HFModelSearchResult } from "@/types/models";
 import {
   buildHfModelSpec,
   buildPresetModelSpec,
   HF_USER_AGENT,
+  hfModelIdFromSpec,
   hfRefFromId,
   hfRefFromSearch,
   isHuggingFaceUrl,
@@ -26,7 +27,7 @@ import {
 } from "@/services/downloads/download-service";
 import { latestJobForModel } from "@/services/models/download-jobs.ts";
 import { resumeDataForPartial, classifyFileOnDisk, PART_SUFFIX } from "@/services/models/resume-state.ts";
-import { findProjectorFile, pairDownloadStep } from "@/services/models/vision-pairing.ts";
+import { findProjectorFile, mmprojSiblings, pairDownloadStep } from "@/services/models/vision-pairing.ts";
 import { readGgufMetadata } from "@/services/models/gguf-header.ts";
 import { modelFitsOnDevice } from "@/utils/storage-fit.ts";
 import { generateId } from "./storage";
@@ -69,17 +70,26 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
 
   startDownload: async (modelId, file, token, options) => {
     const isHf = "path" in file;
-    const spec = isHf
-      ? buildHfModelSpec(hfRefFor(modelId, get().searchResults), file)
-      : buildPresetModelSpec(presetFor(modelId, get().presets), file);
-    // Vision pairing (vision-series 01): the card already promises the
-    // pair — now the downloader fetches it. Same helper as the card, so
-    // the promise and the fetch can never drift. A repo with no mmproj
-    // records no projector, and nothing about the download changes.
+    // The repo's file listing: the details sheet fetches it (getModelFiles,
+    // recursive, mmproj included) and now hands it here. searchModels
+    // itself returns results with an empty ggufFiles — search results
+    // carry no file list at all — so falling back to those empty results
+    // is what left the user's VLM spec blind: vision claimed via tags,
+    // but no projector paired and no candidates recorded.
     const siblings = isHf
-      ? (get().searchResults.find((r) => r.modelId === modelId)?.ggufFiles ??
+      ? (options?.files ??
+        get().searchResults.find((r) => r.modelId === modelId)?.ggufFiles ??
         [])
       : presetFor(modelId, get().presets).files;
+    const spec = isHf
+      ? buildHfModelSpec(
+          {
+            ...hfRefFor(modelId, get().searchResults),
+            siblings: siblings as HFModelFile[],
+          },
+          file,
+        )
+      : buildPresetModelSpec(presetFor(modelId, get().presets), file);
     // "Download text only" (VisionDownloadSheet): no pair at all, and the
     // switch is persisted so the card shows the model as text-only.
     const visionEnabled = options?.visionEnabled !== false;
@@ -465,6 +475,44 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
       );
     } catch {
       // Best-effort: the row keeps its state, tapping retries.
+    }
+  },
+
+  healProjectorCandidates: async (specId) => {
+    try {
+      const spec = get().getModel(specId);
+      // Only the blind case: a vision spec that claims to see but holds
+      // neither a paired projector nor candidates — the old import path's
+      // signature (search results carry no file list, so nothing could be
+      // recorded). Anything already paired is left exactly as it is.
+      if (!spec || spec.supportsVision !== true || spec.projector) return;
+      if ((spec.projectorCandidates?.length ?? 0) > 0) return;
+      const modelId = hfModelIdFromSpec(spec);
+      if (modelId === null) return;
+      const repoFiles = await get().getModelFiles(modelId);
+      const candidates = mmprojSiblings(repoFiles);
+      if (candidates.length === 0) return;
+      const file = spec.files[0];
+      const paired = file ? findProjectorFile(file, candidates) : undefined;
+      get().updateModel(specId, {
+        projectorCandidates: candidates.map((f) => ({
+          name: f.name,
+          size: f.size,
+          downloadUrl: f.downloadUrl,
+        })),
+        ...(paired
+          ? {
+              projector: {
+                name: paired.name,
+                size: paired.size,
+                downloadUrl: paired.downloadUrl,
+              },
+            }
+          : {}),
+      });
+    } catch {
+      // Best-effort: a network failure leaves the row as it was; the
+      // card's heal trigger runs again next time it is entered.
     }
   },
 

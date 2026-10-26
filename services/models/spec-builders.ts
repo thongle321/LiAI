@@ -92,6 +92,26 @@ export function hfSpecId(modelId: string, fileName: string): string {
   return `hf-${modelId}-${fileName}`;
 }
 
+/** The HF repo a spec came from, parsed back from its first file URL.
+ *
+ *  The spec id embeds the modelId but with ambiguous separators (the file
+ *  name may contain slashes too); a file's download URL is the unambiguous
+ *  record: everything between the host and `/resolve/` IS the modelId.
+ *  null for anything that is not a HF-resolve URL (presets, remotes). */
+export function hfModelIdFromSpec(spec: Pick<ModelSpec, "files">): string | null {
+  const url = spec.files[0]?.downloadUrl ?? "";
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname; // /<modelId>/resolve/main/<file>
+    const marker = "/resolve/";
+    const idx = path.indexOf(marker);
+    if (idx < 1) return null;
+    return decodeURIComponent(path.slice(1, idx));
+  } catch {
+    return null;
+  }
+}
+
 export function buildHfModelSpec(ref: HFModelRef, file: HFModelFile): ModelSpec {
   // Vision facts recorded ONCE here, so the card's toggle, the selector and
   // the downloader all read the same answer instead of re-deriving it (the

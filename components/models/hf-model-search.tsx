@@ -219,7 +219,9 @@ export function HFModelSearch({
       selected.modelId,
       file,
       activeHfToken() ?? undefined,
-      opts,
+      // The repo listing came from openDetails' getModelFiles call: hand it
+      // to the pairing (search results carry no files to fall back on).
+      { ...opts, files },
     );
   };
 

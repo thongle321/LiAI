@@ -2,7 +2,7 @@
 
 import { Alert, Pressable, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
-import { CheckCircle2, Download, Eye, MessageSquare, Pause, Play, X } from "lucide-react-native";
+import { CheckCircle2, CircleOff, Download, Eye, MessageSquare, Pause, Play, X } from "lucide-react-native";
 
 import { useColors, type Colors } from "@/themes/tokens.ts";
 import { clampPercent, formatBytes, progressCaption } from "@/services/models/progress.ts";
@@ -185,6 +185,7 @@ export function DownloadButton({
   onPause,
   onResume,
   disabled = false,
+  iconOnly = false,
 }: {
   status: string;
   progress: number;
@@ -193,6 +194,10 @@ export function DownloadButton({
   onPause?: () => void;
   onResume?: () => void;
   disabled?: boolean;
+  /** PocketParity (ModelFileCard.tsx:397-414): an icon-only IconButton.
+   *  Same states and labels; the completed branch is never reached —
+   *  callers that go icon-only hide the control on completion themselves. */
+  iconOnly?: boolean;
 }) {
   const colors = useColors();
   const isDownloading = status === "downloading";
@@ -216,8 +221,45 @@ export function DownloadButton({
     return (
       <View className="flex-row items-center rounded-lg bg-surface-2 px-3 py-2">
         <CheckCircle2 size={16} color={colors.successMark} />
-        <Text className="ml-2 text-quiet">Downloaded</Text>
+        {iconOnly ? null : <Text className="ml-2 text-quiet">Downloaded</Text>}
       </View>
+    );
+  }
+
+  if (iconOnly) {
+    // The glyph speaks the state in coloured ink: the active action in ink,
+    // grayed ink when it cannot happen — a full disk renders a prohibition
+    // glyph instead of a frozen Download one, so the reason is visible
+    // without a tooltip. PocketParity uses Material's download-off-outline
+    // (ModelFileCard.tsx:239-243); lucide ships no such glyph, so the
+    // closest is CircleOff.
+    return (
+      <Pressable
+        onPress={isDownloading ? onPause ?? onPress : isPaused ? onResume ?? onPress : onPress}
+        disabled={disabled}
+        className="icon-btn"
+        accessibilityRole="button"
+        accessibilityState={{ disabled }}
+        accessibilityLabel={
+          isDownloading
+            ? `Pause download, ${Math.round(progress)} percent`
+            : isPaused
+            ? "Resume download"
+            : isFailed
+            ? "Retry download"
+            : "Download model"
+        }
+      >
+        {disabled ? (
+          <CircleOff size={20} color={colors.secondaryText} />
+        ) : isDownloading ? (
+          <Pause size={20} color={colors.primary} />
+        ) : isPaused ? (
+          <Play size={20} color={colors.primary} />
+        ) : (
+          <Download size={20} color={colors.primary} />
+        )}
+      </Pressable>
     );
   }
 

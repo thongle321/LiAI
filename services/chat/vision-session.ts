@@ -12,6 +12,10 @@
 
 import type { ChatMessage } from "@/types/chat.ts";
 
+/** The ephemeral session id a vision turn carries: nothing stores under
+ *  it (the runner is store-less), the id only labels the turn. */
+export const VISION_EPHEMERAL_ID = "vision-ephemeral";
+
 /** Follow-up context, in turns: six Q&As is the live-camera horizon —
  *  older frames are captured again within seconds and the last few
  *  questions are what "what about now?" refers to. */

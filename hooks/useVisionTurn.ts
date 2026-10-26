@@ -35,6 +35,7 @@ import {
 import { multimodalAvailable } from "@/services/inference/mmproj.ts";
 import { MULTIMODAL_WARNING } from "@/store/chat/send.ts";
 import {
+  VISION_EPHEMERAL_ID,
   visionHistory,
   visionRecord,
   visionReset,
@@ -191,7 +192,7 @@ export function useVisionTurn(
         runVisionTurnRef.current ??
         (runVisionTurnRef.current = createVisionTurnRunner());
       const outcome = await runTurn(said, {
-        sessionId: "vision-ephemeral",
+        sessionId: VISION_EPHEMERAL_ID,
         history: visionHistory(),
         images: frameUris,
         voiceMode: true,
@@ -200,6 +201,9 @@ export function useVisionTurn(
       visionRecord(said, outcome.reply);
       speak(outcome.reply);
     } catch {
+      // The store-backed send surfaced richer errors; the store-less
+      // runner only rejects when the engine is unusable, and the strip
+      // has no action to offer beyond a retry.
       if (!aliveRef.current) return;
       setIssue("Couldn't answer that. Try again.");
       setBoth("idle");

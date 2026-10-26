@@ -167,11 +167,9 @@ export function VisionMode({ onExit }: { onExit: () => void }) {
   }
 
   return (
-    // edges={[]}: the camera preview is genuinely full-bleed, and the two
-    // overlays own the top and bottom insets themselves (they are measured
-    // at runtime). A default SafeAreaView here would pad the same two edges
-    // a second time and push both overlays off-screen under edge-to-edge.
-    <SafeAreaView edges={[]} style={{ flex: 1, backgroundColor: colors.base }}>
+    // Top edge is padded so the overlays sit below the status bar instead of
+    // overlapping it; the camera stays full-bleed on the sides and bottom.
+    <SafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: colors.base }}>
       <View className="flex-1 bg-black">
         <VisionPreview
           hasPermission={hasPermission}
@@ -186,7 +184,7 @@ export function VisionMode({ onExit }: { onExit: () => void }) {
         {camLive ? (
           <>
             <VisionTopFloat
-              top={insets.top + 8}
+              top={8}
               onExit={exit}
               onFlip={flip}
               watchOn={watch.watchOn}

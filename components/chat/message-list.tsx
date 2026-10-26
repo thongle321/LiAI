@@ -211,6 +211,7 @@ export function MessageList({
       keyExtractor={(row) => (row.kind === "message" ? row.message.id : row.id)}
       renderItem={({ item }) => renderRow(item, widths)}
       renderScrollComponent={renderScrollComponent}
+      scrollEnabled={true}
       onScroll={handleScroll}
       onContentSizeChange={handleContentSizeChange}
       onLayout={handleLayout}

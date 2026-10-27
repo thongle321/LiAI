@@ -354,7 +354,7 @@ export function MessageInput({
     >
       <View className="flex-col">
         {attachIssue !== null && (
-          <Text className="px-4 pb-1 font-sans text-xs text-secondary-text">
+          <Text className="px-6 pb-1 font-sans text-xs text-secondary-text">
             {attachIssue}
           </Text>
         )}
@@ -362,7 +362,7 @@ export function MessageInput({
           // Same treatment as the other issue lines, so a blocked send
           // does not shout louder than a failed attach.
           <Text
-            className="px-4 pb-1 font-sans text-xs text-secondary-text"
+            className="px-6 pb-1 font-sans text-xs text-secondary-text"
             accessibilityLiveRegion="polite"
           >
             {helperNote}
@@ -377,7 +377,7 @@ export function MessageInput({
           // than a horizontal ScrollView: five thumbs fit in a bounded box, and
           // a nested scroll inside the composer is a fight with the keyboard
           // lift for no gain.
-          <View className="mx-4 mb-2 rounded-lg bg-surface-2 p-2">
+          <View className="mx-6 mb-2 rounded-lg bg-surface-2 p-2">
             <View className="flex-row flex-wrap items-center gap-2">
               {attached.map((uri, i) => (
                 <View key={`${i}-${uri.length}`} className="relative">
@@ -412,7 +412,7 @@ export function MessageInput({
               user dismisses at will is chrome, and chrome over the list is
               what that row is for. Spec §5. */}
           {editing === true && (
-            <View className="flex-row items-center gap-2 border-b border-border px-4 py-1">
+            <View className="flex-row items-center gap-2 border-b border-border px-6 py-1">
               <Pencil size={14} color={colors.secondaryText} />
               <Text className="flex-1 text-quiet">
                 Editing message — sending replaces this turn and everything after it
@@ -431,7 +431,7 @@ export function MessageInput({
           {/* Text input area: the field's own spec supplies the fill, the top
               hairline and the square corners, so this row is padding and the
               input only. */}
-          <View className="flex-1 px-5 py-2">
+          <View className="flex-1 px-6 py-2">
             <TextInput
               value={draft}
               onChangeText={setDraft}
@@ -465,7 +465,7 @@ export function MessageInput({
               onStop={() => voiceCapture.stop()}
             />
           ) : (
-          <View className="flex-row items-center justify-between px-4 py-2 min-h-9">
+          <View className="flex-row items-center justify-between px-6 py-2 min-h-9">
             <View className="flex-row items-center gap-2 flex-1">
               <Animated.View style={plusPress.animatedStyle}>
                 <Pressable

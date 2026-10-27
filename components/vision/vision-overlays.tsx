@@ -5,9 +5,9 @@
  */
 
 import type { RefObject } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
-import { Eye, EyeOff, Keyboard, Mic, Minus, Plus, Send, SwitchCamera, X } from "lucide-react-native";
+import { Eye, EyeOff, Mic, Minus, Plus, SwitchCamera, X } from "lucide-react-native";
 import {
   Camera,
   type CameraDevice,
@@ -17,7 +17,6 @@ import {
 
 import { useColors } from "@/themes/tokens.ts";
 import * as Haptics from "expo-haptics";
-import { useKeyboardLift } from "@/hooks/useKeyboardLift.ts";
 import { usePressFeedback } from "@/utils/motion.ts";
 import type { VoicePhase } from "@/services/voice/voice-status.ts";
 
@@ -46,14 +45,15 @@ export function VisionPreview({
   ]);
   if (hasPermission && device !== undefined) {
     return (
-      <View className="flex-1">
+      <View className="flex-1 bg-black">
         <Camera
           ref={cameraRef}
-          style={{ flex: 1 }}
+          style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
           device={device}
           format={format}
           isActive={focused}
           photo
+          resizeMode="cover"
           onInitialized={onReady}
           onError={(e: { message?: unknown }) =>
             onProblem(`Camera error: ${String(e.message ?? e)}`)
@@ -205,9 +205,6 @@ export function VisionTopFloat({
             <SwitchCamera size={22} color={colors.inverseText} />
           </Pressable>
         </Animated.View>
-        <Text className="ml-1 font-sans-semibold text-caption tracking-widest text-inverse-text">
-          VISION
-        </Text>
       </View>
       {watchOn && (
         <View className="mt-1 flex-row items-center justify-end gap-3">
@@ -245,14 +242,8 @@ export function VisionBottomPanel({
   answer,
   statusLabel,
   camProblem,
-  inputOpen,
-  draft,
-  onDraftChange,
-  onSendDraft,
-  onToggleInput,
   onTalk,
   modelReady,
-  liftAnchor,
   visionSupported = true,
 }: {
   bottom: number;
@@ -261,7 +252,6 @@ export function VisionBottomPanel({
    *  mounted the panel is never on the physical bottom, so its rise is the
    *  keyboard height MINUS this corridor (utils/keyboard.ts). See
    *  components/voice/voice-vision-mode.tsx for the value. */
-  liftAnchor: number;
   issue: string | null;
   needsSettings: boolean;
   onOpenSettings: () => void;
@@ -273,11 +263,6 @@ export function VisionBottomPanel({
   answer: string;
   statusLabel: string;
   camProblem: string | null;
-  inputOpen: boolean;
-  draft: string;
-  onDraftChange: (s: string) => void;
-  onSendDraft: () => void;
-  onToggleInput: () => void;
   onTalk: () => void;
   /** No active model: talk + type are disabled and greyed. */
   modelReady: boolean;
@@ -291,8 +276,7 @@ export function VisionBottomPanel({
   const colors = useColors();
   const retryPress = usePressFeedback();
   const settingsPress = usePressFeedback();
-  const sendPress = usePressFeedback();
-  const toggleInputPress = usePressFeedback();
+
   // The mic needs MORE than a loaded model: it needs a model that can see.
   // Text input keeps the plain modelReady gate — a question typed here is
   // not vision-specific, so the ordinary (text-only) turn path stands.
@@ -317,11 +301,10 @@ export function VisionBottomPanel({
   // Reading keyboard.height raw here was a separate, earlier bug: the library
   // reports it NEGATIVE while the keyboard is up, so the panel sank instead of
   // rising.
-  const liftStyle = useKeyboardLift(liftAnchor);
   return (
     <Animated.View
       className="absolute left-0 right-0 px-6"
-      style={[{ bottom }, liftStyle]}
+      style={{ bottom }}
     >
       <View className="rounded-lg bg-scrim px-6 py-3">
         {issue !== null ? (
@@ -387,50 +370,8 @@ export function VisionBottomPanel({
         )}
       </View>
 
-      {inputOpen && (
-        <View className="mt-2 flex-row items-center rounded-lg bg-scrim px-2 py-1">
-          <TextInput
-            value={draft}
-            onChangeText={modelReady ? onDraftChange : () => undefined}
-            editable={modelReady}
-            placeholder="Ask about this…"
-            placeholderTextColor={colors.secondaryText}
-            multiline
-            autoFocus={modelReady}
-            className="flex-1 px-3 font-sans text-body-md text-inverse-text"
-          />
-          <Animated.View style={sendPress.animatedStyle}>
-            <Pressable
-              onPress={onSendDraft}
-              onPressIn={sendPress.onPressIn}
-              onPressOut={sendPress.onPressOut}
-              disabled={!modelReady}
-              className="icon-btn"
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !modelReady }}
-              accessibilityLabel="Send question"
-            >
-              <Send size={22} color={modelReady ? colors.primary : colors.secondaryText} />
-            </Pressable>
-          </Animated.View>
-        </View>
-      )}
-
       <View className="mt-3 flex-row items-center justify-center">
-        <Animated.View style={toggleInputPress.animatedStyle}>
-          <Pressable
-            onPress={modelReady ? onToggleInput : undefined}
-            onPressIn={toggleInputPress.onPressIn}
-            onPressOut={toggleInputPress.onPressOut}
-            disabled={!modelReady}
-            className="h-12 w-12 items-center justify-center rounded-full bg-scrim"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !modelReady }}
-            accessibilityLabel="Type a question"
-          >
-            <Keyboard size={22} color={modelReady ? colors.inverseText : colors.secondaryText} />
-          </Pressable>
-        </Animated.View>
+        <View className="w-12" />
         <Animated.View style={talkPress.animatedStyle}>
           <Pressable
             onPress={talkReady ? () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onTalk(); } : undefined}

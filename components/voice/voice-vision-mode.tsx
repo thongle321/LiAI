@@ -25,14 +25,14 @@
 import { useState, useEffect } from "react";
 import { useRef } from "react";
 import { View } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useIsFocused } from "expo-router";
 import { openSettings } from "expo-linking";
 import { useCameraDevice, useCameraPermission } from "react-native-vision-camera";
 import type { Camera as VisionCameraView } from "react-native-vision-camera";
 
 import { colors, useColors } from "@/themes/tokens.ts";
-import { useKeyboardStore } from "@/store/keyboard.ts";
+
 import { VOICE_STATUS_LABEL } from "@/services/voice/voice-status.ts";
 import { useVisionTurn } from "@/hooks/useVisionTurn.ts";
 import { useWatchMode } from "@/hooks/useWatchMode.ts";
@@ -50,8 +50,6 @@ export function VisionMode({ onExit }: { onExit: () => void }) {
   const [position, setPosition] = useState<"back" | "front">("back");
   const [camLive, setCamLive] = useState(false);
   const [camProblem, setCamProblem] = useState<string | null>(null);
-  const [inputOpen, setInputOpen] = useState(false);
-  const [draft, setDraft] = useState("");
   const camera = useRef<VisionCameraView | null>(null);
   // No model: talk and type are disabled so the mic can't open a turn that
   // can never answer.
@@ -109,23 +107,7 @@ export function VisionMode({ onExit }: { onExit: () => void }) {
   useEffect(() => {
     if (focused && !hasPermission) void requestPermission();
   }, [focused, hasPermission, requestPermission]);
-  const insets = useSafeAreaInsets();
-  // The tab bar owns the bottom inset ("applied once, at the bar") and —
-  // PocketParity — stays MOUNTED while the keyboard opens, so the panel
-  // anchors 12px above the bar top in BOTH keyboard states. The geometry no
-  // longer carries a keyboard term at all: the keyboard simply covers the
-  // bar and the panel's lower margin, which is what stops the jump the old
-  // keyboardVisible compensation made.
-  // What the panel DOES still do is rise with the keyboard, and its lift
-  // must know how far off the physical screen bottom it rests: the bar's
-  // slot (inset + measured height) plus its own 12px margin. Same store as
-  // the chat screen (store/keyboard.ts): the bar's MEASURED height, not the
-  // seed constant — the label scales with the OS font setting, so the real
-  // bar can be taller than the class sum, and the anchor must track it or
-  // the panel drifts when large text is on (see VisionBottomPanel).
-  const tabBarHeight = useKeyboardStore((s) => s.tabBarHeight);
   const panelBottom = 12;
-  const panelLiftAnchor = panelBottom + insets.bottom + tabBarHeight;
   // Two dead ends land on the same system screen: a denied camera and a
   // blocked mic. One handler for both.
   const goToSettings = () => void openSettings().catch(() => {});
@@ -137,7 +119,6 @@ export function VisionMode({ onExit }: { onExit: () => void }) {
     needsSettings,
     bargeIn,
     retry,
-    sendText,
     stopAll,
   } = useVisionTurn(
     camera,
@@ -157,13 +138,6 @@ export function VisionMode({ onExit }: { onExit: () => void }) {
     stopAll();
     watch.stopWatch();
     onExit();
-  }
-
-  function sendDraft(): void {
-    if (draft.trim() === "") return;
-    sendText(draft);
-    setDraft("");
-    setInputOpen(false);
   }
 
   return (
@@ -195,7 +169,6 @@ export function VisionMode({ onExit }: { onExit: () => void }) {
 
             <VisionBottomPanel
               bottom={panelBottom}
-              liftAnchor={panelLiftAnchor}
               issue={issue ?? visionCard}
               issueAction={
                 cannotSee === "toggledOff" && issue === null
@@ -209,11 +182,6 @@ export function VisionMode({ onExit }: { onExit: () => void }) {
               answer={answer}
               statusLabel={VOICE_STATUS_LABEL[phase]}
               camProblem={camProblem}
-              inputOpen={inputOpen}
-              draft={draft}
-              onDraftChange={setDraft}
-              onSendDraft={sendDraft}
-              onToggleInput={() => setInputOpen((o) => !o)}
               onTalk={() => void bargeIn()}
               modelReady={modelReady}
               visionSupported={seesImages}

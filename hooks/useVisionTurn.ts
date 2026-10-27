@@ -113,7 +113,23 @@ export function useVisionTurn(
       setAnswer("");
       setIssue(null);
       setBoth("listening");
-      ExpoSpeechRecognitionModule.start({ ...VOICE_LISTEN_OPTS });
+      // Use on-device recognition only when the platform actually supports it;
+      // forcing it on a device without the speech pack fails every start and
+      // surfaces as "Didn't hear anything…". Fall back to network recognition
+      // if the on-device start throws.
+      const opts = {
+        ...VOICE_LISTEN_OPTS,
+        requiresOnDeviceRecognition:
+          ExpoSpeechRecognitionModule.supportsOnDeviceRecognition(),
+      };
+      try {
+        ExpoSpeechRecognitionModule.start(opts);
+      } catch {
+        ExpoSpeechRecognitionModule.start({
+          ...VOICE_LISTEN_OPTS,
+          requiresOnDeviceRecognition: false,
+        });
+      }
     } catch {
       if (!aliveRef.current) return;
       setIssue("Voice input isn't available in this build — rebuild the dev client.");

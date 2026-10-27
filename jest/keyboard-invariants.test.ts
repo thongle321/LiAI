@@ -64,7 +64,8 @@ describe("the chat screen's geometry carries no keyboard term", () => {
     expect(CHAT.match(/useKeyboardLift\(keyboardOffset\)/g)).toHaveLength(1);
     expect(CHAT).toMatch(/liftAnchor=\{keyboardOffset\}/);
     expect(COMPOSER).toMatch(/useKeyboardLift\(liftAnchor\)/);
-    expect(VISION_OVERLAYS).toMatch(/useKeyboardLift\(liftAnchor\)/);
+    // Vision mode no longer has a text input, so its panel no longer lifts.
+    expect(VISION_OVERLAYS).not.toMatch(/useKeyboardLift/);
   });
 });
 

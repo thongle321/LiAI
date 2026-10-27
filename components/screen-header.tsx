@@ -23,7 +23,7 @@ export function ScreenHeader({ title, right }: { title: string; right?: ReactNod
 
   return (
     <View
-      className="h-14 flex-row items-center border-b border-border bg-surface-1 px-5"
+      className="h-14 flex-row items-center border-b border-border bg-surface-1 px-6"
     >
       <View className="w-12 flex-row items-center">
         <Pressable

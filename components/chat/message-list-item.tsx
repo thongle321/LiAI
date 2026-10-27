@@ -197,7 +197,7 @@ export const MessageListItem = memo(function MessageListItem({
               bubbles have all four corners rounded and the tail its styles
               describe never actually renders. */}
           {withMenu(
-            <View className="rounded-xl bg-surface-3 px-5 py-3">
+            <View className="rounded-xl bg-surface-3 px-6 py-3">
               <Text className="font-sans text-body-lg text-primary-text">
                 {message.text}
               </Text>

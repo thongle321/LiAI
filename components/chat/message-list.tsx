@@ -231,7 +231,7 @@ export function MessageList({
       // No empty-state centring on this container: that is what put a
       // centred child inside the dynamic contentInset above. With rows
       // present the padding is all this container needs.
-      contentContainerClassName="p-5"
+      contentContainerClassName="p-6"
       className="flex-1"
       // Reflow, not entrance. Per-row entering/exiting on a virtualized list
       // replays every time the render window recycles a row, so scrolling back

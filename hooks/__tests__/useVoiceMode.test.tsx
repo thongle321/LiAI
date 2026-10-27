@@ -7,7 +7,7 @@
  *  and a mocked mic-access module. */
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 
-import { useVoiceMode } from "@/hooks/useVoiceMode.ts";
+import { useVoiceMode, useVoiceSession } from "@/hooks/useVoiceMode.ts";
 import type { VoiceModeDeps, VoiceCapture } from "@/hooks/useVoiceMode.ts";
 import type { AsrTier } from "@/services/asr/types.ts";
 import type {
@@ -21,6 +21,7 @@ import type { VoiceChatPort } from "@/services/voice/chat-port.ts";
 import { useAsrStore } from "@/store/asr.ts";
 import { useVoice } from "@/store/voice.ts";
 import { PHONON_VOICES } from "@/services/tts/engines/phonon/voices";
+import { useVoiceModeSession, voiceModeSessionApi } from "@/store/voice-mode.ts";
 
 jest.mock("@/services/voice/mic-access.ts", () => ({
   ensureMicAccess: jest.fn(async () => "granted"),
@@ -38,11 +39,11 @@ jest.mock("@siteed/audio-studio", () => ({
 }));
 
 /** Focus, read at render time; suites run focused unless pinned false. */
-let focusNow = true;
+let mockFocusNow = true;
 
 jest.mock("expo-router", () => ({
   ...jest.requireActual("expo-router"),
-  useIsFocused: () => focusNow,
+  useIsFocused: () => mockFocusNow,
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
@@ -217,6 +218,8 @@ function deliverUtterance(rig: Rig): void {
 
 beforeEach(() => {
   armStore();
+  // The circuit is a module singleton now; every reset starts it closed.
+  voiceModeSessionApi.reset();
   (ensureMicAccess as jest.Mock).mockResolvedValue?.("granted");
   (checkMicAccess as jest.Mock).mockResolvedValue?.("granted");
 });
@@ -586,8 +589,6 @@ describe("exits", () => {
     expect(rig.engine.released).toBe(1);
     expect(rig.capture.stopped).toBe(1);
   });
-
-
   it(
     "a mic that delivers nothing restarts once, then ends the session",
     async () => {
@@ -640,5 +641,75 @@ describe("exits", () => {
 
     expect(rig.engine.released).toBe(1);
     expect(rig.capture.stopped).toBe(1);
+  });
+});
+
+describe("one circuit, one controller (issue 01)", () => {
+  it("a live session makes a second entry a no-op", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+
+    await act(async () => {
+      await rig.result.current.requestEntry();
+    });
+
+    expect(rig.engine.prepared).toBe("base");
+    expect(rig.capture.started).toBe(1);
+    expect(rig.result.current.phase).toBe("listening");
+  });
+
+  it("closing the circuit resets the mute flag and the presentation", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+
+    // Later tickets flip these (mute toggle, collapsed bar); the close
+    // semantics are assembled now.
+    voiceModeSessionApi.set({ micMuted: true, presentation: "bar" });
+    await act(async () => {
+      rig.result.current.end();
+    });
+
+    const circuit = useVoiceModeSession.getState();
+    expect(circuit.phase).toBe("closed");
+    expect(circuit.micMuted).toBe(false);
+    expect(circuit.presentation).toBe("full");
+  });
+
+  it("exit-on-blur is anchored to the session's ORIGIN screen", async () => {
+    const rig = makeRig();
+    await enterOpen(rig); // requestEntry() defaults origin to "voice"
+    const screen = renderHook(
+      ({ origin }: { origin: "chat" | "voice" }) => useVoiceSession(origin),
+      { initialProps: { origin: "chat" as "chat" | "voice" } },
+    );
+
+    // A foreign screen (chat, later) blurring must NOT end a session
+    // the Voice tab started.
+    mockFocusNow = false;
+    await act(async () => {
+      screen.rerender({ origin: "chat" });
+    });
+    expect(useVoiceModeSession.getState().phase).toBe("listening");
+    screen.unmount();
+    mockFocusNow = true;
+  });
+
+  it("the origin screen blurring ends the session", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+    const screen = renderHook(
+      ({ origin }: { origin: "chat" | "voice" }) => useVoiceSession(origin),
+      { initialProps: { origin: "voice" as "chat" | "voice" } },
+    );
+
+    mockFocusNow = false;
+    await act(async () => {
+      screen.rerender({ origin: "voice" });
+    });
+    await waitFor(() => {
+      expect(useVoiceModeSession.getState().phase).toBe("closed");
+    });
+    screen.unmount();
+    mockFocusNow = true;
   });
 });

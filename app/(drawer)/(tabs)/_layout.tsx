@@ -17,6 +17,7 @@ import { router, Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BottomNav, type ChatTab } from "@/components/navigation/bottom-nav.tsx";
+import { VoiceSessionHost } from "@/components/voice/voice-session-host.tsx";
 import { useKeyboardStore } from "@/store/keyboard.ts";
 
 // Same story as the root boundary: this was `app/(drawer)/(tabs)/+error.tsx`.
@@ -24,17 +25,21 @@ export { TabsErrorBoundary as ErrorBoundary } from "@/components/route-error-bou
 
 export default function TabLayout() {
   return (
-    <Tabs
-      screenOptions={{ headerShown: false }}
-      // Closure returning an element: the navigator invokes tabBar as a
-      // plain function, so passing the bare TabBar reference would run
-      // its hooks outside a component (Invalid hook call). TabBar itself
-      // stays a real component with hooks.
-      tabBar={(props) => <TabBar {...props} />}
-    >
-      <Tabs.Screen name="chat" />
-      <Tabs.Screen name="voice" />
-    </Tabs>
+    <>
+      <Tabs
+        screenOptions={{ headerShown: false }}
+        // Closure returning an element: the navigator invokes tabBar as a
+        // plain function, so passing the bare TabBar reference would run
+        // its hooks outside a component (Invalid hook call). TabBar itself
+        // stays a real component with hooks.
+        tabBar={(props) => <TabBar {...props} />}
+      >
+        <Tabs.Screen name="chat" />
+        <Tabs.Screen name="voice" />
+      </Tabs>
+      {/* The single voice session; the screens consume it, never own it. */}
+      <VoiceSessionHost />
+    </>
   );
 }
 

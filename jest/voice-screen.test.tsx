@@ -1,9 +1,10 @@
 /** The voice tab screen: its rendering contract over the session
- *  controller. The controller itself is covered by
- *  hooks/__tests__/useVoiceMode.test.tsx; this suite mocks THAT hook and
- *  pins what the SCREEN does with its surface — labels per phase, the mic
- *  press split (closed → enter the gates, open → the cloud tap), the
- *  issue line's Settings affordance, End, and the controller's sheets.
+ *  circuit. The controller itself is covered by
+ *  hooks/__tests__/useVoiceMode.test.tsx; this suite mocks the session
+ *  consumer (useVoiceSession) and pins what the SCREEN does with its
+ *  surface — labels per phase, the mic press split (closed → enter the
+ *  gates, open → the cloud tap), the issue line's Settings affordance,
+ *  End, and the controller's sheets.
  *
  *  Screen suites live in jest/ (app/ must hold nothing but routes).
  */
@@ -17,7 +18,6 @@ import type { useVoiceMode } from "@/hooks/useVoiceMode.ts";
 import type { VoiceModeSheet } from "@/hooks/useVoiceMode.ts";
 import { useVoice } from "@/store/voice.ts";
 import { useModelStore } from "@/store/model-store.ts";
-
 /** Focus, read at render time; the vision swap resets on blur. Pinned so
  *  the bare render (no router) doesn't die on useIsFocused. */
 let focusNow = true;
@@ -111,15 +111,14 @@ function surface(
 }
 
 let mockSurface = surface();
-const hookDeps = {
-  last: null as null | (Parameters<typeof useVoiceMode>[0] & object),
-};
+const mockMicSink = jest.fn(() => () => {});
 
 jest.mock("@/hooks/useVoiceMode.ts", () => ({
-  useVoiceMode: (deps?: Parameters<typeof useVoiceMode>[0]) => {
-    hookDeps.last = deps ?? null;
-    return mockSurface;
-  },
+  // The screen is a CONSUMER (issue 01): the session is read through
+  // useVoiceSession; the controller lives at the tab layout, so the
+  // screen never passes deps or calls the host hook.
+  useVoiceSession: () => mockSurface,
+  setVoiceMicSink: (...args: unknown[]) => mockMicSink(...(args as [unknown])),
 }));
 
 function armStores(): void {
@@ -130,7 +129,7 @@ function armStores(): void {
 beforeEach(() => {
   armStores();
   jest.clearAllMocks();
-  hookDeps.last = null;
+  mockMicSink.mockClear();
   mockSurface = surface();
 });
 
@@ -143,8 +142,9 @@ describe("VoiceScreen", () => {
     fireEvent.press(screen.getByLabelText("Tap to speak"));
     expect(actions.requestEntry).toHaveBeenCalledTimes(1);
     expect(actions.tapCloud).not.toHaveBeenCalled();
-    // The mic capsule is wired to the controller as the orb's level feed.
-    expect(typeof hookDeps.last?.onMicAudio).toBe("function");
+    // This screen registers its level capsule as the session's mic feed
+    // (the controller lives at the tab layout; the sink rides here).
+    expect(mockMicSink).toHaveBeenCalledWith(expect.any(Function));
   });
 
   it("listening: the label gains the phase; the mic press is the cloud tap", () => {

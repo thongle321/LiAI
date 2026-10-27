@@ -1,6 +1,9 @@
 /** Standalone voice tab (tap-to-talk), driven by the unified-Whisper
- *  session controller (hooks/useVoiceMode — ported from PocketPal's
- *  useVoiceMode, one Whisper tier for dictation + voice mode).
+ *  session controller (hooked ONCE at the tab layout — this screen is a
+ *  consumer: hooks/useVoiceSession("voice") reads the session circuit and
+ *  its blur guard re-anchors exit-on-blur to the screen that started the
+ *  session; components/voice/voice-session-host.tsx owns the controller
+ *  so chat can share the same machinery later).
  *
  *  Redesigned around the expo-thinking-orbs shell (docs/specs/
  *  2026-10-25-voice-tab-orb-redesign.md): the mic disc it replaces is now
@@ -31,7 +34,7 @@ import Animated, {
 import { Eye } from "lucide-react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { openSettings } from "expo-linking";
-import { useRouter, useIsFocused } from "expo-router";
+import { useIsFocused } from "expo-router";
 
 import { ASR_SAMPLE_RATE } from "@/services/asr/constants.ts";
 import { useColors } from "@/themes/tokens.ts";
@@ -40,7 +43,7 @@ import {
   fadeEntering,
   motionEasing,
 } from "@/utils/motion.ts";
-import { useVoiceMode } from "@/hooks/useVoiceMode.ts";
+import { useVoiceSession, setVoiceMicSink } from "@/hooks/useVoiceMode.ts";
 import {
   VOICE_MODE_LABEL,
   VOICE_MODE_STATE_LABEL,
@@ -55,17 +58,16 @@ import { useVoiceLevels } from "expo-thinking-orbs";
 
 export default function VoiceScreen() {
   const colors = useColors();
-  const router = useRouter();
   // The corner Eye anchors to the REAL top inset: a fixed offset put it
   // under the status bar on the device (overlapped and untappable).
   const insets = useSafeAreaInsets();
   // The mic capsule lives here (not the hero) so the controller's
   // onMicAudio seam fills it every 50 ms chunk while listening.
   const mic = useVoiceLevels({ sampleRate: ASR_SAMPLE_RATE });
-  const voice = useVoiceMode({
-    openModels: () => router.push("/models"),
-    onMicAudio: mic.setSamples,
-  });
+  // The controller lives at the tab layout now; this screen registers its
+  // level capsule as the orb's feed for the duration it owns the surface.
+  useEffect(() => setVoiceMicSink(mic.setSamples), [mic.setSamples]);
+  const voice = useVoiceSession("voice");
   const {
     phase,
     heard,

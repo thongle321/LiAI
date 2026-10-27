@@ -49,7 +49,7 @@ export const VOICE_KEY = "liai_voice";
 
 /** PocketPal's gate: neural TTS needs a 4 GiB device (spec Q14). */
 export const RAM_GATE_BYTES = 4 * 1024 * 1024 * 1024;
-export const VOICE_FIRST_CHUNK_HOLD_MS = 1200;
+export const VOICE_FIRST_CHUNK_HOLD_MS = 1500;
 
 export type PlaybackState =
   | { mode: "idle" }

@@ -37,6 +37,7 @@ import { pullsCollapse } from "@/utils/voice-collapse.ts";
 import { useVoiceLevels } from "expo-thinking-orbs";
 import type { VoiceModeSurface } from "@/hooks/useVoiceMode.ts";
 import {
+  voiceModeHintLabel,
   voiceModeStateLabel,
   voiceModeVerbLabel,
 } from "@/services/voice/voice-status.ts";
@@ -194,6 +195,12 @@ export function VoiceFullView({
       >
         {voiceModeVerbLabel(phase, micMuted)}
       </Animated.Text>
+      {voiceModeHintLabel(phase, micMuted) !== "" &&
+        voiceModeHintLabel(phase, micMuted) !== voiceModeVerbLabel(phase, micMuted) && (
+        <Text className="mt-1 text-center text-quiet">
+          {voiceModeHintLabel(phase, micMuted)}
+        </Text>
+      )}
       {/* Heard slot never unmounts: nbsp holds the line when silent.
           Tap to toggle captions. Hidden while the machine speaks — the
           reply caption takes over below. */}

@@ -169,6 +169,13 @@ class VoiceModeController {
       this.deps.openModels();
       return;
     }
+    if (!asrStore.voiceModeAvailable) {
+      this.writeCircuit({
+        issue: "Hands-free voice is off — enable it in Settings.",
+        sheet: null,
+      });
+      return;
+    }
     // Mic state is read WITHOUT prompting: the ask belongs to the setup
     // sheet (reference isSetupComplete → VoiceSetupSheet). A permanent
     // denial is beyond the sheet though — LiAI's sheet has no settings

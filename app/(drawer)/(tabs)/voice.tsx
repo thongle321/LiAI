@@ -27,6 +27,7 @@ import { ASR_SAMPLE_RATE } from "@/services/asr/constants.ts";
 import { useColors } from "@/themes/tokens.ts";
 import { useVoiceSession, setVoiceMicSink } from "@/hooks/useVoiceMode.ts";
 import { useModelStore } from "@/store/model-store.ts";
+import { useVoice } from "@/store/voice.ts";
 import { VoiceSetupSheet } from "@/components/voice/voice-setup-sheet.tsx";
 import { VoiceMemorySheet } from "@/components/voice/voice-memory-sheet.tsx";
 import { VoiceFullView } from "@/components/voice/voice-full-view.tsx";
@@ -71,6 +72,8 @@ export default function VoiceScreen() {
   const models = useModelStore((s) => s.models);
   const chatModelName =
     models.find((m) => m.id === activeModelId)?.name ?? "this chat model";
+  const currentVoice = useVoice((s) => s.currentVoice);
+  const voiceName = currentVoice?.name ?? "this voice";
 
   // The mode's body owns its own full-bleed shell (it needs different
   // SafeAreaView edges than the voice trunk), so the swap replaces the
@@ -121,6 +124,7 @@ export default function VoiceScreen() {
           fit={sheet.fit}
           onClose={dismissSheet}
           chatModelName={chatModelName}
+          voiceName={voiceName}
           onContinue={() => void continueAnyway()}
           onChooseSmallerModel={openModels}
         />

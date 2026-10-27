@@ -147,6 +147,26 @@ export function voiceModeVerbLabel(
   return VOICE_MODE_VERB_LABEL[phase];
 }
 
+/** Per-phase guidance hint (PocketPal voiceStatus hint), adapted to LiAI's orb. */
+export const VOICE_MODE_HINT_LABEL: Record<VoiceModePhase, string> = {
+  closed: "",
+  starting: "Loading speech recognition and the voice. The first time can take a little longer.",
+  listening: "Pause when you're done, or tap the cloud to send",
+  transcribing: "Tap the cloud to cancel",
+  thinking: "Tap the cloud to cancel",
+  speaking: "Tap the cloud to interrupt",
+};
+
+export function voiceModeHintLabel(
+  phase: VoiceModePhase,
+  micMuted: boolean,
+): string {
+  if (micMuted && phase === "listening") {
+    return "Tap the microphone to talk again";
+  }
+  return VOICE_MODE_HINT_LABEL[phase];
+}
+
 /** Which expo-thinking-orbs behaviour matches the session right now. The
  *  orb's own nine-state union is LiveKit's AgentState; LiAI's phases map in
  *  one direction onto a subset, with `failed` reserved for a CLOSED session

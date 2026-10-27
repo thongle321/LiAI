@@ -16,7 +16,7 @@ export function GreetingBubble({
   greeting: string;
 }) {
   return (
-    <View className="items-start px-4 pb-3">
+    <View className="items-start px-6 pb-3">
       <View className="max-w-[85%] rounded-2xl rounded-bl-sm border border-border bg-surface-1 px-4 py-3">
         <Text className="mb-1 text-body-sm font-sans-semibold text-secondary-text">
           {companionName}

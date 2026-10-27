@@ -632,7 +632,7 @@ export default function ChatRoute() {
           instead of over a bar. */}
       <Animated.View
         style={[composerLift, { bottom: composerHeight }]}
-        className="absolute inset-x-0 px-4"
+        className="absolute inset-x-0 px-6"
         pointerEvents="box-none"
       >
         {/* No active-run chip: the pending row inside the list owns that

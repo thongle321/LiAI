@@ -115,11 +115,11 @@ export function useVoiceCapture(
       clearTimeout(noAudioTimerRef.current);
       noAudioTimerRef.current = null;
     }
-    try {
-      recorder.stopRecording();
-    } catch {
+    // stopRecording() is async and rejects when nothing is recording; the
+    // try/catch above cannot catch that, so swallow it here.
+    void recorder.stopRecording().catch(() => {
       // nothing live
-    }
+    });
   }, []);
 
   const finish = useCallback(

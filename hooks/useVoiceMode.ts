@@ -648,7 +648,11 @@ function makeDefaultCapture(recorder: ReturnType<typeof useAudioRecorder>): Voic
         },
       });
     },
-    stop: () => recorder.stopRecording(),
+    stop: () => {
+      // stopRecording() is async and rejects when nothing is recording;
+      // the synchronous try/catch in stopCapture cannot catch that.
+      void recorder.stopRecording().catch(() => {});
+    },
   };
 }
 

@@ -458,7 +458,7 @@ export default function ChatRoute() {
         <Animated.View
           entering={searchBarEntering}
           exiting={searchBarExiting}
-          className="flex-row items-center gap-2 border-b border-border bg-base px-5 py-2"
+          className="flex-row items-center gap-2 border-b border-border bg-base px-6 py-2"
         >
           <TextInput
             value={query}

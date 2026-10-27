@@ -147,11 +147,11 @@ components:
   card:
     backgroundColor: "{colors.clean-white}"
     rounded: "{rounded.default}"
-    padding: "20px"
+    padding: "24px"
   card-muted:
     backgroundColor: "{colors.mist}"
     rounded: "{rounded.default}"
-    padding: "20px"
+    padding: "24px"
   message-bubble-user:
     backgroundColor: "{colors.surface-tint}"
     textColor: "{colors.ink}"
@@ -185,7 +185,7 @@ components:
 
 LiAI is a light system with exactly one loud thing in it. A single blue hue does all the signalling — the live tab, the focused field, the one primary action, the active step — carried in two steps of that one hue, and everything else is a near-white plane separated by 1px hairlines. The restraint is the point. Where most AI products reach for gradients, glass, and glow to feel futuristic, this one earns "sci-fi" from 2px line icons, corner brackets, and a dot trail. Nothing emits light.
 
-The density is conversational, not dashboard. Space is generous — a 4px scale with a 20px screen gutter and 20px card padding — because a phone screen held one-handed for conversation should breathe. Structure comes from alignment and hairlines, never from enclosure: cards are open white rectangles, not boxes. Type does the heavy lifting, with a nine-step Inter scale where Display (32/40) is reserved for one moment per screen, Screen title (14/20) carries every title, and Meta (10/14) is the floor.
+The density is conversational, not dashboard. Space is generous — a 4px scale with a 24px screen gutter and 24px card padding — because a phone screen held one-handed for conversation should breathe. Structure comes from alignment and hairlines, never from enclosure: cards are open white rectangles, not boxes. Type does the heavy lifting, with a nine-step Inter scale where Display (32/40) is reserved for one moment per screen, Screen title (14/20) carries every title, and Meta (10/14) is the floor.
 
 **This file is the authority, and the code now implements it.** The build used to trail this file by a whole world — near-black surfaces, a lime accent, Raleway, soft elevation, clipped octagonal corners — and that world has since been retired out of the codebase entirely. What remains is to hold the line: see *Do's and Don'ts* for the guardrails that keep it retired.
 

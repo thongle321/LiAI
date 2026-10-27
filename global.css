@@ -265,7 +265,7 @@
 
 .card {
   background-color: var(--color-surface-1);
-  padding: 20px;
+  padding: 24px;
 }
 
 /* The inline line under a Download button that cannot fit. Three surfaces
@@ -367,8 +367,8 @@
   align-items: center;
   gap: 8px;
   min-height: 48px;
-  padding-left: 20px;
-  padding-right: 20px;
+  padding-left: 24px;
+  padding-right: 24px;
   padding-top: 12px;
   padding-bottom: 12px;
 }

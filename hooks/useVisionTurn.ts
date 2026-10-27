@@ -25,8 +25,7 @@ import {
   voiceErrorAction,
 } from "@/services/voice/voice-status.ts";
 import { ensureMicAccess } from "@/services/voice/mic-access.ts";
-import { speakReply, stopSpeaking } from "@/services/voice/voice-speak.ts";
-import { useVoice } from "@/store/voice.ts";
+import { stopSpeaking } from "@/services/voice/voice-speak.ts";
 import { VOICE_LISTEN_OPTS } from "@/services/voice/voice-listen.ts";
 import { snapshotToUri } from "@/services/storage/snapshot.ts";
 import {
@@ -215,7 +214,7 @@ export function useVisionTurn(
       });
       if (!aliveRef.current) return;
       visionRecord(said, outcome.reply);
-      speak(outcome.reply);
+      showAnswer(outcome.reply);
     } catch {
       // The store-backed send surfaced richer errors; the store-less
       // runner only rejects when the engine is unusable, and the strip
@@ -237,29 +236,13 @@ export function useVisionTurn(
     }
   }
 
-  function speak(text: string): void {
+  function showAnswer(text: string): void {
     if (!aliveRef.current) return;
+    // Vision mode answers in the caption only - no TTS.
     stopSpeaking();
     setAnswer(text);
     setIssue(null);
-    if (!useVoice.getState().autoSpeak) {
-      setBoth("idle");
-      return;
-    }
-    setBoth("speaking");
-    speakReply(text, {
-      onDone: () => {
-        if (aliveRef.current && phaseRef.current === "speaking") setBoth("idle");
-      },
-      onStopped: () => {
-        if (aliveRef.current && phaseRef.current === "speaking") setBoth("idle");
-      },
-      onError: () => {
-        if (!aliveRef.current) return;
-        setIssue("Couldn't play the reply. Try again.");
-        setBoth("idle");
-      },
-    });
+    setBoth("idle");
   }
 
   /** Mic tap: begin from idle, stop back to idle — never auto-listen. */

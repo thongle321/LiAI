@@ -215,9 +215,16 @@ export function MessageList({
       onScroll={handleScroll}
       onContentSizeChange={handleContentSizeChange}
       onLayout={handleLayout}
+      // PocketPal (inverted list) uses autoscrollToTopThreshold: 20 here, which
+      // auto-scrolls to the top when the first visible item is near the top.
+      // LiAI's list is deliberately non-inverted, so "the top" means the
+      // oldest messages; that same threshold pinned a streaming reply to the
+      // top and made it stick (see the chat composer bug). 0 disables the
+      // auto-scroll-to-top while keeping minIndexForVisible so the growing
+      // bubble cannot shove the reader off-screen.
       maintainVisibleContentPosition={
         streaming
-          ? { minIndexForVisible: 1, autoscrollToTopThreshold: 20 }
+          ? { minIndexForVisible: 1, autoscrollToTopThreshold: 0 }
           : undefined
       }
       // Render windowing at PocketPal's values (ChatView.tsx:997,1001):

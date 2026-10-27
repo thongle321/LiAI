@@ -10,6 +10,7 @@
  */
 
 import { isLegacyQuantization } from "./hf-format.ts";
+import { exceedsLearnedCeiling } from "@/utils/load-guard.ts";
 
 export type HFWarningCode =
   | "not-enough-space"
@@ -49,9 +50,14 @@ export function hfFileWarnings({
   if (freeBytes !== null && requiredBytes > freeBytes) {
     warnings.push({ code: "not-enough-space", label: "Not enough space" });
   }
-  // A zero ceiling means no successful download to compare against, so
-  // every first download would otherwise warn.
-  if (learnedCeilingBytes > 0 && requiredBytes > learnedCeilingBytes) {
+  // PocketParity: the chip is the memory-fit verdict for this device
+  // (ModelFileCard.tsx:119-144 reads useMemoryCheck's fit, not a raw
+  // size-vs-download comparison), so the load guard's learned rule
+  // applies — EXCEEDS_LEARNED_CEILING with its 1.5x headroom, so the
+  // chip and the "Large model" confirm can never disagree, and a small
+  // model inside the headroom stays silent instead of warning wherever
+  // a row is browsed.
+  if (exceedsLearnedCeiling(requiredBytes, learnedCeilingBytes)) {
     warnings.push({ code: "short-memory", label: "Memory tight" });
   }
   if (isVision && !hasProjector) {

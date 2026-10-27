@@ -6,12 +6,58 @@ import {
   bargeActionFor,
   showsReplyOverlay,
   voiceErrorAction,
+  voiceModeStateLabel,
+  voiceModeVerbLabel,
   voiceOrbStateFor,
   VOICE_MODE_LABEL,
   VOICE_MODE_STATE_LABEL,
   VOICE_MODE_VERB_LABEL,
   VOICE_STATUS_LABEL,
 } from "../voice-status";
+
+describe("muted status override", () => {
+  it("a muted listen reads as Microphone off (reference l10n)", () => {
+    expect(voiceModeStateLabel("listening", true)).toBe("MICROPHONE OFF");
+    expect(voiceModeVerbLabel("listening", true)).toBe(
+      "Tap the microphone to talk again",
+    );
+  });
+
+  it("muted overrides every other phase's copy but listening", () => {
+    for (const phase of [
+      "closed",
+      "starting",
+      "transcribing",
+      "thinking",
+      "speaking",
+    ] as const) {
+      expect(voiceModeStateLabel(phase, true)).toBe(
+        VOICE_MODE_STATE_LABEL[phase],
+      );
+      expect(voiceModeVerbLabel(phase, true)).toBe(
+        VOICE_MODE_VERB_LABEL[phase],
+      );
+    }
+  });
+
+  it("unmuted sessions read the phase labels verbatim", () => {
+    for (const phase of [
+      "closed",
+      "starting",
+      "listening",
+      "transcribing",
+      "thinking",
+      "speaking",
+    ] as const) {
+      expect(voiceModeStateLabel(phase, false)).toBe(
+        VOICE_MODE_STATE_LABEL[phase],
+      );
+      expect(voiceModeVerbLabel(phase, false)).toBe(
+        VOICE_MODE_VERB_LABEL[phase],
+      );
+    }
+  });
+});
 
 describe("VOICE_STATUS_LABEL", () => {
   it("labels every phase for the status line", () => {

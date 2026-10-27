@@ -49,6 +49,9 @@ interface VoiceOrbHeroProps {
   phase: VoiceModePhase;
   /** An issue with no live session: the shell freezes as `failed`. */
   failed: boolean;
+  /** The session's mic-mute flag: a muted listen renders the greyed,
+   *  frozen treatment PocketPal gives a muted cloud. */
+  muted?: boolean;
   /** The screen's mic capsule — fed by the controller's onMicAudio seam. */
   mic: VoiceLevels;
   /** closed → enter the gates (requestEntry); open → the cloud tap. */
@@ -61,8 +64,8 @@ interface VoiceOrbHeroProps {
  *  stack — see the research doc). `active=false` just stops synthesising;
  *  the level is left where it lies, because VoiceOrb ignores amplitude
  *  outside its listening/speaking behaviours and releases its own
- *  smoothing. */
-function useSynthSpeechLevel(active: boolean): SharedValue<number> {
+ *  smoothing. Exported for the collapsed bar's mini orb. */
+export function useSynthSpeechLevel(active: boolean): SharedValue<number> {
   const level = useSharedValue(0);
   const t = useSharedValue(0);
   const frame = useFrameCallback((info) => {
@@ -84,6 +87,7 @@ function useSynthSpeechLevel(active: boolean): SharedValue<number> {
 export function VoiceOrbHero({
   phase,
   failed,
+  muted = false,
   mic,
   onTap,
 }: VoiceOrbHeroProps): ReactElement {
@@ -92,6 +96,10 @@ export function VoiceOrbHero({
   const open = phase !== "closed";
   const orbState = voiceOrbStateFor(phase, failed);
   const speech = useSynthSpeechLevel(phase === "speaking");
+  // The muted treatment is the LISTENING look, exactly like the
+  // reference's voiceVisual: a speaking shell keeps its colour mid-turn;
+  // muting while speech is live still ends its audio via the controller.
+  const mutedListen = muted && phase === "listening";
 
   return (
     <Animated.View style={press.animatedStyle}>
@@ -107,7 +115,8 @@ export function VoiceOrbHero({
         <VoiceOrb
           state={orbState}
           size={ORB_SIZE}
-          color={colors.primary}
+          color={mutedListen ? colors.secondaryText : colors.primary}
+          paused={mutedListen}
           inputAmplitude={mic.level}
           inputLevels={mic}
           outputAmplitude={speech}

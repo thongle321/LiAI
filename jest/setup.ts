@@ -21,6 +21,12 @@ import {
   routerMock as mockRouter,
 } from "./router-mock.ts";
 
+// RNGH's gesture-handler mocks at the module boundary (the native module
+// is a TurboModule): `fireGestureHandler` routes synthetic pan events to
+// them, and GestureDetector renders without a device. Same line the
+// reference jest harness uses (pocketpal-ai/jest/setup.ts).
+import "react-native-gesture-handler/jestSetup";
+
 jest.mock("uniwind", () => ({
   withUniwind: (component: React.ComponentType<unknown>) => component,
   useResolveClassNames: () => undefined,

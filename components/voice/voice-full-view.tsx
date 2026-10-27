@@ -1,27 +1,31 @@
-/** The full-screen voice session view (spec: hands-free in chat, issue 02).
+/** The full-screen voice session view (spec: voice-tab hands-free parity,
+ *  the view half of the old "hands-free in chat" issue 02).
  *
- *  The Voice tab's session screen, made reusable: the LiAI orb (the
- *  existing phase→orb-state mapping, no redesign), the per-phase status
- *  title + hint strings with the error-variant slot for the session's last
- *  issue, live-region phase announcements for screen readers, the End
- *  control, and two reserved slots — a mic-mute control (issue 05) and a
- *  drag handle row the collapse gesture will enter through (issue 04;
- *  pull-down resistance lands there too). Everything is read from the
+ *  The Voice tab's session screen: the LiAI orb (the existing phase→orb-
+ *  state mapping, no redesign), the per-phase status title + hint strings
+ *  with the error-variant slot for the session's last issue, the muted
+ *  override (Microphone off), live-region phase announcements for screen
+ *  readers, the End control, the mic-mute control, and the drag-handle row
+ *  the collapse-to-bar gesture enters through. Everything is read from the
  *  session circuit the caller passes (the store-backed surface of
  *  hooks/useVoiceMode); the only local state is the caption toggle.
  *
- *  The Voice tab renders its session through this component and is
- *  visually unchanged; the chat surface (issue 03) just needs a gate
- *  wrapper around the same view.
+ *  The Voice tab renders its session through this component; the chat
+ *  surface never mounts it (contrast the research doc's overlay framing,
+ *  rejected in the parity spec).
  */
 
 import { useEffect, useState, type ReactElement } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { BackHandler, Pressable, ScrollView, Text, View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 import { openSettings } from "expo-linking";
 
 import {
@@ -29,13 +33,15 @@ import {
   fadeEntering,
   motionEasing,
 } from "@/utils/motion.ts";
+import { pullsCollapse } from "@/utils/voice-collapse.ts";
 import { useVoiceLevels } from "expo-thinking-orbs";
 import type { VoiceModeSurface } from "@/hooks/useVoiceMode.ts";
 import {
-  VOICE_MODE_STATE_LABEL,
-  VOICE_MODE_VERB_LABEL,
+  voiceModeStateLabel,
+  voiceModeVerbLabel,
 } from "@/services/voice/voice-status.ts";
 import { VoiceOrbHero } from "@/components/voice/voice-orb-hero.tsx";
+import { VoiceMuteControl } from "@/components/voice/voice-mute.tsx";
 
 interface VoiceFullViewProps {
   /** The mic capsule — fed by the controller's onMicAudio seam via the
@@ -51,12 +57,15 @@ export function VoiceFullView({
 }: VoiceFullViewProps): ReactElement {
   const {
     phase,
+    micMuted,
     heard,
     reply,
     issue,
     needsMicSettings,
     requestEntry,
     tapCloud,
+    toggleMute,
+    collapse,
     end,
   } = voice;
   const open = phase !== "closed";
@@ -91,31 +100,99 @@ export function VoiceFullView({
     opacity: overlayOpacity.value,
   }));
 
+  // Collapse to the in-tab bar (spec: voice-tab hands-free parity). The
+  // gesture is scoped to the handle row because the session view scrolls —
+  // the reference drags the whole overlay; an in-tab divergence. The pull
+  // shows as rubber-band resistance on the row; the collapse / spring-back
+  // hop happens in onEnd. Tapping the row is the same exit.
+  const reduceMotion = useReducedMotion();
+  const handleDrag = useSharedValue(0);
+  const handleStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: handleDrag.value }],
+  }));
+  const pullDown = Gesture.Pan()
+    .activeOffsetY(15)
+    .withTestId("voice-view-pull")
+    .onUpdate((event) => {
+      if (!reduceMotion) {
+        // Rubber-band: the row follows at a fraction of the finger so the
+        // pull reads as resistance, not as progress.
+        handleDrag.value = Math.max(0, event.translationY) / 3;
+      }
+    })
+    .onEnd((event) => {
+      if (pullsCollapse(event.translationY, event.velocityY)) {
+        scheduleOnRN(collapse);
+        return;
+      }
+      if (!reduceMotion) {
+        handleDrag.value = withSpring(0);
+      }
+    });
+
+  useEffect(() => {
+    if (!open) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      collapse();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [open, collapse]);
+
   return (
     <ScrollView contentContainerClassName="flex-1 items-center justify-center px-8">
-      {/* RESERVED (issue 04, collapse-to-bar): the drag handle row. The
-          pull-down/flick gesture that collapses this view into the bar
-          enters through this slot; pull-down resistance lands there. */}
-      <View testID="voice-drag-handle-slot" />
+      {/* The collapse row (issue 04): drag handle + hint, tap = collapse,
+          pull-down = collapse at the reference's thresholds. Mounted only
+          in a live session — the closed gate has nothing to collapse. */}
+      {open && (
+        <GestureDetector gesture={pullDown}>
+          <Pressable
+            onPress={collapse}
+            accessibilityRole="button"
+            accessibilityLabel="Collapse voice view"
+            testID="voice-view-collapse"
+            className="items-center py-3"
+          >
+            <Animated.View
+              style={handleStyle}
+              className="items-center"
+            >
+              <View
+                className="h-[5px] w-10 rounded-full bg-border"
+              />
+              <Text className="mt-1 font-sans text-xs text-secondary-text">
+                Pull down to collapse
+              </Text>
+            </Animated.View>
+          </Pressable>
+        </GestureDetector>
+      )}
 
-      <VoiceOrbHero phase={phase} failed={failed} mic={mic} onTap={orbPress} />
+      <VoiceOrbHero
+        phase={phase}
+        failed={failed}
+        muted={micMuted}
+        mic={mic}
+        onTap={orbPress}
+      />
 
       {/* Two-line label: uppercase state name + verb (matches expo-thinking-orbs example).
-          The live region announces every phase change to screen readers. */}
+          A muted listen overrides both lines (Microphone off). The live
+          region announces every change to screen readers. */}
       <Animated.Text
-        key={phase}
+        key={phase + String(micMuted)}
         entering={fadeEntering(MOTION_DURATION_MS)}
         accessibilityLiveRegion="polite"
         className="mt-6 text-center font-sans-bold text-h3 text-primary-text uppercase tracking-wide"
       >
-        {VOICE_MODE_STATE_LABEL[phase]}
+        {voiceModeStateLabel(phase, micMuted)}
       </Animated.Text>
       <Animated.Text
-        key={phase + "-verb"}
+        key={phase + "-verb-" + String(micMuted)}
         entering={fadeEntering(MOTION_DURATION_MS)}
         className="mt-1 text-center font-sans text-body-md text-secondary-text"
       >
-        {VOICE_MODE_VERB_LABEL[phase]}
+        {voiceModeVerbLabel(phase, micMuted)}
       </Animated.Text>
       {/* Heard slot never unmounts: nbsp holds the line when silent.
           Tap to toggle captions. Hidden while the machine speaks — the
@@ -203,10 +280,12 @@ export function VoiceFullView({
         </View>
       )}
 
-      {/* RESERVED (issue 05, mic mute): the mute control's slot. Toggling
-          mutes the capture without ending the session; the orb renders a
-          greyed, frozen variant while the slot is live. */}
-      <View testID="voice-mute-slot" />
+      {/* The mute control replaces its reserved slot (issue 05): toggling
+          mutes the capture without ending the session; the orb above
+          renders the greyed, frozen treatment while it is live. */}
+      {open && (
+        <VoiceMuteControl muted={micMuted} onToggle={toggleMute} size="full" />
+      )}
     </ScrollView>
   );
 }

@@ -92,6 +92,9 @@ const actions = {
   continueAnyway: jest.fn(async () => {}),
   openModels: jest.fn(() => {}),
   tapCloud: jest.fn(() => {}),
+  toggleMute: jest.fn(() => {}),
+  collapse: jest.fn(() => {}),
+  expand: jest.fn(() => {}),
   end: jest.fn(async () => {}),
 };
 
@@ -100,6 +103,9 @@ function surface(
 ): ReturnType<typeof useVoiceMode> {
   return {
     phase: "closed",
+    micMuted: false,
+    presentation: "full",
+    origin: "voice",
     heard: "",
     reply: null,
     issue: null,
@@ -252,6 +258,27 @@ describe("VoiceScreen", () => {
     expect(actions.continueAnyway).toHaveBeenCalledTimes(1);
     fireEvent.press(screen.getByTestId("voice-memory-smaller-model"));
     expect(actions.openModels).toHaveBeenCalledTimes(1);
+  });
+
+  it("the collapsed presentation rides the bar instead of the full view", () => {
+    mockSurface = surface({
+      phase: "listening",
+      presentation: "bar",
+      micMuted: true,
+    });
+    renderScreen();
+
+    // The full view is gone; the bar shows the same session state.
+    expect(screen.queryByText("LISTENING")).not.toBeOnTheScreen();
+    expect(screen.getByTestId("voice-bar")).toBeOnTheScreen();
+    expect(screen.getByText("MICROPHONE OFF")).toBeOnTheScreen();
+    // Same contract, new place: mute and End still hand off.
+    fireEvent.press(screen.getByTestId("voice-mute"));
+    expect(actions.toggleMute).toHaveBeenCalledTimes(1);
+    fireEvent.press(screen.getByTestId("voice-bar-end"));
+    expect(actions.end).toHaveBeenCalledTimes(1);
+    // The Eye rides along in the collapsed presentation too.
+    expect(screen.getByLabelText("Open vision")).toBeOnTheScreen();
   });
 });
 

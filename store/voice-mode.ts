@@ -2,11 +2,12 @@
  *
  * The session controller (hooks/useVoiceMode) owns every behavior — entry
  * gates, capture, endpointing, turns, watchdog, exits — and is the ONLY
- * writer of this store. Consumers (the Voice tab today; the chat screen's
- * hands-free entry later) read it and call the controller-bound actions,
- * never set state. Presenter-affecting fields the controller itself does
- * not compute (mute toggle, full/bar presentation) ride along so later
- * tickets arrive as additive changes, not refactors.
+ * writer of this store. Consumers (the Voice tab; spec
+ * 2026-10-27-voice-tab-hands-free-parity.md renders the `bar` presentation
+ * inside the tab — chat-screen embedding is rejected) read it and call the
+ * controller-bound actions, never set state. Presenter-affecting fields the
+ * controller itself does not compute (mute toggle, full/bar presentation)
+ * ride along so those tickets arrive as additive changes, not refactors.
  *
  * Pandit write lane: `voiceModeSessionApi` is the controller-fielded adapter
  * ({ get, set, reset }); the zustand hook below is the READ lane for

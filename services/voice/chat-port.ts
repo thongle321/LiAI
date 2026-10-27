@@ -6,7 +6,9 @@
  *  the ported contract (reference: pocketpal-ai VoiceTurnPort): the reply
  *  text rides TWO captions — `lastReply` read after the turn settles, and
  *  `onReply` called while the run settles so the caption can land while
- *  the reply is still speaking. The engine contract itself is unchanged.
+ *  the reply is still speaking. The engine resolves PocketPal's per-turn
+ *  `speech_failed` as "no playback was observed during the turn".
+ *  The engine contract itself is unchanged.
  *
  *  One failure rule, mapped to the engine's `reply_failed`: a refused
  *  send (empty text, chat busy), a missing assistant row, an errored row,

@@ -126,6 +126,27 @@ export const VOICE_MODE_VERB_LABEL: Record<VoiceModePhase, string> = {
   speaking: "Speaking",
 };
 
+/** The muted listen overrides the phase copy outright: the status line is
+ *  what tells the user the mic is off while the session keeps running
+ *  (reference l10n mutedTitle/mutedHint, verbatim). */
+export function voiceModeStateLabel(
+  phase: VoiceModePhase,
+  micMuted: boolean,
+): string {
+  if (micMuted && phase === "listening") return "MICROPHONE OFF";
+  return VOICE_MODE_STATE_LABEL[phase];
+}
+
+export function voiceModeVerbLabel(
+  phase: VoiceModePhase,
+  micMuted: boolean,
+): string {
+  if (micMuted && phase === "listening") {
+    return "Tap the microphone to talk again";
+  }
+  return VOICE_MODE_VERB_LABEL[phase];
+}
+
 /** Which expo-thinking-orbs behaviour matches the session right now. The
  *  orb's own nine-state union is LiveKit's AgentState; LiAI's phases map in
  *  one direction onto a subset, with `failed` reserved for a CLOSED session

@@ -15,7 +15,13 @@
  */
 
 import { fireEvent, render, screen } from "@testing-library/react-native";
-import { openSettings } from "expo-linking";
+import { BackHandler } from "react-native";
+import { State } from "react-native-gesture-handler";
+import {
+  fireGestureHandler,
+  getByGestureTestId,
+} from "react-native-gesture-handler/jest-utils";
+import { openSettings, } from "expo-linking";
 
 import type { useVoiceMode } from "@/hooks/useVoiceMode.ts";
 import type { VoiceModeSheet } from "@/hooks/useVoiceMode.ts";
@@ -36,6 +42,9 @@ const actions = {
   continueAnyway: jest.fn(async () => {}),
   openModels: jest.fn(() => {}),
   tapCloud: jest.fn(() => {}),
+  toggleMute: jest.fn(() => {}),
+  collapse: jest.fn(() => {}),
+  expand: jest.fn(() => {}),
   end: jest.fn(async () => {}),
 };
 
@@ -154,6 +163,59 @@ describe("VoiceFullView orb phase mapping + tap dispatch", () => {
   });
 });
 
+describe("VoiceFullView collapse (issue 04)", () => {
+  const pull = (translationY: number, velocityY = 0) =>
+    fireGestureHandler(getByGestureTestId("voice-view-pull"), [
+      { state: State.BEGAN, translationY: 0, velocityY: 0 },
+      { state: State.ACTIVE, translationY: translationY / 2, velocityY },
+      { state: State.END, translationY, velocityY },
+    ]);
+
+  it("the handle row is live in a session: tapping it collapses", () => {
+    renderView(surface({ phase: "listening" }));
+
+    expect(screen.getByLabelText("Collapse voice view")).toBeOnTheScreen();
+    fireEvent.press(screen.getByLabelText("Collapse voice view"));
+    expect(actions.collapse).toHaveBeenCalledTimes(1);
+  });
+
+  it("the gate is closed: nothing collapses", () => {
+    renderView(surface({ phase: "closed" }));
+
+    expect(screen.queryByLabelText("Collapse voice view")).not.toBeOnTheScreen();
+  });
+
+  it("a long pull collapses; a short slow pull spring back", () => {
+    renderView(surface({ phase: "listening" }));
+
+    pull(120);
+    expect(actions.collapse).toHaveBeenCalledTimes(1);
+
+    actions.collapse.mockClear();
+    pull(30, 100);
+    expect(actions.collapse).not.toHaveBeenCalled();
+  });
+
+  it("a quick flick collapses however short", () => {
+    renderView(surface({ phase: "listening" }));
+
+    pull(30, 1200);
+    expect(actions.collapse).toHaveBeenCalledTimes(1);
+  });
+
+  it("Android back collapses the view", () => {
+    const addListener = jest.spyOn(BackHandler, "addEventListener");
+    renderView(surface({ phase: "listening" }));
+
+    const add = addListener.mock.calls.at(-1)!;
+    expect(add[0]).toBe("hardwareBackPress");
+    const handler = add[1] as () => boolean;
+    expect(handler()).toBe(true);
+    expect(actions.collapse).toHaveBeenCalledTimes(1);
+    addListener.mockRestore();
+  });
+});
+
 describe("VoiceFullView End control", () => {
   it("End is visible only in a live session and hands the exit off", () => {
     renderView(surface({ phase: "listening" }));
@@ -172,10 +234,32 @@ describe("VoiceFullView End control", () => {
 });
 
 describe("VoiceFullView reserved slots", () => {
-  it("the mute-mic and drag-handle slots are mounted, invisible for now", () => {
+  it("the mute control is live in a session and hands its toggle off", () => {
     renderView(surface({ phase: "listening" }));
 
-    expect(screen.getByTestId("voice-mute-slot")).toBeOnTheScreen();
-    expect(screen.getByTestId("voice-drag-handle-slot")).toBeOnTheScreen();
+    const mute = screen.getByTestId("voice-mute");
+    expect(mute.props.accessibilityState.checked).toBe(true);
+    fireEvent.press(mute);
+    expect(actions.toggleMute).toHaveBeenCalledTimes(1);
+  });
+
+  it("the mute slots stay out of the closed gate", () => {
+    renderView(surface({ phase: "closed" }));
+
+    expect(screen.queryByTestId("voice-mute")).not.toBeOnTheScreen();
+  });
+
+  it("a muted listen reads Microphone off, not Listening", () => {
+    renderView(
+      surface({ phase: "listening", micMuted: true }),
+    );
+
+    expect(screen.getByText("MICROPHONE OFF")).toBeOnTheScreen();
+    expect(
+      screen.getByText("Tap the microphone to talk again"),
+    ).toBeOnTheScreen();
+    expect(screen.queryByText("LISTENING")).not.toBeOnTheScreen();
+    expect(screen.getByTestId("voice-mute").props.accessibilityState)
+      .toEqual({ checked: false });
   });
 });

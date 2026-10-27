@@ -14,7 +14,8 @@ export type VoiceTurnOutcome =
   | "answered"
   | "interrupted"
   | "transcribe_failed"
-  | "reply_failed";
+  | "reply_failed"
+  | "speech_failed";
 
 /** The chat the voice session talks to. */
 export interface VoiceTurnPort {

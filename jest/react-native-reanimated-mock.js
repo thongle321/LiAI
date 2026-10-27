@@ -78,6 +78,16 @@ module.exports = {
     return { setActive: (_active) => {}, update: () => {} };
   },
   useAnimatedStyle: (styleFn) => styleFn(),
+  // The real useEvent wraps the handler in a WorkletEventHandler and is
+  // attached as an event prop (RNGH's GestureDetector does exactly that):
+  // give it the same object shape. The worklet never RUNS here — the
+  // gesture-handler module mocks drive the state instead.
+  useEvent: (handler, eventNames = []) => ({
+    workletEventHandler: {
+      // A Map of event name → handler, as WorkletEventHandler keeps them.
+      handlers: new Map(eventNames.map((name) => [name, handler])),
+    },
+  }),
   // Run the worklet body against a plain event so the component still
   // exercises it. Shared values are mutable objects in this mock, so the
   // bookkeeping a scroll handler does survives the call.

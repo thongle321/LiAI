@@ -111,7 +111,7 @@ function surface(
 }
 
 let mockSurface = surface();
-const mockMicSink = jest.fn(() => () => {});
+const mockMicSink = jest.fn((_sink?: unknown) => () => {});
 
 jest.mock("@/hooks/useVoiceMode.ts", () => ({
   // The screen is a CONSUMER (issue 01): the session is read through

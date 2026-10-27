@@ -127,10 +127,13 @@ describe("voice-mode session circuit", () => {
       .filter((rel) => rel !== "hooks/useVoiceMode.ts" && rel !== "store/voice-mode.ts")
       .filter((rel) => {
         const source = readFileSync(join(ROOT, rel), "utf8");
-        return (
+        const writesLane =
           /store\/voice-mode\.ts/.test(source) &&
-          /voiceModeSessionApi/.test(source)
-        );
+          (/voiceModeSessionApi/.test(source) ||
+            // The read lane's own setState is a hidden write: only the
+            // store module itself touches the hook's internals.
+            /useVoiceModeSession\.(setState|getState)/.test(source));
+        return writesLane;
       });
     expect(offenders).toEqual([]);
   });

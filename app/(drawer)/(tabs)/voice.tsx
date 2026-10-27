@@ -91,7 +91,7 @@ export default function VoiceScreen() {
           bar pinned at the tab's bottom — tap/swipe up re-expands. The
           session, mic and turns are untouched across the swap. */}
       {voice.presentation === "bar" ? (
-        <View className="flex-1 justify-end px-4 pb-4">
+        <View className="flex-1 justify-end px-6 pb-6">
           <VoiceBar mic={mic} voice={voice} />
         </View>
       ) : (

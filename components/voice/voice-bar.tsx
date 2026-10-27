@@ -12,7 +12,6 @@
 
 import { type ReactElement } from "react";
 import { Pressable, Text, View } from "react-native";
-import { X } from "lucide-react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
@@ -52,7 +51,6 @@ export function VoiceBar({ mic, voice }: VoiceBarProps): ReactElement {
     issue,
     toggleMute,
     expand,
-    end,
   } = voice;
   const colors = useColors();
   const open = phase !== "closed";
@@ -151,16 +149,6 @@ export function VoiceBar({ mic, voice }: VoiceBarProps): ReactElement {
             body is one expand pressable), matching the reference bar's
             contract. */}
         <VoiceMuteControl muted={micMuted} onToggle={toggleMute} size="bar" />
-        <Pressable
-          onPress={() => void end()}
-          accessibilityRole="button"
-          accessibilityLabel="End conversation"
-          testID="voice-bar-end"
-          className="ml-1 h-12 w-12 items-center justify-center rounded-full active:opacity-80"
-          style={{ backgroundColor: colors.primary }}
-        >
-          <X size={20} color={colors.onPrimary} />
-        </Pressable>
       </Animated.View>
     </GestureDetector>
   );

@@ -10,7 +10,6 @@
  *   - the orb's phase mapping (via the VoiceOrb behaviour label) and the
  *     tap-orb dispatch per phase (closed → requestEntry, live →
  *     tapCloud, whose per-phase split is the controller's job),
- *   - End handing the exit to the store/controller (no new behavior),
  *   - the reserved mute + drag-handle slots (rendered, nothing visible).
  */
 
@@ -216,13 +215,7 @@ describe("VoiceFullView collapse (issue 04)", () => {
   });
 });
 
-describe("VoiceFullView End control", () => {
-  it("End is visible only in a live session and hands the exit off", () => {
-    renderView(surface({ phase: "listening" }));
-    fireEvent.press(screen.getByLabelText("End conversation"));
-    expect(actions.end).toHaveBeenCalledTimes(1);
-  });
-
+describe("VoiceFullView sheets", () => {
   it("respects the sheet contract: a parked gate sheet stays with the screen", () => {
     renderView(
       surface({ sheet: { kind: "setup" } as VoiceModeSheet }),

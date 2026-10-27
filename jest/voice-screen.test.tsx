@@ -163,10 +163,6 @@ describe("VoiceScreen", () => {
     fireEvent.press(screen.getByLabelText("Tap to stop or take the turn"));
     expect(actions.tapCloud).toHaveBeenCalledTimes(1);
     expect(actions.requestEntry).not.toHaveBeenCalled();
-    // End is the explicit way out of a live session.
-    expect(screen.getByLabelText("End conversation")).toBeOnTheScreen();
-    fireEvent.press(screen.getByLabelText("End conversation"));
-    expect(actions.end).toHaveBeenCalledTimes(1);
   });
 
   it("phases keep their labels: starting and transcribing are new", () => {
@@ -182,15 +178,14 @@ describe("VoiceScreen", () => {
     expect(screen.getByText("Processing")).toBeOnTheScreen();
   });
 
-  it("speaking: the Playing-audio overlay with Stop riding the cloud tap", () => {
+  it("speaking: the reply renders; the orb tap interrupts playback", () => {
     mockSurface = surface({ phase: "speaking", reply: "Here is the answer." });
     renderScreen();
 
     expect(screen.getByText("SPEAKING")).toBeOnTheScreen();
     expect(screen.getByText("Speaking")).toBeOnTheScreen();
-    expect(screen.getByText("Playing audio…")).toBeOnTheScreen();
     expect(screen.getByText("Here is the answer.")).toBeOnTheScreen();
-    fireEvent.press(screen.getByLabelText("Stop playback"));
+    fireEvent.press(screen.getByLabelText("Tap to stop or take the turn"));
     expect(actions.tapCloud).toHaveBeenCalledTimes(1);
   });
 
@@ -272,11 +267,9 @@ describe("VoiceScreen", () => {
     expect(screen.queryByText("LISTENING")).not.toBeOnTheScreen();
     expect(screen.getByTestId("voice-bar")).toBeOnTheScreen();
     expect(screen.getByText("MICROPHONE OFF")).toBeOnTheScreen();
-    // Same contract, new place: mute and End still hand off.
+    // Mute hands off; End is no longer presented.
     fireEvent.press(screen.getByTestId("voice-mute"));
     expect(actions.toggleMute).toHaveBeenCalledTimes(1);
-    fireEvent.press(screen.getByTestId("voice-bar-end"));
-    expect(actions.end).toHaveBeenCalledTimes(1);
     // The Eye rides along in the collapsed presentation too.
     expect(screen.getByLabelText("Open vision")).toBeOnTheScreen();
   });

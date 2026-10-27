@@ -5,7 +5,7 @@
  *  state mapping, no redesign), the per-phase status title + hint strings
  *  with the error-variant slot for the session's last issue, the muted
  *  override (Microphone off), live-region phase announcements for screen
- *  readers, the End control, the mic-mute control, and the drag-handle row
+ *  readers, the mic-mute control, and the drag-handle row
  *  the collapse-to-bar gesture enters through. Everything is read from the
  *  session circuit the caller passes (the store-backed surface of
  *  hooks/useVoiceMode); the only local state is the caption toggle.
@@ -23,7 +23,6 @@ import Animated, {
   useReducedMotion,
   useSharedValue,
   withSpring,
-  withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { openSettings } from "expo-linking";
@@ -31,7 +30,6 @@ import { openSettings } from "expo-linking";
 import {
   MOTION_DURATION_MS,
   fadeEntering,
-  motionEasing,
 } from "@/utils/motion.ts";
 import { pullsCollapse } from "@/utils/voice-collapse.ts";
 import { useVoiceLevels } from "expo-thinking-orbs";
@@ -67,7 +65,6 @@ export function VoiceFullView({
     tapCloud,
     toggleMute,
     collapse,
-    end,
   } = voice;
   const open = phase !== "closed";
   const speaking = phase === "speaking";
@@ -87,19 +84,6 @@ export function VoiceFullView({
 
   // Captions: tap the heard line to toggle the live transcript.
   const [captionsOn, setCaptionsOn] = useState(true);
-
-  // Overlay fades in on reply start, fades out when audio ends.
-  // Always mounted — only opacity changes, so nothing ever shifts.
-  const overlayOpacity = useSharedValue(0);
-  useEffect(() => {
-    overlayOpacity.value = withTiming(speaking ? 1 : 0, {
-      duration: speaking ? 150 : 200,
-      easing: motionEasing,
-    });
-  }, [speaking, overlayOpacity]);
-  const overlayStyle = useAnimatedStyle(() => ({
-    opacity: overlayOpacity.value,
-  }));
 
   // Collapse to the in-tab bar (spec: voice-tab hands-free parity). The
   // gesture is scoped to the handle row because the session view scrolls —
@@ -213,39 +197,6 @@ export function VoiceFullView({
           {captionsOn && heard !== "" && !speaking ? heard : " "}
         </Text>
       </Pressable>
-
-      {/* While the machine speaks the orb IS the indicator: the overlay
-          is just the way to stop it, riding the cloud tap. */}
-      <Animated.View
-        style={overlayStyle}
-        pointerEvents={speaking ? "auto" : "none"}
-        className="absolute bottom-8 left-8 right-8"
-      >
-        <View className="surface bg-surface-1 flex-row items-center p-4">
-          <Text className="flex-1 font-sans text-body-md text-primary-text">
-            Playing audio…
-          </Text>
-          <Pressable
-            onPress={tapCloud}
-            className="btn btn--ghost active:opacity-80 px-5 py-2"
-            accessibilityRole="button"
-            accessibilityLabel="Stop playback"
-          >
-            <Text className="font-sans-semibold text-body-md text-primary">Stop</Text>
-          </Pressable>
-        </View>
-      </Animated.View>
-
-      {open && (
-        <Pressable
-          onPress={() => void end()}
-          className="btn btn--ghost active:opacity-80 mt-6 px-6 py-2"
-          accessibilityRole="button"
-          accessibilityLabel="End conversation"
-        >
-          <Text className="font-sans-semibold text-body-md text-primary">End</Text>
-        </Pressable>
-      )}
 
       {reply !== null && reply !== "" && (
         <Text className="mt-4 text-center font-sans text-body-md text-primary-text">

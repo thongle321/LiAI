@@ -7,7 +7,7 @@
  *   - the whole body is one expand pressable (tap → expand; the orb-level
  *     interrupt semantics stay on the full view),
  *   - the swipe-up gesture expands at the reference's thresholds,
- *   - mute and End hand off to the controller (no new behavior).
+ *   - mute hands off to the controller (no new behavior).
  */
 
 import { fireEvent, render, screen } from "@testing-library/react-native";
@@ -154,12 +154,5 @@ describe("VoiceBar session controls", () => {
     expect(mute.props.accessibilityState.checked).toBe(true);
     fireEvent.press(mute);
     expect(actions.toggleMute).toHaveBeenCalledTimes(1);
-  });
-
-  it("End hands the exit off to the controller", async () => {
-    renderBar(surface({ phase: "speaking" }));
-
-    fireEvent.press(screen.getByTestId("voice-bar-end"));
-    expect(actions.end).toHaveBeenCalledTimes(1);
   });
 });

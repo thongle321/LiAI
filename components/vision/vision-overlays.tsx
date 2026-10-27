@@ -159,7 +159,7 @@ export function VisionTopFloat({
   const watchPress = usePressFeedback();
   return (
     <View
-      className="absolute left-0 right-0 px-5"
+      className="absolute left-0 right-0 px-6"
       style={{ top }}
     >
       <View className="flex-row items-center">
@@ -320,10 +320,10 @@ export function VisionBottomPanel({
   const liftStyle = useKeyboardLift(liftAnchor);
   return (
     <Animated.View
-      className="absolute left-0 right-0 px-5"
+      className="absolute left-0 right-0 px-6"
       style={[{ bottom }, liftStyle]}
     >
-      <View className="rounded-lg bg-scrim px-5 py-3">
+      <View className="rounded-lg bg-scrim px-6 py-3">
         {issue !== null ? (
           needsSettings ? (
             <Animated.View style={settingsPress.animatedStyle}>

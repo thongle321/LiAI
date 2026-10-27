@@ -31,7 +31,7 @@ function GroupLabel({ label }: { label: string }) {
   return (
     <Text
       numberOfLines={1}
-      className="px-5 pt-3 pb-1 font-sans-medium text-caption text-secondary-text"
+      className="px-6 pt-3 pb-1 font-sans-medium text-caption text-secondary-text"
     >
       {label}
     </Text>

@@ -285,7 +285,7 @@ export function SessionList({
     <>
       {selecting ? (
         <>
-          <View className="flex-row items-center px-5 pb-1 pt-3">
+          <View className="flex-row items-center px-6 pb-1 pt-3">
             <Pressable
               onPress={exitSelection}
               className="h-9 justify-center pr-2"
@@ -329,7 +329,7 @@ export function SessionList({
               control crammed into the header. */}
           <Pressable
             onPress={toggleAll}
-            className="flex-row items-center px-5 py-3"
+            className="flex-row items-center px-6 py-3"
             accessibilityRole="checkbox"
             accessibilityState={{ checked: allSelected }}
             accessibilityLabel={allSelected ? "Deselect all conversations" : "Select all conversations"}
@@ -346,7 +346,7 @@ export function SessionList({
           <View className="h-px bg-border" />
         </>
       ) : (
-        <View className="flex-row items-center px-5 pb-1 pt-3">
+        <View className="flex-row items-center px-6 pb-1 pt-3">
           <History size={20} color={colors.secondaryText} />
           <Text className="ml-3 text-quiet">
             History
@@ -355,7 +355,7 @@ export function SessionList({
       )}
 
       {notice !== null && (
-        <Text className="px-5 py-1 text-quiet">
+        <Text className="px-6 py-1 text-quiet">
           {notice}
         </Text>
       )}
@@ -370,14 +370,14 @@ export function SessionList({
         stickySectionHeadersEnabled
         renderSectionHeader={({ section }) => (
           <Text
-            className="bg-surface-1 px-5 pb-1 pt-3 font-sans-semibold text-body-sm text-secondary-text"
+            className="bg-surface-1 px-6 pb-1 pt-3 font-sans-semibold text-body-sm text-secondary-text"
             accessibilityRole="header"
           >
             {section.title}
           </Text>
         )}
         ListEmptyComponent={
-          <Text className="px-5 py-2 text-quiet">
+          <Text className="px-6 py-2 text-quiet">
             No conversations yet.
           </Text>
         }

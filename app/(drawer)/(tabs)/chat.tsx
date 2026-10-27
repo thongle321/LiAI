@@ -557,9 +557,9 @@ export default function ChatRoute() {
               />
             ) : greeting !== undefined && activeCompanion !== undefined ? (
               // The bubbles' own horizontal padding lives inside
-              // GreetingBubble (px-4); px-5 here matches the list's p-5 so
+              // GreetingBubble (px-4); px-6 here matches the list's p-6 so
               // the bubble keeps the margin it had as list content.
-              <View className="flex-1 justify-center px-5">
+              <View className="flex-1 justify-center px-6">
                 <GreetingBubble
                   companionName={activeCompanion.name}
                   greeting={greeting.text}

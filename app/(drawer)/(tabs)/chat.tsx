@@ -329,7 +329,6 @@ export default function ChatRoute() {
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<ChatRow>>(null);
   const [atEnd, setAtEnd] = useState(true);
-  const [listHeight, setListHeight] = useState(0);
   // What the list must clear: the tab bar and the safe-area inset below it.
   // The bar's own height is seeded from its class-sum constant and
   // replaced by its measured height (store/keyboard.ts), so a class change
@@ -401,13 +400,11 @@ export default function ChatRoute() {
   // Derived from the message itself rather than toggled on send, so it
   // cannot get stuck if a turn is cancelled or the screen is left mid-reply.
   const streaming = messages[messages.length - 1]?.streaming === true;
-  // Reserve scroll room for a streaming reply directly, instead of easing
-  // into it. The eased version ran one duration behind the token stream and
-  // fought the follow-scroll; a hard reserve keeps blankSpace coincident
-  // with the streaming flag (PocketPal: no timing on the equivalent value).
-  useEffect(() => {
-    blankSpace.value = streaming ? listHeight : 0;
-  }, [streaming, listHeight, blankSpace]);
+  // PocketPal parity: no extra blank-space reserve. The list's bottom inset is
+  // only the keyboard + composer height (extraContentPadding); a full-viewport
+  // reserve here made the bottom inset scrollable past the newest (AI) message,
+  // so scrolling to the bottom pushed past messages out of view. The follow-
+  // scroll (below) keeps the newest message in view while it streams.
   const [generationOpen, setGenerationOpen] = useState(false);
   // One chat picker for both halves of PocketPal's ChatPalModelPickerSheet:
   // the empty thread's CTA and the composer's chevron open the same sheet,
@@ -498,10 +495,7 @@ export default function ChatRoute() {
           KeyboardAvoidingView is the wrong tool for chat, so there is no KAV
           on this screen. */}
       <View className="flex-1">
-        <View
-          className="flex-1"
-          onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
-        >
+        <View className="flex-1">
           <MessageList
             listRef={listRef}
             rows={rows}

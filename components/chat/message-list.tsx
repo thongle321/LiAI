@@ -64,7 +64,10 @@ export function MessageList({
   /** Tracks the growing multiline composer so the newest message is never
    *  clipped behind it. */
   extraContentPadding,
-  /** Minimum bottom inset reserved while a reply streams. */
+  /** Minimum bottom inset reserved while a reply streams. Retained for API
+   *  parity with KeyboardChatScrollView; LiAI no longer raises it (a
+   *  full-viewport reserve made the bottom inset scrollable past the newest
+   *  message). Always 0. */
   blankSpace,
   onEndVisibleChange,
   streaming,

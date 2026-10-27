@@ -180,7 +180,10 @@ export function ModelSettingsSheet({
   useEffect(() => {
     if (modelId) {
       const s = getModelSettings(modelId);
-      setDisplayName(s.displayName);
+      // Seed with the model's own name when nothing has been renamed yet,
+      // so the field is never blank for an unrenamed model (PocketPal
+      // seeds tempModelName from model?.name).
+      setDisplayName(s.displayName || model?.name || spec?.name || "");
       setSystemPrompt(s.systemPrompt);
       setStopWords(s.stopWords);
       setStopWordDraft("");
@@ -253,7 +256,9 @@ export function ModelSettingsSheet({
   function handleReset(): void {
     if (!modelId || isRemote) return;
     updateModelSettings(modelId, { ...DEFAULT_MODEL_SETTINGS });
-    setDisplayName(DEFAULT_MODEL_SETTINGS.displayName);
+    // Reset to the model's own name, not the empty default, so the field
+    // keeps showing what the card falls back to.
+    setDisplayName(model?.name ?? spec?.name ?? "");
     setSystemPrompt(DEFAULT_MODEL_SETTINGS.systemPrompt);
     setStopWords([]);
     setStopWordDraft("");

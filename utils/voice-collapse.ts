@@ -17,6 +17,7 @@ export function pullsCollapse(
   translationY: number,
   velocityY: number,
 ): boolean {
+  "worklet";
   return (
     translationY > VOICE_PULL_COLLAPSE_PT || velocityY > VOICE_FLICK_VELOCITY
   );
@@ -27,6 +28,7 @@ export function liftsExpand(
   translationY: number,
   velocityY: number,
 ): boolean {
+  "worklet";
   return (
     translationY < -VOICE_EXPAND_SWIPE_PT || velocityY < -VOICE_FLICK_VELOCITY
   );

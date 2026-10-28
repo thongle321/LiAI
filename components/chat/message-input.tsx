@@ -349,7 +349,16 @@ export function MessageInput({
     // overlay in ChatScreen instead.
     <Animated.View
       className={`border-t border-border bg-surface-1${className ? ` ${className}` : ""}`}
-      style={lift}
+      style={[
+        lift,
+        {
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.04,
+          shadowRadius: 8,
+          elevation: 2,
+        },
+      ]}
       onLayout={onHeightChange}
     >
       <View className="flex-col">
@@ -488,6 +497,13 @@ export function MessageInput({
                   onPressIn={plusPress.onPressIn}
                   onPressOut={plusPress.onPressOut}
                   className="h-12 w-12 items-center justify-center rounded-full bg-surface-3"
+                  style={{
+                    shadowColor: "#000000",
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.04,
+                    shadowRadius: 4,
+                    elevation: 1,
+                  }}
                   accessibilityRole="button"
                   accessibilityState={{ disabled: !modelReady || !canSee }}
                   accessibilityLabel={
@@ -516,7 +532,16 @@ export function MessageInput({
                     : `Choose companion and model, current ${companionName}`
                 }
               >
-                <View className="h-12 w-12 items-center justify-center rounded-full bg-surface-3">
+                <View
+                  className="h-12 w-12 items-center justify-center rounded-full bg-surface-3"
+                  style={{
+                    shadowColor: "#000000",
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.04,
+                    shadowRadius: 4,
+                    elevation: 1,
+                  }}
+                >
                   <ChevronUp size={20} color={colors.primary} />
                 </View>
                 {activeModelId !== null && !!companionName && (
@@ -530,7 +555,16 @@ export function MessageInput({
                 // Anchored to the plus button's wrapper and extending right into
                 // the empty composer space — the plus is leftmost, so w-48 fits
                 // without clipping. (right-0 here would squash it to 48px.)
-                <View className="surface bg-surface-1 absolute bottom-12 left-0 w-48 py-1">
+                <View
+                  className="surface bg-surface-1 absolute bottom-12 left-0 w-48 py-1"
+                  style={{
+                    shadowColor: "#000000",
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.08,
+                    shadowRadius: 12,
+                    elevation: 4,
+                  }}
+                >
                   <PlusItem
                     Icon={Camera}
                     label="Take photo"
@@ -623,6 +657,13 @@ export function MessageInput({
                     onPressIn={stopPress.onPressIn}
                     onPressOut={stopPress.onPressOut}
                     className="h-12 w-12 items-center justify-center rounded-full bg-primary"
+                    style={{
+                      shadowColor: "#000000",
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: 0.06,
+                      shadowRadius: 6,
+                      elevation: 2,
+                    }}
                     accessibilityRole="button"
                     accessibilityLabel="Stop generating"
                   >
@@ -652,6 +693,17 @@ export function MessageInput({
                     className={`h-12 w-12 items-center justify-center rounded-full ${
                       canSend ? "bg-primary" : "bg-surface-2"
                     }`}
+                    style={
+                      canSend
+                        ? {
+                            shadowColor: "#000000",
+                            shadowOffset: { width: 0, height: 1 },
+                            shadowOpacity: 0.06,
+                            shadowRadius: 6,
+                            elevation: 2,
+                          }
+                        : undefined
+                    }
                     accessibilityRole="button"
                     accessibilityLabel={
                       modelReady ? "Send message" : "Load a model to send this message"

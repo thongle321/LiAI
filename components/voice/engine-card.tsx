@@ -201,7 +201,16 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
   }
 
   return (
-    <View className="voice-card mb-3">
+    <View
+      className="voice-card mb-3"
+      style={{
+        shadowColor: "#000000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+      }}
+    >
       {/* Collapsed header — the card itself is the disclosure, so it has no
           action of its own: every action needs the body open. */}
       <Pressable
@@ -281,7 +290,11 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
                       <Text className="flex-1 font-sans text-body-md text-primary-text">
                         {voice.name}
                       </Text>
-                      {previewing ? <Square size={14} color={colors.primary} /> : null}
+                      {previewing ? (
+                        <Square size={14} color={colors.primary} />
+                      ) : (
+                        <Play size={14} color={colors.primary} />
+                      )}
                     </Pressable>
                   );
                 })}

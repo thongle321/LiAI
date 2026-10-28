@@ -176,7 +176,16 @@ export function ModelCard({
   }
 
   return (
-    <View className={CARD}>
+    <View
+      className={CARD}
+      style={{
+        shadowColor: "#000000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+      }}
+    >
       {/* PocketPal's compact header (styles.ts:53-95): type icon + name on
           the left, the size cluster (Cpu chip + size, :86-99) then the
           status dot on the right. The dot reads "loaded" when green and

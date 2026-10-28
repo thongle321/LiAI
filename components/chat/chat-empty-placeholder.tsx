@@ -97,6 +97,13 @@ export function ChatEmptyPlaceholder({
               : onSelectModel()
           }
           className="btn btn--primary active:opacity-80 mt-6 min-w-48"
+          style={{
+            shadowColor: "#000000",
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.06,
+            shadowRadius: 6,
+            elevation: 2,
+          }}
           accessibilityRole="button"
           accessibilityLabel={buttonText}
         >

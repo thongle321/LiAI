@@ -93,7 +93,16 @@ export function VoiceSettings() {
       {/* System voice — what the device can already do, zero install. One
           row, the device default: OS voices are never enumerated (Q9), so
           there is no picker here to get wrong. */}
-      <View className={systemSelected ? "voice-card voice-card--active mb-3" : "voice-card mb-3"}>
+      <View
+        className={systemSelected ? "voice-card voice-card--active mb-3" : "voice-card mb-3"}
+        style={{
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.05,
+          shadowRadius: 8,
+          elevation: 2,
+        }}
+      >
         <Pressable
           onPress={() => setCurrentVoice(DEVICE_DEFAULT_VOICE)}
           accessibilityRole="radio"

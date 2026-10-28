@@ -25,6 +25,7 @@ import { Pressable, Text, View } from "react-native";
 import { Check, Copy, Volume2, VolumeX } from "lucide-react-native";
 
 import { useColors } from "@/themes/tokens.ts";
+import * as Haptics from "expo-haptics";
 import { useCopy } from "@/hooks/useCopy.ts";
 import { speakReply, stopSpeaking } from "@/services/voice/voice-speak.ts";
 import { useVoice } from "@/store/voice.ts";
@@ -67,8 +68,12 @@ export function MessageActions({
       return;
     }
     const reset = () => setSpeaking(false);
-    speakReply(text, { onDone: reset, onStopped: reset, onError: reset });
-    setSpeaking(true);
+    try {
+      speakReply(text, { onDone: reset, onStopped: reset, onError: reset });
+      setSpeaking(true);
+    } catch {
+      reset();
+    }
   }
 
   useEffect(() => {
@@ -102,22 +107,26 @@ export function MessageActions({
         ? "Cut off — likely context full"
         : null;
 
-  // Theirs returns null when there is nothing to say (AssistantTurnFooter
-  // :40-42). Same here, so a bare turn adds no empty row.
-  if (timingParts.length === 0 && marker === null) return null;
+  // PocketPal's footer renders whenever there is something to say (copy,
+  // speak, timings or an interrupted/cut-off marker). Copy and speak are
+  // NOT coupled to timings: a turn with no metrics still gets Copy (and
+  // Speak when TTS is available). Only an entirely empty turn adds no row.
+  const hasText = text.trim() !== "";
+  if (!hasText && timingParts.length === 0 && marker === null && !canSpeak) {
+    return null;
+  }
 
   return (
     <View className="mt-2 flex-row flex-wrap items-center gap-x-1.5 gap-y-0.5 pb-3">
-      {canSpeak ? (
+      {canSpeak && hasText ? (
         <Pressable
-        onPress={toggleSpeak}
-        // 16px icon, 44dp target. PocketPal uses hitSlop 8, which is a
-        // 32dp target — under the platform minimum, and invisible either
-        // way since the icon is identical.
-        hitSlop={14}
-        accessibilityRole="button"
-        accessibilityLabel={speaking ? "Stop speaking" : "Speak message"}
-      >
+          onPress={toggleSpeak}
+          className="icon-btn"
+          hitSlop={14}
+          accessibilityRole="button"
+          accessibilityLabel={speaking ? "Stop speaking" : "Speak message"}
+          testID="footer-speak"
+        >
           {speaking ? (
             <VolumeX size={16} color={colors.primary} />
           ) : (
@@ -125,18 +134,25 @@ export function MessageActions({
           )}
         </Pressable>
       ) : null}
-      <Pressable
-        onPress={() => copy(text)}
-        hitSlop={14}
-        accessibilityRole="button"
-        accessibilityLabel={copied ? "Copied" : "Copy message"}
-      >
+      {hasText ? (
+        <Pressable
+          onPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            copy(text);
+          }}
+          className="icon-btn"
+          hitSlop={14}
+          accessibilityRole="button"
+          accessibilityLabel={copied ? "Copied" : "Copy message"}
+          testID="footer-copy"
+        >
         {copied ? (
           <Check size={16} color={colors.successMark} />
         ) : (
           <Copy size={16} color={colors.secondaryText} />
         )}
       </Pressable>
+      ) : null}
       {marker !== null && (
         <Text className="font-sans text-micro text-error">{marker}</Text>
       )}

@@ -94,7 +94,16 @@ export function SnackbarOverlay({ ref }: { ref?: Ref<SnackbarOverlayHandle> }) {
       exiting={Exiting.duration(200)}
       className={`absolute left-4 right-4 z-[9999] ${current.position === "top" ? "top-4" : "bottom-4"}`}
     >
-      <View className="surface bg-surface-1 flex-row items-center gap-3 px-4 py-3">
+      <View
+        className="surface bg-surface-1 flex-row items-center gap-3 px-4 py-3"
+        style={{
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.08,
+          shadowRadius: 12,
+          elevation: 4,
+        }}
+      >
         <View
           className="h-2 w-2 rounded-full"
           style={{ backgroundColor: typeColor }}

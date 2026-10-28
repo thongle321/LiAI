@@ -96,14 +96,34 @@ export function SettingsSection(props: SettingsSectionProps) {
   if (props.plain === true) {
     return (
       <View className="mb-6">
-        <View className="rows rows--plain">{props.children}</View>
+        <View
+          className="rows rows--plain"
+          style={{
+            shadowColor: "#000000",
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.05,
+            shadowRadius: 8,
+            elevation: 2,
+          }}
+        >
+          {props.children}
+        </View>
       </View>
     );
   }
 
   return (
     <View className="mb-4">
-      <View className="rows rows--titled">
+      <View
+        className="rows rows--titled"
+        style={{
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.05,
+          shadowRadius: 8,
+          elevation: 2,
+        }}
+      >
         <Text className="card-title pb-2">{props.title}</Text>
         {props.children}
       </View>

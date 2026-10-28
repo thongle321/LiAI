@@ -284,6 +284,13 @@ export function Sheet({
       grabber
       backgroundColor={colors.surface1}
       cornerRadius={12}
+      style={{
+        shadowColor: "#000000",
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 32,
+        elevation: 8,
+      }}
       // `scrollingExpandsSheet: false` (default): its DEFAULT is
       // true, and true means a scroll gesture belongs to the SHEET, not
       // the content. Android's TrueSheetBottomSheetBehavior.kt consumes

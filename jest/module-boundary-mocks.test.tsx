@@ -105,6 +105,6 @@ describe("native SDK boundary mocks", () => {
         <Harness />
       </View>,
     );
-    expect(getByLabelText("Listening…")).toBeOnTheScreen();
+    expect(getByLabelText("Listening")).toBeOnTheScreen();
   });
 });

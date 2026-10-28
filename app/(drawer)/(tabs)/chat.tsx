@@ -329,7 +329,6 @@ export default function ChatRoute() {
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<ChatRow>>(null);
   const [atEnd, setAtEnd] = useState(true);
-  const [listHeight, setListHeight] = useState(0);
   // What the list must clear: the tab bar and the safe-area inset below it.
   // The bar's own height is seeded from its class-sum constant and
   // replaced by its measured height (store/keyboard.ts), so a class change
@@ -348,7 +347,7 @@ export default function ChatRoute() {
   const keyboardOffset = insets.bottom + tabBarHeight;
   const [composerHeight, setComposerHeight] = useState(0);
   // Hold the list's keyboard inset steady while a sheet is open.
-  const freeze = useSharedValue(false);
+  const [freeze, setFreeze] = useState(false);
   // Height of the field, which IS the composer. NOT a delta from a baseline,
   // unlike the library's example: the field is out of flow, so nothing else
   // accounts for it and the newest message would sit behind it. The banners
@@ -401,13 +400,11 @@ export default function ChatRoute() {
   // Derived from the message itself rather than toggled on send, so it
   // cannot get stuck if a turn is cancelled or the screen is left mid-reply.
   const streaming = messages[messages.length - 1]?.streaming === true;
-  // Reserve scroll room for a streaming reply directly, instead of easing
-  // into it. The eased version ran one duration behind the token stream and
-  // fought the follow-scroll; a hard reserve keeps blankSpace coincident
-  // with the streaming flag (PocketPal: no timing on the equivalent value).
-  useEffect(() => {
-    blankSpace.value = streaming ? listHeight : 0;
-  }, [streaming, listHeight, blankSpace]);
+  // PocketPal parity: no extra blank-space reserve. The list's bottom inset is
+  // only the keyboard + composer height (extraContentPadding); a full-viewport
+  // reserve here made the bottom inset scrollable past the newest (AI) message,
+  // so scrolling to the bottom pushed past messages out of view. The follow-
+  // scroll (below) keeps the newest message in view while it streams.
   const [generationOpen, setGenerationOpen] = useState(false);
   // One chat picker for both halves of PocketPal's ChatPalModelPickerSheet:
   // the empty thread's CTA and the composer's chevron open the same sheet,
@@ -417,8 +414,8 @@ export default function ChatRoute() {
   // Sync the freeze flag with the sheet-open state (declared above because the
   // pickers are defined late in this component).
   useEffect(() => {
-    freeze.value = pickerOpen || generationOpen;
-  }, [pickerOpen, generationOpen, freeze]);
+    setFreeze(pickerOpen || generationOpen);
+  }, [pickerOpen, generationOpen]);
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
 
@@ -458,7 +455,7 @@ export default function ChatRoute() {
         <Animated.View
           entering={searchBarEntering}
           exiting={searchBarExiting}
-          className="flex-row items-center gap-2 border-b border-border bg-base px-5 py-2"
+          className="flex-row items-center gap-2 border-b border-border bg-base px-6 py-2"
         >
           <TextInput
             value={query}
@@ -498,10 +495,7 @@ export default function ChatRoute() {
           KeyboardAvoidingView is the wrong tool for chat, so there is no KAV
           on this screen. */}
       <View className="flex-1">
-        <View
-          className="flex-1"
-          onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
-        >
+        <View className="flex-1">
           <MessageList
             listRef={listRef}
             rows={rows}
@@ -557,9 +551,9 @@ export default function ChatRoute() {
               />
             ) : greeting !== undefined && activeCompanion !== undefined ? (
               // The bubbles' own horizontal padding lives inside
-              // GreetingBubble (px-4); px-5 here matches the list's p-5 so
+              // GreetingBubble (px-4); px-6 here matches the list's p-6 so
               // the bubble keeps the margin it had as list content.
-              <View className="flex-1 justify-center px-5">
+              <View className="flex-1 justify-center px-6">
                 <GreetingBubble
                   companionName={activeCompanion.name}
                   greeting={greeting.text}
@@ -632,7 +626,7 @@ export default function ChatRoute() {
           instead of over a bar. */}
       <Animated.View
         style={[composerLift, { bottom: composerHeight }]}
-        className="absolute inset-x-0 px-4"
+        className="absolute inset-x-0 px-6"
         pointerEvents="box-none"
       >
         {/* No active-run chip: the pending row inside the list owns that

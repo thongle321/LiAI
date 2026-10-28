@@ -13,6 +13,9 @@
   --font-sans: 'Inter_400Regular';
   --font-sans-medium: 'Inter_500Medium';
   --font-sans-semibold: 'Inter_600SemiBold';
+  --font-display: 'SpaceGrotesk_600SemiBold';
+  --font-display-medium: 'SpaceGrotesk_500Medium';
+  --font-display-bold: 'SpaceGrotesk_700Bold';
 
   /* Inter only. Class names are stable aliases onto that scale:
      h1 display · h2 headline · h3 title · h4 body · body-lg body ·
@@ -162,8 +165,8 @@
 
 /* BEM bundles — multi-property patterns reused across screens.
  * Flat selectors only. For property conflicts with Tailwind
- * utilities, wrap usage with cn(). No box-shadow anywhere: depth is a
- * 1px hairline or one step between the three surfaces. Every colour is a
+ * utilities, wrap usage with cn(). Depth comes from hairlines, surface
+ * layers, and subtle platform shadows where appropriate. Every colour is a
  * token reference, so a BEM block themes itself with no dark: variant. */
 
 /* Buttons: .btn + .btn--primary | --secondary | --destructive | --ghost */
@@ -265,7 +268,7 @@
 
 .card {
   background-color: var(--color-surface-1);
-  padding: 20px;
+  padding: 24px;
 }
 
 /* The inline line under a Download button that cannot fit. Three surfaces
@@ -367,8 +370,8 @@
   align-items: center;
   gap: 8px;
   min-height: 48px;
-  padding-left: 20px;
-  padding-right: 20px;
+  padding-left: 24px;
+  padding-right: 24px;
   padding-top: 12px;
   padding-bottom: 12px;
 }

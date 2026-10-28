@@ -176,7 +176,16 @@ export function ModelCard({
   }
 
   return (
-    <View className={CARD}>
+    <View
+      className={CARD}
+      style={{
+        shadowColor: "#000000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+      }}
+    >
       {/* PocketPal's compact header (styles.ts:53-95): type icon + name on
           the left, the size cluster (Cpu chip + size, :86-99) then the
           status dot on the right. The dot reads "loaded" when green and
@@ -254,6 +263,10 @@ export function ModelCard({
         {actions.length > 1 ? (
           <View className="mt-3 flex-row flex-wrap items-center gap-2">
             {actions.includes("download") && onDownload ? (
+              /* Polish (2026-10-26, user request): the download control
+                 rides the card's icon column instead of a text pill —
+                 deliberate DIVERGENCE from PocketParity, whose preset
+                 cards keep the wide text button (ModelCard.tsx). */
               <DownloadButton
                 status={item.downloadStatus}
                 progress={item.downloadProgress}
@@ -261,6 +274,7 @@ export function ModelCard({
                 onPause={() => void pauseModelDownload(item.id)}
                 onResume={() => void resumeModelDownload(item.id)}
                 disabled={!fit.fits || item.downloadStatus === "completed"}
+                iconOnly
               />
             ) : null}
 

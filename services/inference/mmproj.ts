@@ -95,6 +95,31 @@ export function canSeeImages(s: ModelCapabilityState): boolean {
     : specCanSeeImages(s.models, s.activeModelId, s.activeProviderType);
 }
 
+/** Why an ACTIVE setup cannot see, from the same records canSeeImages
+ *  reads — so a screen's cannot-see CARD can never split differently from
+ *  the send gate's verdict:
+ *  - "toggledOff": the projector is on disk but the flag is off — fixable
+ *    in Models, so the card offers "Open Models";
+ *  - "noVision": every other cannot-see (no projector paired, or a remote
+ *    probe that recorded no vision, or no model at all).
+ *  Callers must check canSeeImages first (or just read the kind). */
+export type CannotSeeKind = "sees" | "toggledOff" | "noVision";
+
+export function cannotSeeKind(s: ModelCapabilityState): CannotSeeKind {
+  if (canSeeImages(s)) return "sees";
+  if (s.activeProviderType === "local" && s.activeModelId !== null) {
+    const spec = s.models.find(
+      (m) =>
+        m.id === s.activeModelId &&
+        m.downloadStatus === "completed" &&
+        m.projector !== undefined &&
+        m.visionEnabled === false,
+    );
+    if (spec) return "toggledOff";
+  }
+  return "noVision";
+}
+
 /** The ONE dynamic-import seam for capability reads (code-review: the
  *  dance existed in three places). Node-safe: a failed import yields
  *  undefined, and every caller's answer degrades to cannot-see. */

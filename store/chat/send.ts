@@ -286,7 +286,11 @@ export function createSendSlice(
           useAsrStore.getState().setChatBusyOnCpu(false);
         }
       })();
-      if (gen !== ctx.streamGen) return;
+      if (gen !== ctx.streamGen) {
+        // A superseded run must not leave its bubble claiming to stream.
+        updateBubble(opts.assistantId, { streaming: false });
+        return;
+      }
       updateBubble(opts.assistantId, {
         text: outcome.reply,
         ...(outcome.reasoning !== undefined ? { reasoning: outcome.reasoning } : {}),
@@ -324,7 +328,10 @@ export function createSendSlice(
       ctx.keepAwake(false);
       void get().refreshSessions();
     } catch (err) {
-      if (gen !== ctx.streamGen) return;
+      if (gen !== ctx.streamGen) {
+        updateBubble(opts.assistantId, { streaming: false });
+        return;
+      }
       const message = err instanceof Error ? err.message : "Local run failed";
       const error = llmError(message);
       updateBubble(opts.assistantId, {

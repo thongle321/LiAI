@@ -44,7 +44,13 @@ describe("the composer gates the attach affordance on it", () => {
   it("the plus button is always rendered, disabled-with-hint when blind", () => {
     const src = readSource("components/chat/message-input.tsx");
     expect(src).toMatch(/useMultimodalAvailable/);
-    expect(src).toMatch(/disabled=\{!modelReady \|\| !canSee\}/);
+    // The disabled STATE stays (a11y state + grey glyph), but `disabled` is
+    // not set: a gated press must answer with the cannot-see helper line,
+    // same rule as the G9 send gate.
+    expect(src).toMatch(
+      /accessibilityState=\{\{ disabled: !modelReady \|\| !canSee \}\}/,
+    );
+    expect(src).toMatch(/setHelperNote\(plusBlockedHint\)/);
     expect(src).toMatch(/"This model can't see images"/);
   });
 });

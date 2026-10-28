@@ -103,6 +103,12 @@
         {
           "photosPermission": "LiAI needs your photo library to attach pictures to a message."
         }
+      ],
+      [
+        "expo-navigation-bar",
+        {
+          "enforceContrast": false
+        }
       ]
     ],
     "extra": {

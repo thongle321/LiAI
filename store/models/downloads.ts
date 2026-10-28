@@ -9,12 +9,13 @@ import type { StateCreator } from "zustand";
 import * as LegacyFileSystem from "expo-file-system/legacy";
 
 import type { DownloadsSlice, ModelStore } from "./types";
-import type { DownloadJob, PresetModel } from "@/types/models";
+import type { DownloadJob, HFModelFile, PresetModel } from "@/types/models";
 import type { HFModelSearchResult } from "@/types/models";
 import {
   buildHfModelSpec,
   buildPresetModelSpec,
   HF_USER_AGENT,
+  hfModelIdFromSpec,
   hfRefFromId,
   hfRefFromSearch,
   isHuggingFaceUrl,
@@ -26,7 +27,7 @@ import {
 } from "@/services/downloads/download-service";
 import { latestJobForModel } from "@/services/models/download-jobs.ts";
 import { resumeDataForPartial, classifyFileOnDisk, PART_SUFFIX } from "@/services/models/resume-state.ts";
-import { findProjectorFile, pairDownloadStep } from "@/services/models/vision-pairing.ts";
+import { findProjectorFile, mmprojSiblings, pairDownloadStep, pairProgress } from "@/services/models/vision-pairing.ts";
 import { readGgufMetadata } from "@/services/models/gguf-header.ts";
 import { modelFitsOnDevice } from "@/utils/storage-fit.ts";
 import { generateId } from "./storage";
@@ -69,17 +70,26 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
 
   startDownload: async (modelId, file, token, options) => {
     const isHf = "path" in file;
-    const spec = isHf
-      ? buildHfModelSpec(hfRefFor(modelId, get().searchResults), file)
-      : buildPresetModelSpec(presetFor(modelId, get().presets), file);
-    // Vision pairing (vision-series 01): the card already promises the
-    // pair — now the downloader fetches it. Same helper as the card, so
-    // the promise and the fetch can never drift. A repo with no mmproj
-    // records no projector, and nothing about the download changes.
+    // The repo's file listing: the details sheet fetches it (getModelFiles,
+    // recursive, mmproj included) and now hands it here. searchModels
+    // itself returns results with an empty ggufFiles — search results
+    // carry no file list at all — so falling back to those empty results
+    // is what left the user's VLM spec blind: vision claimed via tags,
+    // but no projector paired and no candidates recorded.
     const siblings = isHf
-      ? (get().searchResults.find((r) => r.modelId === modelId)?.ggufFiles ??
+      ? (options?.files ??
+        get().searchResults.find((r) => r.modelId === modelId)?.ggufFiles ??
         [])
       : presetFor(modelId, get().presets).files;
+    const spec = isHf
+      ? buildHfModelSpec(
+          {
+            ...hfRefFor(modelId, get().searchResults),
+            siblings: siblings as HFModelFile[],
+          },
+          file,
+        )
+      : buildPresetModelSpec(presetFor(modelId, get().presets), file);
     // "Download text only" (VisionDownloadSheet): no pair at all, and the
     // switch is persisted so the card shows the model as text-only.
     const visionEnabled = options?.visionEnabled !== false;
@@ -164,11 +174,13 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
       get().updateModel(specId, { projector: spec.projector });
     }
     if (step === "complete") {
+      // The pair whole: report the footprint the card promises.
+      const pairTotal = file.size + (spec.projector?.size ?? 0);
       get().updateModel(specId, {
         downloadStatus: "completed",
         downloadProgress: 100,
-        downloadedBytes: file.size,
-        totalBytes: file.size,
+        downloadedBytes: pairTotal,
+        totalBytes: pairTotal,
         localPath: `${LegacyFileSystem.documentDirectory}models/${file.name}`,
         error: undefined,
       });
@@ -262,11 +274,21 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
     // ten-minute cap on a multi-GB transfer, and it is posted whether or not
     // the user has answered any prompt — on Android 13+ it stays suppressed
     // until the permission is granted from system settings.
+    // Pair accounting (PocketParity): the row's bar covers the PAIR —
+    // llm + projector — so one transfer reads one download, even though
+    // the legs fetch in sequence. Without this the main leg's write
+    // promised only the LLM and the projector leg restarted the bar.
+    const initialPair = pairProgress({
+      mainSize: file.size,
+      projectorSize: spec.projector?.size ?? 0,
+      legProjector: step === "projector",
+      legBytes: partialBytes,
+    });
     get().updateModel(specId, {
       downloadStatus: "downloading",
-      downloadProgress: resumeProgress,
-      totalBytes: activeFile.size,
-      downloadedBytes: partialBytes,
+      downloadProgress: Math.round(initialPair.progress),
+      totalBytes: initialPair.totalBytes,
+      downloadedBytes: initialPair.downloadedBytes,
       error: undefined,
     });
 
@@ -311,15 +333,27 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
           error: downloadJob.error,
         });
       }
+      // Pair accounting: a paired spec reads ONE bar across both legs —
+      // the LLM's whole bytes stand under the projector leg's ticks.
+      // specNow, not the closure spec: a healed row's projector is here
+      // before the re-start lands.
+      const specNow = get().getModel(downloadJob.modelId);
+      const pair = pairProgress({
+        mainSize: file.size,
+        projectorSize: specNow?.projector?.size ?? 0,
+        legProjector:
+          specNow?.projector !== undefined &&
+          downloadJob.fileName === specNow.projector.name,
+        legBytes: downloadJob.downloadedBytes,
+      });
       get().setModelProgress(downloadJob.modelId, {
-        downloadProgress: downloadJob.progress,
-        downloadedBytes: downloadJob.downloadedBytes,
-        totalBytes: downloadJob.totalBytes,
+        downloadProgress: Math.round(pair.progress),
+        downloadedBytes: pair.downloadedBytes,
+        totalBytes: pair.totalBytes,
         speedBytesPerSec: downloadJob.speedBytesPerSec,
       });
 
       if (downloadJob.status === "completed") {
-        const specNow = get().getModel(downloadJob.modelId);
         if (
           specNow?.projector !== undefined &&
           downloadJob.fileName === specNow?.files[0]?.name
@@ -333,24 +367,28 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
           return;
         }
         const mainFile = specNow?.files[0];
-        const mainSize = mainFile?.size ?? downloadJob.totalBytes;
+        // The pair's whole bytes stand as "downloaded": either the LLM
+        // alone (no pair) or the LLM plus the projector leg just landed.
         get().updateModel(downloadJob.modelId, {
           downloadStatus: "completed",
           downloadProgress: 100,
-          downloadedBytes: mainSize,
-          totalBytes: mainSize,
+          downloadedBytes: pair.downloadedBytes,
+          totalBytes: pair.totalBytes,
           localPath: mainFile
             ? `${LegacyFileSystem.documentDirectory}models/${mainFile.name}`
             : downloadJob.destinationPath,
         });
         void get().refreshGgufMetadata(downloadJob.modelId);
+        // The learned ceiling records the LLM leg only (storage-fit inputs
+        // unchanged by this ticket) — the pair's display account above is
+        // the bar, not the download ledger.
+        const mainSize = mainFile?.size ?? downloadJob.totalBytes;
         if (mainSize > get().largestSuccessfulBytes) {
           // The persist middleware owns the disk; this only moves the state.
           set({ largestSuccessfulBytes: mainSize });
         }
         detach();
       } else if (downloadJob.status === "failed") {
-        const specNow = get().getModel(downloadJob.modelId);
         const message =
           specNow?.projector !== undefined &&
           downloadJob.fileName === specNow?.projector?.name
@@ -468,6 +506,44 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
     }
   },
 
+  healProjectorCandidates: async (specId) => {
+    try {
+      const spec = get().getModel(specId);
+      // Only the blind case: a vision spec that claims to see but holds
+      // neither a paired projector nor candidates — the old import path's
+      // signature (search results carry no file list, so nothing could be
+      // recorded). Anything already paired is left exactly as it is.
+      if (!spec || spec.supportsVision !== true || spec.projector) return;
+      if ((spec.projectorCandidates?.length ?? 0) > 0) return;
+      const modelId = hfModelIdFromSpec(spec);
+      if (modelId === null) return;
+      const repoFiles = await get().getModelFiles(modelId);
+      const candidates = mmprojSiblings(repoFiles);
+      if (candidates.length === 0) return;
+      const file = spec.files[0];
+      const paired = file ? findProjectorFile(file, candidates) : undefined;
+      get().updateModel(specId, {
+        projectorCandidates: candidates.map((f) => ({
+          name: f.name,
+          size: f.size,
+          downloadUrl: f.downloadUrl,
+        })),
+        ...(paired
+          ? {
+              projector: {
+                name: paired.name,
+                size: paired.size,
+                downloadUrl: paired.downloadUrl,
+              },
+            }
+          : {}),
+      });
+    } catch {
+      // Best-effort: a network failure leaves the row as it was; the
+      // card's heal trigger runs again next time it is entered.
+    }
+  },
+
   reconcileInterrupted: async () => {
     const dir = `${LegacyFileSystem.documentDirectory}models/`;
     // Native wins, and this runs BEFORE reconcileWithNative adopts anything
@@ -513,13 +589,16 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
       // body appended onto a partial by the native writer, and calling that
       // "completed" hands the user a corrupt model that loads and misbehaves.
       const state = classifyFileOnDisk(size, file.size);
+      // The row's bar covers the PAIR (vision-series account): the LLM's
+      // leg is what this loop stats, but a paired row's total is the pair.
+      const pairTotal = file.size + (spec.projector?.size ?? 0);
       if (state === "complete") {
           // Whole file on disk but never marked: killed at the finish line.
           get().updateModel(spec.id, {
             downloadStatus: "completed",
             downloadProgress: 100,
-            downloadedBytes: file.size,
-            totalBytes: file.size,
+            downloadedBytes: pairTotal,
+            totalBytes: pairTotal,
             localPath: dir + file.name,
             error: undefined,
           });
@@ -538,16 +617,16 @@ const oid: string | undefined = "oid" in file ? file.oid : undefined;
             downloadStatus: "idle",
             downloadProgress: 0,
             downloadedBytes: 0,
-            totalBytes: file.size,
+            totalBytes: pairTotal,
             error: "A partial download was left corrupt on disk — tap Download to start again",
           });
         } else if (state === "partial") {
           // Partial file: manual Resume continues it, nothing auto-starts.
           get().updateModel(spec.id, {
             downloadStatus: "paused",
-            downloadProgress: Math.round((size / file.size) * 100),
+            downloadProgress: Math.round((size / pairTotal) * 100),
             downloadedBytes: size,
-            totalBytes: file.size,
+            totalBytes: pairTotal,
             error: undefined,
           });
         }

@@ -273,6 +273,13 @@ export function ContextLadderSheet({
               onPressIn={press.onPressIn}
               onPressOut={press.onPressOut}
               className="btn btn--primary active:opacity-80 mt-4 min-h-12 items-center justify-center"
+              style={{
+                shadowColor: "#000000",
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.06,
+                shadowRadius: 6,
+                elevation: 2,
+              }}
               accessibilityRole="button"
               accessibilityLabel="Start a new chat"
             >
@@ -333,6 +340,13 @@ export function ContextLadderSheet({
               onPress={() => void confirm()}
               disabled={reloading || chosen?.fit === "wont_fit"}
               className="btn btn--primary active:opacity-80 mt-4 min-h-12 items-center justify-center"
+              style={{
+                shadowColor: "#000000",
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.06,
+                shadowRadius: 6,
+                elevation: 2,
+              }}
               accessibilityRole="button"
               accessibilityLabel={`Reload at ${chosen?.label ?? ""} context`}
             >

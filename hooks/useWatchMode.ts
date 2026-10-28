@@ -23,7 +23,10 @@ export function useWatchMode(
   cameraReady: () => boolean,
   active: boolean,
 ) {
-  const [watchOn, setWatchOn] = useState(false);
+  // Continuous capture by default: a question rides the rolling buffer of
+  // recent frames instead of a single at-ask snapshot. The toggle still
+  // lets the user pause it.
+  const [watchOn, setWatchOn] = useState(true);
   const intervalMs = useWatch((s) => s.watchIntervalMs);
   const setWatchIntervalMs = useWatch((s) => s.setWatchIntervalMs);
   const framesRef = useRef<string[]>([]);

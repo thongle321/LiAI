@@ -147,7 +147,7 @@ export function AppDrawerContent() {
           <DrawerItem Icon={CircleHelp} label="About" onPress={() => go("/about")} />
         </View>
 
-        <Text className="border-t border-border px-5 py-3 text-quiet">
+        <Text className="border-t border-border px-6 py-3 text-quiet">
           v{VERSION}
         </Text>
       </View>
@@ -168,7 +168,7 @@ function DrawerItem({
   return (
     <Pressable
       onPress={onPress}
-      className="min-h-12 flex-row items-center px-5 py-3 active:bg-surface-3"
+      className="min-h-12 flex-row items-center px-6 py-3 active:bg-surface-3"
       accessibilityRole="button"
       accessibilityLabel={label}
     >

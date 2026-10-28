@@ -41,14 +41,14 @@ export interface MockVoiceLevels {
 /** Copied from the real VoiceOrb.tsx (VOICE_LABELS). */
 export const ORB_ACCESSIBILITY_LABELS: Record<string, string> = {
   disconnected: "Disconnected",
-  connecting: "Connecting…",
-  "pre-connect-buffering": "Buffering…",
+  connecting: "Connecting",
+  "pre-connect-buffering": "Processing",
   failed: "Connection failed",
-  initializing: "Connecting…",
+  initializing: "Connecting",
   idle: "Ready",
-  listening: "Listening…",
-  thinking: "Thinking…",
-  speaking: "Speaking…",
+  listening: "Listening",
+  thinking: "Thinking",
+  speaking: "Speaking",
 };
 
 export interface MockVoiceOrbProps {

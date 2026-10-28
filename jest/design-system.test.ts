@@ -94,7 +94,7 @@ describe("surface shape", () => {
   });
 
   it("adds only what makes .card and .rows different", () => {
-    expect(bodyOf(".card")).toContain("padding: 20px;");
+    expect(bodyOf(".card")).toContain("padding: 24px;");
     expect(bodyOf(".card")).not.toMatch(/border-(width|style|color|radius)/);
 
     expect(bodyOf(".rows")).toContain("overflow: hidden;");

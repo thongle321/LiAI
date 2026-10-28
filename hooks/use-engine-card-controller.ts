@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
 
 import { formatBytes } from "@/services/models/progress.ts";
@@ -30,12 +30,25 @@ export function useEngineCardController(engineId: NeuralEngineId) {
   const removeEngineModel = useVoice((s) => s.removeEngineModel);
   const play = useVoice((s) => s.play);
   const stop = useVoice((s) => s.stop);
+  const playbackState = useVoice((s) => s.playbackState);
 
   const [expanded, setExpanded] = useState<boolean>(
     () => currentVoice?.engine === engineId,
   );
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [errorNote, setErrorNote] = useState<string | null>(null);
+  const prevPlaybackMode = useRef(playbackState.mode);
+
+  useEffect(() => {
+    if (
+      prevPlaybackMode.current === "playing" &&
+      playbackState.mode === "idle" &&
+      previewingId !== null
+    ) {
+      setPreviewingId(null);
+    }
+    prevPlaybackMode.current = playbackState.mode;
+  }, [playbackState.mode, previewingId]);
 
   const group: EngineGroupState = engineGroupState(downloads[engineId]);
 
@@ -93,11 +106,7 @@ export function useEngineCardController(engineId: NeuralEngineId) {
     setCurrentVoice(voice);
     setPreviewingId(voice.id);
     setErrorNote(null);
-    track(
-      play(VOICE_PREVIEW_SAMPLE, { voice }).finally(() => {
-        setPreviewingId((id) => (id === voice.id ? null : id));
-      }),
-    );
+    track(play(VOICE_PREVIEW_SAMPLE, { voice }));
   }
 
   return {

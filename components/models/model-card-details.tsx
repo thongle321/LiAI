@@ -182,6 +182,23 @@ export function ModelCardDetails({
     projector === "missing";
   const isActive = activeModelId === item.id;
 
+  // Reclassify heal: a vision spec whose projector record never landed
+  // (imports before the picker's file list reached the pairing) is
+  // exactly this card's blind case — no projection row at all. One
+  // best-effort re-fetch per entry; the write is a no-op when the heal
+  // cannot help (offline, text-only repo). Re-derives never runs once
+  // the record exists, so this stays a one-shot repair.
+  const healProjectorCandidates = useModelStore(
+    (s) => s.healProjectorCandidates,
+  );
+  useEffect(() => {
+    if (item.supportsVision !== true) return;
+    if (item.projector || (item.projectorCandidates?.length ?? 0) > 0) return;
+    void healProjectorCandidates(item.id);
+    // itemProjector/candidates guard against the re-entry loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id, item.supportsVision, item.projector, item.projectorCandidates, healProjectorCandidates]);
+
   function toggleVision(enabled: boolean): void {
     const apply = (): void => {
       setVisionEnabled(item.id, enabled);

@@ -328,7 +328,7 @@ export default function ModelsRoute() {
             // the group header above, the runtime FAB reserve below (set
             // inline on the next line, which overrides any class `pb`).
             // A list `pt` would stack a second top inset.
-            contentContainerClassName="px-5 pb-[256px]"
+            contentContainerClassName="px-6 pb-[256px]"
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           />

@@ -34,6 +34,7 @@ import { MicButton } from "@/components/voice/mic-button.tsx";
 import { useSnackbar } from "@/components/snackbar.tsx";
 import { VoiceRecordingBar } from "@/components/chat/voice-recording-bar.tsx";
 import { useMultimodalAvailable } from "@/hooks/useMultimodalAvailable.ts";
+import { cannotSeeKind, type CannotSeeKind } from "@/services/inference/mmproj.ts";
 import { useModelStore } from "@/store/model-store";
 import { resolveThinking } from "@/services/inference/thinking.ts";
 import {
@@ -118,8 +119,10 @@ export function MessageInput({
   const setEffortOverride = useInference((s) => s.setEffortOverride);
   const activeModelId = useModelStore((s) => s.activeModelId);
   const activeModels = useModelStore((s) => s.models);
+  const activeProviderType = useModelStore((s) => s.activeProviderType);
+  const remoteCaps = useModelStore((s) => s.remoteCaps);
   const thinkingLocal =
-    useModelStore((s) => s.activeProviderType) === "local";
+    activeProviderType === "local";
   // The pill shows the RESOLVED state for the active model — user
   // override, then the spec's detected capability — never a global
   // (C6). Absent capability resolves to UNDEFINED, which is why the
@@ -234,12 +237,12 @@ export function MessageInput({
   // decision: that argued the PLACEHOLDER is the honest single surface for
   // showing state, and this is feedback for an ATTEMPTED action, not a
   // second place to show state.
-  const [blockedNote, setBlockedNote] = useState<string | null>(null);
+  const [helperNote, setHelperNote] = useState<string | null>(null);
   useEffect(() => {
-    if (blockedNote === null) return;
-    const id = setTimeout(() => setBlockedNote(null), 2500);
+    if (helperNote === null) return;
+    const id = setTimeout(() => setHelperNote(null), 2500);
     return () => clearTimeout(id);
-  }, [blockedNote]);
+  }, [helperNote]);
   useEffect(() => {
     void useInference.getState().load();
   }, []);
@@ -277,6 +280,20 @@ export function MessageInput({
   // the active model cannot see — no path hands the pipeline an image it
   // would silently strip. Same rule as the send gate, read live.
   const canSee = useMultimodalAvailable();
+  // Why the plus is gated, computed from the SAME records cannotSeeKind
+  // reads — one verdict per kind, stated in the component because copy is
+  // presentation. "sees" never reaches the copy: the only path here runs
+  // while !canSee.
+  const cannotSee: CannotSeeKind =
+    cannotSeeKind({ models: activeModels, remoteCaps, activeModelId, activeProviderType });
+  const plusBlockedHint =
+    !modelReady
+      ? "Load a model to attach a photo."
+      : cannotSee === "toggledOff"
+        ? "Vision is switched off for this model — turn it on in Models."
+        : activeProviderType === "remote"
+          ? "This model can't see images."
+          : "No vision projector is paired with this model — pair it in Models.";
 
   async function handleAttach(source: ImageSource): Promise<void> {
     setPlusOpen(false);
@@ -332,23 +349,32 @@ export function MessageInput({
     // overlay in ChatScreen instead.
     <Animated.View
       className={`border-t border-border bg-surface-1${className ? ` ${className}` : ""}`}
-      style={lift}
+      style={[
+        lift,
+        {
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.04,
+          shadowRadius: 8,
+          elevation: 2,
+        },
+      ]}
       onLayout={onHeightChange}
     >
       <View className="flex-col">
         {attachIssue !== null && (
-          <Text className="px-4 pb-1 font-sans text-xs text-secondary-text">
+          <Text className="px-6 pb-1 font-sans text-xs text-secondary-text">
             {attachIssue}
           </Text>
         )}
-        {blockedNote !== null && (
+        {helperNote !== null && (
           // Same treatment as the other issue lines, so a blocked send
           // does not shout louder than a failed attach.
           <Text
-            className="px-4 pb-1 font-sans text-xs text-secondary-text"
+            className="px-6 pb-1 font-sans text-xs text-secondary-text"
             accessibilityLiveRegion="polite"
           >
-            {blockedNote}
+            {helperNote}
           </Text>
         )}
         {attached.length > 0 && (
@@ -360,7 +386,7 @@ export function MessageInput({
           // than a horizontal ScrollView: five thumbs fit in a bounded box, and
           // a nested scroll inside the composer is a fight with the keyboard
           // lift for no gain.
-          <View className="mx-4 mb-2 rounded-lg bg-surface-2 p-2">
+          <View className="mx-6 mb-2 rounded-lg bg-surface-2 p-2">
             <View className="flex-row flex-wrap items-center gap-2">
               {attached.map((uri, i) => (
                 <View key={`${i}-${uri.length}`} className="relative">
@@ -395,7 +421,7 @@ export function MessageInput({
               user dismisses at will is chrome, and chrome over the list is
               what that row is for. Spec §5. */}
           {editing === true && (
-            <View className="flex-row items-center gap-2 border-b border-border px-4 py-1">
+            <View className="flex-row items-center gap-2 border-b border-border px-6 py-1">
               <Pencil size={14} color={colors.secondaryText} />
               <Text className="flex-1 text-quiet">
                 Editing message — sending replaces this turn and everything after it
@@ -414,7 +440,7 @@ export function MessageInput({
           {/* Text input area: the field's own spec supplies the fill, the top
               hairline and the square corners, so this row is padding and the
               input only. */}
-          <View className="flex-1 px-5 py-2">
+          <View className="flex-1 px-6 py-2">
             <TextInput
               value={draft}
               onChangeText={setDraft}
@@ -448,15 +474,36 @@ export function MessageInput({
               onStop={() => voiceCapture.stop()}
             />
           ) : (
-          <View className="flex-row items-center justify-between px-4 py-2 min-h-9">
+          <View className="flex-row items-center justify-between px-6 py-2 min-h-9">
             <View className="flex-row items-center gap-2 flex-1">
               <Animated.View style={plusPress.animatedStyle}>
                 <Pressable
-                  onPress={modelReady && canSee ? () => setPlusOpen((o) => !o) : undefined}
+                  // G9's rule for attach: a gated plus must still ANSWER the
+                  // press. The look stays disabled (secondary glyph, disabled
+                  // a11y state), but the press explains itself with a helper
+                  // line naming THE reason — no model, vision toggled off, or
+                  // no projector paired (cannotSeeKind reads the same records
+                  // the send gate does, so the two cannot split).
+                  onPress={
+                    modelReady && canSee
+                      ? () => setPlusOpen((o) => !o)
+                      : () => {
+                          void Haptics.notificationAsync(
+                            Haptics.NotificationFeedbackType.Warning,
+                          );
+                          setHelperNote(plusBlockedHint);
+                        }
+                  }
                   onPressIn={plusPress.onPressIn}
                   onPressOut={plusPress.onPressOut}
-                  disabled={!modelReady || !canSee}
                   className="h-12 w-12 items-center justify-center rounded-full bg-surface-3"
+                  style={{
+                    shadowColor: "#000000",
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.04,
+                    shadowRadius: 4,
+                    elevation: 1,
+                  }}
                   accessibilityRole="button"
                   accessibilityState={{ disabled: !modelReady || !canSee }}
                   accessibilityLabel={
@@ -485,7 +532,16 @@ export function MessageInput({
                     : `Choose companion and model, current ${companionName}`
                 }
               >
-                <View className="h-12 w-12 items-center justify-center rounded-full bg-surface-3">
+                <View
+                  className="h-12 w-12 items-center justify-center rounded-full bg-surface-3"
+                  style={{
+                    shadowColor: "#000000",
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.04,
+                    shadowRadius: 4,
+                    elevation: 1,
+                  }}
+                >
                   <ChevronUp size={20} color={colors.primary} />
                 </View>
                 {activeModelId !== null && !!companionName && (
@@ -499,7 +555,16 @@ export function MessageInput({
                 // Anchored to the plus button's wrapper and extending right into
                 // the empty composer space — the plus is leftmost, so w-48 fits
                 // without clipping. (right-0 here would squash it to 48px.)
-                <View className="surface bg-surface-1 absolute bottom-12 left-0 w-48 py-1">
+                <View
+                  className="surface bg-surface-1 absolute bottom-12 left-0 w-48 py-1"
+                  style={{
+                    shadowColor: "#000000",
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.08,
+                    shadowRadius: 12,
+                    elevation: 4,
+                  }}
+                >
                   <PlusItem
                     Icon={Camera}
                     label="Take photo"
@@ -592,6 +657,13 @@ export function MessageInput({
                     onPressIn={stopPress.onPressIn}
                     onPressOut={stopPress.onPressOut}
                     className="h-12 w-12 items-center justify-center rounded-full bg-primary"
+                    style={{
+                      shadowColor: "#000000",
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: 0.06,
+                      shadowRadius: 6,
+                      elevation: 2,
+                    }}
                     accessibilityRole="button"
                     accessibilityLabel="Stop generating"
                   >
@@ -610,7 +682,7 @@ export function MessageInput({
                         void Haptics.notificationAsync(
                           Haptics.NotificationFeedbackType.Warning,
                         );
-                        setBlockedNote("Load a model to send this message.");
+                        setHelperNote("Load a model to send this message.");
                         return;
                       }
                       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -621,6 +693,17 @@ export function MessageInput({
                     className={`h-12 w-12 items-center justify-center rounded-full ${
                       canSend ? "bg-primary" : "bg-surface-2"
                     }`}
+                    style={
+                      canSend
+                        ? {
+                            shadowColor: "#000000",
+                            shadowOffset: { width: 0, height: 1 },
+                            shadowOpacity: 0.06,
+                            shadowRadius: 6,
+                            elevation: 2,
+                          }
+                        : undefined
+                    }
                     accessibilityRole="button"
                     accessibilityLabel={
                       modelReady ? "Send message" : "Load a model to send this message"

@@ -19,10 +19,16 @@ export async function playVoice(
   deps: VoiceEngineDeps,
 ): Promise<void> {
   const engine = getEngine(voice.engine);
-  const installed = await engine.isInstalled().catch(() => false);
-  if (!installed) {
-    await deps.stop();
-    return;
+  try {
+    const installed = await engine.isInstalled().catch(() => true);
+    if (installed === false && voice.engine === "system") {
+      await deps.stop();
+      return;
+    }
+    // For neural engines, proceed even if isInstalled() is uncertain;
+    // let the engine/runtime decide.
+  } catch {
+    // ignore
   }
   await ttsRuntime.acquire(engine, () => engine.play(text, voice));
 }

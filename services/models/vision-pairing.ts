@@ -55,6 +55,35 @@ export function pairDownloadStep(
   return "complete";
 }
 
+/** One progress account for a paired download.
+ *
+ * The LLM leg and the projector leg feed ONE bar: totalBytes is the PAIR's
+ * footprint (llm + mmproj) and downloadedBytes accumulate — the LLM already
+ * whole during the projector leg, the projector leg's ticks on top of it.
+ * PocketParity: a vision card shows the pair's combined size
+ * (ModelFileCard.tsx:253-271), so the bar covering it reads one download.
+ * No pair = the projector size adds nothing and the projector leg never
+ * runs, so a text-only download keeps its own account exactly.
+ */
+export function pairProgress(input: {
+  /** The LLM leg's whole size. */
+  mainSize: number;
+  /** The paired projector's whole size (0 = no pair). */
+  projectorSize: number;
+  /** Is the leg currently in flight the projector's? */
+  legProjector: boolean;
+  /** Bytes the in-flight leg reports. */
+  legBytes: number;
+}): { totalBytes: number; downloadedBytes: number; progress: number } {
+  const totalBytes = input.mainSize + input.projectorSize;
+  const downloadedBytes = (input.legProjector ? input.mainSize : 0) + input.legBytes;
+  return {
+    totalBytes,
+    downloadedBytes,
+    progress: totalBytes > 0 ? (downloadedBytes / totalBytes) * 100 : 0,
+  };
+}
+
 /** Every mmproj in a repo — the selector's list and the candidates a spec
  *  records at build time. One filter, so the picker and the pairer can
  *  never disagree about what counts as a projector. */

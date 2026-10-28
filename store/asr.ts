@@ -57,6 +57,7 @@ export interface AsrDeps {
 
 interface AsrPersisted {
   userASROverride: boolean | null;
+  userVoiceModeOverride: boolean | null;
   selectedTier: AsrTier;
   spokenLanguage: string | null;
 }
@@ -68,6 +69,7 @@ function isAsrTier(v: unknown): v is AsrTier {
 function normalizeAsrPrefs(raw: unknown): AsrPersisted {
   const fallback: AsrPersisted = {
     userASROverride: null,
+    userVoiceModeOverride: null,
     selectedTier: ASR_DEFAULT_TIER,
     spokenLanguage: null,
   };
@@ -77,6 +79,10 @@ function normalizeAsrPrefs(raw: unknown): AsrPersisted {
     userASROverride: r.userASROverride === true || r.userASROverride === false
       ? r.userASROverride
       : null,
+    userVoiceModeOverride:
+      r.userVoiceModeOverride === true || r.userVoiceModeOverride === false
+        ? r.userVoiceModeOverride
+        : null,
     selectedTier: isAsrTier(r.selectedTier) ? r.selectedTier : ASR_DEFAULT_TIER,
     spokenLanguage: typeof r.spokenLanguage === "string" ? r.spokenLanguage : null,
   };
@@ -87,6 +93,8 @@ export interface AsrState extends AsrPersisted {
   deviceSupported: boolean;
   /** Override wins, else the device verdict (PocketParity gate). */
   asrAvailable: boolean;
+  /** Override wins, else the device verdict (hands-free voice gate). */
+  voiceModeAvailable: boolean;
   loaded: boolean;
   captureState: CaptureState;
   /** When the current capture began: the bar's elapsed timer t0.
@@ -104,6 +112,7 @@ export interface AsrState extends AsrPersisted {
 
   load: () => Promise<void>;
   setUserASROverride: (override: boolean | null) => void;
+  setUserVoiceModeOverride: (override: boolean | null) => void;
   /** PUBLIC surface (#1017): switch the in-use tier, ONLY to a ready one. */
   selectTier: (tier: AsrTier) => void;
   /** INTERNAL write: reconcile, first-install select and delete fallback. */
@@ -187,10 +196,12 @@ export function createAsrStore(storage: KeyValueStorage, deps: AsrDeps) {
 
         return {
           userASROverride: null,
+          userVoiceModeOverride: null,
           selectedTier: ASR_DEFAULT_TIER,
           spokenLanguage: null,
           deviceSupported: true,
           asrAvailable: true,
+          voiceModeAvailable: true,
           loaded: false,
           captureState: "idle",
   recordingStartedAt: null,
@@ -215,13 +226,15 @@ export function createAsrStore(storage: KeyValueStorage, deps: AsrDeps) {
               }
               const carried = normalizeAsrPrefs({
                 userASROverride: get().userASROverride,
+                userVoiceModeOverride: get().userVoiceModeOverride,
                 selectedTier: get().selectedTier,
                 spokenLanguage: get().spokenLanguage,
               });
               // PocketParity gate: override wins, else the device verdict.
               const deviceSupported = deviceSupportedFor(await deps.readMemory());
               const asrAvailable = carried.userASROverride ?? deviceSupported;
-              set({ ...carried, deviceSupported, asrAvailable, loaded: true });
+              const voiceModeAvailable = carried.userVoiceModeOverride ?? deviceSupported;
+              set({ ...carried, deviceSupported, asrAvailable, voiceModeAvailable, loaded: true });
               // PocketParity init(): per-tier install state derives from
               // disk, and backgrounding frees the idle whisper context.
               for (const tier of ASR_TIER_ORDER) {
@@ -267,6 +280,9 @@ export function createAsrStore(storage: KeyValueStorage, deps: AsrDeps) {
 
           setUserASROverride: (override) => {
             set({ userASROverride: override, asrAvailable: override ?? get().deviceSupported });
+          },
+          setUserVoiceModeOverride: (override) => {
+            set({ userVoiceModeOverride: override, voiceModeAvailable: override ?? get().deviceSupported });
           },
           // PocketParity selectTier: the PUBLIC switch. Only an installed
           // tier commits — the reconcile writes below are the private lane.
@@ -403,6 +419,7 @@ export function createAsrStore(storage: KeyValueStorage, deps: AsrDeps) {
         skipHydration: true,
         partialize: (state) => ({
           userASROverride: state.userASROverride,
+          userVoiceModeOverride: state.userVoiceModeOverride,
           selectedTier: state.selectedTier,
           spokenLanguage: state.spokenLanguage,
         }),
@@ -466,6 +483,9 @@ export const asrStore = {
   get asrAvailable() {
     return useAsrStore.getState().asrAvailable;
   },
+  get voiceModeAvailable() {
+    return useAsrStore.getState().voiceModeAvailable;
+  },
   get isSelectedTierReady() {
     return useAsrStore.getState().isSelectedTierReady;
   },
@@ -494,6 +514,7 @@ export const asrStore = {
   retryDownload: (tier: AsrTier) => useAsrStore.getState().retryDownload(tier),
   deleteModel: (tier: AsrTier) => useAsrStore.getState().deleteModel(tier),
   setCaptureState: (s: CaptureState) => useAsrStore.getState().setCaptureState(s),
+  setUserVoiceModeOverride: (override: boolean | null) => useAsrStore.getState().setUserVoiceModeOverride(override),
   resetCapture: () => useAsrStore.getState().resetCapture(),
   setError: (kind: AsrErrorKind) => useAsrStore.getState().setError(kind),
   setSpokenLanguage: (lang: string | null) => useAsrStore.getState().setSpokenLanguage(lang),

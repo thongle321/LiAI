@@ -147,11 +147,11 @@ components:
   card:
     backgroundColor: "{colors.clean-white}"
     rounded: "{rounded.default}"
-    padding: "20px"
+    padding: "24px"
   card-muted:
     backgroundColor: "{colors.mist}"
     rounded: "{rounded.default}"
-    padding: "20px"
+    padding: "24px"
   message-bubble-user:
     backgroundColor: "{colors.surface-tint}"
     textColor: "{colors.ink}"
@@ -185,7 +185,7 @@ components:
 
 LiAI is a light system with exactly one loud thing in it. A single blue hue does all the signalling — the live tab, the focused field, the one primary action, the active step — carried in two steps of that one hue, and everything else is a near-white plane separated by 1px hairlines. The restraint is the point. Where most AI products reach for gradients, glass, and glow to feel futuristic, this one earns "sci-fi" from 2px line icons, corner brackets, and a dot trail. Nothing emits light.
 
-The density is conversational, not dashboard. Space is generous — a 4px scale with a 20px screen gutter and 20px card padding — because a phone screen held one-handed for conversation should breathe. Structure comes from alignment and hairlines, never from enclosure: cards are open white rectangles, not boxes. Type does the heavy lifting, with a nine-step Inter scale where Display (32/40) is reserved for one moment per screen, Screen title (14/20) carries every title, and Meta (10/14) is the floor.
+The density is conversational, not dashboard. Space is generous — a 4px scale with a 24px screen gutter and 24px card padding — because a phone screen held one-handed for conversation should breathe. Structure comes from alignment and hairlines, never from enclosure: cards are open white rectangles, not boxes. Type does the heavy lifting, with a nine-step Inter scale where Display (32/40) is reserved for one moment per screen, Screen title (14/20) carries every title, and Meta (10/14) is the floor.
 
 **This file is the authority, and the code now implements it.** The build used to trail this file by a whole world — near-black surfaces, a lime accent, Raleway, soft elevation, clipped octagonal corners — and that world has since been retired out of the codebase entirely. What remains is to hold the line: see *Do's and Don'ts* for the guardrails that keep it retired.
 
@@ -296,7 +296,7 @@ The spatial model is a 4px scale — 4, 8, 12, 16, 20, 24, 32, 40, 48 — with *
 
 **Token names are descriptive here and terse in code.** This file names colours and type steps by role — Signal, Signal Mark, Slate, Muted, Body Small — because that is what an agent should reach for. `global.css` and `themes/tokens.ts` mirror the same values under short names for use in class strings, and the two are the code mirror of this file, not a second system. Display, Headline, Title, Body, Body Small and Caption are `h1`, `h2`, `h3`, `h4`, `body-lg`, `body-md` and `body-sm`; Screen title, Label and Meta are `title`, `xs` and `micro`; Signal, Signal Mark, Deep Signal, Ink, Slate, Clean White, Cool Paper, Mist and Surface Tint are `primary`, `primary-mark`, `primary-hover`, `primary-text`, `secondary-text`, `secondary-text-muted`, `surface-1`, `base`, `surface-2` and `surface-3`. The values are identical in all three places, and a test fails if the CSS and TypeScript mirrors drift apart.
 
-**Gutters and padding.** The screen gutter is one `5` step (20px) on every edge, including horizontal insets for cards, list rows, and form fields. Cards carry 20px (`5`) internal padding — generous, because a card is a small plane, not a dense module. Fields sit at 12px/16px (`3`/`4`) vertical/horizontal. Message bubbles sit at 12px/16px (`3`/`4`).
+**Gutters and padding.** The screen gutter is one `6` step (24px) on every edge, including horizontal insets for cards, list rows, and form fields. Cards carry 24px (`6`) internal padding — generous, because a card is a small plane, not a dense module. Fields sit at 12px/16px (`3`/`4`) vertical/horizontal. Message bubbles sit at 12px/16px (`3`/`4`). (Stillness: bumped from 20px to 24px for breathing room.)
 
 **The gutter does not apply to a full-bleed field.** A field docked to a screen edge takes no horizontal inset at all: its own 12px/16px padding *is* the whole inset, so its value sits 16px from the edge. This is not a stacked gutter — it is the gutter deliberately absent, which is what lets the element be the edge. The chat composer is the only such field today.
 
@@ -410,7 +410,7 @@ Small categorical labels that carry a short token word (engine tier, default, st
 - **Background:** Clean White on Cool Paper. Use Mist for a card that is *inside* another surface, never as a top-level card.
 - **Shadow strategy:** none — see *Elevation & Depth*. Separation is the 1px Hairline border, always present on a card.
 - **Border:** 1px Hairline, on all four sides — except a full-bleed element, whose left and right edges coincide with the screen edge and so take a top divider only (the composer is the only such element today). A card without a border is a mistake unless it is Mist-on-Mist.
-- **Internal padding:** 20px (`5`) on all sides. 16px for a card that contains a list of rows rather than prose.
+- **Internal padding:** 24px (`6`) on all sides. 16px for a card that contains a list of rows rather than prose.
 - **Row cards** (model list, session history) drop the internal padding to 0 and let a 16px horizontal / 12px vertical row padding define the rhythm, so the divider lines run edge to edge. Settings cards are the titled variant: they keep 16px internal padding and inset the dividers (see Settings).
 - **Model cards** are the row-card case with one refinement, taken from PocketPal's `ModelCard` anatomy (see `docs/research/2026-10-10-model-card-architecture-parity.md`): a *header* block carries its own 16px horizontal padding, and then ONE content wrapper carries it again for everything below it — the warnings, the progress bar, the action row, and the expanded details when open. The action row and the details therefore carry no padding of their own, which is what lets the hairline-bearing header, the scrolled content and the expansion all share one left edge. The details are a continuation of that wrapper, not a second region: no `border-t` re-opens a divider inside the card, and the card's own 1px border is the only enclosure.
 - **Recorded correction (2026-10-10).** The model card shipped for a while at PocketPal's 24px radius, taken wholesale over this step. It was the one card that had not been re-derived against the design system, and it is now 8px. The lesson is worth naming: *parity is a licence to copy anatomy, never a licence to copy a token.*

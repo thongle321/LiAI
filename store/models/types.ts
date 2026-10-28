@@ -106,7 +106,7 @@ export interface DownloadsSlice {
     token?: string,
     /** VisionDownloadSheet's answer: text-only skips the projector leg, an
      *  explicit projector overrides the pairing rule. */
-    options?: { visionEnabled?: boolean; projector?: ModelFile },
+    options?: { visionEnabled?: boolean; projector?: ModelFile; files?: HFModelFile[] },
   ) => Promise<void>;
   /** Start from an already-built spec (interrupted-resume re-entry). */
   startSpecDownload: (
@@ -122,6 +122,11 @@ export interface DownloadsSlice {
   /** Fetch ONLY the projector leg of a model whose LLM is already whole —
    *  the "Download projection model" action on a card. */
   startProjectorDownload: (specId: string) => Promise<void>;
+  /** Repair a downloaded vision spec that never got its projector record
+   *  (imports before the picker's file list reached the pairing): re-fetch
+   *  the repo's listing and record the candidates + the pairing rule's
+   *  projector. No-op when the spec is already paired or carries none. */
+  healProjectorCandidates: (specId: string) => Promise<void>;
   /** Mark partial on-disk files paused after launch so Resume continues them. */
   reconcileInterrupted: () => Promise<void>;
   /** Read the model's GGUF header at rest and store what it says, so the

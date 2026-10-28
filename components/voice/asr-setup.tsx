@@ -131,8 +131,10 @@ function TierRow({ tier, last }: { tier: AsrTier; last: boolean }) {
 export function AsrSetup() {
   const load = useAsrStore((s) => s.load);
   const asrAvailable = useAsrStore((s) => s.asrAvailable);
+  const voiceModeAvailable = useAsrStore((s) => s.voiceModeAvailable);
   const deviceSupported = useAsrStore((s) => s.deviceSupported);
   const setUserASROverride = useAsrStore((s) => s.setUserASROverride);
+  const setUserVoiceModeOverride = useAsrStore((s) => s.setUserVoiceModeOverride);
   const { freeBytes, checked } = useFreeSpacePoll(asrAvailable);
 
   useEffect(() => {
@@ -141,6 +143,20 @@ export function AsrSetup() {
 
   return (
     <View className="mb-4">
+      <SettingsSection title="Hands-free voice">
+        <View className="row row--titled row--last">
+          <ToggleRow
+            label="Hands-free voice"
+            description={
+              deviceSupported
+                ? undefined
+                : "This device is below the recommended spec. Hands-free voice will likely be slow or may fail."
+            }
+            on={voiceModeAvailable}
+            onPress={() => setUserVoiceModeOverride(!voiceModeAvailable)}
+          />
+        </View>
+      </SettingsSection>
       <SettingsSection title="Voice Input">
         <View
           className={

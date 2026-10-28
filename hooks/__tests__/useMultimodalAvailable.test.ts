@@ -2,7 +2,7 @@
  * The composer's image gate must be the SAME verdict the send path uses.
  *
  * This locks the store wiring only: the one capability rule itself is tested
- * in `services/inference//__tests__/mmproj.test.ts`. The interesting hook failure
+ * in `services/inference/__tests__/mmproj.test.ts`. The interesting hook failure
  * is a composer that disagrees with the engine gate, so the tests seed the
  * active state and read the hook's answer live.
  */

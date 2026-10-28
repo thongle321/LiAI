@@ -14,7 +14,7 @@
 
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { Bookmark, ChevronRight, Eye, Lock, Trash2 } from "lucide-react-native";
+import { Bookmark, ChevronRight, Eye, Lock, Trash2, X } from "lucide-react-native";
 
 import { useColors } from "@/themes/tokens.ts";
 import { useModelStore } from "@/store/model-store";
@@ -29,8 +29,6 @@ import type {
   ModelDownloadStatus,
 } from "@/types/models";
 import {
-  CancelDownloadButton,
-  Chip,
   DownloadButton,
   DownloadProgressBar,
   confirmDeleteModel,
@@ -134,7 +132,7 @@ export function HFFileRow({
   return (
     <View className="py-3 border-b border-border">
       <View className="flex-row items-center justify-between gap-2">
-        <View className="flex-1">
+        <View className="flex-1 min-w-0">
           {/* Middle ellipsis, PocketParity (ModelFileCard.tsx:281-288): a
               GGUF name carries its repo prefix, so the quantisation suffix
               is the informative end — and the name shares this row with two
@@ -146,16 +144,25 @@ export function HFFileRow({
           >
             {file.name}
           </Text>
-          <View className="flex-row flex-wrap items-center gap-2 mt-2">
-            <Chip label="GGUF" />
-            {/* Names the file KIND and nothing else — constant by
-                construction, since getModelFiles already filters to .gguf
-                (services/models//huggingface.ts:562). Ours alone: the reference's
-                file row has no such chip. Recorded in the 2026-10-12
-                parity record, divergence 3. */}
-            {/* A gated repo's file needs the HF token; without the chip a
-                download 401s halfway (PocketParity: ModelFileCard.tsx
-                :323-338). */}
+          {/* Size under the name, not a kind chip: getEnhancedSizeDisplay,
+              PocketParity (ModelFileCard.tsx:253-272) — a vision LLM with a
+              projector promises the PAIR's combined footprint, everything
+              else the file's own size. (Restores parity; the GGUF chip was
+              recorded as ours alone, divergence 3, and is now gone.) */}
+          {file.size > 0 ? (
+            <Text className="font-sans text-caption text-secondary-text-muted mt-1">
+              {formatBytes(
+                breakdown.mmprojSize !== null ? breakdown.total : file.size,
+                2,
+                false,
+                true,
+              )}
+            </Text>
+          ) : null}
+          {/* A gated repo's file needs the HF token; without the chip a
+              download 401s halfway (PocketParity: ModelFileCard.tsx
+              :323-338). */}
+          <View className="flex-row flex-wrap items-center gap-2">
             {result.gated ? (
               <View className="flex-row items-center gap-1 rounded bg-surface-2 px-2 py-0.5">
                 <Lock size={10} color={colors.secondaryText} />
@@ -164,69 +171,68 @@ export function HFFileRow({
                 </Text>
               </View>
             ) : null}
-            {/* Vision is a DECISION, not a label: it opens the sheet that
-                downloads the pair (or deliberately skips it). The plain
-                Download button beside it still takes the default. */}
-            {breakdown.isVision ? (
-              /* The pill is small; the target is not. DESIGN.md: "pad the
-                 hit area, not the circle" — the same reason the destructive
-                 icon button keeps a 48dp box. The reference's Paper Chip is
-                 32dp; the 48dp floor is binding here. */
-              <Pressable
-                onPress={() => setVisionSheetFile(file)}
-                className="min-h-12 flex-row items-center"
-                accessibilityRole="button"
-                accessibilityLabel={`Choose vision setup for ${file.name}`}
-              >
-                <View className="flex-row items-center gap-1 rounded bg-surface-2 px-2 py-0.5">
-                  <Eye size={12} color={colors.primary} />
-                  {/* The chip's whole job is answering "is vision already on
-                      for this file?", so the label is the state word — the
-                      reference's two labels, verbatim (ModelFileCard.tsx
-                      :308-330). */}
-                  <Text className="font-sans text-caption text-primary">
-                    {spec?.visionEnabled ? "Vision enabled" : "Includes vision capability"}
-                  </Text>
-                  <ChevronRight size={12} color={colors.secondaryText} />
-                </View>
-              </Pressable>
-            ) : null}
-            {/* A vision model's real footprint is the pair, so the
-                projector is priced into the number next to the button.
-                Ours prints the pair; the reference prints only the total
-                (ModelFileCard.tsx:265-283). More informative, one extra
-                line at small widths — 2026-10-12 parity record, divergence
-                4. */}
-            <Text className="font-sans text-body-sm text-secondary-text-muted">
-              {breakdown.mmprojSize !== null
-                ? `${formatBytes(breakdown.llmSize)} + ${formatBytes(breakdown.mmprojSize)} projector`
-                : formatBytes(file.size)}
-            </Text>
-            {fit.message ? (
-              <Text className="storage-warning">
-                {fit.message}
-              </Text>
-            ) : null}
           </View>
+          {/* Vision is a DECISION, not a label: it opens the sheet that
+              downloads the pair (or deliberately skips it). The plain
+              Download button beside it still takes the default.
+              PocketParity: visionChipContainer is OUTSIDE the chips row to
+              prevent wrapping/overlap issues with the actions column. */}
+          {breakdown.isVision ? (
+            /* The pill is small; the target is not. DESIGN.md: "pad the
+               hit area, not the circle" — the same reason the destructive
+               icon button keeps a 48dp box. The reference's Paper Chip is
+               32dp; the 48dp floor is binding here. */
+            <Pressable
+              onPress={() => setVisionSheetFile(file)}
+              className="flex-row items-center gap-1 rounded bg-surface-2 px-2 py-0.5 mt-2"
+              accessibilityRole="button"
+              accessibilityLabel={`Choose vision setup for ${file.name}`}
+            >
+              <Eye size={12} color={colors.primary} />
+              {/* The chip's whole job is answering "is vision already on
+                  for this file?", so the label is the state word — the
+                  reference's two labels, verbatim (ModelFileCard.tsx
+                  :308-330). */}
+              <Text className="font-sans text-caption text-primary">
+                {spec?.visionEnabled ? "Vision enabled" : "Includes vision capability"}
+              </Text>
+              <ChevronRight size={12} color={colors.secondaryText} />
+            </Pressable>
+          ) : null}
         </View>
-        <View className="flex-row items-center gap-1">
-          <Pressable
-            onPress={() =>
-              bookmarked && file.oid
-                ? onUnbookmark(file.oid)
-                : bookmarkModel(result, file)
-            }
-            className="icon-btn"
-            accessibilityRole="button"
-            accessibilityLabel={bookmarked ? `Remove bookmark for ${file.name}` : `Bookmark ${file.name}`}
-            testID={`hf-bookmark-${file.name}`}
-          >
-            <Bookmark
-              size={18}
-              color={bookmarked ? colors.primary : colors.secondaryText}
-              fill={bookmarked ? colors.primary : "none"}
-            />
-          </Pressable>
+        <View className="flex-row items-center gap-1 ml-auto">
+          {/* A live transfer gives the column ONE control: the bookmark
+              steps aside for the cancel it costs (PocketParity,
+              ModelFileCard.tsx:239-243 — isDownloadActive swaps in a close
+              IconButton). The separate "Cancel download" row is gone. */}
+          {isProgressVisible(status) ? (
+            <Pressable
+              onPress={() => void cancelModelDownload(specId)}
+              className="icon-btn"
+              accessibilityRole="button"
+              accessibilityLabel={`Cancel ${file.name} download`}
+            >
+              <X size={18} color={colors.secondaryText} />
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() =>
+                bookmarked && file.oid
+                  ? onUnbookmark(file.oid)
+                  : bookmarkModel(result, file)
+              }
+              className="icon-btn"
+              accessibilityRole="button"
+              accessibilityLabel={bookmarked ? `Remove bookmark for ${file.name}` : `Bookmark ${file.name}`}
+              testID={`hf-bookmark-${file.name}`}
+            >
+              <Bookmark
+                size={18}
+                color={bookmarked ? colors.primary : colors.secondaryText}
+                fill={bookmarked ? colors.primary : "none"}
+              />
+            </Pressable>
+          )}
           {isProgressVisible(status) ? null : status === "completed" ? (
             /* Downloaded: the ONE action left is the destructive one. The
                reference turns its download glyph into the delete glyph in
@@ -248,6 +254,7 @@ export function HFFileRow({
               status={status}
               progress={progress}
               disabled={!fit.fits}
+              iconOnly
               onPress={() => onDownload(file)}
               onPause={() => void pauseModelDownload(specId)}
               onResume={() => void resumeModelDownload(specId)}
@@ -292,7 +299,6 @@ export function HFFileRow({
             total={spec?.totalBytes ?? 0}
             speed={spec?.speedBytesPerSec}
           />
-          <CancelDownloadButton onPress={() => void cancelModelDownload(specId)} />
         </>
       ) : null}
 

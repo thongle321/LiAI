@@ -7,6 +7,7 @@
   "dependencies": {
     "@dr.pogodin/react-native-fs": "2.40.4",
     "@expo-google-fonts/inter": "^0.4.2",
+    "@expo-google-fonts/space-grotesk": "^0.4.1",
     "@expo/ui": "~57.0.26",
     "@kesha-antonov/react-native-background-downloader": "^4.6.4",
     "@lodev09/react-native-true-sheet": "^3.11.18",
@@ -32,6 +33,7 @@
     "expo-image-picker": "~57.0.20",
     "expo-keep-awake": "~57.0.2",
     "expo-linking": "~57.0.13",
+    "expo-navigation-bar": "~57.0.3",
     "expo-router": "~57.0.29",
     "expo-secure-store": "~57.0.4",
     "expo-sharing": "~57.0.24",
@@ -45,13 +47,13 @@
     "expo-updates": "~57.0.26",
     "link-preview-js": "^5.0.1",
     "llama.rn": "^0.13.0-rc.8",
-    "lucide-react-native": "^1.61.0",
+    "lucide-react-native": "^1.63.0",
     "react": "19.2.3",
     "react-native": "0.86.3",
     "react-native-code-highlighter": "^1.3.1",
     "react-native-gesture-handler": "~2.32.0",
     "react-native-keyboard-controller": "1.21.9",
-    "react-native-marked": "^8.3.2",
+    "react-native-marked": "^8.3.3",
     "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.2",
@@ -93,5 +95,6 @@
   },
   "allowScripts": {
     "llama.rn@0.13.0-rc.7": true
-  }
+  },
+  "trustedDependencies": ["llama.rn"]
 }

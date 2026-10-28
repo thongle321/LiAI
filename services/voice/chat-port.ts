@@ -6,7 +6,9 @@
  *  the ported contract (reference: pocketpal-ai VoiceTurnPort): the reply
  *  text rides TWO captions — `lastReply` read after the turn settles, and
  *  `onReply` called while the run settles so the caption can land while
- *  the reply is still speaking. The engine contract itself is unchanged.
+ *  the reply is still speaking. The engine resolves PocketPal's per-turn
+ *  `speech_failed` as "no playback was observed during the turn".
+ *  The engine contract itself is unchanged.
  *
  *  One failure rule, mapped to the engine's `reply_failed`: a refused
  *  send (empty text, chat busy), a missing assistant row, an errored row,
@@ -82,10 +84,11 @@ export function createChatTurnPort(hand: VoiceChatHand): VoiceChatPort {
 }
 
 /** A chat turn may still be running (a typed send beat us to the model);
- *  give it up to ten seconds, like the old voice loop did. */
+ *  give it up to thirty seconds, so a slow model doesn't get reported as
+ *  "send refused". */
 async function waitForChatIdle(): Promise<void> {
   const waited = 100;
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 300; i++) {
     if (!useChatStore.getState().sending) return;
     await new Promise((resolve) => setTimeout(resolve, waited));
   }

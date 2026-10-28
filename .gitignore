@@ -73,3 +73,6 @@ yarn-error.*
 
 # Vendored reference app (read-only, never shipped)
 pocketpal-ai/
+# @generated expo skills start
+.agents/skills/build-with-tinybase
+# @generated expo skills end

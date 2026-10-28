@@ -38,6 +38,8 @@ module.exports = {
     'llama.rn': '<rootDir>/__mocks__/external/llama.rn.ts',
     'react-native-vision-camera':
       '<rootDir>/__mocks__/external/react-native-vision-camera.ts',
+    'react-native-keyboard-controller':
+      '<rootDir>/__mocks__/external/react-native-keyboard-controller.ts',
     '@lodev09/react-native-true-sheet':
       '@lodev09/react-native-true-sheet/mock',
     'react-native-reanimated':

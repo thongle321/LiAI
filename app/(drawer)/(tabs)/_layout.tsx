@@ -1,7 +1,10 @@
 /** Bottom tabs (JavaScript tabs per the Expo Router tabs guide).
  *
- * Chat + voice + vision share one router-owned bar — the existing
- * BottomNav design, unchanged. The bar stays MOUNTED while the keyboard
+ * Chat + voice share one router-owned bar — the existing BottomNav
+ * design, unchanged. Vision is NOT a destination: it is the voice tab's
+ * in-screen mode behind the Eye toggle (components/voice/
+ * voice-vision-mode.tsx), so the bar owns no /vision route. The bar
+ * stays MOUNTED while the keyboard
  * opens (PocketPal parity: nothing on screen unmounts in response to the
  * keyboard — pocketpal-ai/src/components/ChatView/ChatView.tsx composition
  * notes); edge-to-edge means the keyboard simply covers it, pane by pane,
@@ -14,6 +17,7 @@ import { router, Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BottomNav, type ChatTab } from "@/components/navigation/bottom-nav.tsx";
+import { VoiceSessionHost } from "@/components/voice/voice-session-host.tsx";
 import { useKeyboardStore } from "@/store/keyboard.ts";
 
 // Same story as the root boundary: this was `app/(drawer)/(tabs)/+error.tsx`.
@@ -21,18 +25,21 @@ export { TabsErrorBoundary as ErrorBoundary } from "@/components/route-error-bou
 
 export default function TabLayout() {
   return (
-    <Tabs
-      screenOptions={{ headerShown: false }}
-      // Closure returning an element: the navigator invokes tabBar as a
-      // plain function, so passing the bare TabBar reference would run
-      // its hooks outside a component (Invalid hook call). TabBar itself
-      // stays a real component with hooks.
-      tabBar={(props) => <TabBar {...props} />}
-    >
-      <Tabs.Screen name="chat" />
-      <Tabs.Screen name="voice" />
-      <Tabs.Screen name="vision" />
-    </Tabs>
+    <>
+      <Tabs
+        screenOptions={{ headerShown: false }}
+        // Closure returning an element: the navigator invokes tabBar as a
+        // plain function, so passing the bare TabBar reference would run
+        // its hooks outside a component (Invalid hook call). TabBar itself
+        // stays a real component with hooks.
+        tabBar={(props) => <TabBar {...props} />}
+      >
+        <Tabs.Screen name="chat" />
+        <Tabs.Screen name="voice" />
+      </Tabs>
+      {/* The single voice session; the screens consume it, never own it. */}
+      <VoiceSessionHost />
+    </>
   );
 }
 
@@ -43,12 +50,10 @@ function TabBar({ state }: { state: { index: number; routeNames: string[] } }) {
   const insets = useSafeAreaInsets();
   const setTabBarHeight = useKeyboardStore((s) => s.setTabBarHeight);
   const focusedRoute = state.routeNames[state.index] ?? "chat";
-  const active: ChatTab =
-    focusedRoute === "voice"
-      ? "voice"
-      : focusedRoute === "vision"
-        ? "vision"
-        : "chat";
+  // Two destinations only (see bottom-nav.tsx): anything else reads as
+  // chat — and the vision mode is part of the voice route, so it never
+  // appears here.
+  const active: ChatTab = focusedRoute === "voice" ? "voice" : "chat";
 
   return (
     <View
@@ -66,8 +71,7 @@ function TabBar({ state }: { state: { index: number; routeNames: string[] } }) {
       <BottomNav
         active={active}
         onSelect={(t) => {
-          if (t === "vision") router.navigate("/vision");
-          else if (t !== active) router.navigate(t === "voice" ? "/voice" : "/chat");
+          if (t !== active) router.navigate(t === "voice" ? "/voice" : "/chat");
         }}
       />
     </View>

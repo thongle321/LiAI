@@ -3,10 +3,10 @@
  *  Ported from pocketpal-ai src/services/voice/cascadeEngine.ts, mapped to
  *  LiAI's stores: `useAsrStore` (tier pinned at `prepare`, spoken language,
  *  the CPU-busy wait) and `useVoice` (playback idle = the reply finished
- *  speaking). Recorded divergences: the per-turn `speech_failed`
- *  bookkeeping the reference exposes through its TTS store does not exist
- *  here, and `speechStarted` is a playing/streaming playback state rather
- *  than a per-turn speech id.
+ *  speaking). LiAI has no per-turn speech-failure id to read back at turn
+ *  end; the equivalent observable is the speech event itself (a turn that
+ *  heard no playback at all is `speech_failed`), and `speechStarted` is a
+ *  playing/streaming playback state rather than a per-turn speech id.
  */
 
 import { fromByteArray } from "base64-js";
@@ -50,6 +50,7 @@ function watchSpeech(
 export class CascadeVoiceEngine implements VoiceEngine {
   readonly id = "cascade" as const;
   private tier: AsrTier | null = null;
+  lastReplyError: string | null = null;
 
   async prepare(tier: AsrTier): Promise<void> {
     this.tier = tier;
@@ -140,8 +141,11 @@ export class CascadeVoiceEngine implements VoiceEngine {
       sending = port
         .send(text, () => {})
         .then(
-          () => {},
+          () => {
+            this.lastReplyError = null;
+          },
           (err) => {
+            this.lastReplyError = err instanceof Error ? err.message : String(err);
             console.warn("[voiceMode] reply failed:", err);
             throw err;
           },
@@ -159,7 +163,15 @@ export class CascadeVoiceEngine implements VoiceEngine {
         await interrupting;
         return "interrupted";
       }
-      return sendFailed ? "reply_failed" : "answered";
+      if (sendFailed) {
+        return "reply_failed";
+      }
+      // The chain completed but no playback was ever observed (PocketPal's
+      // per-turn stream failure; LiAI observes the speech event instead).
+      if (!speech.stopped()) {
+        return "speech_failed";
+      }
+      return "answered";
     };
 
     const done = run().finally(() => {

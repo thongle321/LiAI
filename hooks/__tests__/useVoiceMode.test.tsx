@@ -7,7 +7,7 @@
  *  and a mocked mic-access module. */
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 
-import { useVoiceMode } from "@/hooks/useVoiceMode.ts";
+import { useVoiceMode, useVoiceSession, activeVoiceModeController } from "@/hooks/useVoiceMode.ts";
 import type { VoiceModeDeps, VoiceCapture } from "@/hooks/useVoiceMode.ts";
 import type { AsrTier } from "@/services/asr/types.ts";
 import type {
@@ -21,6 +21,8 @@ import type { VoiceChatPort } from "@/services/voice/chat-port.ts";
 import { useAsrStore } from "@/store/asr.ts";
 import { useVoice } from "@/store/voice.ts";
 import { PHONON_VOICES } from "@/services/tts/engines/phonon/voices";
+import { useVoiceModeSession, voiceModeSessionApi } from "@/store/voice-mode.ts";
+import { onAudioInterruption } from "@pocketpalai/react-native-speech";
 
 jest.mock("@/services/voice/mic-access.ts", () => ({
   ensureMicAccess: jest.fn(async () => "granted"),
@@ -38,11 +40,11 @@ jest.mock("@siteed/audio-studio", () => ({
 }));
 
 /** Focus, read at render time; suites run focused unless pinned false. */
-let focusNow = true;
+let mockFocusNow = true;
 
 jest.mock("expo-router", () => ({
   ...jest.requireActual("expo-router"),
-  useIsFocused: () => focusNow,
+  useIsFocused: () => mockFocusNow,
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
@@ -217,6 +219,8 @@ function deliverUtterance(rig: Rig): void {
 
 beforeEach(() => {
   armStore();
+  // The circuit is a module singleton now; every reset starts it closed.
+  voiceModeSessionApi.reset();
   (ensureMicAccess as jest.Mock).mockResolvedValue?.("granted");
   (checkMicAccess as jest.Mock).mockResolvedValue?.("granted");
 });
@@ -470,6 +474,24 @@ describe("turn wiring", () => {
     expect(rig.result.current.phase).toBe("listening");
   });
 
+  it("a successful send that never played resolves speech_failed", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+
+    deliverUtterance(rig);
+    await waitFor(() => {
+      expect(rig.engine.turnDone).not.toBeNull();
+    });
+    await act(async () => {
+      rig.engine.turnDone?.("speech_failed");
+    });
+
+    await waitFor(() => {
+      expect(rig.result.current.issue).toBe("Couldn't play the answer aloud.");
+    });
+    expect(rig.result.current.phase).toBe("listening");
+  });
+
   it("an empty utterance is a nudge, not an error", async () => {
     const rig = makeRig();
     await enterOpen(rig);
@@ -526,6 +548,249 @@ describe("turn wiring", () => {
     // The mic tap aligned with live speech hands the utterance over.
     expect(rig.engine.utterances.length).toBe(1);
     expect(rig.result.current.phase).toBe("transcribing");
+  });
+});
+
+describe("mic mute", () => {
+  it("mute in listening stops the capture; unmute restarts it", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+    expect(rig.capture.started).toBe(1);
+
+    await act(async () => {
+      rig.result.current.toggleMute();
+    });
+    expect(rig.result.current.micMuted).toBe(true);
+    expect(rig.capture.stopped).toBe(1);
+    // Nothing restarts while muted — the session stays open.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(rig.capture.started).toBe(1);
+    expect(rig.result.current.phase).toBe("listening");
+
+    await act(async () => {
+      rig.result.current.toggleMute();
+    });
+    expect(rig.result.current.micMuted).toBe(false);
+    await waitFor(() => {
+      expect(rig.capture.started).toBe(2);
+    });
+  });
+
+  it("muting mid-turn carries over: the resumed listen stays silent", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+
+    deliverUtterance(rig);
+    await waitFor(() => {
+      expect(rig.result.current.phase).toBe("transcribing");
+    });
+    await act(async () => {
+      rig.result.current.toggleMute();
+    });
+    // Not listening, so no capture action — the flag rides the turn out.
+    expect(rig.capture.started).toBe(1);
+    await act(async () => {
+      rig.engine.turnDone?.("answered");
+    });
+    await waitFor(() => {
+      expect(rig.result.current.phase).toBe("listening");
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    // The auto-relisten restart must not open a muted mic.
+    expect(rig.capture.started).toBe(1);
+
+    await act(async () => {
+      rig.result.current.toggleMute();
+    });
+    await waitFor(() => {
+      expect(rig.capture.started).toBe(2);
+    });
+  });
+
+  it("closing the session resets the mute (pinned regression)", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+    await act(async () => {
+      rig.result.current.toggleMute();
+    });
+    await act(async () => {
+      rig.result.current.end();
+    });
+    await waitFor(() => {
+      expect(useVoiceModeSession.getState().phase).toBe("closed");
+    });
+    expect(useVoiceModeSession.getState().micMuted).toBe(false);
+  });
+});
+
+describe("audio interruption", () => {
+  /** The subscription lives in the host hook; the tests drive the
+   *  controller method through the module singleton. */
+  const controller = () => {
+    const c = activeVoiceModeController();
+    if (c === null) throw new Error("no controller mounted");
+    return c;
+  };
+
+  it("the host hook subscribes to the fork's interruption events and unsubscribes on unmount", () => {
+    const rig = makeRig();
+    const subscription = (onAudioInterruption as jest.Mock).mock.results.at(
+      -1,
+    )?.value as { remove: jest.Mock };
+    expect(onAudioInterruption).toHaveBeenCalled();
+    subscription.remove.mockClear();
+    rig.unmount();
+    expect(subscription.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it("began: the mic and turn stop, the pause rides the mic-off flag", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+    deliverUtterance(rig);
+    await waitFor(() => {
+      expect(rig.engine.turnDone).not.toBeNull();
+    });
+
+    await act(async () => {
+      controller().onAudioInterruption({ type: "began" });
+    });
+
+    expect(rig.engine.interrupted).toBe(1);
+    expect(useVoiceModeSession.getState().micMuted).toBe(true);
+    expect(useVoiceModeSession.getState().phase).not.toBe("speaking");
+  });
+
+  it("ended: resume unmuted and reopen the mic", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+    await act(async () => {
+      controller().onAudioInterruption({ type: "began" });
+    });
+
+    await act(async () => {
+      controller().onAudioInterruption({ type: "ended" });
+    });
+
+    expect(useVoiceModeSession.getState().micMuted).toBe(false);
+    await waitFor(() => {
+      expect(rig.capture.started).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it("a cloud tap resumes a paused session without touching the turn", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+    await act(async () => {
+      controller().onAudioInterruption({ type: "began" });
+    });
+
+    await act(async () => {
+      rig.result.current.tapCloud();
+    });
+
+    expect(useVoiceModeSession.getState().micMuted).toBe(false);
+    await waitFor(() => {
+      expect(rig.capture.started).toBeGreaterThanOrEqual(2);
+    });
+    // No turn at this point (none was mid-flight while listening... the
+    // interrupt semantics are `began`'s job, not the tap's).
+    expect(rig.engine.interrupted).toBe(0);
+  });
+
+  it("an ended event without a pause restarts a live listen", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+
+    await act(async () => {
+      controller().onAudioInterruption({ type: "ended" });
+    });
+
+    await waitFor(() => {
+      expect(rig.capture.started).toBe(2);
+    });
+    expect(useVoiceModeSession.getState().micMuted).toBe(false);
+  });
+
+  it("the app returning to active resumes a paused session (inactive → active)", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+    await act(async () => {
+      controller().onAudioInterruption({ type: "began" });
+    });
+
+    await act(async () => {
+      controller().onAppStateChange("inactive", "active");
+    });
+
+    expect(useVoiceModeSession.getState().micMuted).toBe(false);
+    await waitFor(() => {
+      expect(rig.capture.started).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it("background still exits, and closing resets the pause", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+    await act(async () => {
+      controller().onAudioInterruption({ type: "began" });
+    });
+
+    await act(async () => {
+      controller().onAppStateChange("active", "background");
+    });
+
+    await waitFor(() => {
+      expect(useVoiceModeSession.getState().phase).toBe("closed");
+    });
+    // Closing resets what belongs to a session.
+    expect(useVoiceModeSession.getState().micMuted).toBe(false);
+  });
+
+  it("a user mute during the pause ends the pause (unmute wins)", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+    await act(async () => {
+      controller().onAudioInterruption({ type: "began" });
+    });
+    expect(useVoiceModeSession.getState().micMuted).toBe(true);
+
+    // Unmute = explicit resume request: the capture restarts and the
+    // pause flag cannot steal the next `ended`.
+    await act(async () => {
+      rig.result.current.toggleMute();
+    });
+    await waitFor(() => {
+      expect(rig.capture.started).toBeGreaterThanOrEqual(2);
+    });
+    await act(async () => {
+      controller().onAudioInterruption({ type: "ended" });
+    });
+    expect(useVoiceModeSession.getState().micMuted).toBe(false);
+  });
+});
+
+describe("presentation (collapse/expand)", () => {
+  it("collapse rides the director: only a LIVE session may show the bar", async () => {
+    const rig = makeRig();
+    expect(useVoiceModeSession.getState().presentation).toBe("full");
+    rig.result.current.collapse();
+    expect(useVoiceModeSession.getState().presentation).toBe("full");
+
+    await enterOpen(rig);
+    await act(async () => {
+      rig.result.current.collapse();
+    });
+    expect(useVoiceModeSession.getState().presentation).toBe("bar");
+    expect(useVoiceModeSession.getState().phase).toBe("listening");
+
+    await act(async () => {
+      rig.result.current.expand();
+    });
+    expect(useVoiceModeSession.getState().presentation).toBe("full");
   });
 });
 
@@ -586,8 +851,6 @@ describe("exits", () => {
     expect(rig.engine.released).toBe(1);
     expect(rig.capture.stopped).toBe(1);
   });
-
-
   it(
     "a mic that delivers nothing restarts once, then ends the session",
     async () => {
@@ -640,5 +903,75 @@ describe("exits", () => {
 
     expect(rig.engine.released).toBe(1);
     expect(rig.capture.stopped).toBe(1);
+  });
+});
+
+describe("one circuit, one controller (issue 01)", () => {
+  it("a live session makes a second entry a no-op", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+
+    await act(async () => {
+      await rig.result.current.requestEntry();
+    });
+
+    expect(rig.engine.prepared).toBe("base");
+    expect(rig.capture.started).toBe(1);
+    expect(rig.result.current.phase).toBe("listening");
+  });
+
+  it("closing the circuit resets the mute flag and the presentation", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+
+    // Later tickets flip these (mute toggle, collapsed bar); the close
+    // semantics are assembled now.
+    voiceModeSessionApi.set({ micMuted: true, presentation: "bar" });
+    await act(async () => {
+      rig.result.current.end();
+    });
+
+    const circuit = useVoiceModeSession.getState();
+    expect(circuit.phase).toBe("closed");
+    expect(circuit.micMuted).toBe(false);
+    expect(circuit.presentation).toBe("full");
+  });
+
+  it("exit-on-blur is anchored to the session's ORIGIN screen", async () => {
+    const rig = makeRig();
+    await enterOpen(rig); // requestEntry() defaults origin to "voice"
+    const screen = renderHook(
+      ({ origin }: { origin: "chat" | "voice" }) => useVoiceSession(origin),
+      { initialProps: { origin: "chat" as "chat" | "voice" } },
+    );
+
+    // A foreign screen (chat, later) blurring must NOT end a session
+    // the Voice tab started.
+    mockFocusNow = false;
+    await act(async () => {
+      screen.rerender({ origin: "chat" });
+    });
+    expect(useVoiceModeSession.getState().phase).toBe("listening");
+    screen.unmount();
+    mockFocusNow = true;
+  });
+
+  it("the origin screen blurring ends the session", async () => {
+    const rig = makeRig();
+    await enterOpen(rig);
+    const screen = renderHook(
+      ({ origin }: { origin: "chat" | "voice" }) => useVoiceSession(origin),
+      { initialProps: { origin: "voice" as "chat" | "voice" } },
+    );
+
+    mockFocusNow = false;
+    await act(async () => {
+      screen.rerender({ origin: "voice" });
+    });
+    await waitFor(() => {
+      expect(useVoiceModeSession.getState().phase).toBe("closed");
+    });
+    screen.unmount();
+    mockFocusNow = true;
   });
 });

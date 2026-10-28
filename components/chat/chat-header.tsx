@@ -37,7 +37,7 @@ export function ChatHeader({
   const penPress = usePressFeedback();
 
   return (
-    <View className="h-14 flex-row items-center border-b border-border bg-surface-1 px-5">
+    <View className="h-14 flex-row items-center border-b border-border bg-surface-1 px-6">
       <View className="w-36 flex-row items-center">
         <Animated.View style={menuPress.animatedStyle}>
           <Pressable

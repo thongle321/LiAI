@@ -14,7 +14,8 @@ export type VoiceTurnOutcome =
   | "answered"
   | "interrupted"
   | "transcribe_failed"
-  | "reply_failed";
+  | "reply_failed"
+  | "speech_failed";
 
 /** The chat the voice session talks to. */
 export interface VoiceTurnPort {
@@ -48,6 +49,8 @@ export interface VoiceEngine {
   prepare(tier: AsrTier): Promise<void>;
   /** Frees them; resolves once any in-flight decode has stopped. */
   release(): Promise<void>;
+  /** The reason the most recent turn failed to reply, if any. */
+  lastReplyError?: string | null;
   runTurn(
     utterance: Uint8Array,
     port: VoiceTurnPort,

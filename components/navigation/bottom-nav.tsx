@@ -11,14 +11,16 @@
 
 import { PixelRatio, Pressable, Text, View } from "react-native";
 import {
-  Eye,
   MessageCircle,
   Mic,
   type LucideIcon,
 } from "lucide-react-native";
 import { useColors } from "@/themes/tokens.ts";
 
-export type ChatTab = "chat" | "voice" | "vision";
+/** Two destinations only: Chat and Voice. Vision is the voice tab's
+ *  in-screen mode behind the Eye toggle (components/voice/
+ *  voice-vision-mode.tsx), not a third tab. */
+export type ChatTab = "chat" | "voice";
 
 /** Rendered height of the bar ITSELF at DEFAULT font scale, excluding the
  * bottom safe-area inset that (tabs)/_layout.tsx adds below it. The class
@@ -44,7 +46,6 @@ export const TAB_BAR_HEIGHT = 69;
 const TABS: { id: ChatTab; label: string; Icon: LucideIcon }[] = [
   { id: "chat", label: "Chat", Icon: MessageCircle },
   { id: "voice", label: "Voice", Icon: Mic },
-  { id: "vision", label: "Vision", Icon: Eye },
 ];
 
 /** Global caption line-height (global.css --text-caption--line-height),

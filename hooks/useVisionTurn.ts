@@ -1,10 +1,10 @@
 /** Vision turn: voice or text question about the live camera.
  *
  * The stream sends frames while the screen is idle/listening. A question
- * pauses frame uploads, sends the current frame plus question over the
- * vision socket, and resumes after the answer and TTS finish. If the socket
- * is unavailable, the existing HTTP chat path remains the fallback so a
- * network hiccup does not make vision unusable.
+ * snapshots the CURRENT frame at ask time and runs it through the
+ * chat pipeline STORE-LESS (createVisionTurnRunner): no chat session is
+ * minted or adopted, nothing is appended to the chat history — the only
+ * memory is the ephemeral vision record below, cleared on exit.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -25,13 +25,20 @@ import {
   voiceErrorAction,
 } from "@/services/voice/voice-status.ts";
 import { ensureMicAccess } from "@/services/voice/mic-access.ts";
-import { speakReply, stopSpeaking } from "@/services/voice/voice-speak.ts";
-import { useVoice } from "@/store/voice.ts";
+import { stopSpeaking } from "@/services/voice/voice-speak.ts";
 import { VOICE_LISTEN_OPTS } from "@/services/voice/voice-listen.ts";
 import { snapshotToUri } from "@/services/storage/snapshot.ts";
-import { useChatStore } from "@/store/chat.ts";
+import {
+  createVisionTurnRunner,
+} from "@/store/chat/index.ts";
 import { multimodalAvailable } from "@/services/inference/mmproj.ts";
 import { MULTIMODAL_WARNING } from "@/store/chat/send.ts";
+import {
+  VISION_EPHEMERAL_ID,
+  visionHistory,
+  visionRecord,
+  visionReset,
+} from "@/services/chat/vision-session.ts";
 
 const NOTHING_HEARD = "Didn't hear anything — tap the mic to try again.";
 const NO_FRAME = "Couldn't capture a frame — try again.";
@@ -47,8 +54,10 @@ export function useVisionTurn(
   const [answer, setAnswer] = useState("");
   const [issue, setIssue] = useState<string | null>(null);
   const [needsSettings, setNeedsSettings] = useState(false);
-  const send = useChatStore((s) => s.send);
-  const sending = useChatStore((s) => s.sending);
+  // The vision tab owns its turn runner: store-less by construction.
+  const runVisionTurnRef = useRef<ReturnType<typeof createVisionTurnRunner> | null>(null);
+  /** Local busy flag: an in-flight vision turn refuses a new one. */
+  const busyRef = useRef(false);
 
   const phaseRef = useRef<VoicePhase>("idle");
   const aliveRef = useRef(true);
@@ -103,7 +112,23 @@ export function useVisionTurn(
       setAnswer("");
       setIssue(null);
       setBoth("listening");
-      ExpoSpeechRecognitionModule.start({ ...VOICE_LISTEN_OPTS });
+      // Use on-device recognition only when the platform actually supports it;
+      // forcing it on a device without the speech pack fails every start and
+      // surfaces as "Didn't hear anything…". Fall back to network recognition
+      // if the on-device start throws.
+      const opts = {
+        ...VOICE_LISTEN_OPTS,
+        requiresOnDeviceRecognition:
+          ExpoSpeechRecognitionModule.supportsOnDeviceRecognition(),
+      };
+      try {
+        ExpoSpeechRecognitionModule.start(opts);
+      } catch {
+        ExpoSpeechRecognitionModule.start({
+          ...VOICE_LISTEN_OPTS,
+          requiresOnDeviceRecognition: false,
+        });
+      }
     } catch {
       if (!aliveRef.current) return;
       setIssue("Voice input isn't available in this build — rebuild the dev client.");
@@ -169,31 +194,38 @@ export function useVisionTurn(
       frameUris = [frameUri];
     }
 
-    // A chat send may still be in flight (store.send refuses while busy):
-    // wait for it instead of failing the turn.
-    let waited = 0;
-    while (useChatStore.getState().sending && waited < 10 && aliveRef.current) {
-      await new Promise((r) => setTimeout(r, 1000));
-      waited += 1;
-    }
-    const before = useChatStore.getState().messages.length;
-    const ok = await send(said, frameUris);
-    if (!aliveRef.current) return;
-    if (!ok) {
-      setIssue("Couldn't send that. Try again.");
+    // Only one vision turn at a time (the store's busy gate lives in
+    // the chat screen; this mode runs store-less, so it guards itself).
+    if (busyRef.current) {
+      setIssue("Still answering — hold on.");
       setBoth("idle");
       return;
     }
-    const replyMsg = useChatStore
-      .getState()
-      .messages.slice(before)
-      .find((m) => m.role === "assistant");
-    if (replyMsg === undefined) {
-      setIssue("No reply came back. Try again.");
+    busyRef.current = true;
+    try {
+      const runTurn =
+        runVisionTurnRef.current ??
+        (runVisionTurnRef.current = createVisionTurnRunner());
+      const outcome = await runTurn(said, {
+        sessionId: VISION_EPHEMERAL_ID,
+        history: visionHistory(),
+        images: frameUris,
+        voiceMode: true,
+      });
+      if (!aliveRef.current) return;
+      visionRecord(said, outcome.reply);
+      showAnswer(outcome.reply);
+    } catch {
+      // The store-backed send surfaced richer errors; the store-less
+      // runner only rejects when the engine is unusable, and the strip
+      // has no action to offer beyond a retry.
+      if (!aliveRef.current) return;
+      setIssue("Couldn't answer that. Try again.");
       setBoth("idle");
       return;
+    } finally {
+      busyRef.current = false;
     }
-    speak(replyMsg.text);
     // The frame went out with the turn — if the model could not actually
     // SEE it, say so HERE on the vision screen (the chat screen's
     // chatWarning never reaches this tab). Reads the send path's own
@@ -204,29 +236,13 @@ export function useVisionTurn(
     }
   }
 
-  function speak(text: string): void {
+  function showAnswer(text: string): void {
     if (!aliveRef.current) return;
+    // Vision mode answers in the caption only - no TTS.
     stopSpeaking();
     setAnswer(text);
     setIssue(null);
-    if (!useVoice.getState().autoSpeak) {
-      setBoth("idle");
-      return;
-    }
-    setBoth("speaking");
-    speakReply(text, {
-      onDone: () => {
-        if (aliveRef.current && phaseRef.current === "speaking") setBoth("idle");
-      },
-      onStopped: () => {
-        if (aliveRef.current && phaseRef.current === "speaking") setBoth("idle");
-      },
-      onError: () => {
-        if (!aliveRef.current) return;
-        setIssue("Couldn't play the reply. Try again.");
-        setBoth("idle");
-      },
-    });
+    setBoth("idle");
   }
 
   /** Mic tap: begin from idle, stop back to idle — never auto-listen. */
@@ -261,10 +277,13 @@ export function useVisionTurn(
     void askAboutFrame(text);
   }
 
-  /** Stop everything (screen exit): recognizer, speech, back to idle. */
+  /** Stop everything (screen exit): recognizer, speech, back to idle.
+   *  The exit is the vision conversation whole life, so the ephemeral
+   *  memory dies here too — the next entry starts with no history. */
   function stopAll(): void {
     safeStopListen();
     stopSpeaking();
+    visionReset();
     setBoth("idle");
   }
 

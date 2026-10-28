@@ -30,12 +30,14 @@ const ROW_COLORS: Record<MemoryRowKind, "primary" | "success"> = {
 export function VoiceMemorySheet({
   fit,
   chatModelName,
+  voiceName,
   onClose,
   onContinue,
   onChooseSmallerModel,
 }: {
   fit: VoiceMemoryFit;
   chatModelName: string;
+  voiceName?: string;
   onClose: () => void;
   onContinue: () => void;
   onChooseSmallerModel: () => void;
@@ -96,7 +98,9 @@ export function VoiceMemorySheet({
                 <Text className="font-sans text-body-md text-primary-text">
                   {row.kind === "chat"
                     ? `Chat model · ${chatModelName}`
-                    : `Speech recognition · Whisper ${ASR_TIER_LABEL[fit.sttTier]}`}
+                    : row.kind === "tts"
+                      ? `Voice · ${voiceName ?? "this voice"}`
+                      : `Speech recognition · Whisper ${ASR_TIER_LABEL[fit.sttTier]}`}
                 </Text>
               </View>
               <Text className="font-sans text-body-md text-primary-text">

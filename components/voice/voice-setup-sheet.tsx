@@ -15,6 +15,7 @@ import { AppState, Pressable, Text, View } from "react-native";
 
 import { setupTierFor } from "@/store/asr.ts";
 import { useAsrStore } from "@/store/asr.ts";
+import { useVoice } from "@/store/voice.ts";
 import { Sheet } from "@/components/sheet.tsx";
 import { WhisperModelRow } from "@/components/voice/whisper-model-row.tsx";
 import { ensureMicAccess } from "@/services/voice/mic-access.ts";
@@ -33,6 +34,8 @@ export function VoiceSetupSheet({
   const tierReady = useAsrStore((s) => s.isSelectedTierReady);
   const downloading = useAsrStore((s) => s.downloadStates[tier] === "downloading");
   const downloadModel = useAsrStore((s) => s.downloadModel);
+  const currentVoice = useVoice((s) => s.currentVoice);
+  const voiceName = currentVoice?.name ?? "System voice";
   const [mic, setMic] = useState<"pending" | "granted" | "refused">("pending");
   const [busy, setBusy] = useState(false);
   // A resolve after the sheet closed must not call onDone.
@@ -77,6 +80,14 @@ export function VoiceSetupSheet({
         </Text>
         <View className="rounded-2xl bg-surface-2 px-4 py-3">
           <WhisperModelRow tier={tier} testIDPrefix="voice-setup" />
+        </View>
+        <View className="rounded-2xl bg-surface-2 px-4 py-3">
+          <Text className="font-sans text-body-md text-primary-text">
+            Voice
+          </Text>
+          <Text className="mt-1 text-quiet">
+            {voiceName} · ready
+          </Text>
         </View>
         <Text
           testID="voice-setup-mic"

@@ -6,9 +6,9 @@ export type VoicePhase = "idle" | "listening" | "thinking" | "speaking";
 
 export const VOICE_STATUS_LABEL: Record<VoicePhase, string> = {
   idle: "Tap to talk",
-  listening: "Listening…",
-  thinking: "Thinking…",
-  speaking: "Speaking…",
+  listening: "Listening",
+  thinking: "Thinking",
+  speaking: "Speaking",
 };
 
 /** The "Playing audio…" block renders only while the AI replies. */
@@ -96,14 +96,76 @@ export type VoiceModePhase =
   | "thinking"
   | "speaking";
 
+/** Verb-style labels matching expo-thinking-orbs example (no ellipsis). */
 export const VOICE_MODE_LABEL: Record<VoiceModePhase, string> = {
-  closed: "Tap to talk",
-  starting: "Loading voice…",
-  listening: "Listening…",
-  transcribing: "Transcribing…",
-  thinking: "Thinking…",
-  speaking: "Speaking…",
+  closed: "Waiting",
+  starting: "Connecting",
+  listening: "Listening",
+  transcribing: "Processing",
+  thinking: "Thinking",
+  speaking: "Speaking",
 };
+
+/** Uppercase state names for the main label (matches expo-thinking-orbs example style). */
+export const VOICE_MODE_STATE_LABEL: Record<VoiceModePhase, string> = {
+  closed: "WAITING",
+  starting: "CONNECTING",
+  listening: "LISTENING",
+  transcribing: "PROCESSING",
+  thinking: "THINKING",
+  speaking: "SPEAKING",
+};
+
+/** Verb/description for the secondary label line. */
+export const VOICE_MODE_VERB_LABEL: Record<VoiceModePhase, string> = {
+  closed: "Waiting",
+  starting: "Connecting",
+  listening: "Listening",
+  transcribing: "Processing",
+  thinking: "Thinking",
+  speaking: "Speaking",
+};
+
+/** The muted listen overrides the phase copy outright: the status line is
+ *  what tells the user the mic is off while the session keeps running
+ *  (reference l10n mutedTitle/mutedHint, verbatim). */
+export function voiceModeStateLabel(
+  phase: VoiceModePhase,
+  micMuted: boolean,
+): string {
+  if (micMuted && phase === "listening") return "MICROPHONE OFF";
+  return VOICE_MODE_STATE_LABEL[phase];
+}
+
+export function voiceModeVerbLabel(
+  phase: VoiceModePhase,
+  micMuted: boolean,
+): string {
+  if (micMuted && phase === "listening") {
+    return "Tap the microphone to talk again";
+  }
+  return VOICE_MODE_VERB_LABEL[phase];
+}
+
+/** Per-phase guidance hint (PocketPal voiceStatus hint), adapted to LiAI's orb. */
+export const VOICE_MODE_HINT_LABEL: Record<VoiceModePhase, string> = {
+  closed: "",
+  starting: "Loading speech recognition and the voice. The first time can take a little longer.",
+  listening: "Pause when you're done, or tap the cloud to send",
+  transcribing: "Tap the cloud to cancel",
+  thinking: "Tap the cloud to cancel",
+  speaking: "Tap the cloud to interrupt",
+};
+
+export function voiceModeHintLabel(
+  phase: VoiceModePhase,
+  micMuted: boolean,
+): string {
+  if (micMuted && phase === "listening") {
+    return "Tap the microphone to talk again";
+  }
+  return VOICE_MODE_HINT_LABEL[phase];
+}
 
 /** Which expo-thinking-orbs behaviour matches the session right now. The
  *  orb's own nine-state union is LiveKit's AgentState; LiAI's phases map in
@@ -115,16 +177,18 @@ export function voiceOrbStateFor(
   phase: VoiceModePhase,
   failed: boolean,
 ): VoiceOrbState {
-  if (phase === "closed") return failed ? "failed" : "idle";
+  if (phase === "closed") return failed ? "failed" : "disconnected";
   switch (phase) {
     case "starting":
-      return "initializing";
+      return "connecting";
     case "listening":
       return "listening";
     case "speaking":
       return "speaking";
+    case "transcribing":
+      return "pre-connect-buffering";
     default:
-      // transcribing + thinking are one behaviour: the in-flight wait.
+      // thinking is the in-flight wait
       return "thinking";
   }
 }

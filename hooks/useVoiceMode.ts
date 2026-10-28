@@ -3,23 +3,36 @@
  *  + the cascade engine, through the same chat store send path as typed
  *  chat.
  *
- *  Recorded divergences (docs/specs/2026-10-25-voice-unified-whisper.md):
- *  no Plus teaser/paywall, no mute or audio-interruption wiring (no
- *  speech-capture native module to interrupt), no per-turn speech_failed
- *  (the voice store has no per-turn speech bookkeeping), and entry always
- *  speaks — the session IS the TTS surface, so the old autoSpeak gate is
- *  not consulted. Phases live in React state (no voiceModeStore here).
+ *  Recorded divergences (docs/specs/2026-10-25-voice-unified-whisper.md and
+ *  2026-10-27-voice-tab-hands-free-parity.md): no Plus teaser/paywall, no
+ *  device gate, no voice-picker setup step, and speech interruption support
+ *  rides the fork's own events rather than a speech-capture interrupt hook.
+ *  Mic mute, audio-interruption pause/resume and per-turn speech_failed are
+ *  ported (voice-tab hands-free parity spec).
+ *
+ *  Session state is a STORE, not controller React state (spec: hands-free
+ *  in chat / issue 01): phase, mic mute, full/bar presentation, the origin
+ *  screen and the captions live in store/voice-mode.ts. The controller
+ *  remains the only writer. The hook is mounted EXACTLY ONCE at the tab
+ *  layout level (components/voice/voice-session-host.tsx) so the chat
+ *  screen and the Voice tab can never run two sessions; screens consume
+ *  the registered controller through useVoiceSession(origin), whose blur
+ *  guard re-anchors exit-on-blur to the screen that started the session.
  *
  *  The hook is the only consumer interface; the class is internal. The
  *  deps options are seams for tests and let the screen pass navigation.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppState, Platform, type AppStateStatus } from "react-native";
 import { useIsFocused } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { toByteArray } from "base64-js";
 import { useAudioRecorder, type AudioDataEvent } from "@siteed/audio-studio";
+import {
+  onAudioInterruption,
+  type AudioInterruptionProps,
+} from "@pocketpalai/react-native-speech";
 
 import { createKeepAwake } from "@/services/chat/keep-awake.ts";
 import { ASR_SAMPLE_RATE } from "@/services/asr/constants.ts";
@@ -45,6 +58,17 @@ import { useModelStore } from "@/store/model-store.ts";
 import { useVoice } from "@/store/voice.ts";
 
 import type { VoiceModePhase } from "@/services/voice/voice-status.ts";
+import {
+  voiceModeSessionApi,
+  useVoiceModeSession,
+  type VoiceModeCircuit,
+  type VoiceModePresentation,
+  type VoiceModeSessionApi,
+  type VoiceModeSheet,
+  type VoiceSessionOrigin,
+} from "@/store/voice-mode.ts";
+
+export type { VoiceModeSheet, VoiceSessionOrigin } from "@/store/voice-mode.ts";
 
 /** A distinct tag: ending a chat turn's wake lock must not cut a live
  *  voice session (each holder keeps its own lock). */
@@ -52,12 +76,6 @@ const voiceLock = createKeepAwake(
   () => import("expo-keep-awake"),
   "liai-voice-mode",
 );
-
-/** The sheet state a session can hold while its phases stay "closed". */
-export type VoiceModeSheet =
-  | { kind: "setup" }
-  | { kind: "memory"; fit: ReturnType<typeof voiceMemoryFit> }
-  | null;
 
 /** The mic, as the controller sees it: a stream of int16 PCM bytes. */
 export interface VoiceCapture {
@@ -82,18 +100,10 @@ export interface VoiceModeDeps {
   onMicAudio?: (pcm: Float32Array) => void;
 }
 
-export interface VoiceCaptions {
-  heard: string;
-  reply: string | null;
-  issue: string | null;
-  needsMicSettings: boolean;
-}
-
-type CaptionPatch = Partial<VoiceCaptions>;
-
 const FAILURES: Partial<Record<VoiceTurnOutcome, string>> = {
   transcribe_failed: "Couldn't transcribe that. Try speaking again.",
   reply_failed: "Couldn't send that. Try again.",
+  speech_failed: "Couldn't play the answer aloud.",
 };
 
 const withStartTimeout = (loading: Promise<void>): Promise<void> => {
@@ -111,9 +121,11 @@ class VoiceModeController {
   private open = false;
   private disposed = false;
   private session = 0;
-  private phaseState: VoiceModePhase = "closed";
   private exiting: Promise<void> | null = null;
   private turn: VoiceTurn | null = null;
+  /** True between an audio interruption's `began` and its resume: the
+   *  controller-internal half of the pause (the UI rides micMuted). */
+  private pausedByInterruption = false;
   private readonly endpointer = new Endpointer();
   private micWatchdog: ReturnType<typeof setTimeout> | null = null;
   private micRetried = false;
@@ -122,28 +134,46 @@ class VoiceModeController {
 
   constructor(
     private readonly deps: Required<VoiceModeDeps>,
-    private readonly hooks: {
-      phase: (phase: VoiceModePhase) => void;
-      captions: (patch: CaptionPatch) => void;
-      sheet: (sheet: VoiceModeSheet) => void;
-    },
+    /** The circuit store — injected so tests can pin the write lane; the
+     *  app binds the real one in store/voice-mode.ts. */
+    private readonly sessionStore: VoiceModeSessionApi = voiceModeSessionApi,
   ) {
     // The reply caption lands as soon as the run settles — usually while
     // the speech is still going; the phase flips via the engine's
     // speechStarted event.
     this.deps.port.onReply = (text) => {
-      if (this.open) this.hooks.captions({ reply: text });
+      if (this.open) this.writeCircuit({ reply: text });
     };
   }
 
-  async requestEntry(): Promise<void> {
+  /** The circuit's current phase, read from the store (the controller is
+   *  its only writer, so this is safe to read without subscribing). */
+  private get phaseState(): VoiceModePhase {
+    return this.sessionStore.get().phase;
+  }
+
+  private writeCircuit(patch: Partial<VoiceModeCircuit>): void {
+    this.sessionStore.set(patch);
+  }
+
+  async requestEntry(origin: VoiceSessionOrigin = "voice"): Promise<void> {
     if (this.open || this.disposed) return;
+    // The exit-on-blur anchor: remember WHOSE screen asked, even when a
+    // gate fails (a parked sheet belongs to the originating screen).
+    this.writeCircuit({ origin });
     if (!this.deps.isModelReady()) {
-      this.hooks.captions({
+      this.writeCircuit({
         issue: "Load a chat model first — pick one in Models.",
+        sheet: null,
       });
-      this.hooks.sheet(null);
       this.deps.openModels();
+      return;
+    }
+    if (!asrStore.voiceModeAvailable) {
+      this.writeCircuit({
+        issue: "Hands-free voice is off — enable it in Settings.",
+        sheet: null,
+      });
       return;
     }
     // Mic state is read WITHOUT prompting: the ask belongs to the setup
@@ -154,14 +184,14 @@ class VoiceModeController {
     const mic = await checkMicAccess();
     if (this.open || this.disposed) return;
     if (mic === "settings") {
-      this.hooks.captions({
+      this.writeCircuit({
         needsMicSettings: true,
         issue: "Microphone is blocked — enable it in Settings.",
       });
       return;
     }
     if (mic === "unavailable") {
-      this.hooks.captions({
+      this.writeCircuit({
         needsMicSettings: false,
         issue: "Voice isn't available in this build — rebuild the dev client.",
       });
@@ -170,7 +200,7 @@ class VoiceModeController {
     // The setup gate: tier ready AND mic already granted. Everything else
     // is what VoiceSetupSheet exists to fix (tier download and/or the ask).
     if (!asrStore.isSelectedTierReady || mic !== "granted") {
-      this.hooks.sheet({ kind: "setup" });
+      this.writeCircuit({ sheet: { kind: "setup" } });
       return;
     }
     await this.checkMemoryAndEnter();
@@ -179,11 +209,11 @@ class VoiceModeController {
   async checkMemoryAndEnter(): Promise<void> {
     await this.exiting;
     if (this.open || this.disposed) {
-      this.hooks.sheet(null);
+      this.writeCircuit({ sheet: null });
       return;
     }
     if (!asrStore.isSelectedTierReady) {
-      this.hooks.sheet({ kind: "setup" });
+      this.writeCircuit({ sheet: { kind: "setup" } });
       return;
     }
     const tier = asrStore.selectedTier;
@@ -202,10 +232,10 @@ class VoiceModeController {
       ttsBytes,
     });
     if (fit.status === "fits") {
-      this.hooks.sheet(null);
+      this.writeCircuit({ sheet: null });
       await this.enter(tier);
     } else {
-      this.hooks.sheet({ kind: "memory", fit });
+      this.writeCircuit({ sheet: { kind: "memory", fit } });
     }
   }
 
@@ -213,7 +243,7 @@ class VoiceModeController {
    *  it changed underneath (the reference's continueAnyway contract). */
   async continueAnyway(tier: AsrTier): Promise<void> {
     await this.exiting;
-    this.hooks.sheet(null);
+    this.writeCircuit({ sheet: null });
     if (this.open || this.disposed) return;
     if (asrStore.selectedTier !== tier || !asrStore.isSelectedTierReady) {
       await this.requestEntry();
@@ -224,25 +254,45 @@ class VoiceModeController {
 
   /** The memory sheet's way into the picker (a smaller chat model). */
   openModelPicker(): void {
-    this.hooks.sheet(null);
+    this.writeCircuit({ sheet: null });
     this.deps.openModels();
   }
 
-  async setupDone(): Promise<void> {
-    this.hooks.sheet(null);
-    await this.requestEntry();
+  setupDone(): Promise<void> {
+    this.writeCircuit({ sheet: null });
+    return this.requestEntry(this.sessionStore.get().origin ?? "voice");
   }
 
   private setPhase(phase: VoiceModePhase): void {
-    this.phaseState = phase;
-    this.hooks.phase(phase);
+    this.writeCircuit({ phase });
   }
 
+  /** Presenter writers for the session's two presentations (the
+   *  reference's setPresentation): the collapsed bar lives inside the
+   *  Voice tab, not over the chat — the session, its mic and its turns
+   *  keep running across the swap. Only a live session has a shape. */
+  collapse(): void {
+    if (this.open) this.writeCircuit({ presentation: "bar" });
+  }
+
+  expand(): void {
+    if (this.open) this.writeCircuit({ presentation: "full" });
+  }
+
+  /** The UI putting a parked gate sheet away; a session-circuit write like
+   *  any other, so it stays this class's lane. */
+  dismissSheet(): void {
+    this.writeCircuit({ sheet: null });
+  }
+
+  /** True only when the capture may actually run: the session must be the
+   *  live one, listening, and not muted. */
   private isListening(session: number): boolean {
     return (
       session === this.session &&
       this.open &&
-      this.phaseState === "listening"
+      this.phaseState === "listening" &&
+      !this.sessionStore.get().micMuted
     );
   }
 
@@ -252,6 +302,9 @@ class VoiceModeController {
     this.open = true;
     const session = ++this.session;
     this.setPhase("starting");
+    // Every open presents full-screen; a stale `bar` from a previous
+    // session must not survive a fresh one. (Mute is reset in exit.)
+    this.writeCircuit({ presentation: "full" });
     // Any speech from before the session goes quiet first.
     useVoice.getState().stop().catch(() => {});
     void voiceLock.holdScreen();
@@ -266,7 +319,7 @@ class VoiceModeController {
       return;
     }
     if (session !== this.session || !this.open) return;
-    this.hooks.captions({
+    this.writeCircuit({
       heard: "",
       reply: null,
       issue: null,
@@ -279,6 +332,11 @@ class VoiceModeController {
 
   tapCloud(): void {
     if (!this.open) return;
+    // A paused session comes back on the cloud like it does on `ended`.
+    if (this.pausedByInterruption) {
+      this.resumeAfterInterruption();
+      return;
+    }
     const phase = this.phaseState;
     if (phase === "listening" && this.endpointer.tap()) {
       this.endUtterance(this.session, "tap");
@@ -291,6 +349,26 @@ class VoiceModeController {
     }
   }
 
+  /** The mute switch: flip the flag, then act only while listening. A
+   *  muted mic never restarts even when a turn resumes the listen —
+   *  isListening includes the flag — and unmute re-opens the capture with
+   *  a fresh watchdog retry budget (reference toggleMute). */
+  toggleMute(): void {
+    if (!this.open) return;
+    const muted = !this.sessionStore.get().micMuted;
+    this.writeCircuit({ micMuted: muted });
+    // An explicit mute/unmute is a user decision: it ends any pause, and
+    // unmute below becomes the resume (reference toggleMute).
+    this.pausedByInterruption = false;
+    if (this.phaseState !== "listening") return;
+    if (muted) {
+      this.stopCapture();
+    } else {
+      this.micRetried = false;
+      void this.startCapture(this.session);
+    }
+  }
+
   /** The chat screen's explicit way out; the voice tab's End button. */
   exit(reason: string): Promise<void> {
     if (!this.open) {
@@ -299,7 +377,11 @@ class VoiceModeController {
     this.open = false;
     this.session += 1;
     this.micRetried = false;
+    this.pausedByInterruption = false;
     this.setPhase("closed");
+    // Closing the circuit resets what belongs to a session: the mute
+    // flag dies with it, and the next open presents full again.
+    this.writeCircuit({ micMuted: false, presentation: "full" });
     this.stopCapture();
     const turn = this.turn;
     this.turn = null;
@@ -328,15 +410,72 @@ class VoiceModeController {
     this.exit("dispose");
   }
 
-  onAppStateChange(next: AppStateStatus): void {
+  /** A call, alarm or Siri took the audio session: the mic and any turn
+   *  stop and the UI shows the mic off until `ended` (or a cloud tap, or
+   *  the app returning to active) resumes unmuted. `ended` may never
+   *  arrive (Android only holds focus while a chunk plays; iOS skips it
+   *  after Siri), and no watchdog runs meanwhile — the capture is off.
+   *  (Reference onAudioInterruption; the UI pause state rides the
+   *  existing micMuted flag.) */
+  onAudioInterruption({ type }: AudioInterruptionProps): void {
+    if (!this.open) return;
+    if (type === "began") {
+      this.stopCapture();
+      if (this.turn) {
+        void this.turn.interrupt();
+      }
+      if (
+        (this.turn !== null ||
+          this.phaseState === "listening" ||
+          this.phaseState === "starting") &&
+        !this.sessionStore.get().micMuted
+      ) {
+        this.pausedByInterruption = true;
+        this.writeCircuit({ micMuted: true });
+      }
+      return;
+    }
+    if (this.pausedByInterruption) {
+      this.resumeAfterInterruption();
+    } else if (this.phaseState === "listening") {
+      // Not one of ours: a plain capture restart on the live listen.
+      this.stopCapture();
+      void this.startCapture(this.session);
+    }
+  }
+
+  /** The one way a paused session comes back: unmuted, fresh watchdog
+   *  budget, capture re-opened. Shared by `ended`, the cloud tap and the
+   *  app returning to active (reference resumeAfterInterruption). */
+  private resumeAfterInterruption(): void {
+    this.pausedByInterruption = false;
+    this.micRetried = false;
+    this.writeCircuit({ micMuted: false });
+    this.stopCapture();
+    void this.startCapture(this.session);
+  }
+
+  onAppStateChange(
+    previous: AppStateStatus | null,
+    next: AppStateStatus,
+  ): void {
     if (!this.open) return;
     if (next === "background") {
       this.exit("background");
+    } else if (next === "active" && previous === "inactive") {
+      if (this.pausedByInterruption) {
+        this.resumeAfterInterruption();
+      } else if (this.phaseState === "listening") {
+        // iOS laid the capture down with the audio session (reference
+        // mic.restart, why: foreground): re-open on the way back.
+        this.stopCapture();
+        void this.startCapture(this.session);
+      }
     }
   }
 
   private notifyError(message: string): void {
-    this.hooks.captions({ issue: message });
+    this.writeCircuit({ issue: message });
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(
       () => {},
     );
@@ -448,7 +587,7 @@ class VoiceModeController {
     const turn = this.deps.engine.runTurn(utterance, this.deps.port, {
       transcribed: (text) => {
         if (!current()) return;
-        this.hooks.captions({ heard: text, reply: null });
+        this.writeCircuit({ heard: text, reply: null });
         this.setPhase("thinking");
       },
       speechStarted: () => {
@@ -464,7 +603,7 @@ class VoiceModeController {
         this.turn = null;
         this.setPhase("listening");
         if (outcome === "empty") {
-          this.hooks.captions({
+          this.writeCircuit({
             heard: "",
             issue: "Didn't catch anything — try speaking again.",
           });
@@ -474,6 +613,13 @@ class VoiceModeController {
           void Haptics.notificationAsync(
             Haptics.NotificationFeedbackType.Success,
           ).catch(() => {});
+        } else if (outcome === "reply_failed") {
+          const reason = this.deps.engine.lastReplyError;
+          this.notifyError(
+            reason
+              ? `Couldn't send that: ${reason}. Try again.`
+              : "Couldn't send that. Try again.",
+          );
         } else {
           const message = FAILURES[outcome];
           if (message) this.notifyError(message);
@@ -486,13 +632,6 @@ class VoiceModeController {
 // ---------------------------------------------------------------------------
 // The hook
 // ---------------------------------------------------------------------------
-
-const EMPTY_CAPTIONS: VoiceCaptions = {
-  heard: "",
-  reply: null,
-  issue: null,
-  needsMicSettings: false,
-};
 
 /** The default mic: audio-studio's recorder, 50 ms int16 PCM events. */
 function makeDefaultCapture(recorder: ReturnType<typeof useAudioRecorder>): VoiceCapture {
@@ -509,8 +648,35 @@ function makeDefaultCapture(recorder: ReturnType<typeof useAudioRecorder>): Voic
         },
       });
     },
-    stop: () => recorder.stopRecording(),
+    stop: () => {
+      // stopRecording() is async and rejects when nothing is recording;
+      // the synchronous try/catch in stopCapture cannot catch that.
+      void recorder.stopRecording().catch(() => {});
+    },
   };
+}
+
+/** The UI side of the mic-level bridge: the controller is mounted once at
+ *  the tab layout, but the orb's SharedValues live on the screen that
+ *  renders the orb. The screen hands its setSamples here; the controller's
+ *  default onMicAudio forwards every chunk to whoever is registered. */
+let micSink: ((pcm: Float32Array) => void) | null = null;
+
+export function setVoiceMicSink(
+  sink: (pcm: Float32Array) => void,
+): () => void {
+  micSink = sink;
+  return () => {
+    if (micSink === sink) micSink = null;
+  };
+}
+
+/** The single live session's controller. Consumers (useVoiceSession) call
+ *  it; only one exists because the host hook is mounted exactly once. */
+let activeController: VoiceModeController | null = null;
+
+export function activeVoiceModeController(): VoiceModeController | null {
+  return activeController;
 }
 
 function resolveDeps(deps: VoiceModeDeps, recorder: ReturnType<typeof useAudioRecorder>): Required<VoiceModeDeps> {
@@ -539,80 +705,161 @@ function resolveDeps(deps: VoiceModeDeps, recorder: ReturnType<typeof useAudioRe
     }),
     chatBytes: deps.chatBytes ?? activeChatModelBytes,
     openModels: deps.openModels ?? (() => {}),
-    onMicAudio: deps.onMicAudio ?? (() => {}),
+    onMicAudio:
+      deps.onMicAudio ??
+      ((pcm: Float32Array) => {
+        try {
+          micSink?.(pcm);
+        } catch {
+          // A level consumer dying must never take the session down.
+        }
+      }),
   };
 }
 
-export function useVoiceMode(deps: VoiceModeDeps = {}) {
-  const recorder = useAudioRecorder();
-  const [phase, setPhase] = useState<VoiceModePhase>("closed");
-  const [captions, setCaptions] = useState<VoiceCaptions>(EMPTY_CAPTIONS);
-  const [sheet, setSheet] = useState<VoiceModeSheet>(null);
-  const focused = useIsFocused();
-  const focusedRef = useRef(focused);
-  focusedRef.current = focused;
+/** The circuit + controller-bound actions a screen (or the controller
+ *  suite) works with. Reads the store; every write goes on the wrapped
+ *  VoiceModeController, never direct setState. */
+export interface VoiceModeSurface {
+  phase: VoiceModePhase;
+  micMuted: boolean;
+  presentation: VoiceModePresentation;
+  origin: VoiceSessionOrigin | null;
+  heard: string;
+  reply: string | null;
+  issue: string | null;
+  needsMicSettings: boolean;
+  sheet: VoiceModeSheet;
+  /** Starts the entry gates from `origin`'s screen (default: voice tab). */
+  requestEntry(origin?: VoiceSessionOrigin): Promise<void>;
+  dismissSheet(): void;
+  setupDone(): Promise<void>;
+  continueAnyway(): Promise<void>;
+  openModels(): void;
+  tapCloud(): void;
+  /** The session's mic-mute switch (reference toggleMute). */
+  toggleMute(): void;
+  /** Collapses the full view to the in-tab bar and back (issue 04). */
+  collapse(): void;
+  expand(): void;
+  end(): Promise<void>;
+}
 
-  const [controller] = useState(() => {
-    return new VoiceModeController(resolveDeps(deps, recorder), {
-      phase: setPhase,
-      captions: (patch) => {
-        setCaptions((c) => ({ ...c, ...patch }));
-      },
-      sheet: setSheet,
-    });
-  });
-
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
-      if (focusedRef.current) {
-        controller.onAppStateChange(next);
-      }
-    });
-    return () => {
-      sub.remove();
-      controller.dispose();
-    };
-  }, [controller]);
-
-  useEffect(() => {
-    if (!focused) controller.exit("blur");
-  }, [focused, controller]);
-
-  const requestEntry = useCallback(() => controller.requestEntry(), [controller]);
-  const dismissSheet = useCallback(() => setSheet(null), []);
-  const setupDone = useCallback(() => controller.setupDone(), [controller]);
-  const continueAnyway = useCallback(
-    () => {
-      if (
-        sheet !== null &&
-        sheet.kind === "memory" &&
-        sheet.fit.status === "tight"
-      ) {
-        return controller.continueAnyway(sheet.fit.sttTier);
-      }
-    },
-    [controller, sheet],
+/** Shared body of both entry points: read the circuit, wrap the
+ *  controller's actions. */
+function useVoiceSurface(): VoiceModeSurface {
+  const circuit = useVoiceModeSession();
+  const requestEntry = useCallback(
+    (origin: VoiceSessionOrigin = "voice") =>
+      // A live session makes a second entry a no-op: one controller runs
+      // the only loop for both surfaces.
+      activeController?.requestEntry(origin) ?? Promise.resolve(),
+    [],
   );
+  const dismissSheet = useCallback(
+    () => activeController?.dismissSheet(),
+    [],
+  );
+  const setupDone = useCallback(
+    () => activeController?.setupDone() ?? Promise.resolve(),
+    [],
+  );
+  const continueAnyway = useCallback(() => {
+    // The tier comes from the circuit's own memory sheet, at call time.
+    const sheet = voiceModeSessionApi.get().sheet;
+    if (
+      sheet !== null &&
+      sheet.kind === "memory" &&
+      sheet.fit.status === "tight"
+    ) {
+      void activeController?.continueAnyway(sheet.fit.sttTier);
+    }
+    return Promise.resolve();
+  }, []);
   const openModels = useCallback(
-    () => controller.openModelPicker(),
-    [controller],
+    () => activeController?.openModelPicker(),
+    [],
   );
-  const tapCloud = useCallback(() => controller.tapCloud(), [controller]);
-  const end = useCallback(() => controller.exit("end"), [controller]);
-
+  const tapCloud = useCallback(() => activeController?.tapCloud(), []);
+  const toggleMute = useCallback(() => activeController?.toggleMute(), []);
+  const collapse = useCallback(() => activeController?.collapse(), []);
+  const expand = useCallback(() => activeController?.expand(), []);
+  const end = useCallback(
+    () => activeController?.exit("end") ?? Promise.resolve(),
+    [],
+  );
   return {
-    phase,
-    heard: captions.heard,
-    reply: captions.reply,
-    issue: captions.issue,
-    needsMicSettings: captions.needsMicSettings,
-    sheet,
+    ...circuit,
     requestEntry,
     dismissSheet,
     setupDone,
     continueAnyway,
     openModels,
     tapCloud,
+    toggleMute,
+    collapse,
+    expand,
     end,
   };
+}
+
+/** The HOST hook: mounted exactly once, at the tab-layout level, by
+ *  components/voice/voice-session-host.tsx. Creates the single controller
+ *  and wires app-state exits. Blur exits do NOT live here — they are
+ *  re-anchored to the session's ORIGIN screen by that screen's
+ *  useVoiceSession guard (a session survives a tab that didn't start it). */
+export function useVoiceMode(deps: VoiceModeDeps = {}): VoiceModeSurface {
+  const recorder = useAudioRecorder();
+  const [controller] = useState(() => {
+    const created = new VoiceModeController(resolveDeps(deps, recorder));
+    activeController = created;
+    return created;
+  });
+
+  useEffect(() => {
+    let previous: AppStateStatus | null = AppState.currentState;
+    const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
+      const from = previous;
+      previous = next;
+      controller.onAppStateChange(from, next);
+    });
+    // OS-level audio interruptions (a call, an alarm) ride the fork's
+    // event: the controller pauses, resumes unmuted on the way back.
+    const interruptions = onAudioInterruption((event) =>
+      controller.onAudioInterruption(event),
+    );
+    return () => {
+      sub.remove();
+      interruptions.remove();
+      controller.dispose();
+      if (activeController === controller) activeController = null;
+    };
+  }, [controller]);
+
+  return useVoiceSurface();
+}
+
+/** The consumer hook: HOW a screen talks to the one session. `origin`
+ *  names the screen mounting it; its blur guard exits only a session this
+ *  screen started (issue 01: exit-on-blur re-anchored to the origin
+ *  screen — today every live session still starts from the Voice tab). */
+export function useVoiceSession(
+  origin: VoiceSessionOrigin = "voice",
+): VoiceModeSurface {
+  const focused = useIsFocused();
+  useEffect(() => {
+    if (!focused) return;
+    return () => {
+      // Focus lost: end a session this screen started; leave one that
+      // belongs to another screen alone.
+      const controller = activeController;
+      if (
+        controller !== null &&
+        voiceModeSessionApi.get().origin === origin
+      ) {
+        void controller.exit("blur");
+      }
+    };
+  }, [focused, origin]);
+  return useVoiceSurface();
 }

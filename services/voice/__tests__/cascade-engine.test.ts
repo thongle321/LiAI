@@ -114,12 +114,17 @@ describe("CascadeVoiceEngine", () => {
     useAsrStore.setState({ spokenLanguage: "en" });
 
     const seen: string[] = [];
+    let speechStarted = 0;
     const port = new FakePort();
     const turn = engine.runTurn(voicedPcm(), port, {
       transcribed: (t) => seen.push(t),
-      speechStarted: () => {},
+      speechStarted: () => (speechStarted += 1),
     });
     await new Promise((r) => setTimeout(r, 0));
+    // Speech is observed before the turn settles: the reply did play.
+    useVoice.setState({ playbackState: { mode: "playing" } });
+    expect(speechStarted).toBe(1);
+    useVoice.setState({ playbackState: { mode: "idle" } });
     port.completeSend();
     const outcome = await turn.done;
 
@@ -179,6 +184,29 @@ describe("CascadeVoiceEngine", () => {
     const outcome = await turn.done;
 
     expect(outcome).toBe("reply_failed");
+  });
+
+  it("no speech was ever observed on a successful turn: speech_failed", async () => {
+    const engine = new CascadeVoiceEngine();
+    jest.spyOn(whisperAsrEngine, "preload").mockResolvedValue(undefined);
+    jest
+      .spyOn(whisperAsrEngine, "transcribe")
+      .mockResolvedValue({ text: "hi", language: "en" });
+    await engine.prepare("base");
+
+    // The send settles while playback never leaves idle: the reply had
+    // text but no audio came out of it (PocketPal's per-turn stream
+    // failure, observable here as a silent chain).
+    const port = new FakePort();
+    const turn = engine.runTurn(voicedPcm(), port, {
+      transcribed: () => {},
+      speechStarted: () => {},
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    port.completeSend();
+    const outcome = await turn.done;
+
+    expect(outcome).toBe("speech_failed");
   });
 
   it("interrupting before the send cancels the transcription", async () => {

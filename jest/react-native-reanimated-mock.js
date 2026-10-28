@@ -66,6 +66,10 @@ module.exports = {
     inOut: (fn) => fn,
   },
   useSharedValue: (initial) => ({ value: initial }),
+  // A derived value re-evaluates on read: shared values are plain objects
+  // in this mock, so the worklet body runs live on every .value access —
+  // useKeyboardLift's occlusion arithmetic reads true numbers.
+  useDerivedValue: (fn) => ({ get value() { return fn(); } }),
   // Frame callbacks exist but never fire under Jest — nothing animates at
   // the boundary. The only call surface the components under test make is
   // `setActive` (gating a callback on a phase toggle).
@@ -74,6 +78,16 @@ module.exports = {
     return { setActive: (_active) => {}, update: () => {} };
   },
   useAnimatedStyle: (styleFn) => styleFn(),
+  // The real useEvent wraps the handler in a WorkletEventHandler and is
+  // attached as an event prop (RNGH's GestureDetector does exactly that):
+  // give it the same object shape. The worklet never RUNS here — the
+  // gesture-handler module mocks drive the state instead.
+  useEvent: (handler, eventNames = []) => ({
+    workletEventHandler: {
+      // A Map of event name → handler, as WorkletEventHandler keeps them.
+      handlers: new Map(eventNames.map((name) => [name, handler])),
+    },
+  }),
   // Run the worklet body against a plain event so the component still
   // exercises it. Shared values are mutable objects in this mock, so the
   // bookkeeping a scroll handler does survives the call.

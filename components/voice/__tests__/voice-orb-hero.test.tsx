@@ -10,6 +10,7 @@
 
 import { fireEvent, render, screen } from "@testing-library/react-native";
 
+import * as orbs from "expo-thinking-orbs";
 import type { useVoiceMode } from "@/hooks/useVoiceMode.ts";
 import { VoiceOrbHero } from "../voice-orb-hero";
 import { useVoiceLevels } from "expo-thinking-orbs";
@@ -23,13 +24,14 @@ const inbox = (): ReturnType<typeof useVoiceLevels> => useVoiceLevels();
 
 function renderHero(
   phase: VoiceModeState["phase"],
-  opts: { failed?: boolean; onTap?: () => void } = {},
+  opts: { failed?: boolean; muted?: boolean; onTap?: () => void } = {},
 ): void {
   const onTap = opts.onTap ?? (() => {});
   render(
     <VoiceOrbHero
       phase={phase}
       failed={opts.failed === true}
+      muted={opts.muted === true}
       mic={inbox()}
       onTap={onTap}
     />,
@@ -37,22 +39,22 @@ function renderHero(
 }
 
 describe("VoiceOrbHero", () => {
-  it("closed: the shell breathes at idle and the tap enters the gates", () => {
+  it("closed: the shell uses disconnected and the tap enters the gates", () => {
     const onTap = jest.fn();
     renderHero("closed", { onTap });
 
-    expect(screen.getByLabelText("Ready")).toBeOnTheScreen();
+    expect(screen.getByLabelText("Disconnected")).toBeOnTheScreen();
     fireEvent.press(screen.getByLabelText("Tap to speak"));
     expect(onTap).toHaveBeenCalledTimes(1);
   });
 
   it("live phases resolve the orb's behaviour; the tap is always on", () => {
     const cases: Array<[VoiceModeState["phase"], string]> = [
-      ["starting", "Connecting…"],
-      ["listening", "Listening…"],
-      ["transcribing", "Thinking…"],
-      ["thinking", "Thinking…"],
-      ["speaking", "Speaking…"],
+      ["starting", "Connecting"],
+      ["listening", "Listening"],
+      ["transcribing", "Processing"],
+      ["thinking", "Thinking"],
+      ["speaking", "Speaking"],
     ];
     for (const [phase, label] of cases) {
       const onTap = jest.fn();
@@ -73,5 +75,26 @@ describe("VoiceOrbHero", () => {
     expect(screen.getByLabelText("Connection failed")).toBeOnTheScreen();
     fireEvent.press(screen.getByLabelText("Tap to speak"));
     expect(onTap).toHaveBeenCalledTimes(1);
+  });
+
+  it("a muted listen freezes the shell and drops the signal colour", () => {
+    const orbSpy = jest.spyOn(orbs, "VoiceOrb");
+    renderHero("listening", { muted: true });
+
+    // The paused prop is the real orb's freeze; the colour steps down from
+    // the signal blue to the secondary text step (the greyed treatment).
+    const lastCall = orbSpy.mock.calls.at(-1)![0];
+    expect(lastCall.paused).toBe(true);
+    expect(lastCall.color).toBe("#475569"); // light secondaryText
+    orbSpy.mockRestore();
+  });
+
+  it("unmuted sessions keep the running shell in the signal colour", () => {
+    const orbSpy = jest.spyOn(orbs, "VoiceOrb");
+    renderHero("listening", { muted: false });
+
+    const lastCall = orbSpy.mock.calls.at(-1)![0];
+    expect(lastCall.paused).toBe(false);
+    orbSpy.mockRestore();
   });
 });

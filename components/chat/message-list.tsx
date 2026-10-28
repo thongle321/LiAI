@@ -64,7 +64,10 @@ export function MessageList({
   /** Tracks the growing multiline composer so the newest message is never
    *  clipped behind it. */
   extraContentPadding,
-  /** Minimum bottom inset reserved while a reply streams. */
+  /** Minimum bottom inset reserved while a reply streams. Retained for API
+   *  parity with KeyboardChatScrollView; LiAI no longer raises it (a
+   *  full-viewport reserve made the bottom inset scrollable past the newest
+   *  message). Always 0. */
   blankSpace,
   onEndVisibleChange,
   streaming,
@@ -211,12 +214,20 @@ export function MessageList({
       keyExtractor={(row) => (row.kind === "message" ? row.message.id : row.id)}
       renderItem={({ item }) => renderRow(item, widths)}
       renderScrollComponent={renderScrollComponent}
+      scrollEnabled={true}
       onScroll={handleScroll}
       onContentSizeChange={handleContentSizeChange}
       onLayout={handleLayout}
+      // PocketPal (inverted list) uses autoscrollToTopThreshold: 20 here, which
+      // auto-scrolls to the top when the first visible item is near the top.
+      // LiAI's list is deliberately non-inverted, so "the top" means the
+      // oldest messages; that same threshold pinned a streaming reply to the
+      // top and made it stick (see the chat composer bug). 0 disables the
+      // auto-scroll-to-top while keeping minIndexForVisible so the growing
+      // bubble cannot shove the reader off-screen.
       maintainVisibleContentPosition={
         streaming
-          ? { minIndexForVisible: 1, autoscrollToTopThreshold: 20 }
+          ? { minIndexForVisible: 1, autoscrollToTopThreshold: 0 }
           : undefined
       }
       // Render windowing at PocketPal's values (ChatView.tsx:997,1001):
@@ -230,7 +241,7 @@ export function MessageList({
       // No empty-state centring on this container: that is what put a
       // centred child inside the dynamic contentInset above. With rows
       // present the padding is all this container needs.
-      contentContainerClassName="p-5"
+      contentContainerClassName="p-6"
       className="flex-1"
       // Reflow, not entrance. Per-row entering/exiting on a virtualized list
       // replays every time the render window recycles a row, so scrolling back

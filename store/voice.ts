@@ -49,7 +49,7 @@ export const VOICE_KEY = "liai_voice";
 
 /** PocketPal's gate: neural TTS needs a 4 GiB device (spec Q14). */
 export const RAM_GATE_BYTES = 4 * 1024 * 1024 * 1024;
-export const VOICE_FIRST_CHUNK_HOLD_MS = 1200;
+export const VOICE_FIRST_CHUNK_HOLD_MS = 1500;
 
 export type PlaybackState =
   | { mode: "idle" }
@@ -440,6 +440,7 @@ export function createVoiceStore(storage: KeyValueStorage) {
         if (!get().autoSpeak || !get().isTTSAvailable()) return;
         if (get().lastSpokenMessageId === messageId) return;
         const voice = get().currentVoice ?? DEVICE_DEFAULT_VOICE;
+        const engine = getEngine(voice.engine);
         const stopDone = get().stop().catch(() => undefined);
         set({ lastSpokenMessageId: messageId });
         streamStripper = new ThinkingStripper();
@@ -478,7 +479,6 @@ export function createVoiceStore(storage: KeyValueStorage) {
           voiceStream = null;
         }
 
-        const engine = getEngine(voice.engine);
         const supertonicOpts =
           voice.engine === "supertonic"
             ? {
@@ -487,8 +487,23 @@ export function createVoiceStore(storage: KeyValueStorage) {
                 ...streamOpts,
               }
             : streamOpts;
-        const handle = engine.playStreaming(voice, stopDone, supertonicOpts);
-        set({ playbackState: { mode: "streaming", messageId, handle } });
+        try {
+          const handle = engine.playStreaming(voice, stopDone, supertonicOpts);
+          set({ playbackState: { mode: "streaming", messageId, handle } });
+        } catch (err) {
+          console.warn("[voice] streaming start failed:", err);
+          // Clear the spoken mark so onAssistantMessageComplete can use the
+          // installed-gated oneshot replay path.
+          set({ lastSpokenMessageId: null });
+          streamStripper = null;
+          streamPlaceholderEmitted = false;
+          voiceStream = null;
+          voiceSpeechStarted = null;
+          const ps = get().playbackState;
+          if (ps.mode === "streaming" && ps.messageId === messageId) {
+            set({ playbackState: { mode: "idle" } });
+          }
+        }
       },
 
       onAssistantMessageChunk: (messageId, chunkText, reasoningDelta) => {
@@ -551,10 +566,12 @@ export function createVoiceStore(storage: KeyValueStorage) {
               state.handle.appendText(leftover);
             }
           }
+          let finalized = true;
           try {
             await state.handle.finalize();
           } catch (err) {
             console.warn("[voice] finalize failed:", err);
+            finalized = false;
           } finally {
             const ps = get().playbackState;
             if (ps.mode === "streaming" && ps.messageId === messageId) {
@@ -565,7 +582,12 @@ export function createVoiceStore(storage: KeyValueStorage) {
               voiceSpeechStarted = null;
             }
           }
-          return;
+          if (finalized) {
+            return;
+          }
+          // Fall through to the replay path so a failed stream can still
+          // speak the completed reply (especially for neural voices).
+          set({ lastSpokenMessageId: null });
         }
         // Fallback replay path (missed start or non-streaming).
         if (!get().autoSpeak || !get().isTTSAvailable()) return;

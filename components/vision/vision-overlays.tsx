@@ -378,7 +378,7 @@ export function VisionBottomPanel({
             onPressIn={talkPress.onPressIn}
             onPressOut={talkPress.onPressOut}
             disabled={!talkReady}
-            className="h-20 w-20 items-center justify-center"
+            className="h-16 w-16 items-center justify-center"
             accessibilityRole="button"
             accessibilityState={{ disabled: !talkReady }}
             accessibilityLabel={phase === "idle" ? "Talk" : "Stop talking"}
@@ -388,7 +388,7 @@ export function VisionBottomPanel({
               "disabled has no border" holds, so the primary ring is dropped
               and only the muted icon remains. */}
           <View
-            className={`h-20 w-20 items-center justify-center rounded-full ${
+            className={`h-16 w-16 items-center justify-center rounded-full ${
               !talkReady ? "bg-scrim" : phase === "idle" ? "border border-primary bg-scrim" : "bg-surface-3"
             }`}
 

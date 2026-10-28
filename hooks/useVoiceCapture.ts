@@ -45,6 +45,8 @@ export function useVoiceCapture(
   const peakLevelRef = useRef(0);
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noAudioTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasSpokenRef = useRef(false);
   const onTranscriptRef = useRef(onTranscript);
   onTranscriptRef.current = onTranscript;
   const recorder = useAudioRecorder();
@@ -114,6 +116,10 @@ export function useVoiceCapture(
     if (noAudioTimerRef.current) {
       clearTimeout(noAudioTimerRef.current);
       noAudioTimerRef.current = null;
+    }
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
     }
     // stopRecording() is async and rejects when nothing is recording; the
     // try/catch above cannot catch that, so swallow it here.
@@ -187,11 +193,27 @@ export function useVoiceCapture(
             if (!recordingRef.current) return;
             const bytes = toByteArray(event.data as string);
             segmenterRef.current?.push(bytes);
-            const lvl = inputLevel(int16PcmToFloat32(bytes));
+            const samples = int16PcmToFloat32(bytes);
+            const lvl = inputLevel(samples);
             peakLevelRef.current = Math.max(peakLevelRef.current, lvl);
             if (++chunkCountRef.current % ASR_LEVEL_CHUNKS === 0) {
               asrStore.pushInputLevel(peakLevelRef.current);
               peakLevelRef.current = 0;
+            }
+            // Auto-stop on silence: once speech has been heard, a sustained
+            // pause (no voiced chunk) finalises the capture like ChatGPT.
+            const voiced = energyVad(samples).passed;
+            if (voiced) {
+              hasSpokenRef.current = true;
+              if (silenceTimerRef.current) {
+                clearTimeout(silenceTimerRef.current);
+                silenceTimerRef.current = null;
+              }
+              silenceTimerRef.current = setTimeout(() => {
+                if (recordingRef.current && session === sessionRef.current) {
+                  void finish(session).catch(() => {});
+                }
+              }, 1500);
             }
           },
         });
@@ -230,6 +252,10 @@ export function useVoiceCapture(
 
   const cancel = useCallback(() => {
     sessionRef.current++;
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
     if (recordingRef.current) teardownCapture();
     segmenterRef.current = null;
     whisperAsrEngine.cancelTranscription().catch((err) => {

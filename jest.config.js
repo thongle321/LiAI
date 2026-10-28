@@ -69,6 +69,8 @@ module.exports = {
     '^expo-speech$': '<rootDir>/__mocks__/external/expo-speech.ts',
     '^expo-speech-recognition$':
       '<rootDir>/__mocks__/external/expo-speech-recognition.ts',
+    '^@siteed/audio-studio$':
+      '<rootDir>/__mocks__/external/@siteed/audio-studio.ts',
     '^@pocketpalai/react-native-speech$':
       '<rootDir>/__mocks__/external/@pocketpalai/react-native-speech.ts',
     '^@pocketpalai/react-native-speech-phonon$':

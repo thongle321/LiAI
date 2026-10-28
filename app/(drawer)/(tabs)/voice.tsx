@@ -8,10 +8,9 @@
  *  The session body is the shared full-screen view
  *  (components/voice/voice-full-view.tsx, spec: voice-tab hands-free
  *  parity) — the orb, per-phase status strings, the issue line, End, mute
- *  and the collapse-to-bar gesture all live there. A live session pulled
- *  down renders the collapsed bar (components/voice/voice-bar.tsx) pinned
- *  at the tab's bottom instead — same session, same mic; the swap rides
- *  the circuit's `presentation` field. This screen keeps what is ITS own:
+ *  and the per-phase status strings, the issue line, End, mute all live
+ *  there. Voice is its own tab, so the session always renders the full
+ *  view (no collapse-to-bar). This screen keeps what is ITS own:
  *  the mic-sink registration for the orb's level feed, the pre-entry gate
  *  sheets, and the corner Eye that swaps in vision (a mode of this tab,
  *  not a destination).
@@ -31,7 +30,6 @@ import { useVoice } from "@/store/voice.ts";
 import { VoiceSetupSheet } from "@/components/voice/voice-setup-sheet.tsx";
 import { VoiceMemorySheet } from "@/components/voice/voice-memory-sheet.tsx";
 import { VoiceFullView } from "@/components/voice/voice-full-view.tsx";
-import { VoiceBar } from "@/components/voice/voice-bar.tsx";
 import { VisionMode } from "@/components/voice/voice-vision-mode.tsx";
 import { useVoiceLevels } from "expo-thinking-orbs";
 
@@ -87,16 +85,7 @@ export default function VoiceScreen() {
       edges={["top", "left", "right"]}
       style={{ flex: 1, backgroundColor: colors.base }}
     >
-      {/* The collapsed presentation (issue 04): the live session rides a
-          bar pinned at the tab's bottom — tap/swipe up re-expands. The
-          session, mic and turns are untouched across the swap. */}
-      {voice.presentation === "bar" ? (
-        <View className="flex-1 justify-end px-6 pb-6">
-          <VoiceBar mic={mic} voice={voice} />
-        </View>
-      ) : (
-        <VoiceFullView mic={mic} voice={voice} />
-      )}
+      <VoiceFullView mic={mic} voice={voice} />
 
       {/* Vision's one entry point: a corner Eye riding on voice mode. It
           is always here (covered by the mode's own "vision is off for

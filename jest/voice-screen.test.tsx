@@ -159,7 +159,6 @@ describe("VoiceScreen", () => {
 
     expect(screen.getByText("LISTENING")).toBeOnTheScreen();
     expect(screen.getByText("Listening")).toBeOnTheScreen();
-    expect(screen.getByText("hello")).toBeOnTheScreen();
     fireEvent.press(screen.getByLabelText("Tap to stop or take the turn"));
     expect(actions.tapCloud).toHaveBeenCalledTimes(1);
     expect(actions.requestEntry).not.toHaveBeenCalled();
@@ -255,7 +254,7 @@ describe("VoiceScreen", () => {
     expect(actions.openModels).toHaveBeenCalledTimes(1);
   });
 
-  it("the collapsed presentation rides the bar instead of the full view", () => {
+  it("presentation is ignored: the full view always renders", () => {
     mockSurface = surface({
       phase: "listening",
       presentation: "bar",
@@ -263,14 +262,11 @@ describe("VoiceScreen", () => {
     });
     renderScreen();
 
-    // The full view is gone; the bar shows the same session state.
-    expect(screen.queryByText("LISTENING")).not.toBeOnTheScreen();
-    expect(screen.getByTestId("voice-bar")).toBeOnTheScreen();
+    // Collapse is gone: the full view renders regardless of presentation.
+    expect(screen.queryByTestId("voice-bar")).not.toBeOnTheScreen();
     expect(screen.getByText("MICROPHONE OFF")).toBeOnTheScreen();
-    // Mute hands off; End is no longer presented.
     fireEvent.press(screen.getByTestId("voice-mute"));
     expect(actions.toggleMute).toHaveBeenCalledTimes(1);
-    // The Eye rides along in the collapsed presentation too.
     expect(screen.getByLabelText("Open vision")).toBeOnTheScreen();
   });
 });

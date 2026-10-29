@@ -1,3 +1,4 @@
+import "react-native-gesture-handler";
 import "../global.css";
 import { Stack } from "expo-router";
 import { ThemeProvider, DefaultTheme, DarkTheme } from "expo-router";

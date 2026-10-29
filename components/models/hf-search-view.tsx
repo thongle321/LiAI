@@ -116,7 +116,7 @@ export function HFSearchView({
             >
               <X size={16} color={colors.secondaryText} />
             </Pressable>
-          ) : null}
+          ) : undefined}
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="pt-2">
           <Pressable
@@ -179,9 +179,9 @@ export function HFSearchView({
               <RefreshCw size={14} color={colors.primary} />
               <Text className="font-sans text-body-sm text-primary">Retry</Text>
             </Pressable>
-          ) : null}
+          ) : undefined}
         </View>
-      ) : null}
+      ) : undefined}
 
       {searchLoading && searchResults.length === 0 ? (
         <View className="flex-row items-center justify-center py-4">
@@ -241,7 +241,7 @@ export function HFSearchView({
                       Requires Token
                     </Text>
                   </View>
-                ) : null}
+                ) : undefined}
               </View>
             </Pressable>
           )}
@@ -257,17 +257,18 @@ export function HFSearchView({
               <Text className="py-6 text-center font-sans text-body-md text-secondary-text">
                 No models found for “{query}”
               </Text>
-            ) : null
+            ) : undefined
           }
           ListFooterComponent={
             searchLoadingMore ? (
               <View className="flex-row items-center justify-center py-4">
                 <ActivityIndicator size="small" color={colors.primary} />
               </View>
-            ) : null
+            ) : undefined
           }
         />
       )}
     </View>
   );
 }
+

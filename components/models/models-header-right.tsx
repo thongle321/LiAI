@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Dimensions, Modal, Pressable, Text, View } from "react-native";
+import { Dimensions, Modal, Pressable, Text, View, type ViewInstance } from "react-native";
 import Animated from "react-native-reanimated";
 import {
   Check,
@@ -100,7 +100,7 @@ export function ModelsHeaderRight({
   // duration so paper's fade-out actually plays before the menu unmounts.
   const [shown, setShown] = useState(false);
   const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
-  const btnRef = useRef<View>(null);
+  const btnRef = useRef<ViewInstance>(null);
   // PocketPal parity: the menu always plays, ignoring the OS reduce-motion
   // setting (paper hardcodes its durations the same way). Doubles as the
   // close lag — `shown` outlives `open` by exactly the exit duration so the

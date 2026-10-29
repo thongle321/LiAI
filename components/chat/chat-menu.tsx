@@ -20,6 +20,7 @@ import {
   Text,
   TextInput,
   View,
+  type ViewInstance,
 } from "react-native";
 import Animated from "react-native-reanimated";
 import {
@@ -122,7 +123,7 @@ export function ChatMenu({
   onOpenSearch: () => void;
 }) {
   const colors = useColors();
-  const btnRef = useRef<View | null>(null);
+  const btnRef = useRef<ViewInstance | null>(null);
   const [open, setOpen] = useState(false);
   // The panel unmounts with `open` so `exiting` plays, while the Modal
   // lingers for exactly the exit duration. Same pairing as the models
@@ -458,3 +459,5 @@ function BackRow({ label, onPress }: { label: string; onPress: () => void }) {
     </Pressable>
   );
 }
+
+

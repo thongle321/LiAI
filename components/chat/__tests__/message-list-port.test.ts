@@ -115,8 +115,12 @@ describe("the empty state is list content again (PocketPal's flow)", () => {
     // flexGrow/justify-center on the empty container.
     expect(CHAT).toMatch(/listEmpty=\{/);
     expect(CHAT).toMatch(/<ChatEmptyPlaceholder/);
-    expect(LIST).toMatch(/ListEmptyComponent=\{listEmpty\}/);
+    expect(LIST).toContain('ListEmptyComponent={listEmpty ?? undefined}');
     expect(LIST).toMatch(/flexGrow: 1/);
     expect(LIST).toMatch(/justifyContent: "center"/);
   });
 });
+
+
+
+

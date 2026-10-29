@@ -15,13 +15,13 @@ declare module "expo-router/testing-library" {
   export const fireEvent: typeof ReactNativeTestingLibrary.fireEvent;
   export const act: typeof ReactNativeTestingLibrary.act;
   export const testRouter: {
-    navigate(path: string): void;
-    push(path: string): void;
-    replace(path: string): void;
-    back(path?: string): void;
+    navigate(path: string): Promise<void>;
+    push(path: string): Promise<void>;
+    replace(path: string): Promise<void>;
+    back(path?: string): Promise<void>;
     canGoBack(): boolean;
-    setParams(params: Record<string, string>, path?: string): void;
-    dismissAll(): void;
+    setParams(params: Record<string, string>, path?: string): Promise<void>;
+    dismissAll(): Promise<void>;
   };
   export type MockContextConfig = Record<string, () => ReactElement>;
   export type RenderRouterOptions = Parameters<
@@ -40,5 +40,6 @@ declare module "expo-router/testing-library" {
   export function renderRouter(
     context?: MockContextConfig,
     options?: RenderRouterOptions,
-  ): RenderRouterResult;
+  ): Promise<RenderRouterResult>;
 }
+

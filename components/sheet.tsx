@@ -33,6 +33,7 @@ import {
   ScrollView,
   Text,
   View,
+  type ScrollViewInstance,
 } from "react-native";
 import { TrueSheet, type TrueSheet as TrueSheetType, type TrueSheetProps } from "@lodev09/react-native-true-sheet";
 import { X } from "lucide-react-native";
@@ -69,7 +70,7 @@ export function Sheet({
 }) {
   const colors = useColors();
   const innerRef = useRef<TrueSheetType | null>(null);
-  const internalScrollRef = useRef<ScrollView | null>(null);
+  const internalScrollRef = useRef<ScrollViewInstance | null>(null);
   const presentedRef = useRef(false);
   const dismissedRef = useRef(false);
 
@@ -83,7 +84,7 @@ export function Sheet({
     }
   }, [visible]);
 
-  const resolvedScrollRef = scrollable ? internalScrollRef : (providedScrollableRef ?? null);
+  const resolvedScrollRef: TrueSheetProps["scrollableRef"] | null = scrollable ? internalScrollRef : (providedScrollableRef ?? null);
 
   const header = (
     <View className="flex-row items-center justify-between px-4 pb-2 pt-4">
@@ -166,3 +167,5 @@ export function Sheet({
     </TrueSheet>
   );
 }
+
+

@@ -46,10 +46,10 @@ export default function TabLayout() {
 /** Router-owned bar: shared BottomNav + bottom system inset.
  * Screens skip the bottom inset (edges) so it is applied once, here.
  */
-function TabBar({ state }: { state: { index: number; routeNames: string[] } }) {
+function TabBar({ state }: { state: { index: number; routes: { name: string }[] } }) {
   const insets = useSafeAreaInsets();
   const setTabBarHeight = useKeyboardStore((s) => s.setTabBarHeight);
-  const focusedRoute = state.routeNames[state.index] ?? "chat";
+  const focusedRoute = state.routes[state.index]?.name ?? "chat";
   // Two destinations only (see bottom-nav.tsx): anything else reads as
   // chat — and the vision mode is part of the voice route, so it never
   // appears here.
@@ -77,3 +77,4 @@ function TabBar({ state }: { state: { index: number; routeNames: string[] } }) {
     </View>
   );
 }
+

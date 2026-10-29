@@ -208,7 +208,7 @@ export function MessageList({
       automaticallyAdjustContentInsets={false}
       keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "none"}
       ListHeaderComponent={renderListHeaderComponent}
-      ListEmptyComponent={listEmpty}
+      ListEmptyComponent={listEmpty ?? undefined}
       maintainVisibleContentPosition={
         streaming
           ? { minIndexForVisible: 1, autoscrollToTopThreshold: 20 }
@@ -240,3 +240,4 @@ export function MessageList({
     />
   );
 }
+

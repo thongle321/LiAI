@@ -1,6 +1,6 @@
 import "../global.css";
 import { Stack } from "expo-router";
-import { ThemeProvider, DefaultTheme, DarkTheme } from "expo-router/react-navigation";
+import { ThemeProvider, DefaultTheme, DarkTheme } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as SystemUI from "expo-system-ui";
 import {

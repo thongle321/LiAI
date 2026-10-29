@@ -826,7 +826,7 @@ export function useVoiceMode(deps: VoiceModeDeps = {}): VoiceModeSurface {
   });
 
   useEffect(() => {
-    let previous: AppStateStatus | null = AppState.currentState;
+    let previous: AppStateStatus | null = AppState.currentState as AppStateStatus | null;
     const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
       const from = previous;
       previous = next;
@@ -834,7 +834,7 @@ export function useVoiceMode(deps: VoiceModeDeps = {}): VoiceModeSurface {
     });
     // OS-level audio interruptions (a call, an alarm) ride the fork's
     // event: the controller pauses, resumes unmuted on the way back.
-    const interruptions = onAudioInterruption((event) =>
+    const interruptions = onAudioInterruption((event: AudioInterruptionProps) =>
       controller.onAudioInterruption(event),
     );
     return () => {
@@ -872,3 +872,4 @@ export function useVoiceSession(
   }, [focused, origin]);
   return useVoiceSurface();
 }
+

@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { InteractionManager, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -59,7 +59,7 @@ export function ReasoningBlock({
   // layout settle (PocketPal's InteractionManager.runAfterInteractions).
   useEffect(() => {
     if (autoCollapse && !userToggledRef.current) {
-      InteractionManager.runAfterInteractions(() => {
+      requestIdleCallback(() => {
         if (!userToggledRef.current) setState("collapsed");
       });
     }

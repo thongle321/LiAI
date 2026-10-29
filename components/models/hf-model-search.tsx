@@ -17,8 +17,8 @@
  * the list's scroll).
  */
 
-import { useEffect, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { FlatList, Pressable, Text, TextInput, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import { CheckCircle2 } from "lucide-react-native";
 
@@ -151,8 +151,11 @@ export function HFModelSearch({
   visible: boolean;
   onClose: () => void;
 }) {
+  // Plugged into the details sheet's TrueSheet so the file list scrolls in
+  // place and only the grabber moves the sheet.
+  const detailsListRef = useRef<FlatList<HFModelFile> | null>(null);
   // Stable selectors: actions are referentially stable, but useShallow
-  // keeps the re-rendering subscriptions isolated — a bookmark toggle must
+  // keeps the re-rendering subscriptions isolated - a bookmark toggle must
   // not rebuild the search list.
   const searchModels = useModelStore((s) => s.searchModels);
   const setSearchFilters = useModelStore((s) => s.setSearchFilters);
@@ -264,6 +267,7 @@ export function HFModelSearch({
         title={selected ? extractHFModelTitle(selected.modelId) : ""}
         titleEllipsize
         scrollable={false}
+        scrollableRef={detailsListRef}
         /* PocketParity (HFModelSearch.tsx:91-100 enableContentPanningGesture:
             false): the file list scrolls IN PLACE; a scroll gesture never
             drives the sheet detents - only the grabber moves the sheet. */
@@ -276,6 +280,7 @@ export function HFModelSearch({
             filesLoading={filesLoading}
             onBack={closeDetails}
             onStartDownload={onStartDownload}
+            listRef={detailsListRef}
           />
         ) : null}
         <SearchErrorSnackbar

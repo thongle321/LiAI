@@ -5,7 +5,7 @@
  *  and playback-state transitions; this module owns engine resolution and
  *  the acquire/play/teardown flow. */
 import { getEngine } from "./engineRegistry.ts";
-import { ttsRuntime } from "./runtime.ts";
+import { ensureVoiceFile } from "./voiceFiles.ts";
 import type { Voice } from "./types.ts";
 
 export interface VoiceEngineDeps {
@@ -30,5 +30,8 @@ export async function playVoice(
   } catch {
     // ignore
   }
-  await ttsRuntime.acquire(engine, () => engine.play(text, voice));
+  await ensureVoiceFile(voice);
+  // Engine.play already acquires the runtime slot (PocketPal pattern);
+  // wrapping it again here deadlocks the FIFO mutex, so just delegate.
+  await engine.play(text, voice);
 }

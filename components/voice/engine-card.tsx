@@ -279,27 +279,18 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
                       onPress={() => onTapVoice(voice)}
                       accessibilityRole="radio"
                       accessibilityState={{ checked: selected }}
-                      accessibilityLabel={
-                        previewing
-                          ? `Stop previewing ${voice.name}`
-                          : `Speak with ${voice.name} and preview`
-                      }
+                      accessibilityLabel={`Select ${voice.name}`}
                       className="flex-row items-center gap-3 py-2"
                     >
                       <RadioDot checked={selected} />
                       <Text className="flex-1 font-sans text-body-md text-primary-text">
                         {voice.name}
                       </Text>
-                      {previewing ? (
-                        <Square size={14} color={colors.primary} />
-                      ) : (
-                        <Play size={14} color={colors.primary} />
-                      )}
                     </Pressable>
                   );
                 })}
                 <Text className="mt-1 text-quiet">
-                  Tap a voice to select it and hear a sample.
+                  Tap a voice to select it.
                 </Text>
                 <Pressable
                   onPress={onRemove}

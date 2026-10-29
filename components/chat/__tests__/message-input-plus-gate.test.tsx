@@ -11,6 +11,7 @@
 
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import * as Reanimated from "react-native-reanimated";
 
 import { MessageInput } from "../message-input.tsx";
 import { makeSpec } from "@/jest/fixtures/models.ts";
@@ -34,6 +35,10 @@ jest.mock("@/hooks/useVoiceCapture.ts", () => ({
   }),
 }));
 
+// A plain shared value from the Reanimated mock (no hook scope outside a
+// component render, so this is constructed directly at module level).
+const occlusion = Reanimated.useSharedValue(0);
+
 function renderComposer() {
   return render(
     <SafeAreaProvider
@@ -49,6 +54,7 @@ function renderComposer() {
           onSend={async () => true}
           companionName={null}
           onOpenPicker={() => undefined}
+          occlusion={occlusion}
         />
       </SnackbarProvider>
     </SafeAreaProvider>,

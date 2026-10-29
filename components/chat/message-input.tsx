@@ -1,9 +1,15 @@
 /** Message input: the composer — text field, attach, companion/model picker,
- * thinking and voice, with send at the trailing edge.
+ *  thinking and voice, with send at the trailing edge.
  *
- * Renamed from ChatInput.tsx (message-view refactor): same behavior, new
- * name. The composer attach button opens the camera/gallery picker, and the
- * thinking pill toggles the model's reasoning mode.
+ *  Renamed from ChatInput.tsx (message-view refactor): same behavior, new
+ *  name. The composer attach button opens the camera/gallery picker, and the
+ *  thinking pill toggles the model's reasoning mode.
+ *
+ *  2026-10-29 full port: the composer no longer reads the keyboard itself.
+ *  The route derives ONE reconciled occlusion value (PocketPal's ChatView
+ *  thesis — "one expression … so they never disagree") and hands it here; a
+ *  second hook reading `keyboard.height` was the two-measurements race the
+ *  reported stuck-lifted composer came from.
  */
 
 import { useEffect, useState } from "react";
@@ -16,7 +22,10 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { Brain, Camera, ChevronUp, Image as ImageIcon, Pencil, Plus, Send, Square, X, type LucideIcon } from "lucide-react-native";
-import Animated from "react-native-reanimated";
+import Animated, {
+  useAnimatedStyle,
+  type SharedValue,
+} from "react-native-reanimated";
 import { KeyboardControllerNative } from "react-native-keyboard-controller";
 
 import * as Haptics from "expo-haptics";
@@ -48,7 +57,11 @@ import {
   type ImageSource,
 } from "@/services/chat/attachments.ts";
 import { usePressFeedback } from "@/utils/motion.ts";
-import { useKeyboardLift } from "@/hooks/useKeyboardLift.ts";
+
+/** PocketPal's composer field cap (ChatInput styles.ts `maxHeight: 150`):
+ *  a long draft scrolls inside the field instead of raising a composer
+ *  taller than the reply space the list reserves for it. */
+const MAX_FIELD_HEIGHT = 150;
 
 export function MessageInput({
   sending,
@@ -60,7 +73,7 @@ export function MessageInput({
   onCancelEdit,
   companionName,
   onOpenPicker,
-  liftAnchor = 0,
+  occlusion,
 }: {
   sending: boolean;
   /** False with no loaded model: send disables (PocketPal parity). */
@@ -73,15 +86,13 @@ export function MessageInput({
    *  would be dragged up by the keyboard whether it wanted that or not. It
    *  has one caller today; making that conditional is the price of reusing it. */
   className?: string;
-  /** The composer's own bottom anchor above the physical screen bottom —
-   *  the tab bar's slot (safe-area inset + measured bar height). With the
-   *  bar mounted this field rests `liftAnchor` above the physical bottom,
-   *  so the lift rises by the keyboard height MINUS that corridor
-   *  (utils/keyboard.ts). Absent = 0 (anchored at the physical bottom). */
-  liftAnchor?: number;
-  /** Reports this box's height. It is the only thing reserving room for a
-   *  composer that is out of flow, so it must be measured here at the
-   *  outermost level and nowhere shallower. */
+  /** The route's ONE reconciled keyboard-occlusion value (see chat.tsx).
+   *  The lift is this box's own animated style over it — there is exactly
+   *  one keyboard reader per screen, and it is NOT here. */
+  occlusion: SharedValue<number>;
+  /** Reports this box's height. The list reserves it with its marginBottom,
+   *  so it must be measured here at the outermost level and nowhere
+   *  shallower. */
   onHeightChange?: (event: LayoutChangeEvent) => void;
   /** True while the composer is rewriting an earlier turn. */
   editing?: boolean;
@@ -95,12 +106,12 @@ export function MessageInput({
 }) {
   const colors = useColors();
   // This box is the bottom-anchored surface, so it carries the keyboard lift
-  // itself rather than being wrapped in something that does. Same mechanism
-  // the library applies internally (`translateY: height.value + offset` in
-  // KeyboardStickyView), minus the extra component. The anchor comes from the
-  // caller: it is always the caller's job to say how far off the physical
-  // screen bottom this box rests (the chat route passes the tab bar's slot).
-  const lift = useKeyboardLift(liftAnchor);
+  // itself rather than being wrapped in something that does. The VALUE comes
+  // from the caller (the one reconciled occlusion) — this is the same shape
+  // pocketpal-ai applies inside ChatView's inputContainerAnimatedStyle.
+  const lift = useAnimatedStyle(() => ({
+    transform: [{ translateY: -occlusion.value }],
+  }));
   // Composer text lives in the chat store (per-session drafts survive
   // switches).
   const draft = useChatStore((s) => s.draft);
@@ -348,6 +359,7 @@ export function MessageInput({
     // (the sending indicator, the prompt chips, the usage line) is an
     // overlay in ChatScreen instead.
     <Animated.View
+      pointerEvents="box-none"
       className={`border-t border-border bg-surface-1${className ? ` ${className}` : ""}`}
       style={[
         lift,
@@ -439,7 +451,9 @@ export function MessageInput({
           )}
           {/* Text input area: the field's own spec supplies the fill, the top
               hairline and the square corners, so this row is padding and the
-              input only. */}
+              input only. maxHeight (PocketPal ChatInput styles.ts) caps the
+              field: a long draft scrolls inside it instead of raising a
+              composer taller than the message space above it. */}
           <View className="flex-1 px-6 py-2">
             <TextInput
               value={draft}
@@ -449,6 +463,9 @@ export function MessageInput({
               multiline
               editable={!sending}
               className="flex-1 pt-2 font-sans text-body-lg text-primary-text"
+              style={{
+                maxHeight: MAX_FIELD_HEIGHT,
+              }}
               accessibilityLabel="Message"
               // The no-model state must not be visual-only: the chip that routes to
               // Models is focus-gated, and a screen reader announces a field's label

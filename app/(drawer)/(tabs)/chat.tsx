@@ -23,12 +23,22 @@ import {
   useNavigation,
   useRouter,
 } from "expo-router";
-import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, {
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useDerivedValue,
+} from "react-native-reanimated";
+import {
+  KeyboardEvents,
+  useReanimatedKeyboardAnimation,
+} from "react-native-keyboard-controller";
+import { scheduleOnRN } from "react-native-worklets";
 import { ChevronDown } from "lucide-react-native";
 
 import { colors, useColors } from "@/themes/tokens.ts";
+import { keyboardOcclusion } from "@/utils/keyboard.ts";
 import { filterMessages } from "@/services/chat/filter.ts";
-import { buildRows, type ChatRow } from "@/services/chat/rows.ts";
+import { buildRows, type ChatRow, type MessageRow } from "@/services/chat/rows.ts";
 import {
   MOTION_DURATION_MS,
   fadeEntering,
@@ -38,7 +48,6 @@ import { useChatStore } from "@/store/chat.ts";
 import { useKeyboardStore } from "@/store/keyboard.ts";
 import { useModelStore } from "@/store/model-store";
 import { useInference } from "@/store/inference.ts";
-import { useKeyboardLift } from "@/hooks/useKeyboardLift.ts";
 import { useChatSessionLoader } from "@/hooks/useChatSessionLoader.ts";
 import { useChatHealth } from "@/hooks/useChatHealth.ts";
 import { useToolCompatWarning } from "@/hooks/useToolCompatWarning.ts";
@@ -237,16 +246,12 @@ export default function ChatRoute() {
   // when editing either side.
   const ready = connection === "up";
   // The empty placeholder ("Activate Model To Get Started" / "No Models
-  // Available") is an overlay BESIDE the list, as it was before the
-  // ListEmptyComponent experiment: as scroll content it sits inside
-  // KeyboardChatScrollView's dynamic contentInset, and a centred card
-  // re-centres while the keyboard rises — precisely the reported "empty
-  // view moves with the keyboard". As an overlay the box it centres in
-  // never changes, so nothing can move it; the keyboard covers what it
-  // covers, like pocketpal-ai's does. PocketPal's ListEmptyComponent
-  // placement is a forced divergence for us (docs/specs/2026-09-27-pocketpal-
-  // keyboard-ui-parity.md): their list adds no keyboard inset, ours does.
-  // It renders only with no model and no conversation.
+  // Available") and the companion greeting render as the list's
+  // ListEmptyComponent, PocketPal's own placement — the plain inverted
+  // list adds no dynamic contentInset of its own, so the centred container
+  // is stable in both keyboard states (the overlay-only restriction the
+  // keyboard library's scroll view imposed is gone with it). They render
+  // only with no model and no conversation.
   const emptyState = messages.length === 0 && query.trim() === "";
   // PocketPal's single-source gate: the placeholder asks whether a MODEL is
   // active, not whether the transport is healthy. Gating it on `connection`
@@ -327,7 +332,7 @@ export default function ChatRoute() {
   const navigation = useNavigation<{ openDrawer: () => void }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const listRef = useRef<FlatList<ChatRow>>(null);
+  const listRef = useRef<FlatList<MessageRow>>(null);
   const [atEnd, setAtEnd] = useState(true);
   // What the list must clear: the tab bar and the safe-area inset below it.
   // The bar's own height is seeded from its class-sum constant and
@@ -339,83 +344,98 @@ export default function ChatRoute() {
   // keyboard opens — PocketPal parity ("nothing unmounts"; the
   // edge-to-edge keyboard simply covers it, pane by pane) — so this value
   // is the SAME in both keyboard states and nothing on this screen is
-  // keyed to a store flag any more. The only responses to the keyboard on
-  // this route are Reanimated lifts; that invariance is what removes both
-  // reported symptoms (the compensating step and the unmount's column
-  // growth were the ones that made the empty card move and the composer
-  // flash).
+  // keyed to a store flag any more.
   const keyboardOffset = insets.bottom + tabBarHeight;
+  // Height of the field, which IS the composer. NOT a delta from a baseline:
+  // the field is out of flow, so nothing else accounts for it. One
+  // measurement, three consumers: the list's marginBottom, the empty
+  // state's content container, and the jump-to-latest anchor.
   const [composerHeight, setComposerHeight] = useState(0);
-  // Hold the list's keyboard inset steady while a sheet is open.
-  const [freeze, setFreeze] = useState(false);
-  // Height of the field, which IS the composer. NOT a delta from a baseline,
-  // unlike the library's example: the field is out of flow, so nothing else
-  // accounts for it and the newest message would sit behind it. The banners
-  // above it are deliberately NOT in this number — they are overlays over the
-  // list, and reserving for them would make the list reflow every time a chip
-  // appeared. One measurement, three consumers: this padding, the empty
-  // state's lift, and the jump-to-latest anchor.
-  const extraContentPadding = useSharedValue(0);
-  // Minimum bottom inset while a reply streams, so the sent message is
-  // pushed up and the response has somewhere to appear.
-  const blankSpace = useSharedValue(0);
 
-  // The composer floats and lifts ITSELF — MessageInput calls useKeyboardLift
-  // with the anchor handed to it below, so there is no wrapper box between
-  // this screen and the input. The overlays that must ride WITH it (the
-  // jump pill, the snackbar/banner row) use the same hook and the SAME
-  // anchor, so they rise welded together instead of tracking the keyboard
-  // independently and drifting apart.
+  // ============ THE ONE KEYBOARD VALUE (PocketPal ChatView.tsx:457-490) ===
+  // This route is the screen's ONLY keyboard reader. Everything that rides
+  // the keyboard on this screen — the composer, the list's header spacer,
+  // the jump pill, the chips/snackbar row — derives from this single
+  // reconciled occlusion value, so no two surfaces can measure (or animate
+  // at) different rates and drift. PocketPal's comment states the thesis:
+  // "one expression … so they never disagree". The old per-view lifts
+  // (useKeyboardLift in the composer AND here) were exactly the
+  // two-measurements race behind the reported stuck-lifted composer.
   //
-  // No KeyboardAvoidingView on this screen: the library's own guide lists four
-  // ways it falls short on chat layouts and ships KeyboardChatScrollView for
-  // the list, which MessageList renders. KeyboardGestureArea is deliberately
-  // absent too: the guide pairs it with keyboardDismissMode="interactive" so
-  // the accessory follows the drag, but it is not exported in 1.21.9 (the docs
-  // are on main/1.22). Interactive dismissal still works via keyboardDismissMode
-  // on the scroll view; only the composer tracking the finger needs 1.22+.
-  //
-  // The anchor is keyboardOffset, not the default 0: with the bar mounted the
-  // composer rests keyboardOffset above the physical screen bottom, so it has
-  // to rise by the keyboard height MINUS that corridor (utils/keyboard.ts
-  // documents the arithmetic). Passing 0 now OVERSHOOTS by exactly a bar
-  // slot and parks the composer floating above the keyboard.
-  const composerLift = useKeyboardLift(keyboardOffset);
+  // The anchor is the bar slot, not PocketPal's bare insets.bottom: the tab
+  // bar stays MOUNTED under the keyboard, so the composer rests
+  // keyboardOffset above the physical bottom and the keyboard height
+  // MINUS that corridor is what it must rise (utils/keyboard.ts documents
+  // the arithmetic; passing PocketPal's 0-corridor would overshoot by a
+  // full bar slot — the old composer anchor bug).
+  const keyboard = useReanimatedKeyboardAnimation();
+  const occlusion = useDerivedValue(() =>
+    keyboardOcclusion(keyboard.height.value, keyboardOffset),
+  );
+  // [DEBUG-kbd7] temporary instrumentation — the stuck-composer repro loop.
+  console.log(
+    `[DEBUG-kbd7] mount keyboardOffset=${keyboardOffset} insetsBottom=${insets.bottom} tabBarHeight=${tabBarHeight}`,
+  );
+  const logKeyboard = (next: number) => {
+    console.log(`[DEBUG-kbd7] keyboard.height=${next}`);
+  };
+  useAnimatedReaction(
+    () => Math.round(keyboard.height.value * 10) / 10,
+    (next, previous) => {
+      if (next === previous) return;
+      scheduleOnRN(logKeyboard, next);
+    },
+  );
+  const logOcclusion = (next: number) => {
+    console.log(`[DEBUG-kbd7] occlusion=${next}`);
+  };
+  useAnimatedReaction(
+    () => Math.round(occlusion.value),
+    (next, previous) => {
+      if (next === previous) return;
+      scheduleOnRN(logOcclusion, next);
+    },
+  );
+  useEffect(() => {
+    const log =
+      (name: string) =>
+      (event: { height: number | null; interactive?: boolean }) => {
+        console.log(`[DEBUG-kbd7] ${name} h=${event.height}`);
+      };
+    const subs = (
+      [
+        "keyboardWillShow",
+        "keyboardDidShow",
+        "keyboardWillHide",
+        "keyboardDidHide",
+      ] as const
+    ).map((name) => KeyboardEvents.addListener(name, log(name)));
+    return () => subs.forEach((sub) => sub.remove());
+  }, []);
+  const composerLift = useAnimatedStyle(() => ({
+    transform: [{ translateY: -occlusion.value }],
+  }));
 
   const handleComposerHeight = useCallback(
     (event: LayoutChangeEvent) => {
-      const height = event.nativeEvent.layout.height;
-      // Reserve the composer's height directly rather than easing into it:
-      // easing here only lagged the layout by ~MOTION_DURATION_MS, which
-      // left the newest message briefly overlapping (or gapped from) the
-      // composer during the spring. PocketPal holds a single measured
-      // height with no animation, so we match that. See docs/research/...
-      // (keyboard/composer revert) for the scroll-follow follow-up.
-      setComposerHeight(height);
-      extraContentPadding.value = height;
+      // PocketPal holds a single measured height with no animation
+      // (ChatView's useComponentSize): the list's marginBottom reads it,
+      // and easing here only lagged the layout. See
+      // docs/research/2026-10-29-chat-composer-full-port.md.
+      setComposerHeight(event.nativeEvent.layout.height);
     },
-    [extraContentPadding],
+    [],
   );
 
   // Derived from the message itself rather than toggled on send, so it
   // cannot get stuck if a turn is cancelled or the screen is left mid-reply.
   const streaming = messages[messages.length - 1]?.streaming === true;
-  // PocketPal parity: no extra blank-space reserve. The list's bottom inset is
-  // only the keyboard + composer height (extraContentPadding); a full-viewport
-  // reserve here made the bottom inset scrollable past the newest (AI) message,
-  // so scrolling to the bottom pushed past messages out of view. The follow-
-  // scroll (below) keeps the newest message in view while it streams.
   const [generationOpen, setGenerationOpen] = useState(false);
   // One chat picker for both halves of PocketPal's ChatPalModelPickerSheet:
   // the empty thread's CTA and the composer's chevron open the same sheet,
   // which lands on Models every time. The companion now lives here rather
   // than in the header.
   const [pickerOpen, setPickerOpen] = useState(false);
-  // Sync the freeze flag with the sheet-open state (declared above because the
-  // pickers are defined late in this component).
-  useEffect(() => {
-    setFreeze(pickerOpen || generationOpen);
-  }, [pickerOpen, generationOpen]);
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
 
@@ -475,99 +495,75 @@ export default function ChatRoute() {
 
       {/* Composer always mounted (PocketPal ChatView parity): the no-model
           affordance auto-dismisses on activation, no Retry needed. */}
-      {/* The chat keyboard architecture (react-native-keyboard-controller).
-          Three surfaces, and what each one does:
-            - the content column (list + empty state): never moves. The
-              keyboard covers what it covers, and nothing re-centres.
-            - the composer: absolutely positioned at the bottom, lifting
-              ITSELF via useKeyboardLift, and reporting its own height.
-            - the jump-to-latest overlay: an absolute sibling above the
-              composer, lifting on the same hook so the two stay welded.
-          The list (KeyboardChatScrollView, see MessageList) owns content
-          repositioning inside the column. There is deliberately no wrapper
-          box around the composer: a wrapper that only re-exports a transform
-          is a second box that can disagree with the one it wraps, which is
-          how the empty state came to look like it was sinking while the
-          composer sat still. PocketPal ChatView parity: their own comments
-          call out the same failure — two parts handling the keyboard
-          separately is what makes a screen read as "drifting" when the
-          keyboard opens. The library's guide is also explicit that
-          KeyboardAvoidingView is the wrong tool for chat, so there is no KAV
-          on this screen. */}
+      {/* The chat keyboard architecture (2026-10-29 full port, PocketPal's
+          ChatView). What each layer does:
+            - the message list: a PLAIN inverted FlatList (MessageList) that
+              adds no keyboard inset of its own. It reserves the composer's
+              measured height with its marginBottom and the keyboard's
+              height with a ListHeaderComponent spacer fed by `occlusion`
+              — the same value the composer lifts by.
+            - the composer: absolutely positioned at the bottom, lifting by
+              `occlusion` (ONE reconciled value derived in THIS route; the
+              composer does not measure the keyboard itself). Same for the
+              jump pill and the snackbar/chips row — they cannot drift from
+              the composer because they ARE the same number.
+            - the empty thread (placeholder + greeting): ListEmptyComponent
+              content, centred by the container. With no dynamic inset to
+              re-centre it, PocketPal's own placement is stable again.
+          There is deliberately no wrapper box around the composer and no
+          KeyboardAvoidingView: no second box to disagree, no padding-when-
+          keyboard layout. */}
       <View className="flex-1">
         <View className="flex-1">
           <MessageList
             listRef={listRef}
             rows={rows}
-            offset={keyboardOffset}
-            freeze={freeze}
-            extraContentPadding={extraContentPadding}
-            blankSpace={blankSpace}
-            onEndVisibleChange={setAtEnd}
+            composerHeight={composerHeight}
+            occlusion={occlusion}
             streaming={streaming}
-            renderRow={(row, widths) =>
-              row.kind === "pending" ? (
-                <PendingIndicator startedAt={turnStartedAt} widths={widths} />
-              ) : (
-                <MessageListItem
-                  row={row}
-                  widths={widths}
-                  contextBannerVisible={contextFullShowing}
-                  canRun={canRun}
-                  models={menuModels}
-                  onEdit={startEdit}
-                  onRegenerateWith={handleRegenerateWith}
-                  onRegenerate={
-                    row.message.role === "assistant" ? handleRegenerate : null
-                  }
+            onEndVisibleChange={setAtEnd}
+            renderRow={(row, widths) => (
+              <MessageListItem
+                row={row}
+                widths={widths}
+                contextBannerVisible={contextFullShowing}
+                canRun={canRun}
+                models={menuModels}
+                onEdit={startEdit}
+                onRegenerateWith={handleRegenerateWith}
+                onRegenerate={
+                  row.message.role === "assistant" ? handleRegenerate : null
+                }
+              />
+            )}
+            renderPending={(widths) =>
+              <PendingIndicator startedAt={turnStartedAt} widths={widths} />
+            }
+            listEmpty={
+              showPlaceholder ? (
+                <ChatEmptyPlaceholder
+                  onSelectModel={() => setPickerOpen(true)}
                 />
-              )
+              ) : greeting !== undefined && activeCompanion !== undefined ? (
+                // The bubbles' own horizontal padding lives inside
+                // GreetingBubble (px-4); px-6 here matches the list's p-6 so
+                // the bubble keeps the margin it had as overlay content.
+                <View className="flex-1 justify-center px-6">
+                  <GreetingBubble
+                    companionName={activeCompanion.name}
+                    greeting={greeting.text}
+                  />
+                </View>
+              ) : null
             }
           />
         </View>
-        {/* The empty-chat states — the no-model placeholder and the
-            companion greeting — as an overlay BESIDE the list, not scroll
-            content. The list is a KeyboardChatScrollView, which adds the
-            keyboard height to itself as a dynamic contentInset, and a
-            centred child inside that re-centring inset visibly moves as
-            the keyboard rises — the reported symptom. As an overlay the
-            centring band below spans from the column's top to the
-            composer's RESTING position and never changes size in either
-            keyboard state, so the content is geometrically impossible to
-            move; the keyboard covers what it covers, like pocketpal-ai's
-            does. No keyboard term appears in this anchor, ever: that is
-            the whole fix. showPlaceholder and greeting are exclusive by
-            construction (greeting requires !showPlaceholder). */}
-        {(showPlaceholder ||
-          (greeting !== undefined && activeCompanion !== undefined)) && (
-          <Animated.View
-            className="absolute inset-x-0 top-0"
-            style={{ bottom: composerHeight }}
-            pointerEvents="box-none"
-          >
-            {showPlaceholder ? (
-              <ChatEmptyPlaceholder
-                onSelectModel={() => setPickerOpen(true)}
-              />
-            ) : greeting !== undefined && activeCompanion !== undefined ? (
-              // The bubbles' own horizontal padding lives inside
-              // GreetingBubble (px-4); px-6 here matches the list's p-6 so
-              // the bubble keeps the margin it had as list content.
-              <View className="flex-1 justify-center px-6">
-                <GreetingBubble
-                  companionName={activeCompanion.name}
-                  greeting={greeting.text}
-                />
-              </View>
-            ) : null}
-          </Animated.View>
-        )}
         {/* Jump to latest: an overlay pinned to the content column's
             bottom-right, above the floating composer — pocketpal's FAB
-            placement. It lifts on the same hook as the composer so the two
-            rise welded together, and only appears when the reader has
-            actually scrolled away from the end, which is the only time the
-            list stopped following along.
+            placement. It lifts on the SAME occlusion value as the composer
+            so the two rise welded together, and only appears when the reader
+            has actually scrolled away from the end, which is the only time
+            the list stopped following along.
 
             Icon-only, like PocketPal's scroll-to-bottom FAB: a filled
             circle with a chevron-down (their styles.scrollToBottomButton is
@@ -581,7 +577,7 @@ export default function ChatRoute() {
             pointerEvents="box-none"
           >
             <Pressable
-              onPress={() => listRef.current?.scrollToEnd({ animated: true })}
+              onPress={() => listRef.current?.scrollToOffset({ animated: true, offset: 0 })}
               className="icon-btn rounded-full bg-primary"
               accessibilityRole="button"
               accessibilityLabel="Jump to latest message"
@@ -607,7 +603,7 @@ export default function ChatRoute() {
           still, and how the earlier padding/translation split broke the lift. */}
       <MessageInput
         className="absolute inset-x-0 bottom-0"
-        liftAnchor={keyboardOffset}
+        occlusion={occlusion}
         sending={sending}
         ready={ready}
         editing={editingTurnId !== null}
@@ -619,7 +615,8 @@ export default function ChatRoute() {
       />
       {/* Composer overlays: the chrome that is NOT part of the field and so
           cannot live inside it. Anchored directly above the field and lifted
-          by the same hook, so the keyboard can never strand them; positioned
+          by the SAME occlusion value (composerLift), so the keyboard can
+          never strand them; positioned
           over the list rather than in the field's flow, so they reserve
           nothing and the field never resizes when one appears.
           Each carries its own fill because it now sits over message content

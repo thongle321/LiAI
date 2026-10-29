@@ -103,7 +103,7 @@ export function canStartInstall(state: EngineGroupState, slotBusy: boolean): boo
 
 /** What tapping a voice row does, decided before any state changes. */
 export type VoiceTapOutcome =
-  /** Select the voice (persisted) and play the canned preview through it. */
+  /** Select the voice (persisted). */
   | { kind: "select-and-preview" }
   /** The tapped voice is the one previewing — stop it. */
   | { kind: "stop-preview" }
@@ -112,8 +112,7 @@ export type VoiceTapOutcome =
 
 /** Voice rows exist only while the model is installed, so the rule keeps
  * the tap honest even for a stale render (spec Q16 — preview enabled only
- * when downloaded). A tap on the previewing voice stops it; any other tap
- * on THIS engine's rows selects that voice and previews it.
+ * when downloaded).
  *
  * `engine` is the card that was tapped, not the voice's own engine: with
  * three engines on screen a kitten row must never answer to kokoro's

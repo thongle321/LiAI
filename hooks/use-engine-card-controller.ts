@@ -104,9 +104,7 @@ export function useEngineCardController(engineId: NeuralEngineId) {
       return;
     }
     setCurrentVoice(voice);
-    setPreviewingId(voice.id);
     setErrorNote(null);
-    track(play(VOICE_PREVIEW_SAMPLE, { voice }));
   }
 
   return {

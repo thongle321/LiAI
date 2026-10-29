@@ -1,4 +1,4 @@
-/** Source-text guards for the chat keyboard geometry (keyboard parity port).
+/** Source-text guards for the chat keyboard geometry.
  *
  * Source scans are a last resort (see jest/source.ts), but these three are
  * the pinned invariants of the port — each one revived a real, reported
@@ -40,41 +40,47 @@ describe("tab bar is never keyboard-gated", () => {
   });
 });
 
-describe("the chat screen's geometry carries no keyboard term", () => {
-  it("chat.tsx never subscribes to the visibility flag", () => {
-    expect(CHAT).not.toMatch(/keyboardVisible/);
-    expect(CHAT).not.toMatch(/isVisible/);
+describe("the chat route derives ONE reconciled occlusion (2026-10-29 full port)", () => {
+  it("the route is the screen's only keyboard reader; the composer consumes the shared value", () => {
+    // PocketPal's thesis (ChatView.tsx:461-469): composer translate, list
+    // spacer and overlays all derive from ONE value "so they never
+    // disagree". Per-VIEW hooks each reading keyboard.height are exactly
+    // the two-measurements race the stuck-composer repro showed.
+    expect(CHAT.match(/useReanimatedKeyboardAnimation\(\)/g)).toHaveLength(1);
+    expect(LIST).not.toMatch(/useReanimatedKeyboardAnimation/);
+    expect(COMPOSER).not.toMatch(/useReanimatedKeyboardAnimation/);
+    expect(COMPOSER).not.toMatch(/useKeyboardLift/);
   });
 
-  it("the empty band overlay is anchored at the composer's resting height, with nothing else in the anchor", () => {
-    // The band's `bottom` is composerHeight alone: no compensation, no bar
-    // slot, no keyboard value. This is the line the "empty view moves with
-    // the keyboard" bug lives on.
+  it("the occlusion derives through the pure geometry, anchored at the bar slot", () => {
     expect(CHAT).toMatch(
-      /<Animated\.View\s*\n\s*className="absolute inset-x-0 top-0"\s*\n\s*style=\{\{ bottom: composerHeight \}\}/,
+      /keyboardOcclusion\(keyboard\.height\.value, keyboardOffset\)/,
     );
-    // ...and it renders beside the list, not inside it.
-    expect(CHAT).toMatch(/<ChatEmptyPlaceholder/);
-    expect(CHAT).not.toMatch(/listEmpty=/);
+    expect(CHAT).toMatch(
+      /const composerLift = useAnimatedStyle\(\(\) => \(\{\s*transform: \[\{ translateY: -occlusion\.value \}\],?\s*\}\)\);/,
+    );
   });
 
-  it("lifts and anchors agree across the composer and its welded overlays", () => {
-    // One hook call per screen, same anchor for the composer and every
-    // overlay that rides with it.
-    expect(CHAT.match(/useKeyboardLift\(keyboardOffset\)/g)).toHaveLength(1);
-    expect(CHAT).toMatch(/liftAnchor=\{keyboardOffset\}/);
-    expect(COMPOSER).toMatch(/useKeyboardLift\(liftAnchor\)/);
+  it("the composer receives the shared occlusion and lifts verbatim", () => {
+    expect(COMPOSER).toMatch(/occlusion: SharedValue<number>/);
+    expect(COMPOSER).toMatch(/transform: \[\{ translateY: -occlusion\.value \}\]/);
+    expect(COMPOSER).not.toMatch(/liftAnchor/);
+    expect(CHAT).not.toMatch(/liftAnchor/);
+  });
+
+  it("the composer's welded overlays ride the same lift", () => {
+    expect(CHAT.match(/style=\{\[composerLift, \{ bottom: composerHeight \}\]\}/g))
+      .toHaveLength(2);
     // Vision mode no longer has a text input, so its panel no longer lifts.
     expect(VISION_OVERLAYS).not.toMatch(/useKeyboardLift/);
   });
 });
 
-describe("the message list never renders the empty state", () => {
-  it("no ListEmptyComponent wiring, no empty-state centring classes, no listEmpty prop", () => {
-    expect(LIST).not.toMatch(/ListEmptyComponent=\{/);
-    expect(LIST).not.toMatch(/listEmpty[,:]/);
-    expect(LIST).not.toMatch(/flex-grow/);
-    expect(LIST).not.toMatch(/justify-center/);
+describe("the empty state is list content (PocketPal's flow)", () => {
+  it("no empty-state overlay band beside the list any more", () => {
+    expect(CHAT).not.toMatch(
+      /className="absolute inset-x-0 top-0"\s*\n\s*style=\{\{ bottom: composerHeight \}\}/,
+    );
   });
 
   it("the placeholder owns its own centring and no bottomInset margin", () => {

@@ -42,6 +42,7 @@ import { ENGINE_ORDER, NEURAL_ENGINE_META } from "@/services/tts/engineMeta.ts";
 import type { TtsModelStatus } from "@/services/tts/types.ts";
 import { getEngine, getPhononSupport } from "@/services/tts/engineRegistry.ts";
 import { ttsRuntime } from "@/services/tts/runtime.ts";
+import { ensureVoiceFile } from "@/services/tts/voiceFiles.ts";
 import { playVoice } from "@/services/tts/voice-engine.ts";
 import { readTotalMemory } from "@/services/models/device-tiers.ts";
 
@@ -100,6 +101,8 @@ export interface VoiceState {
   load: () => Promise<void>;
   /** override ?? deviceMeetsMemory — the single availability rule. */
   isTTSAvailable: () => boolean;
+  /** Whether the next assistant reply opens a speech stream. */
+  streamsReplies: () => boolean;
   /** PocketPal's offering gate: true for every neural engine; for Phonon,
    *  true only while the add-on probe reports the engine supported. */
   isEngineOffered: (engine: NeuralEngineId) => boolean;
@@ -352,6 +355,11 @@ export function createVoiceStore(storage: KeyValueStorage) {
         return userTTSOverride ?? deviceMeetsMemory;
       },
 
+      streamsReplies: () => {
+        const { voiceOutputActive, autoSpeak } = get();
+        return voiceOutputActive || (get().isTTSAvailable() && autoSpeak);
+      },
+
       isEngineOffered: (engine) => {
         const { phononSupported } = get();
         return engine !== "phonon" || phononSupported;
@@ -405,8 +413,11 @@ export function createVoiceStore(storage: KeyValueStorage) {
 
       play: async (text, options = {}) => {
         const voice = options.voice ?? get().currentVoice ?? DEVICE_DEFAULT_VOICE;
-        set({ playbackState: { mode: "playing", messageId: options.messageId } });
+        const playing = { mode: "playing" as const, messageId: options.messageId };
+        set({ playbackState: playing });
         try {
+          await ensureVoiceFile(voice);
+          if (get().playbackState !== playing) return;
           await playVoice(text, voice, { speed: options.speed }, { stop: () => get().stop() });
         } catch {
           // A failed play must not wedge the state machine.
@@ -437,11 +448,12 @@ export function createVoiceStore(storage: KeyValueStorage) {
       },
 
       onAssistantMessageStart: (messageId) => {
-        if (!get().autoSpeak || !get().isTTSAvailable()) return;
+        if (!get().streamsReplies()) return;
         if (get().lastSpokenMessageId === messageId) return;
         const voice = get().currentVoice ?? DEVICE_DEFAULT_VOICE;
         const engine = getEngine(voice.engine);
         const stopDone = get().stop().catch(() => undefined);
+        const voiceReady = stopDone.then(() => ensureVoiceFile(voice)).then(() => undefined);
         set({ lastSpokenMessageId: messageId });
         streamStripper = new ThinkingStripper();
         streamPlaceholderEmitted = false;
@@ -488,7 +500,7 @@ export function createVoiceStore(storage: KeyValueStorage) {
               }
             : streamOpts;
         try {
-          const handle = engine.playStreaming(voice, stopDone, supertonicOpts);
+          const handle = engine.playStreaming(voice, voiceReady, supertonicOpts);
           set({ playbackState: { mode: "streaming", messageId, handle } });
         } catch (err) {
           console.warn("[voice] streaming start failed:", err);
@@ -590,7 +602,7 @@ export function createVoiceStore(storage: KeyValueStorage) {
           set({ lastSpokenMessageId: null });
         }
         // Fallback replay path (missed start or non-streaming).
-        if (!get().autoSpeak || !get().isTTSAvailable()) return;
+        if (!get().streamsReplies()) return;
         if (get().lastSpokenMessageId === messageId) return; // already handled by streaming
         set({ lastSpokenMessageId: messageId });
         if (text.trim() === "") return;
@@ -611,7 +623,13 @@ export function createVoiceStore(storage: KeyValueStorage) {
           await engine.downloadModel((p) =>
             applyEngineStatus(engineId, { state: "downloading", percent: p * 100 }),
           );
+          const voices = await (engine as unknown as { getVoices: () => Promise<Voice[]> }).getVoices().catch(() => []);
           applyEngineStatus(engineId, { state: "ready", percent: 100 });
+          if (get().currentVoice === null && voices.length > 0) {
+            const stashed = get().pendingVoiceRestore[engineId];
+            const restored = stashed !== undefined ? restoreVoice(stashed, engineId) : null;
+            set({ currentVoice: restored ?? voices[0] });
+          }
           return null;
         } catch (err) {
           applyEngineStatus(engineId, { state: "error", percent: 0, error: String(err) });

@@ -1,0 +1,67 @@
+diff --git a/android/CMakeLists.txt b/android/CMakeLists.txt
+index 2f814e871ad773c46a958c99ac5efc90d8e64357..db18147706bab063bef004e2cc64c9f8b075cf6e 100644
+--- a/android/CMakeLists.txt
++++ b/android/CMakeLists.txt
+@@ -87,6 +87,9 @@ set_target_properties(
+              CXX_EXTENSIONS OFF
+              POSITION_INDEPENDENT_CODE ON)
+ 
++# 16 KB page alignment for Android 15+ devices
++target_link_options(onnxruntimejsi PRIVATE "-Wl,-z,max-page-size=16384")
++
+ find_library(log-lib log)
+ 
+ target_link_libraries(
+diff --git a/android/build.gradle b/android/build.gradle
+index 41b43599a9af6ef1c170047d39db1f3baa6ca682..85c92d94ae8f418d9316b5500bacd43c37387d09 100644
+--- a/android/build.gradle
++++ b/android/build.gradle
+@@ -1,4 +1,5 @@
+ import java.nio.file.Paths
++import org.gradle.util.internal.VersionNumber
+ 
+ buildscript {
+   repositories {
+diff --git a/ios/OnnxruntimeModule.mm b/ios/OnnxruntimeModule.mm
+index 8155f92aa4770c2c13c6c7c3db2a38f7311282c1..1228c8ab083354a4bf6cf835bbfa8e9f0ff40608 100644
+--- a/ios/OnnxruntimeModule.mm
++++ b/ios/OnnxruntimeModule.mm
+@@ -5,11 +5,15 @@
+ #include "JsiMain.h"
+ 
+ #import <Foundation/Foundation.h>
+-#import <React/RCTBridge+Private.h>
+ #import <React/RCTUtils.h>
+ #import <ReactCommon/RCTTurboModule.h>
+ #import <jsi/jsi.h>
+ 
++@protocol OnnxruntimeBridgeRuntimeAccess <NSObject>
++@property (nonatomic, readonly) void *runtime;
++@property (nonatomic, readonly) std::shared_ptr<facebook::react::CallInvoker> jsCallInvoker;
++@end
++
+ @implementation OnnxruntimeModule
+ 
+ @synthesize bridge = _bridge;
+@@ -27,17 +31,17 @@ RCT_EXPORT_MODULE(Onnxruntime)
+  */
+ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(install) {
+   @try {
+-    RCTCxxBridge* cxxBridge = (RCTCxxBridge*)_bridge;
+-    if (cxxBridge == nil) {
++    id<OnnxruntimeBridgeRuntimeAccess> runtimeBridge = (id<OnnxruntimeBridgeRuntimeAccess>)_bridge;
++    if (runtimeBridge == nil) {
+       return @false;
+     }
+ 
+-    auto jsiRuntime = (facebook::jsi::Runtime*)cxxBridge.runtime;
++    auto jsiRuntime = (facebook::jsi::Runtime*)runtimeBridge.runtime;
+     if (jsiRuntime == nil) {
+       return @false;
+     }
+     auto& runtime = *jsiRuntime;
+-    auto jsiInvoker = _bridge.jsCallInvoker;
++    auto jsiInvoker = runtimeBridge.jsCallInvoker;
+ 
+     env = onnxruntimejsi::install(runtime, jsiInvoker);
+ 

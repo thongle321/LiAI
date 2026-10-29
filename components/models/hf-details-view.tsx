@@ -11,7 +11,7 @@
  * the file list, and every row's Download button depends on the answer.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Ref } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -92,6 +92,7 @@ export function HFDetailsView({
   filesLoading,
   onBack,
   onStartDownload,
+  listRef,
 }: {
   result: HFModelSearchResult;
   files: HFModelFile[];
@@ -100,6 +101,9 @@ export function HFDetailsView({
   /** The download itself: this component owns the free-space reading and
    *  the learned ceiling, so it owns the warning and the guard too. */
   onStartDownload: (file: HFModelFile, opts?: VisionDownloadChoice) => void;
+  /** Optional ref forwarded to the file FlatList so the parent sheet can
+   *  plug it into TrueSheet for gesture coordination. */
+  listRef?: Ref<unknown>;
 }) {
   const colors = useColors();
   const { freeBytes, checked } = useFreeSpacePoll(true);
@@ -206,6 +210,7 @@ export function HFDetailsView({
         </View>
       ) : (
         <FlatList
+          ref={listRef as Ref<FlatList<HFModelFile>>}
           className="grow"
           data={visibleFiles}
           keyExtractor={(f) => f.name}

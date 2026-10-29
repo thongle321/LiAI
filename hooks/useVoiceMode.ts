@@ -46,6 +46,7 @@ import { voiceMemoryFit, type DeviceMemory } from "@/services/voice/memory-fit.t
 import { Endpointer } from "@/services/voice/endpointer.ts";
 import { VOICE_CAPTURE_SETTLE_MS, VOICE_MIC_WATCHDOG_MS, VOICE_START_TIMEOUT_MS } from "@/services/voice/constants.ts";
 import { TTS_ENGINE_RUNTIME_BYTES } from "@/services/tts/constants.ts";
+import { hasVoiceFile } from "@/services/tts/voiceFiles.ts";
 import { int16PcmToFloat32 } from "@/services/asr/energyVad.ts";
 import type {
   VoiceEngine,
@@ -203,6 +204,11 @@ class VoiceModeController {
       this.writeCircuit({ sheet: { kind: "setup" } });
       return;
     }
+    const voice = useVoice.getState().currentVoice;
+    if (voice !== null && voice.engine !== "system" && !(await hasVoiceFile(voice))) {
+      this.writeCircuit({ sheet: { kind: "setup" } });
+      return;
+    }
     await this.checkMemoryAndEnter();
   }
 
@@ -300,6 +306,8 @@ class VoiceModeController {
     await this.exiting;
     if (this.open || this.disposed) return;
     this.open = true;
+    useVoice.getState().setVoiceOutputActive(true);
+    useVoice.getState().setHoldFirstChunk(true);
     const session = ++this.session;
     this.setPhase("starting");
     // Every open presents full-screen; a stale `bar` from a previous
@@ -393,6 +401,7 @@ class VoiceModeController {
       } catch (err) {
         console.warn("[voiceMode] interrupt on exit failed:", err);
       }
+      useVoice.getState().setVoiceOutputActive(false);
       try {
         await this.deps.engine.release();
       } catch (err) {

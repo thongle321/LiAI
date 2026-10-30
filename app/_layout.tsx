@@ -10,7 +10,7 @@ import {
   Inter_600SemiBold,
   useFonts,
 } from "@expo-google-fonts/inter";
-import { Host } from "@expo/ui";
+import { View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider, useKeyboardState } from "react-native-keyboard-controller";
@@ -124,7 +124,7 @@ export default function RootLayout() {
     // The scheme must be passed explicitly: leaving it unset makes the
     // Host follow the DEVICE scheme, so a stored "light" on a dark device
     // renders the native subtrees dark against a light JS tree.
-    <Host colorScheme={scheme} seedColor={colors.primary} style={{ flex: 1 }}>
+    <View style={{ flex: 1 }}>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       {/* Fluid Type (DESIGN.md): scoped --text-* overrides so every
           text-* class re-resolves at this device's width (375dp base,
@@ -173,6 +173,6 @@ export default function RootLayout() {
         </KeyboardProvider>
         </GestureHandlerRootView>
       </ScopedVariables>
-    </Host>
+    </View>
   );
 }

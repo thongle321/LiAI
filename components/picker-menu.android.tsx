@@ -12,7 +12,7 @@
 
 import { useState } from "react";
 import { Pressable } from "react-native";
-import { Host } from "@expo/ui";
+import { Host, RNHostView } from "@expo/ui";
 import {
   DropdownMenuItem,
   ExposedDropdownMenu,
@@ -45,60 +45,64 @@ export function PickerMenu<T extends string>({
       accessibilityHint="Opens a list of choices"
       accessibilityState={{ expanded: open }}
     >
-      <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
-        <ExposedDropdownMenuBox expanded={open} onExpandedChange={setOpen}>
-          {/* The anchor the popup positions against, and the only thing
-              Compose draws in the row. */}
-          <Row
-            verticalAlignment="center"
-            horizontalArrangement="end"
-            modifiers={[menuAnchor()]}
-          >
-            {/* maxLines={1} + ellipsis: device voice names run long
-                ("Microsoft Zira Desktop - English (United States)"). Without
-                a cap the anchor wraps and the whole row grows, which is the
-                same class of defect as the 56dp text field this replaced.
-                The MENU items below stay unwrapped — that is where the user
-                actually reads a long name. */}
-            <ComposeText
-              color={colors.secondaryText}
-              style={{ fontSize: typeScale.bodyMd.size }}
-              maxLines={1}
-              overflow="ellipsis"
+      {/* Out of the root Host's Compose content: a nested Host makes RN
+          lose the region and can cancel a Pressable's press. */}
+      <RNHostView matchContents>
+        <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
+          <ExposedDropdownMenuBox expanded={open} onExpandedChange={setOpen}>
+            {/* The anchor the popup positions against, and the only thing
+                Compose draws in the row. */}
+            <Row
+              verticalAlignment="center"
+              horizontalArrangement="end"
+              modifiers={[menuAnchor()]}
             >
-              {show(value)}
-            </ComposeText>
-          </Row>
-          <ExposedDropdownMenu
-            expanded={open}
-            onDismissRequest={() => setOpen(false)}
-            // A Material 3 ExposedDropdownMenu sizes itself to its
-            // anchor, and this anchor is a short value ("Tavily"). That
-            // left the popup a few characters wide and wrapped every
-            // option into a one-word-per-line column. The floor is set on
-            // the menu rather than the anchor so the row keeps its own
-            // compact width; long names still grow it, because this is a
-            // minimum, not a fixed size.
-            modifiers={[defaultMinSize({ minWidth: 200 })]}
-          >
-            {options.map((option) => (
-              <DropdownMenuItem
-                key={option}
-                onClick={() => {
-                  onChange(option);
-                  setOpen(false);
-                }}
+              {/* maxLines={1} + ellipsis: device voice names run long
+                  ("Microsoft Zira Desktop - English (United States)"). Without
+                  a cap the anchor wraps and the whole row grows, which is the
+                  same class of defect as the 56dp text field this replaced.
+                  The MENU items below stay unwrapped — that is where the user
+                  actually reads a long name. */}
+              <ComposeText
+                color={colors.secondaryText}
+                style={{ fontSize: typeScale.bodyMd.size }}
+                maxLines={1}
+                overflow="ellipsis"
               >
-                <DropdownMenuItem.Text>
-                  <ComposeText color={colors.primaryText} style={{ fontSize: typeScale.bodyMd.size }}>
-                    {show(option)}
-                  </ComposeText>
-                </DropdownMenuItem.Text>
-              </DropdownMenuItem>
-            ))}
-          </ExposedDropdownMenu>
-        </ExposedDropdownMenuBox>
-      </Host>
+                {show(value)}
+              </ComposeText>
+            </Row>
+            <ExposedDropdownMenu
+              expanded={open}
+              onDismissRequest={() => setOpen(false)}
+              // A Material 3 ExposedDropdownMenu sizes itself to its
+              // anchor, and this anchor is a short value ("Tavily"). That
+              // left the popup a few characters wide and wrapped every
+              // option into a one-word-per-line column. The floor is set on
+              // the menu rather than the anchor so the row keeps its own
+              // compact width; long names still grow it, because this is a
+              // minimum, not a fixed size.
+              modifiers={[defaultMinSize({ minWidth: 200 })]}
+            >
+              {options.map((option) => (
+                <DropdownMenuItem
+                  key={option}
+                  onClick={() => {
+                    onChange(option);
+                    setOpen(false);
+                  }}
+                >
+                  <DropdownMenuItem.Text>
+                    <ComposeText color={colors.primaryText} style={{ fontSize: typeScale.bodyMd.size }}>
+                      {show(option)}
+                    </ComposeText>
+                  </DropdownMenuItem.Text>
+                </DropdownMenuItem>
+              ))}
+            </ExposedDropdownMenu>
+          </ExposedDropdownMenuBox>
+        </Host>
+      </RNHostView>
       <ChevronDown size={16} color={colors.secondaryText} />
     </Pressable>
   );

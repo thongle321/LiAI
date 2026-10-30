@@ -8,7 +8,7 @@
 
 import { useImperativeHandle, useRef, type Ref } from "react";
 import { View } from "react-native";
-import { Host } from "@expo/ui";
+import { Host, RNHostView } from "@expo/ui";
 import {
   Snackbar as NativeSnackbar,
   SnackbarHost as NativeSnackbarHost,
@@ -60,17 +60,25 @@ export function SnackbarOverlay({ ref }: { ref?: Ref<SnackbarOverlayHandle> }) {
       {/* matchContents + ignoreSafeArea="keyboard": a zero-size host
           whose content never competes with the app's own keyboard
           handling (expo-ui tip 1 — the host otherwise shifts small
-          content on keyboard open/close). */}
-      <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
-        <NativeSnackbarHost ref={nativeHostRef}>
-          <NativeSnackbar
-            containerColor={colors.surface1}
-            contentColor={colors.primaryText}
-            actionContentColor={colors.primary}
-            dismissActionContentColor={colors.secondaryText}
-          />
-        </NativeSnackbarHost>
-      </Host>
+          content on keyboard open/close).
+
+          RNHostView is load-bearing: the app's root layout already owns a
+          Host, and a Host rendered straight inside another Host's Compose
+          content makes React Native lose the region — an RN Pressable
+          anywhere in the app can then cancel its press. RNHostView resets
+          NativeTreeContext so this overlay is a normal hosted view. */}
+      <RNHostView matchContents>
+        <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
+          <NativeSnackbarHost ref={nativeHostRef}>
+            <NativeSnackbar
+              containerColor={colors.surface1}
+              contentColor={colors.primaryText}
+              actionContentColor={colors.primary}
+              dismissActionContentColor={colors.secondaryText}
+            />
+          </NativeSnackbarHost>
+        </Host>
+      </RNHostView>
     </View>
   );
 }

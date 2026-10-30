@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Pressable } from "react-native";
-import { Host, RNHostView } from "@expo/ui";
+import { Host } from "@expo/ui";
 import {
   DropdownMenuItem,
   ExposedDropdownMenu,
@@ -29,10 +29,7 @@ export function ResetMenu({ items }: ResetMenuProps) {
       accessibilityHint="Opens a list of reset destinations"
       accessibilityState={{ expanded: open }}
     >
-      {/* Out of the root Host's Compose content: a nested Host makes RN
-          lose the region and can cancel a Pressable's press. */}
-      <RNHostView matchContents>
-        <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
+      <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
           <ExposedDropdownMenuBox expanded={open} onExpandedChange={setOpen}>
             <Row
               verticalAlignment="center"
@@ -68,7 +65,6 @@ export function ResetMenu({ items }: ResetMenuProps) {
             </ExposedDropdownMenu>
           </ExposedDropdownMenuBox>
         </Host>
-      </RNHostView>
       <ChevronDown size={16} color={colors.primary} />
     </Pressable>
   );

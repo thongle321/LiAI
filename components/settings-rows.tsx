@@ -26,7 +26,7 @@ import {
 } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import * as Haptics from "expo-haptics";
-import { Host, RNHostView, Switch } from "@expo/ui";
+import { Host, Switch } from "@expo/ui";
 import Slider from "@expo/ui/community/slider";
 import { ChevronDown, ChevronRight, Minus, Plus } from "lucide-react-native";
 
@@ -162,13 +162,9 @@ export function ToggleRow({
           Material You wallpaper — which is exactly what turned every switch
           teal. The scheme follows the app's own (light/dark), not the raw
           device wallpaper palette. */}
-      {/* RNHostView keeps this Host out of the root Host's Compose content;
-          without it RN loses the region and a Pressable can drop its press. */}
-      <RNHostView matchContents>
-        <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
-          <Switch value={on} onValueChange={onPress} testID={`toggle-${label}`} />
-        </Host>
-      </RNHostView>
+      <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
+        <Switch value={on} onValueChange={onPress} testID={`toggle-${label}`} />
+      </Host>
     </View>
   );
 }

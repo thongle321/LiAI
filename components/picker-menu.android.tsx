@@ -12,7 +12,7 @@
 
 import { useState } from "react";
 import { Pressable } from "react-native";
-import { Host, RNHostView } from "@expo/ui";
+import { Host } from "@expo/ui";
 import {
   DropdownMenuItem,
   ExposedDropdownMenu,
@@ -45,10 +45,7 @@ export function PickerMenu<T extends string>({
       accessibilityHint="Opens a list of choices"
       accessibilityState={{ expanded: open }}
     >
-      {/* Out of the root Host's Compose content: a nested Host makes RN
-          lose the region and can cancel a Pressable's press. */}
-      <RNHostView matchContents>
-        <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
+      <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
           <ExposedDropdownMenuBox expanded={open} onExpandedChange={setOpen}>
             {/* The anchor the popup positions against, and the only thing
                 Compose draws in the row. */}
@@ -102,7 +99,6 @@ export function PickerMenu<T extends string>({
             </ExposedDropdownMenu>
           </ExposedDropdownMenuBox>
         </Host>
-      </RNHostView>
       <ChevronDown size={16} color={colors.secondaryText} />
     </Pressable>
   );

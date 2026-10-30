@@ -186,6 +186,7 @@ export function DownloadButton({
   onResume,
   disabled = false,
   iconOnly = false,
+  stretch = false,
 }: {
   status: string;
   progress: number;
@@ -198,6 +199,11 @@ export function DownloadButton({
    *  Same states and labels; the completed branch is never reached —
    *  callers that go icon-only hide the control on completion themselves. */
   iconOnly?: boolean;
+  /** Let the text button take the remaining row width (PocketPal's
+   *  primaryActionButton). Layout belongs to the caller, so this is opt-in;
+   *  `grow` rather than `flex-1` keeps the card's wrapping row able to drop
+   *  the icon buttons to a second line instead of squeezing the label. */
+  stretch?: boolean;
 }) {
   const colors = useColors();
   const isDownloading = status === "downloading";
@@ -219,7 +225,11 @@ export function DownloadButton({
   // radius, 1px Hairline, Ink label.
   if (isCompleted) {
     return (
-      <View className="flex-row items-center rounded-lg bg-surface-2 px-3 py-2">
+      <View
+        className={`flex-row items-center rounded-lg bg-surface-2 px-3 py-2${
+          stretch ? " grow" : ""
+        }`}
+      >
         <CheckCircle2 size={16} color={colors.successMark} />
         {iconOnly ? null : <Text className="ml-2 text-quiet">Downloaded</Text>}
       </View>
@@ -270,15 +280,17 @@ export function DownloadButton({
       // Disabled is a FILL and LABEL change, never opacity (DESIGN.md): a
       // button that looks live and does nothing is worse than no button,
       // because the only way to find out is to tap it and be ignored.
-      className={
+      className={`min-h-12 ${
+        stretch ? "grow" : ""
+      } items-center justify-center rounded-lg border px-3 py-2 ${
         disabled
-          ? "min-h-12 items-center justify-center rounded-lg border border-border bg-surface-2 px-3 py-2"
+          ? "border-border bg-surface-2"
           : // PocketPal's btnDownload trio (#ecfdf5 ground / #bbf7d0 border /
             // #047857 label), carried by LiAI's own three green tokens. Its
             // border value is 1.21:1 and could never clear the non-text floor
             // here, so the border takes the 3:1 mark step instead.
-            "min-h-12 items-center justify-center rounded-lg border border-success-mark bg-success-fill px-3 py-2"
-      }
+            "border-success-mark bg-success-fill"
+      }`}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       accessibilityLabel={

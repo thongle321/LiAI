@@ -263,10 +263,10 @@ export function ModelCard({
         {actions.length > 1 ? (
           <View className="mt-3 flex-row flex-wrap items-center gap-2">
             {actions.includes("download") && onDownload ? (
-              /* Polish (2026-10-26, user request): the download control
-                 rides the card's icon column instead of a text pill —
-                 deliberate DIVERGENCE from PocketParity, whose preset
-                 cards keep the wide text button (ModelCard.tsx). */
+              /* PocketParity: the reference's not-downloaded branch keeps
+                 the wide text button (ModelCard.tsx:454-478, styled by
+                 styles.ts:183-188), so the primary slot is Download + label,
+                 not an icon. */
               <DownloadButton
                 status={item.downloadStatus}
                 progress={item.downloadProgress}
@@ -274,7 +274,7 @@ export function ModelCard({
                 onPause={() => void pauseModelDownload(item.id)}
                 onResume={() => void resumeModelDownload(item.id)}
                 disabled={!fit.fits || item.downloadStatus === "completed"}
-                iconOnly
+                stretch
               />
             ) : null}
 

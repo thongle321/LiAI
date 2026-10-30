@@ -34,6 +34,8 @@ import {
   Text,
   View,
   type ScrollViewInstance,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 import { TrueSheet, type TrueSheet as TrueSheetType, type TrueSheetProps } from "@lodev09/react-native-true-sheet";
 import { X } from "lucide-react-native";
@@ -52,6 +54,7 @@ export function Sheet({
   testID,
   scrollableRef: providedScrollableRef,
   ref,
+  style,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -67,6 +70,7 @@ export function Sheet({
    *  `scrollable` is true (the shared ScrollView is plugged instead). */
   scrollableRef?: TrueSheetProps["scrollableRef"];
   ref?: Ref<TrueSheetType>;
+  style?: StyleProp<ViewStyle>;
 }) {
   const colors = useColors();
   const innerRef = useRef<TrueSheetType | null>(null);
@@ -127,7 +131,7 @@ export function Sheet({
       {children}
     </ScrollView>
   ) : (
-    <View testID={testID} className="px-4">
+    <View testID={testID} className="px-4 flex-1">
       {children}
     </View>
   );
@@ -145,13 +149,16 @@ export function Sheet({
       lazy={false}
       backgroundColor={colors.surface1}
       cornerRadius={12}
-      style={{
-        shadowColor: "#000000",
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.12,
-        shadowRadius: 32,
-        elevation: 8,
-      }}
+      style={[
+        {
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.12,
+          shadowRadius: 32,
+          elevation: 8,
+        },
+        style,
+      ]}
       header={header}
       footer={actionsBar ?? undefined}
       scrollableRef={resolvedScrollRef ?? undefined}

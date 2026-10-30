@@ -11,7 +11,7 @@
  * the file list, and every row's Download button depends on the answer.
  */
 
-import { useEffect, useState, type Ref } from "react";
+import { useEffect, useRef, useState, type Ref } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -114,6 +114,17 @@ export function HFDetailsView({
   // used to carry inline (same predicate, same copy — hooks/useLoadGuard).
   const guard = useLoadGuard();
   const [warnings, setWarnings] = useState<string[] | null>(null);
+  const lastRepoRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (lastRepoRef.current !== result.modelId) {
+      lastRepoRef.current = result.modelId;
+      const ref = listRef as Ref<FlatList<HFModelFile>> | undefined;
+      if (ref && typeof ref !== "function" && ref.current) {
+        ref.current.scrollToOffset({ offset: 0, animated: false });
+      }
+    }
+  }, [result.modelId, listRef]);
 
   const isVision = isVisionModel(
     result.tags,
@@ -171,64 +182,73 @@ export function HFDetailsView({
 
   return (
     <View className="grow">
-      {/* Fixed header above the list, PocketPal's DetailsView. */}
-      <View className="pb-2">
-        <View className="flex-row items-center gap-2">
-          <Pressable
-            onPress={onBack}
-            className="h-12 w-12 items-center justify-center -ml-3"
-            accessibilityRole="button"
-            accessibilityLabel="Back to search results"
-          >
-            <ArrowLeft size={20} color={colors.secondaryText} />
-          </Pressable>
-          <Text className="flex-1 font-sans text-body-sm text-secondary-text-muted">
-            {result.author}
-          </Text>
-          {isVision ? <Chip label="Vision" /> : null}
-        </View>
-        <View className="flex-row flex-wrap items-center gap-2 mt-2">
-          {result.lastModified ? (
-            <StatChip label={timeAgo(result.lastModified, Date.now(), true)} />
-          ) : null}
-          <StatChip label={`${formatNumber(result.downloads)} downloads`} />
-          <StatChip label={`${formatNumber(result.likes)} likes`} />
-          {result.trendingScore && result.trendingScore > 20 ? (
-            <StatChip label="Trending" trending />
-          ) : null}
-        </View>
-        <Text className="font-sans-semibold text-body-md text-primary-text mt-3 mb-1">
-          {/* en.json `models.details.title`, verbatim — it names the file
-              KIND, which is the whole difference between this list and a
-              folder of repository files. */}
-          Available GGUF Files
-        </Text>
-      </View>
-      {filesLoading ? (
-        <View className="flex-row items-center justify-center py-4">
-          <ActivityIndicator size="small" color={colors.primary} />
-        </View>
-      ) : (
-        <FlatList
-          ref={listRef as Ref<FlatList<HFModelFile>>}
-          className="grow"
-          data={visibleFiles}
-          keyExtractor={(f) => f.name}
-          renderItem={({ item: file }) => (
-            <HFFileRow
-              result={result}
-              file={file}
-              siblings={files}
-              freeBytes={freeBytes}
-              checked={checked}
-              onDownload={handleDownload}
-              onUnbookmark={handleUnbookmark}
-              onWarn={setWarnings}
-            />
-          )}
-          keyboardShouldPersistTaps="handled"
-        />
-      )}
+      {/* The FlatList is ALWAYS mounted, even while loading: TrueSheet needs
+          a non-null `scrollableRef` when the sheet presents, or it never
+          binds the file list and the sheet moves from content drags instead
+          of only the grabber. Loading rides ListEmptyComponent, not a
+          replacement tree. The header lives inside the list so drag gestures
+          over it reach the scrollable and only the grabber moves the sheet. */}
+      <FlatList
+        ref={listRef as Ref<FlatList<HFModelFile>>}
+        testID="hf-details-file-list"
+        className="grow"
+        data={filesLoading ? [] : visibleFiles}
+        keyExtractor={(f) => f.name}
+        ListHeaderComponent={
+          <View className="pb-2">
+            <View className="flex-row items-center gap-2">
+              <Pressable
+                onPress={onBack}
+                className="h-12 w-12 items-center justify-center -ml-3"
+                accessibilityRole="button"
+                accessibilityLabel="Back to search results"
+              >
+                <ArrowLeft size={20} color={colors.secondaryText} />
+              </Pressable>
+              <Text className="flex-1 font-sans text-body-sm text-secondary-text-muted">
+                {result.author}
+              </Text>
+              {isVision ? <Chip label="Vision" /> : null}
+            </View>
+            <View className="flex-row flex-wrap items-center gap-2 mt-2">
+              {result.lastModified ? (
+                <StatChip label={timeAgo(result.lastModified, Date.now(), true)} />
+              ) : null}
+              <StatChip label={`${formatNumber(result.downloads)} downloads`} />
+              <StatChip label={`${formatNumber(result.likes)} likes`} />
+              {result.trendingScore && result.trendingScore > 20 ? (
+                <StatChip label="Trending" trending />
+              ) : null}
+            </View>
+            <Text className="font-sans-semibold text-body-md text-primary-text mt-3 mb-1">
+              {/* en.json `models.details.title`, verbatim — it names the file
+                  KIND, which is the whole difference between this list and a
+                  folder of repository files. */}
+              Available GGUF Files
+            </Text>
+          </View>
+        }
+        ListEmptyComponent={
+          filesLoading ? (
+            <View className="flex-row items-center justify-center py-4">
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : undefined
+        }
+        renderItem={({ item: file }) => (
+          <HFFileRow
+            result={result}
+            file={file}
+            siblings={files}
+            freeBytes={freeBytes}
+            checked={checked}
+            onDownload={handleDownload}
+            onUnbookmark={handleUnbookmark}
+            onWarn={setWarnings}
+          />
+        )}
+        keyboardShouldPersistTaps="handled"
+      />
       {warnings ? (
         <WarningSnackbar
           warnings={warnings}

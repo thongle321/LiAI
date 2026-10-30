@@ -60,8 +60,8 @@ function KeyboardVisibilitySync() {
 }
 
 export default function RootLayout() {
-  // Reactive to the theme so the Host seed, the status bar and the stack's
-  // content background follow the App Settings toggle.
+  // Reactive to the theme so the status bar and the stack's content
+  // background follow the App Settings toggle.
   const colors = useColors();
   const scheme = useColorScheme();
 
@@ -118,12 +118,11 @@ export default function RootLayout() {
   if (!loaded && !error) return null;
 
   return (
-    // One Host for the whole app: it seeds every @expo/ui subtree with
-    // Signal Blue and the app's OWN scheme, so native switches, sheets
-    // and pickers land in LiAI's world instead of the platform's default.
-    // The scheme must be passed explicitly: leaving it unset makes the
-    // Host follow the DEVICE scheme, so a stored "light" on a dark device
-    // renders the native subtrees dark against a light JS tree.
+    // A plain View wrapper (no @expo/ui Host): in SDK 58 a root Host
+    // wrapping the whole app interfered with Pressable touch dispatch on
+    // Android, so every @expo/ui subtree now carries its own Host (see
+    // settings-rows, picker-menu, etc.). flex:1 keeps the navigator filling
+    // the screen; the native background follows via SystemUI above.
     <View style={{ flex: 1 }}>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       {/* Fluid Type (DESIGN.md): scoped --text-* overrides so every

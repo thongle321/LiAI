@@ -52,7 +52,7 @@ function RootLayout() {
   return (
     <Stack>
       <Stack.Screen name={route("index")} />
-      <Stack.Protected guard={onboarded}>
+      <Stack.Protected guard={onboarded} redirectTo="/onboarding/welcome">
         <Stack.Screen name={route("(drawer)")} />
       </Stack.Protected>
       <Stack.Screen name={route("onboarding")} />

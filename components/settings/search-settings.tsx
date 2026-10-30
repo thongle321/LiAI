@@ -189,8 +189,7 @@ function ProviderKeySheet({
       }
     >
       <Text className="mb-4 font-sans text-body-md text-primary-text">
-        {/* Q8: their sentence, brand-swapped. */}
-        {"Let the assistant search the web with its own tools. Bring your own API key — LiAI never holds your keys or routes your queries."}
+        {"Bring your own API key. LiAI never holds your keys."}
       </Text>
       <Text className="font-sans-semibold text-body-sm text-primary-text">API key</Text>
       {providerId !== null && !providerRequiresKey(providerId) && (

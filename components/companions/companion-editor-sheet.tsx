@@ -331,10 +331,7 @@ export function CompanionEditorSheet({
         <Text className="mb-2 font-sans-semibold text-body-md text-primary-text">
           Tools
         </Text>
-        <Text className="mb-2 text-body-sm text-secondary-text">
-          Only this companion&apos;s tools are offered in its chats — a conversation
-          with no companion has none.
-        </Text>
+        {/* Tools offered in this companion's chats only. */}
         <SettingsSection plain>
           {TALENT_NAMES.map((name) => (
             <ToggleRow
@@ -397,10 +394,7 @@ export function CompanionEditorSheet({
         <Text className="mb-2 font-sans-semibold text-body-md text-primary-text">
           Model
         </Text>
-        <Text className="mb-2 text-body-sm text-secondary-text">
-          Recommended model for this companion. Nothing is pinned: chat keeps
-          whatever is active unless you switch.
-        </Text>
+        {/* Recommended model: chat keeps whatever is active unless switched. */}
         <View className="mb-2 flex-row flex-wrap gap-2">
           {downloaded.length === 0 ? (
             <Text className="text-body-sm text-quiet">No downloaded models yet.</Text>
@@ -470,7 +464,7 @@ export function CompanionEditorSheet({
         {isEdit && storedCompanion !== undefined ? (
           <ActionRow
             label="Export this companion"
-            description="Share it as a .json file — importing it restores the companion."
+            description="Share as .json file."
             buttonLabel="Share"
             variant="secondary"
             onPress={() => {

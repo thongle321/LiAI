@@ -256,8 +256,7 @@ export function ContextLadderSheet({
           More room
         </Text>
         <Text className="mt-1 text-quiet">
-          Reloading takes a few seconds and nothing in this chat is lost — the
-          model just gets more room to work in.
+          Reloads in a few seconds. Nothing is lost.
         </Text>
         {anyFits === false ? (
           <View className="mt-4">

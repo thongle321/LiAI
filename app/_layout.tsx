@@ -163,7 +163,7 @@ export default function RootLayout() {
                 screens before onboarding completes (D1-1): with guard=false
                 the navigator has no drawer to resolve to, so it falls back to
                 the initial route (index), which redirects to onboarding. */}
-            <Stack.Protected guard={onboarded}>
+            <Stack.Protected guard={onboarded} redirectTo="/onboarding/welcome">
               <Stack.Screen name="(drawer)" options={{ animation: "none" }} />
             </Stack.Protected>
             <Stack.Screen name="onboarding" />

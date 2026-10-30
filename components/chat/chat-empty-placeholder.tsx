@@ -54,14 +54,14 @@ export function ChatEmptyPlaceholder({
     cta = "download";
   } else if (ready.length === 0 && remoteApis.length === 0) {
     title = "No Models Available";
-    description = "Download a model to start chatting with LiAI";
+    description = "";
     buttonText = "Download Model";
     cta = "download";
   } else {
     title = "Activate Model To Get Started";
     // No auto-activation since download completion stopped selecting a model
     // (PocketPal parity), so the copy must not promise it.
-    description = "Pick a downloaded model and tap Load to start chatting.";
+    description = "";
     buttonText = "Select Model";
     cta = "pick";
   }
@@ -85,9 +85,11 @@ export function ChatEmptyPlaceholder({
         <Text className="text-center font-sans-medium text-body-lg text-primary-text">
           {title}
         </Text>
-        <Text className="mt-2 text-center text-quiet">
-          {description}
-        </Text>
+        {description !== "" && (
+          <Text className="mt-2 text-center text-quiet">
+            {description}
+          </Text>
+        )}
       </View>
       {buttonText !== null && (
         <Pressable

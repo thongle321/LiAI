@@ -242,9 +242,7 @@ export function ModelCardDetails({
           <Text className="font-sans text-body-md text-primary-text">
             Estimated memory: ~{formatBytes(estimate)}
           </Text>
-          <Text className="text-quiet">
-            Weights + context cache at your current settings.
-          </Text>
+          {/* Weights + context cache at current settings. */}
           {totalMemory !== null && estimate > totalMemory * 0.9 ? (
             <Text className="mt-2 font-sans text-body-md text-error">
               This model needs more RAM than this device has. It may fail to load.
@@ -274,11 +272,7 @@ export function ModelCardDetails({
             on={visionOn}
             onPress={() => toggleVision(!visionOn)}
           />
-          {!visionOn ? (
-            <Text className="text-quiet">
-              Vision is off — this model answers text only.
-            </Text>
-          ) : null}
+          {/* Vision off: text only. */}
           {visionOn ? (
             <>
               {projectorMissing ? (

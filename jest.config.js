@@ -66,6 +66,8 @@ module.exports = {
     // Anchored: subpath imports (`@expo/ui/jetpack-compose`) resolve to the
     // real platform module, not this universal stub.
     '^@expo/ui$': '<rootDir>/__mocks__/external/@expo/ui.tsx',
+    '^@expo/ui/community/menu$':
+      '<rootDir>/__mocks__/external/@expo/ui-community-menu.tsx',
     '^expo-speech$': '<rootDir>/__mocks__/external/expo-speech.ts',
     '^expo-speech-recognition$':
       '<rootDir>/__mocks__/external/expo-speech-recognition.ts',

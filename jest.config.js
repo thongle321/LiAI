@@ -35,7 +35,10 @@ module.exports = {
     'react-native/setup-env': '<rootDir>/jest/react-native-setup-env.js',
     '@react-native-async-storage/async-storage':
       '<rootDir>/__mocks__/external/@react-native-async-storage/async-storage.ts',
-    'llama.rn': '<rootDir>/__mocks__/external/llama.rn.ts',
+    // Anchored: unanchored, the dot matched any character and the mapping
+    // hijacked every specifier containing `llama-rn` (a module named
+    // `llama-rn-errors` resolved to this mock).
+    '^llama\\.rn$': '<rootDir>/__mocks__/external/llama.rn.ts',
     'react-native-vision-camera':
       '<rootDir>/__mocks__/external/react-native-vision-camera.ts',
     'react-native-keyboard-controller':

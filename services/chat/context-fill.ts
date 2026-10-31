@@ -17,6 +17,17 @@ import { positiveFinite } from "@/utils/guards.ts";
  *  percent at which the soft warning fires, before a turn can fail. */
 export const NEAR_LIMIT_FILL_PCT = 80;
 
+/** Provider id behind an active remote model id (`remote-<providerId>`),
+ *  or undefined for a local model. The prefix rule lives here once: the
+ *  banner hook and the abort path must agree on which window to divide
+ *  by, and a second inline slice is how those two drift apart. */
+export function remoteProviderId(activeModelId: string | null): string | undefined {
+  const prefix = "remote-";
+  return activeModelId?.startsWith(prefix) === true
+    ? activeModelId.slice(prefix.length)
+    : undefined;
+}
+
 /** The denominator the meter and the threshold divide by — PocketPal's
  *  `effectiveNCtx`. A local model divides by the configured nCtx; a
  *  remote one divides by its probed /props `contextLength` (C7), which

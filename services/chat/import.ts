@@ -186,6 +186,12 @@ function toTurn(
     at: value.at,
     type,
   };
+  if (Array.isArray(value.images)) {
+    const images = (value.images as unknown[])
+      .filter((v): v is string => typeof v === "string")
+      .slice(0, 10);
+    if (images.length > 0) turn.images = images;
+  }
   if (steps.length > 0) turn.steps = steps;
   // The additive representation rides the same validation: sanitized,
   // and tool references remapped onto the fresh step ids above. Without
@@ -199,9 +205,6 @@ function toTurn(
         : b,
     );
   }
-  // No image handling: `StoredTurn` has no image field, so export.ts
-  // never writes one and an import cannot restore a photo that was never
-  // in the file. Inventing one would be data the backup does not contain.
   return { turn, droppedRich, droppedSteps };
 }
 

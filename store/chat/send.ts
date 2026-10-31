@@ -462,6 +462,7 @@ export function createSendSlice(
         // no longer in history.
         const editIndex = get().messages.findIndex((m) => m.id === editingId);
         if (editIndex < 0 || sid === null) return false;
+        const original = get().messages[editIndex];
         try {
           const store: SessionStore | null = await ctx.getStore();
           if (!store || !(await store.truncateFrom(sid, editingId))) return false;
@@ -473,6 +474,9 @@ export function createSendSlice(
         // The edited turn keeps its id, so it stays addressable.
         userId = editingId;
         assistantId = newId();
+        if (images === undefined && original?.images !== undefined) {
+          images = original.images;
+        }
       } else {
         userId = newId();
         assistantId = newId();
@@ -540,7 +544,7 @@ export function createSendSlice(
           sessionId: sid,
           ...(target.images !== undefined ? { images: target.images } : {}),
           history,
-          retry: true,
+          retry: false,
           clearOnFirst: false,
         });
         return true;

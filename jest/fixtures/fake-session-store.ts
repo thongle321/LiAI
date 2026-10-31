@@ -17,6 +17,9 @@ import type {
 import { draftSlot } from "@/services/chat/session-store.ts";
 import type { AgentStep, SessionInfo } from "@/types/chat.ts";
 import type { TurnRunner } from "@/store/chat/types.ts";
+import { DEFAULT_SAMPLER, parseSampler, type SamplerParams } from "@/services/inference/sampler.ts";
+
+const GLOBAL_CHAT_SETTINGS_KEY = "newChatCompletionSettings";
 
 interface SeedSession {
   id: string;
@@ -62,6 +65,7 @@ export function fakeSessionStore(
   const drafts = new Map<string, string>();
   const overrides = new Map<string, SessionOverride>();
   const sessionCompanions = new Map<string, { companionId: string; source: "companion" | "custom" }>();
+  const globalSettings = new Map<string, unknown>();
   let active: string | null = activeSessionId;
   let clock = 0;
   const calls: FakeStoreCalls = { creates: 0, appends: [], deletes: [] };
@@ -214,6 +218,37 @@ export function fakeSessionStore(
       if (bound) sessionCompanions.set(copyId, { ...bound });
       active = copyId;
       return copyId;
+    },
+    getGlobalSetting: async (key: string) => {
+      return globalSettings.has(key) ? (globalSettings.get(key) ?? null) : null;
+    },
+    setGlobalSetting: async (key: string, value: unknown) => {
+      if (value === undefined || value === null) {
+        globalSettings.delete(key);
+        return;
+      }
+      globalSettings.set(key, value);
+    },
+    getGlobalChatSettings: async () => {
+      const raw = globalSettings.get(GLOBAL_CHAT_SETTINGS_KEY);
+      if (!raw || typeof raw !== "object") return null;
+      try {
+        return parseSampler(raw as Partial<SamplerParams>);
+      } catch {
+        return null;
+      }
+    },
+    saveGlobalChatSettings: async (settings: SamplerParams) => {
+      globalSettings.set(GLOBAL_CHAT_SETTINGS_KEY, settings);
+    },
+    resetGlobalChatSettings: async () => {
+      globalSettings.delete(GLOBAL_CHAT_SETTINGS_KEY);
+    },
+    applySessionSnapshotToGlobal: async (sessionId: string) => {
+      const override = overrides.get(sessionId);
+      if (!override?.sampler) return false;
+      globalSettings.set(GLOBAL_CHAT_SETTINGS_KEY, override.sampler as SamplerParams);
+      return true;
     },
   };
   return { store, calls, drafts };

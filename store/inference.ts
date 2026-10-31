@@ -63,8 +63,6 @@ export interface InferenceParams {
    *  asEffortOverrides below. */
   effortOverrides: Record<string, EffortLevel>;
   jinjaEnabled: boolean;
-  /** Sampling params, nested so one setter covers the whole group. */
-  sampler: SamplerParams;
   /** Opt into Android's Hexagon NPU. False leaves `devices` unset, which
    *  llama.rn reads as "platform default". */
   useHexagonNpu: boolean;
@@ -109,8 +107,6 @@ export interface InferenceState extends InferenceParams {
   /** Record a per-model effort level, or clear it with null. */
   setEffortOverride: (modelId: string, effort: string | null) => void;
   setJinjaEnabled: (on: boolean) => void;
-  /** Patch any subset; each value is clamped by the sampler module. */
-  setSampler: (patch: Partial<SamplerParams>) => void;
   setUseHexagonNpu: (on: boolean) => void;
   setUseWeightRepacking: (on: boolean) => void;
   setImageMaxTokens: (n: number) => void;
@@ -139,7 +135,6 @@ export const DEFAULT_INFERENCE: InferenceParams = {
   thinkingOverrides: {},
   effortOverrides: {},
   jinjaEnabled: true,
-  sampler: { ...DEFAULT_SAMPLER },
   useHexagonNpu: false,
   // Repacking on by default, matching PocketPal's Android default: it makes
   // prompt processing faster for a small memory cost.
@@ -215,7 +210,6 @@ function asParams(value: unknown): InferenceParams {
     thinkingOverrides: asOverrides(v.thinkingOverrides),
     effortOverrides: asEffortOverrides(v.effortOverrides),
     jinjaEnabled: flag("jinjaEnabled", DEFAULT_INFERENCE.jinjaEnabled),
-    sampler: parseSampler(v.sampler),
     useHexagonNpu: flag("useHexagonNpu", DEFAULT_INFERENCE.useHexagonNpu),
     useWeightRepacking: flag("useWeightRepacking", DEFAULT_INFERENCE.useWeightRepacking),
     imageMaxTokens: clampInt(
@@ -264,7 +258,6 @@ const PARAM_KEYS: (keyof InferenceParams)[] = [
   "thinkingOverrides",
   "effortOverrides",
   "jinjaEnabled",
-  "sampler",
   "useHexagonNpu",
   "useWeightRepacking",
   "imageMaxTokens",
@@ -353,9 +346,6 @@ export function createInferenceStore(storage: KeyValueStorage) {
           },
           setJinjaEnabled: (on) => {
             set({ jinjaEnabled: on });
-          },
-          setSampler: (patch) => {
-            set({ sampler: parseSampler({ ...get().sampler, ...patch }) });
           },
           setUseHexagonNpu: (on) => {
             set({ useHexagonNpu: on });

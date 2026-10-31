@@ -85,21 +85,14 @@ export function GenerationSettingsSheet({
   const hasCompanion = companion !== undefined;
   // One useShallow unit: all five fields feed the draft, so the sheet
   // re-renders only when one of them changes.
-  const {
-    sampler: preset,
-    jinjaEnabled,
-    setSampler,
-    setJinjaEnabled,
-    load,
-  } = useInference(
+  const { jinjaEnabled, setJinjaEnabled, load } = useInference(
     useShallow((s) => ({
-      sampler: s.sampler,
       jinjaEnabled: s.jinjaEnabled,
-      setSampler: s.setSampler,
       setJinjaEnabled: s.setJinjaEnabled,
       load: s.load,
     })),
   );
+  const [preset, setPreset] = useState<SamplerParams>({ ...DEFAULT_SAMPLER });
   const [mode, setMode] = useState<Mode>("session");
   const [override, setOverride] = useState<Partial<SamplerParams> | null>(null);
   // The WHOLE override as loaded (sampler + thinking + effort): Save
@@ -138,6 +131,30 @@ export function GenerationSettingsSheet({
   useEffect(() => {
     void load();
   }, []);
+
+  // Load global preset from KV store
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { getSessionStore } = await import("../../services/chat/tinybase.ts");
+        const store = await getSessionStore().catch(() => null);
+        if (store && !cancelled) {
+          const global = await store.getGlobalChatSettings().catch(() => null);
+          if (global && !cancelled) {
+            setPreset(global);
+          } else if (!cancelled) {
+            setPreset({ ...DEFAULT_SAMPLER });
+          }
+        }
+      } catch {
+        if (!cancelled) setPreset({ ...DEFAULT_SAMPLER });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible]);
 
   // Load this conversation's override whenever the sheet opens on it.
   // The override carries sampler + thinking + effort; this sheet edits
@@ -225,7 +242,7 @@ export function GenerationSettingsSheet({
     if (isSession) {
       void (async () => {
         const { getSessionStore } = await import("../../services/chat/tinybase.ts");
-      const store = await getSessionStore().catch(() => null);
+        const store = await getSessionStore().catch(() => null);
         if (store && sessionId) {
           await store
             .setSessionOverride(sessionId, {
@@ -236,7 +253,14 @@ export function GenerationSettingsSheet({
         }
       })();
     } else {
-      setSampler(current.sampler);
+      void (async () => {
+        const { getSessionStore } = await import("../../services/chat/tinybase.ts");
+        const store = await getSessionStore().catch(() => null);
+        if (store) {
+          await store.saveGlobalChatSettings(current.sampler).catch(() => null);
+          setPreset(current.sampler);
+        }
+      })();
     }
     // JINJA is a global and commits in either mode. The include-thinking
     // flag needs no work here: it lives INSIDE the sampler object the
@@ -253,7 +277,21 @@ export function GenerationSettingsSheet({
     if (!commitDraft()) return;
     // PocketPal order: save the session, apply the same values to the
     // preset, then confirm.
-    if (draft) setSampler(draft.sampler);
+    void (async () => {
+      try {
+        const { getSessionStore } = await import("../../services/chat/tinybase.ts");
+        const store = await getSessionStore().catch(() => null);
+        if (store && sessionId) {
+          await store.applySessionSnapshotToGlobal(sessionId);
+          if (draft) setPreset(draft.sampler);
+        } else if (store && draft) {
+          await store.saveGlobalChatSettings(draft.sampler);
+          setPreset(draft.sampler);
+        }
+      } catch {
+        if (draft) setPreset(draft.sampler);
+      }
+    })();
     onClose();
     Alert.alert(
       "Saved as preset",

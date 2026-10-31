@@ -48,6 +48,9 @@ export interface StoredTurn {
   /** Ordered blocks for the reply, when the turn was written with them.
    * Stored as a JSON column; old rows read through the blocksOf splitter. */
   blocks?: TurnBlock[];
+  /** Photos attached to this turn (G8), as borrowed file URIs.
+   * Persisted on user turns; old rows read as absent (no photos). */
+  images?: string[];
 }
 
 /** A stored turn AS READ BACK, carrying the row id it was persisted under.
@@ -135,10 +138,26 @@ export interface SessionSettings {
   ): Promise<void>;
 }
 
+/** Global chat settings KV store (PocketPal parity). */
+export interface GlobalChatSettings {
+  /** Key/value accessor pair for global settings rows. */
+  getGlobalSetting(key: string): Promise<unknown | null>;
+  setGlobalSetting(key: string, value: unknown): Promise<void>;
+  /** Read global chat completion settings (returns null if unset). */
+  getGlobalChatSettings(): Promise<SamplerParams | null>;
+  /** Save global chat completion settings. */
+  saveGlobalChatSettings(settings: SamplerParams): Promise<void>;
+  /** Reset global chat completion settings to defaults. */
+  resetGlobalChatSettings(): Promise<void>;
+  /** Apply a session's snapshot to the global preset. */
+  applySessionSnapshotToGlobal(sessionId: string): Promise<boolean>;
+}
+
 /** Composite port: a full session store. Prefer depending on one of the
  *  four focused ports above when a caller only needs a slice. */
 export interface SessionStore
   extends SessionCatalog,
     TurnWriter,
     DraftStore,
-    SessionSettings {}
+    SessionSettings,
+    GlobalChatSettings {}

@@ -398,7 +398,14 @@ export function createTurnRunner(deps: TurnDeps) {
         if (!paths.retry) {
           await store.append(
             sessionId,
-            { role: "user", content: trimmed, type: "text" },
+            {
+              role: "user",
+              content: trimmed,
+              type: "text",
+              ...(paths.images !== undefined && paths.images.length > 0
+                ? { images: paths.images }
+                : {}),
+            },
             paths.userMessageId,
           );
           await store.setTitleIfEmpty(sessionId, trimmed.slice(0, SESSION_TITLE_LEN));

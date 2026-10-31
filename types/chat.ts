@@ -100,9 +100,7 @@ export interface ChatMessage {
   text: string;
   /** Local creation time (ms) for the design's timestamp row. */
   at: number;
-  /** Photos attached to this turn (G8), as data-uris. Live render state
-   *  only: `StoredTurn` has no image field, so they are NOT persisted and
-   *  a reloaded conversation is text-only. */
+  /** Photos attached to this turn (G8), as borrowed file URIs. */
   images?: string[];
   error?: ApiError;
   /** Tool calls behind this reply, in order. */

@@ -37,6 +37,9 @@ import { DEFAULT_SAMPLER, type SamplerParams } from "../inference/sampler.ts";
 import { isEffortLevel } from "@/utils/reasoning-capability.ts";
 import { newId } from "./messages.ts";
 
+/** PocketPal parity key for global chat completion settings. */
+export const GLOBAL_CHAT_SETTINGS_KEY = "newChatCompletionSettings";
+
 /** Row id: the timestamp prefix keeps ids unique across restarts, the
  *  counter keeps them ordered inside one millisecond. Named apart from
  *  messages.ts's newId(), which mints a bubble id — same words, opposite
@@ -85,6 +88,8 @@ interface MessageRow {
   /** Flat sibling of the other timings -- TinyBase has no nested cell.
    *  Absent on rows written before the field existed. */
   promptTokensPerSecond?: number;
+  /** Photos attached to this turn (borrowed URIs). Stored as JSON. */
+  images?: string[];
 }
 
 function messageRowFrom(raw: unknown): MessageRow | null {
@@ -113,6 +118,13 @@ function messageRowFrom(raw: unknown): MessageRow | null {
     // the splitter on load — never a crash in the renderer.
     ...(sanitizeBlocks(raw["blocks"]) !== undefined
       ? { blocks: sanitizeBlocks(raw["blocks"]) }
+      : {}),
+    ...(Array.isArray(raw["images"])
+      ? {
+          images: (raw["images"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          ),
+        }
       : {}),
     ...(typeof raw["promptMs"] === "number"
       ? {
@@ -244,6 +256,9 @@ export class TinyBaseSessionStore implements SessionStore {
       seq,
       ...(turn.reasoning !== undefined ? { reasoning: turn.reasoning } : {}),
       ...(turn.blocks !== undefined ? { blocks: turn.blocks } : {}),
+      ...(turn.images !== undefined && turn.images.length > 0
+        ? { images: turn.images }
+        : {}),
       ...(turn.usage !== undefined
         ? {
             promptTokens: turn.usage.promptTokens,
@@ -311,6 +326,9 @@ export class TinyBaseSessionStore implements SessionStore {
       at: row.at,
       ...(row.reasoning !== undefined ? { reasoning: row.reasoning } : {}),
       ...(row.blocks !== undefined ? { blocks: row.blocks } : {}),
+      ...(row.images !== undefined && row.images.length > 0
+        ? { images: row.images }
+        : {}),
       // Rebuilt as the nested shape the port declares, from the flat
       // columns. Omitted entirely when the engine reported nothing, so an
       // old row simply has no `outcome` key.
@@ -683,5 +701,54 @@ export class TinyBaseSessionStore implements SessionStore {
   async setActiveSessionId(sessionId: string | null): Promise<void> {
     if (sessionId === null) this.store.delValue("activeSessionId");
     else this.store.setValue("activeSessionId", sessionId);
+  }
+
+  async getGlobalSetting(key: string): Promise<unknown | null> {
+    const raw = this.store.getCell("globalSettings", key, "value");
+    if (typeof raw !== "string" || raw === "") return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  async setGlobalSetting(key: string, value: unknown): Promise<void> {
+    if (value === undefined || value === null) {
+      this.store.delRow("globalSettings", key);
+      return;
+    }
+    this.store.setCell("globalSettings", key, "value", JSON.stringify(value));
+  }
+
+  async getGlobalChatSettings(): Promise<SamplerParams | null> {
+    const raw = await this.getGlobalSetting(GLOBAL_CHAT_SETTINGS_KEY);
+    if (!raw || typeof raw !== "object") return null;
+    // Reuse sampler parsing logic
+    const { parseSampler } = await import("../inference/sampler.ts");
+    // parseSampler expects the full sampler object shape
+    try {
+      const parsed = parseSampler(raw as Partial<SamplerParams>);
+      // If it's effectively default and was never explicitly set? But better to return what we have
+      // Check if it's been meaningfully set - but easier to just parse
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  async saveGlobalChatSettings(settings: SamplerParams): Promise<void> {
+    await this.setGlobalSetting(GLOBAL_CHAT_SETTINGS_KEY, settings);
+  }
+
+  async resetGlobalChatSettings(): Promise<void> {
+    await this.setGlobalSetting(GLOBAL_CHAT_SETTINGS_KEY, null);
+  }
+
+  async applySessionSnapshotToGlobal(sessionId: string): Promise<boolean> {
+    const override = await this.getSessionOverride(sessionId);
+    if (!override?.sampler) return false;
+    await this.saveGlobalChatSettings(override.sampler as SamplerParams);
+    return true;
   }
 }

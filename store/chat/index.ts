@@ -23,7 +23,7 @@ import { selectEngineSource, type EngineSource } from "@/services/inference/engi
 import { EngineManager } from "@/services/inference/manager.ts";
 import type { LlamaInitParams } from "@/services/inference/local-engine.ts";
 import { projectorPathForFileName } from "@/services/inference/mmproj.ts";
-import { resolveSampler, type SamplerParams } from "@/services/inference/sampler.ts";
+import { DEFAULT_SAMPLER, resolveSampler, type SamplerParams } from "@/services/inference/sampler.ts";
 import { resolveThinking } from "@/services/inference/thinking.ts";
 import {
   resolveEffort,
@@ -471,20 +471,56 @@ async function defaultJinja(): Promise<boolean> {
  *  pointer afterwards, so reading the pointer here would resolve the
  *  previous conversation's tuning — or none at all.
  *
- *  Precedence is session override, then the global preset — a conversation
- *  that never overrode anything follows the preset. */
+ *  Chain: built-in defaults → global preset (from KV) → bound persona's tuning
+ *  → session custom snapshot replaces wholesale when source is 'custom'. */
 async function defaultSampler(sessionId: string | null): Promise<SamplerParams | null> {
   try {
-    const [{ useInference }, { useModelStore }, sessionStore] = await Promise.all([
-      import("../inference.ts"),
+    const [{ useModelStore }, sessionStore] = await Promise.all([
       import("../model-store.ts"),
       defaultGetStore(),
     ]);
     if (useModelStore.getState().activeProviderType === "remote") return null;
-    const global = useInference.getState().sampler;
-    if (!sessionStore || !sessionId) return global;
-    const override = await sessionCustomOverride(sessionId);
-    return resolveSampler(global, override?.sampler ?? null);
+    if (!sessionStore) return DEFAULT_SAMPLER;
+
+    // Read global preset from KV store
+    let global: SamplerParams = DEFAULT_SAMPLER;
+    try {
+      const globalFromKv = await sessionStore.getGlobalChatSettings();
+      if (globalFromKv) {
+        global = globalFromKv;
+      }
+    } catch {
+      global = DEFAULT_SAMPLER;
+    }
+
+    if (!sessionId) return global;
+
+    // Check settings source
+    const source = await sessionStore
+      .getSessionSettingsSource(sessionId)
+      .catch(() => null);
+
+    // If custom, use session snapshot wholesale (replacing chain)
+    if (source === "custom") {
+      const override = await sessionStore.getSessionOverride(sessionId).catch(() => null);
+      if (override?.sampler) {
+        return override.sampler as SamplerParams;
+      }
+      // Fallback if no snapshot
+      return global;
+    }
+
+    // Companion/persona governed: ignore stale snapshot, apply persona tuning over global
+    let base = global;
+    try {
+      const companion = await sessionCompanion(sessionId);
+      if (companion?.completionSettings) {
+        base = resolveSampler(base, companion.completionSettings as Partial<SamplerParams>);
+      }
+    } catch {
+      // ignore
+    }
+    return base;
   } catch {
     return null;
   }

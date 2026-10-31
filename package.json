@@ -100,6 +100,7 @@
   },
   "trustedDependencies": ["@parcel/watcher", "bun", "llama.rn", "unrs-resolver"],
   "patchedDependencies": {
-    "onnxruntime-react-native@1.24.3": "patches/onnxruntime-react-native@1.24.3.patch"
+    "onnxruntime-react-native@1.24.3": "patches/onnxruntime-react-native@1.24.3.patch",
+    "whisper.rn@0.7.4": "patches/whisper.rn@0.7.4.patch"
   }
 }

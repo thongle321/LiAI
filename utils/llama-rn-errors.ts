@@ -7,7 +7,7 @@
  * and any future caller share ONE definition of the wording.
  */
 
-export const LLAMARN_ERROR_PATTERNS = {
+export const LLAMA_RN_ERROR_PATTERNS = {
   /** Prompt-processing overflow: the prompt itself exceeds n_ctx.
    * llama.rn throws "Context is full" before any token is generated, so
    * it never reaches the normal completion result. */

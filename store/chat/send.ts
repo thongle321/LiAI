@@ -13,7 +13,7 @@ import {
   effectiveNCtx,
   remoteProviderId,
 } from "@/services/chat/context-fill.ts";
-import { LLAMARN_ERROR_PATTERNS } from "@/utils/llama-rn-errors.ts";
+import { LLAMA_RN_ERROR_PATTERNS } from "@/utils/llama-rn-errors.ts";
 import { useAsrStore } from "@/store/asr.ts";
 import { useInference } from "../inference.ts";
 import { useModelStore } from "../model-store.ts";
@@ -162,6 +162,29 @@ export function createSendSlice(
    *  the turn only writes to the store once it has a reply. */
   function removeBubble(id: string): void {
     set((s) => ({ messages: s.messages.filter((m) => m.id !== id) }));
+  }
+
+  /** Release turn state after success or failure. */
+  function settle(): void {
+    set({ sending: false, turnStartedAt: null, pendingToolName: null });
+  }
+
+  /** Handle a turn that filled the context window (or hit it mid-tool). */
+  function handleContextFull(
+    assistantId: string,
+    hasPartialContent: boolean,
+    used: number | undefined,
+  ): void {
+    updateBubble(assistantId, {
+      streaming: false,
+      ...(used !== undefined
+        ? { usage: { promptTokens: used, completionTokens: 0, totalTokens: used } }
+        : {}),
+      outcome: hasPartialContent
+        ? { contextFull: true, interrupted: true }
+        : { contextFull: true },
+    });
+    settle();
   }
 
   function adoptSession(id: string): void {
@@ -359,7 +382,7 @@ export function createSendSlice(
         .onAssistantMessageComplete(opts.assistantId, outcome.reply, {
           hadReasoning: !!outcome.reasoning,
         });
-      set({ sending: false, turnStartedAt: null, pendingToolName: null });
+      settle();
       // Released with the turn. The `gen` guard above means a superseded
       // run never reaches this, so a NEW turn's lock is never stomped.
       ctx.keepAwake(false);
@@ -381,94 +404,102 @@ export function createSendSlice(
       //    ran out of context mid-arguments — the same exhaustion signal.
       //  - The speculative draft context can fail to allocate on low-RAM
       //    devices at the first completion.
-      const isContextFullError = LLAMARN_ERROR_PATTERNS.contextFull.test(message);
+      const isContextFullError =
+        LLAMA_RN_ERROR_PATTERNS.contextFull.test(message);
       const isToolArgsParseError =
-        LLAMARN_ERROR_PATTERNS.toolArgsParse.test(message);
+        LLAMA_RN_ERROR_PATTERNS.toolArgsParse.test(message);
       const isSpeculativeInitError =
-        LLAMARN_ERROR_PATTERNS.speculativeInit.test(message);
+        LLAMA_RN_ERROR_PATTERNS.speculativeInit.test(message);
+      const modelActiveProviderType = useModelStore.getState().activeProviderType;
 
       // What the turn actually produced before it threw. The user's prompt
       // is NOT the test: it says nothing about whether the model got any
       // words out.
       const bubble = get().messages.find((m) => m.id === opts.assistantId);
       const hasPartialContent = (bubble?.text ?? "").trim() !== "";
-      // PocketPal's split: a truncated tool call is an n_ctx-exhaustion
+
+      // C4: a remote model's window is unknown if not probed. The banner's
+      // gate stays shut rather than dividing by a guess, so we show a
+      // fallback notice for context-full errors with no window.
+      const used = windowAtFailure();
+      const isRemoteAndUnknownWindow =
+        modelActiveProviderType === "remote" && used === undefined;
+
+      // PocketPal's logic: a truncated tool call is an n_ctx-exhaustion
       // signal only when there is a turn to attach it to. With no content
       // it falls back to the friendly hint below, exactly like PocketPal's
       // `hasPartialContent` branch running before its message chain.
+      // PocketPal's string match on "Context is full" is intentional parity
+      // (their own comment labels it LLAMARN-DEP); we must match it.
       const absorbAsContextFull =
-        isContextFullError || (isToolArgsParseError && hasPartialContent);
+        isContextFullError ||
+        (isToolArgsParseError && hasPartialContent);
 
       if (absorbAsContextFull) {
         // The banner owns the explanation, so the raw native error is never
         // dumped. The turn keeps whatever streamed and is tagged as cut off
-        // by the window; `usage` is pinned to the effective window the same
+        // by the window; `used` is pinned to the effective window the same
         // way PocketPal pins its abort snapshot's `used`, which is what lets
         // the banner's freshness gate clear it once the window is raised.
         // With no content the empty turn still carries the tag — it is the
         // banner's source — and its footer reads "Cut off" if the banner is
         // dismissed.
-        const used = windowAtFailure();
-        updateBubble(opts.assistantId, {
-          streaming: false,
-          ...(used !== undefined
-            ? { usage: { promptTokens: used, completionTokens: 0, totalTokens: used } }
-            : {}),
-          outcome: hasPartialContent
-            ? { contextFull: true, interrupted: true }
-            : { contextFull: true },
-        });
-        set({ sending: false, turnStartedAt: null, pendingToolName: null });
+        handleContextFull(opts.assistantId, hasPartialContent, used);
+        if (isRemoteAndUnknownWindow) {
+          set({
+            chatWarning: {
+              message:
+                "The model ran out of room mid-response. Try a larger context window.",
+              severity: "warning",
+              recoverable: false,
+            },
+          });
+        }
       } else if (isToolArgsParseError) {
         // No content to attach the hint to. The native parser's JSON dump is
         // useless to a reader, so it becomes PocketPal's friendly message.
+        // Retry is dead because the bubble is removed.
         removeBubble(opts.assistantId);
+        settle();
         set({
-          sending: false,
-          turnStartedAt: null,
-          pendingToolName: null,
           chatWarning: {
             message:
               "Tool call cut off — the model likely ran out of room. Try a larger context or a smaller request.",
             severity: "warning",
-            recoverable: true,
+            recoverable: false,
           },
         });
       } else if (isSpeculativeInitError) {
         // Low-RAM devices can fail to allocate the speculative draft context
         // (the load-time memory check has no term for it). PocketPal turns
         // this into a friendly system message instead of the raw dump.
+        // PocketPal shows the notice only when there is NO content.
         if (hasPartialContent) {
           updateBubble(opts.assistantId, {
             streaming: false,
             outcome: { interrupted: true },
           });
+          settle();
         } else {
           removeBubble(opts.assistantId);
+          settle();
+          set({
+            chatWarning: {
+              message:
+                "This device could not start speculative decoding for this model — most likely there is not enough memory for the draft context. Turn off Speculative decoding under Settings → Advanced Settings and try again.",
+              severity: "warning",
+              recoverable: false,
+            },
+          });
         }
-        set({
-          sending: false,
-          turnStartedAt: null,
-          pendingToolName: null,
-          chatWarning: {
-            message:
-              "This device could not start speculative decoding for this model — most likely there is not enough memory for the draft context. Turn off Speculative decoding under Settings → Advanced Settings and try again.",
-            severity: "warning",
-            recoverable: false,
-          },
-        });
       } else {
         // Other errors: show a raw error bubble with retry affordance.
         const error = llmError(message);
-        updateBubble(opts.assistantId, {
-          streaming: false,
-          error,
-        });
+        updateBubble(opts.assistantId, { streaming: false, error });
+        settle();
+        // Preserve any existing warning (e.g., multimodal) from before the turn started.
         set({
-          sending: false,
-          turnStartedAt: null,
-          pendingToolName: null,
-          chatWarning: { message: error.message, severity: "error", recoverable: true },
+          chatWarning: get().chatWarning ?? { message: error.message, severity: "error", recoverable: true },
         });
       }
       ctx.keepAwake(false);

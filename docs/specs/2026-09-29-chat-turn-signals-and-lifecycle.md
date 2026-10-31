@@ -102,6 +102,43 @@ already written at `pocketpal-ai/src/api/completionEngines.ts:43-45`).
 (`pocketpal-ai/src/hooks/useChatSession.ts:765`). Their own comment labels it
 `LLAMARN-DEP`. We have the boolean.
 
+### Amendment (2026-11-01): String-match is required for PocketPal parity
+
+The spec above is **revised** by this amendment. The string-match on `"Context is full"`
+and related native throws **is** reproduced, despite having a boolean available.
+
+**Reason:** The throw happens at prompt-processing time (before any token is generated),
+when `ctx_shift` is off in llama.rn. At this point, the completion path that would
+return `context_full: true` has never been reached — there is no `CompletionResult` to
+receive a `context_full` field. The native layer throws `"Context is full"` as an
+exception, not as a completion result flag.
+
+PocketPal's `LLAMARN-DEP` comment acknowledges this is a dependency they must match,
+not a design choice they regret. Their own code mirrors the native wording:
+
+```typescript
+// PocketPal: src/utils/llamaRnErrors.ts
+export const LLAMARN_ERROR_PATTERNS = {
+  contextFull: /context is full/i,
+  speculativeInit: /failed to create draft context/i,
+  toolArgsParse: /Failed to parse tool call arguments as JSON/i,
+};
+```
+
+LiAI matches this exact pattern. The throw paths are therefore:
+
+1. **"Context is full"** → tags the turn with `contextFull: true` (banner owns the turn)
+2. **"Failed to parse tool call arguments as JSON"** → when there's partial content,
+   absorbed into the banner; otherwise, shows a friendly notice (bubble removed)
+3. **"Failed to create draft context"** → when there's partial content, tags with
+   `interrupted: true`; otherwise, shows a friendly notice (bubble removed)
+
+This divergence from the "don't string-match" guidance is **documented and acceptable**
+because:
+- It matches PocketPal's user-visible behavior exactly
+- A boolean `context_full` is not available at throw time
+- The pattern matching is pure, testable, and mirrors PocketPal's intent
+
 ### Test that must exist first
 
 `tests/local-engine.test.ts` already fakes `ctx.completion`. One case asserting

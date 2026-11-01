@@ -22,6 +22,7 @@ import {
   SettingsSection,
   ToggleRow,
 } from "@/components/settings-rows.tsx";
+import { ModelSelector } from "./model-selector.tsx";
 import type { SamplerParams } from "@/services/inference/sampler.ts";
 import {
   generateFinalSystemPrompt,
@@ -365,59 +366,16 @@ export function CompanionEditorSheet({
         <Text className="mb-2 font-sans-semibold text-body-md text-primary-text">
           Model
         </Text>
-        {/* Recommended model: chat keeps whatever is active unless switched. */}
-        <View className="mb-2 flex-row flex-wrap gap-2">
-          {downloaded.length === 0 ? (
-            <Text className="text-body-sm text-quiet">No downloaded models yet.</Text>
-          ) : (
-            [
-              { id: "", label: "None" },
-              ...downloaded.map((m) => ({ id: m.id, label: m.name })),
-            ].map((option) => {
-              const selected = (draft.modelRef?.id ?? "") === option.id;
-              return (
-                <Pressable
-                  key={option.id || "none"}
-                  onPress={() => {
-                    const model = downloaded.find((m) => m.id === option.id);
-                    patch({
-                      modelRef: model
-                        ? {
-                            id: model.id,
-                            name: model.name,
-                            author: model.author,
-                            ...(model.files[0]
-                              ? {
-                                  file: {
-                                    name: model.files[0].name,
-                                    size: model.files[0].size,
-                                  },
-                                }
-                              : {}),
-                          }
-                        : null,
-                    });
-                  }}
-                  className={`min-h-9 rounded-full border px-3 justify-center ${
-                    selected ? "border-primary bg-primary" : "border-border bg-surface-1"
-                  }`}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                >
-                  <Text className={selected ? "text-body-sm text-on-primary" : "text-body-sm text-primary-text"}>
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })
-          )}
-        </View>
-        {draft.modelRef !== null &&
-          !downloaded.some((m) => m.id === draft.modelRef?.id) ? (
-            <Text className="mb-3 text-body-sm text-quiet">
-              {draft.modelRef.name} isn&apos;t downloaded — find it in Models.
-            </Text>
-          ) : null}
+        {downloaded.length === 0 ? (
+          <Text className="mb-2 text-body-sm text-quiet">No downloaded models yet.</Text>
+        ) : (
+          <ModelSelector
+            value={draft.modelRef}
+            onChange={(model) => patch({ modelRef: model })}
+            label="Default Model"
+            placeholder="Select model"
+          />
+        )}
 
         <Pressable
           onPress={() => setGenVisible(true)}

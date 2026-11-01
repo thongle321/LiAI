@@ -44,20 +44,8 @@ export function ChatTemplateDialog({
       onClose={onClose}
       title="Edit Chat Template"
       testID="chat-template-dialog"
-      actions={
-        <Pressable
-          onPress={onClose}
-          className="btn btn--primary active:opacity-80 min-h-12 self-end"
-          accessibilityRole="button"
-          accessibilityLabel="Close chat template editor"
-        >
-          <Text className="text-action">
-            Close
-          </Text>
-        </Pressable>
-      }
     >
-      <View className="gap-4">
+      <View className="gap-4 pb-4">
         <PickerMenu
           label="Base Chat Template:"
           options={CHAT_TEMPLATE_NAMES}
@@ -93,6 +81,20 @@ export function ChatTemplateDialog({
           className="rounded-lg border border-border bg-surface-2 px-4 py-3 font-sans text-body-sm text-primary-text"
         />
       </View>
+      <Sheet.Actions>
+        <View className="flex-row items-center justify-center">
+          <Pressable
+            onPress={onClose}
+            className="btn btn--primary active:opacity-80 min-h-12 justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Close chat template editor"
+          >
+            <Text className="text-action">
+              Close
+            </Text>
+          </Pressable>
+        </View>
+      </Sheet.Actions>
     </Sheet>
   );
 }

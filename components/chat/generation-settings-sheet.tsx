@@ -28,7 +28,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import { Alert, Pressable, Switch, Text, View } from "react-native";
 
 import {
   DEFAULT_SAMPLER,
@@ -156,11 +156,11 @@ export function GenerationSettingsSheet({
     };
   }, [visible]);
 
-  // Load this conversation's override whenever the sheet opens on it.
+  // Load this conversation'S override whenever the sheet opens on it.
   // The override carries sampler + thinking + effort; this sheet edits
   // the SAMPLER layer, so it reads `.sampler` and commits back through
   // the whole override (Save must not erase thinking/effort it does not
-  // show). Skipped in 'companion' mode: the companion's settings have no session
+  // show). Skipped in 'companion' mode: the companion'S settings have no session
   // override to read.
   useEffect(() => {
     if (!visible || mode !== "session") return;
@@ -180,7 +180,7 @@ export function GenerationSettingsSheet({
   }, [visible, mode, sessionId]);
 
   // The sheet opens on the source the conversation actually has: 'companion'
-  // when a persona is bound (PocketPal's default), else 'session'.
+  // when a persona is bound (PocketPal'S default), else 'session'.
   useEffect(() => {
     if (!visible) return;
     setMode(hasCompanion ? "companion" : "session");
@@ -318,7 +318,7 @@ export function GenerationSettingsSheet({
     setDraft((d) => (d ? { ...d, jinja: on } : d));
   }
 
-  // Resets touch the DRAFT only — PocketPal's reset buttons edit the form,
+  // Resets touch the DRAFT only — PocketPal'S reset buttons edit the form,
   // Save commits it.
   function resetToPreset(): void {
     setDraft((d) => (d ? { ...d, sampler: { ...preset } } : d));
@@ -328,74 +328,19 @@ export function GenerationSettingsSheet({
     setDraft((d) => (d ? { ...d, sampler: { ...DEFAULT_SAMPLER } } : d));
   }
 
+  // PocketPal parity: use Sheet.Actions as a child component for proper scrolling
   return (
     <Sheet
       visible={visible}
       onClose={onClose}
       title={title}
-      actions={
-        /* Pinned action row (PocketPal's Sheet.Actions) — see Sheet.tsx.
-           'companion' mode owns no settings to save or reset: the row shows
-           only the close affordance via the sheet's own X. */
-        isCompanion ? (
-          <View />
-        ) : (
-        <View className="flex-row items-center justify-between">
-          {isSession ? (
-            <ResetMenu
-              items={[
-                { label: "Reset to preset", onPress: resetToPreset },
-                { label: "Reset to System Defaults", onPress: resetToDefault },
-              ]}
-            />
-          ) : (
-            <Pressable
-              onPress={resetToDefault}
-              className="min-h-12 justify-center"
-              accessibilityRole="button"
-              accessibilityLabel="Reset to System Defaults"
-            >
-              <Text className="text-body">
-                Reset to System Defaults
-              </Text>
-            </Pressable>
-          )}
-          <View className="flex-row items-center gap-2">
-            {isSession ? (
-              <Pressable
-                onPress={handleSaveAsPreset}
-                className="btn btn--secondary active:opacity-80"
-                accessibilityRole="button"
-                accessibilityLabel="Save as preset"
-              >
-                <Text className="text-body">Save as preset</Text>
-              </Pressable>
-            ) : null}
-            <Pressable
-              onPress={handleSave}
-              className="btn btn--primary active:opacity-80"
-              style={{
-                shadowColor: "#000000",
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.06,
-                shadowRadius: 6,
-                elevation: 2,
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Save"
-            >
-              <Text className="text-action">Save</Text>
-            </Pressable>
-          </View>
-        </View>
-        )
-      }
+      testID="generation-settings-sheet"
     >
       {/* PocketPal: the source control sits ABOVE the card, not inside it
           (styles.settingsSourceContainer: horizontal margin, 16 below). */}
       <View className="px-3 mb-4">
         {/* Their settingsSource label is labelMedium 12 — one rung above
-            the card's 11, so this zone pins it separately. */}
+            the card'S 11, so this zone pins it separately. */}
         <RowSizeProvider label="text-body-sm" desc="text-body-sm">
           <Segmented<Mode>
             label="Settings source"
@@ -436,7 +381,7 @@ export function GenerationSettingsSheet({
       ) : null}
       {/* One divider-less card, 24px rhythm — CompletionSettings' shape.
           In 'companion' mode the rows are INERT (no pointer events, dimmed):
-          the values shown are the companion's, and a slider that moved and
+          the values shown are the companion'S, and a slider that moved and
           snapped back would be a lie. */}
       <SettingsSection plain>
         {draft ? (
@@ -451,6 +396,68 @@ export function GenerationSettingsSheet({
           </View>
         ) : null}
       </SettingsSection>
+      {/* JINJA is global, not per-companion — the row is part of the shared
+          component, so it is rendered inert here. */}
+      <View className="pointer-events-none mb-2 opacity-0" collapsable={false}>
+        <Switch value={false} onValueChange={() => {}} />
+      </View>
+
+      <Sheet.Actions>
+        {/* 'companion' mode owns no settings to save or reset: the row shows
+           only the close affordance via the sheet'S own X. */}
+        {isCompanion ? (
+          <View />
+        ) : (
+          <View className="flex-row items-center justify-between">
+            {isSession ? (
+              <ResetMenu
+                items={[
+                  { label: "Reset to preset", onPress: resetToPreset },
+                  { label: "Reset to System Defaults", onPress: resetToDefault },
+                ]}
+              />
+            ) : (
+              <Pressable
+                onPress={resetToDefault}
+                className="min-h-12 justify-center"
+                accessibilityRole="button"
+                accessibilityLabel="Reset to System Defaults"
+              >
+                <Text className="text-body">
+                  Reset to System Defaults
+                </Text>
+              </Pressable>
+            )}
+            <View className="flex-row items-center gap-2">
+              {isSession ? (
+                <Pressable
+                  onPress={handleSaveAsPreset}
+                  className="btn btn--secondary active:opacity-80"
+                  accessibilityRole="button"
+                  accessibilityLabel="Save as preset"
+                >
+                  <Text className="text-body">Save as preset</Text>
+                </Pressable>
+              ) : null}
+              <Pressable
+                onPress={handleSave}
+                className="btn btn--primary active:opacity-80"
+                style={{
+                  shadowColor: "#000000",
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.06,
+                  shadowRadius: 6,
+                  elevation: 2,
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Save"
+              >
+                <Text className="text-action">Save</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+      </Sheet.Actions>
     </Sheet>
   );
 }

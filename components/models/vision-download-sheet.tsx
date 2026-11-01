@@ -6,7 +6,7 @@
  * and only revisable afterwards on the model card.
  *
  * The plain Download button bypasses this sheet — it takes the default
- * (with vision), exactly as PocketPal's does.
+ * (with vision), exactly as PocketPal'S does.
  */
 
 import { useEffect, useState } from "react";
@@ -35,7 +35,7 @@ export function VisionDownloadSheet({
   onConfirm,
 }: {
   visible: boolean;
-  /** The LLM being downloaded (the sheet's title). */
+  /** The LLM being downloaded (the sheet'S title). */
   file: HFModelFile | null;
   /** Every gguf in the repo — the candidates come from here. */
   siblings: HFModelFile[];
@@ -52,7 +52,7 @@ export function VisionDownloadSheet({
     downloadUrl: f.downloadUrl,
   }));
 
-  // A fresh open starts from the app's own default (pair automatically);
+  // A fresh open starts from the app'S own default (pair automatically);
   // turning vision off clears the choice, as PocketPal does.
   useEffect(() => {
     if (!visible) return;
@@ -68,38 +68,6 @@ export function VisionDownloadSheet({
       onClose={onClose}
       title={file.name}
       testID="vision-download-sheet"
-      actions={
-        /* Pinned action row (PocketPal's Sheet.Actions) — see Sheet.tsx. */
-        <View className="flex-row gap-2">
-          <Pressable
-            onPress={onClose}
-            className="btn btn--secondary active:opacity-80 flex-1"
-            accessibilityRole="button"
-            accessibilityLabel="Cancel download"
-          >
-            <Text className="text-body">Cancel</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              const projector = candidates.find((c) => c.name === selected);
-              onConfirm(file, {
-                visionEnabled,
-                ...(visionEnabled && projector !== undefined ? { projector } : {}),
-              });
-              onClose();
-            }}
-            className="btn btn--primary active:opacity-80 flex-1"
-            accessibilityRole="button"
-            accessibilityLabel={
-              visionEnabled ? "Download with vision" : "Download text only"
-            }
-          >
-            <Text className="text-action">
-              {visionEnabled ? "Download with vision" : "Download text only"}
-            </Text>
-          </Pressable>
-        </View>
-      }
     >
       <View className="gap-2">
         <ToggleRow
@@ -121,7 +89,7 @@ export function VisionDownloadSheet({
           </Text>
         ) : (
           // Selection only: the fetch belongs to the download that follows,
-          // so no per-row download actions here (PocketPal's search-mode).
+          // so no per-row download actions here (PocketPal'S search-mode).
           candidates.map((c) => {
             const isSelected = c.name === selected;
             return (
@@ -155,6 +123,38 @@ export function VisionDownloadSheet({
           })
         )}
       </View>
+      <Sheet.Actions>
+        {/* Pinned action row (PocketPal'S Sheet.Actions) — see Sheet.tsx. */}
+        <View className="flex-row gap-2">
+          <Pressable
+            onPress={onClose}
+            className="btn btn--secondary active:opacity-80 flex-1"
+            accessibilityRole="button"
+            accessibilityLabel="Cancel download"
+          >
+            <Text className="text-body">Cancel</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              const projector = candidates.find((c) => c.name === selected);
+              onConfirm(file, {
+                visionEnabled,
+                ...(visionEnabled && projector !== undefined ? { projector } : {}),
+              });
+              onClose();
+            }}
+            className="btn btn--primary active:opacity-80 flex-1"
+            accessibilityRole="button"
+            accessibilityLabel={
+              visionEnabled ? "Download with vision" : "Download text only"
+            }
+          >
+            <Text className="text-action">
+              {visionEnabled ? "Download with vision" : "Download text only"}
+            </Text>
+          </Pressable>
+        </View>
+      </Sheet.Actions>
     </Sheet>
   );
 }

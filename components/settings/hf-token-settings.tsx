@@ -93,45 +93,6 @@ function HfTokenSheet({ open, onClose }: { open: boolean; onClose: () => void })
       onClose={onClose}
       title="Hugging Face Token"
       testID="hf-token-sheet"
-      actions={
-        /* Pinned action row (PocketPal's Sheet.Actions) — see Sheet.tsx. */
-        <View className="flex-row items-center justify-between gap-2">
-          {hfToken ? (
-            <Pressable
-              onPress={() => void reset()}
-              disabled={busy !== null}
-              className={
-                busy !== null ? "btn btn--ghost active:opacity-80 btn--disabled flex-1" : "btn btn--ghost active:opacity-80 flex-1"
-              }
-              accessibilityRole="button"
-              accessibilityLabel="Reset Token"
-            >
-              {busy === "reset" ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Text className="text-body">Reset Token</Text>
-              )}
-            </Pressable>
-          ) : null}
-          <Pressable
-            onPress={() => void save()}
-            disabled={!draft.trim() || busy !== null}
-className={
-              !draft.trim() || busy !== null
-                ? "btn btn--primary active:opacity-80 btn--disabled flex-1"
-                : "btn btn--primary active:opacity-80 flex-1"
-            }
-            accessibilityRole="button"
-            accessibilityLabel="Save Token"
-          >
-            {busy === "save" ? (
-              <ActivityIndicator size="small" color={colors.surface1} />
-            ) : (
-              <Text className="text-action">Save Token</Text>
-            )}
-          </Pressable>
-        </View>
-      }
     >
       <Text className="mb-4 font-sans text-body-md text-primary-text">
         Required to access gated models
@@ -195,6 +156,45 @@ className={
       {error !== null ? (
         <Text className="mt-2 font-sans text-body-sm text-error">{error}</Text>
       ) : null}
+      <Sheet.Actions>
+        {/* Pinned action row (PocketPal'S Sheet.Actions) — see Sheet.tsx. */}
+        <View className="flex-row items-center justify-between gap-2">
+          {hfToken ? (
+            <Pressable
+              onPress={() => void reset()}
+              disabled={busy !== null}
+              className={
+                busy !== null ? "btn btn--ghost active:opacity-80 btn--disabled flex-1" : "btn btn--ghost active:opacity-80 flex-1"
+              }
+              accessibilityRole="button"
+              accessibilityLabel="Reset Token"
+            >
+              {busy === "reset" ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text className="text-body">Reset Token</Text>
+              )}
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={() => void save()}
+            disabled={!draft.trim() || busy !== null}
+            className={
+              !draft.trim() || busy !== null
+                ? "btn btn--primary active:opacity-80 btn--disabled flex-1"
+                : "btn btn--primary active:opacity-80 flex-1"
+            }
+            accessibilityRole="button"
+            accessibilityLabel="Save Token"
+          >
+            {busy === "save" ? (
+              <ActivityIndicator size="small" color={colors.surface1} />
+            ) : (
+              <Text className="text-action">Save Token</Text>
+            )}
+          </Pressable>
+        </View>
+      </Sheet.Actions>
     </Sheet>
   );
 }

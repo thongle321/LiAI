@@ -9,7 +9,7 @@
  * Store shape (TinyBase 10's Store is not generic; cells arrive as
  * AnyObject, so every read goes through a narrowing helper below and the
  * typed contract lives on the SessionStore port):
- *   sessions  { title, pinned, updatedAt, seq, activeCompanionId?, settingsSource? }
+ *   sessions  { title, pinned, createdAt, updatedAt, seq, activeCompanionId?, settingsSource? }
  *   messages  { sessionId, role, content, type, at, seq, usage* }
  *   toolRuns  { messageId, position, tool, input?, result?, ok?, data?,
  *               metrics? }
@@ -197,6 +197,7 @@ export class TinyBaseSessionStore implements SessionStore {
     this.store.setRow("sessions", id, {
       title,
       pinned: false,
+      createdAt: new Date().toISOString(),
       updatedAt: Date.now(),
       seq: this.nextSeq(),
     });
@@ -420,12 +421,21 @@ export class TinyBaseSessionStore implements SessionStore {
         pinned: isRecord(raw) && raw["pinned"] === true,
         updatedAt: isRecord(raw) ? num(raw["updatedAt"]) : 0,
         seq: isRecord(raw) ? num(raw["seq"]) : 0,
+        createdAt: isRecord(raw) && typeof raw["createdAt"] === "string"
+          ? raw["createdAt"]
+          : undefined,
       }))
       .sort((a, b) => {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
         return b.seq - a.seq;
       })
-      .map(({ id, title, pinned, updatedAt }) => ({ id, title, pinned, updatedAt }));
+      .map(({ id, title, pinned, updatedAt, createdAt }) => ({
+        id,
+        title,
+        pinned,
+        updatedAt,
+        createdAt,
+      }));
   }
 
   async renameSession(sessionId: string, title: string): Promise<boolean> {
@@ -597,9 +607,9 @@ export class TinyBaseSessionStore implements SessionStore {
   }
 
   /** The session override cell holds `{sampler, thinking?, effort?}`.
-   *  A bare sampler-only object (rows written before thinking/effort
-   *  existed) parses as `{sampler}` — the legacy shape IS the sampler
-   *  keys at the top level, exactly like parseVoiceState's v1 read. */
+   *  The sampler is a COMPLETE object (not partial) when stored in new
+   *  format; legacy partial rows are merged with defaults to produce a
+   *  complete sampler that can be used wholesale. */
   async getSessionOverride(sessionId: string): Promise<SessionOverride | null> {
     const raw = this.store.getCell("sessionSampler", sessionId, "values");
     if (typeof raw !== "string" || raw === "") return null;
@@ -611,28 +621,59 @@ export class TinyBaseSessionStore implements SessionStore {
     }
     if (!isRecord(parsed)) return null;
     const override: SessionOverride = {};
-    // New shape nests under `sampler`; a legacy cell IS the sampler keys
-    // at the top level. Reading both is what keeps old rows working.
+    // New format nests sampler under `sampler` key; legacy format has
+    // sampler keys at the top level. Detect and handle both.
+    const isLegacy = !isRecord(parsed["sampler"]);
     const samplerSource = isRecord(parsed["sampler"]) ? parsed["sampler"] : parsed;
     const sampler = this.samplerOf(samplerSource);
-    if (sampler) override.sampler = sampler;
+    if (sampler) {
+      // For legacy rows, we need to return a complete sampler by merging
+      // defaults with the legacy partial. For new format, the sampler is
+      // already complete (or we merge defaults for missing fields).
+      override.sampler = this.completeSampler(sampler);
+    }
     if (typeof parsed["thinking"] === "boolean") override.thinking = parsed["thinking"];
     if (isEffortLevel(parsed["effort"])) override.effort = parsed["effort"];
     return Object.keys(override).length > 0 ? override : null;
   }
 
-  /** Finite numbers AND booleans count as an override: a boolean flag
-   *  (includeThinkingInContext) is a real per-session choice, and a
-   *  number-only filter would silently drop `false` and fall back to the
-   *  preset. A half-written save still degrades the same way. */
-  private samplerOf(parsed: Record<string, unknown>): Partial<SamplerParams> | null {
-    const out: Record<string, number | boolean> = {};
+  /** Parse sampler fields from stored data, returning a partial or complete
+   *  SamplerParams depending on what was found. Returns null if no valid
+   *  fields were present. */
+  private samplerOf(parsed: Record<string, unknown>): SamplerParams | null {
+    const out: Record<string, number | boolean | string> = {};
+    let found = false;
     for (const key of Object.keys(DEFAULT_SAMPLER)) {
       const v = parsed[key];
-      if (typeof v === "number" && Number.isFinite(v)) out[key] = v;
-      else if (typeof v === "boolean") out[key] = v;
+      if (typeof v === "number" && Number.isFinite(v)) {
+        out[key] = v;
+        found = true;
+      } else if (typeof v === "boolean") {
+        out[key] = v;
+        found = true;
+      }
     }
-    return Object.keys(out).length > 0 ? (out as Partial<SamplerParams>) : null;
+    // Check for any string fields (mirostat, etc.)
+    if (parsed["mirostat"] === 0 || parsed["mirostat"] === 1 || parsed["mirostat"] === 2) {
+      out["mirostat"] = parsed["mirostat"];
+      found = true;
+    }
+    if (!found) return null;
+    // Merge with defaults to produce a complete SamplerParams
+    return { ...DEFAULT_SAMPLER, ...out };
+  }
+
+  /** Ensure a sampler is complete by merging with defaults if needed.
+   *  This handles both legacy partials and new-format objects that may
+   *  have been written without all fields. */
+  private completeSampler(sampler: SamplerParams): SamplerParams {
+    // If all default keys are present and valid, the sampler is already complete
+    const hasAllDefaults = Object.keys(DEFAULT_SAMPLER).every((key) =>
+      key in sampler && sampler[key as keyof SamplerParams] !== undefined,
+    );
+    if (hasAllDefaults) return sampler;
+    // Merge with defaults to fill in any missing fields
+    return { ...DEFAULT_SAMPLER, ...sampler };
   }
 
   async setSessionOverride(
@@ -693,6 +734,15 @@ export class TinyBaseSessionStore implements SessionStore {
     return true;
   }
 
+  async setSessionCreatedAt(
+    sessionId: string,
+    createdAt: string,
+  ): Promise<boolean> {
+    if (!this.store.hasRow("sessions", sessionId)) return false;
+    this.store.setCell("sessions", sessionId, "createdAt", createdAt);
+    return true;
+  }
+
   async getActiveSessionId(): Promise<string | null> {
     const value = this.store.getValue("activeSessionId");
     return typeof value === "string" ? value : null;
@@ -748,7 +798,7 @@ export class TinyBaseSessionStore implements SessionStore {
   async applySessionSnapshotToGlobal(sessionId: string): Promise<boolean> {
     const override = await this.getSessionOverride(sessionId);
     if (!override?.sampler) return false;
-    await this.saveGlobalChatSettings(override.sampler as SamplerParams);
+    await this.saveGlobalChatSettings(override.sampler);
     return true;
   }
 }

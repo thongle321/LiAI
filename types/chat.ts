@@ -116,16 +116,24 @@ export interface ChatMessage {
    * the turn was produced after blocks existed. Absent on older turns —
    * those are read through blocksOf, which splits the legacy fields. */
   blocks?: TurnBlock[];
+  /** Author identity: "user" or "assistant" role ID for display.
+   * Derived from role for normal turns, present for imported data. */
+  authorId?: "user" | "assistant";
+  /** Optional authorship payload for display (name, avatar, etc). */
+  author?: { name?: string; avatar?: string };
 }
 
 /** One row of the session list, owned by the local Store (ADR-0012).
  * `updatedAt` is a wall clock for display; the store keeps a separate
- * monotonic counter for sort order. */
+ * monotonic counter for sort order. `createdAt` is recorded once at
+ * session creation and never changes (Drawer groups by this). */
 export interface SessionInfo {
   id: string;
   title: string;
   pinned: boolean;
   updatedAt: number;
+  /** ISO timestamp written once at creation, for drawer grouping. */
+  createdAt?: string;
 }
 
 /** One row in the drawer's history list (derived from SessionInfo). */

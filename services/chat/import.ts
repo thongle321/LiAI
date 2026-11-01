@@ -52,6 +52,7 @@ const SUPPORTED_VERSION = 1;
 interface ImportedSession {
   title: string;
   pinned: boolean;
+  createdAt?: string;
   /** StoredTurn, never StoredMessage -- import mints its own ids. */
   turns: StoredTurn[];
 }
@@ -192,6 +193,24 @@ function toTurn(
       .slice(0, 10);
     if (images.length > 0) turn.images = images;
   }
+  // Author identity for imported data display purposes
+  if (value.authorId === "user" || value.authorId === "assistant") {
+    turn.authorId = value.authorId;
+  }
+  if (isRecord(value.author)) {
+    turn.author = {
+      name: typeof value.author.name === "string" ? value.author.name : undefined,
+      avatar: typeof value.author.avatar === "string" ? value.author.avatar : undefined,
+    };
+    // Remove undefined values
+    if (!turn.author.name && !turn.author.avatar) {
+      delete turn.author;
+    } else if (!turn.author.name) {
+      delete turn.author.name;
+    } else if (!turn.author.avatar) {
+      delete turn.author.avatar;
+    }
+  }
   if (steps.length > 0) turn.steps = steps;
   // The additive representation rides the same validation: sanitized,
   // and tool references remapped onto the fresh step ids above. Without
@@ -232,6 +251,8 @@ function toSession(value: unknown): { session: ImportedSession; skipped: number 
       skipped += turn.droppedSteps;
     }
   }
+  const createdAt =
+      typeof value.createdAt === "string" ? value.createdAt : undefined;
   if (turns.length === 0) return null;
   return {
     session: {
@@ -239,6 +260,7 @@ function toSession(value: unknown): { session: ImportedSession; skipped: number 
       // so give it something honest rather than showing nothing.
       title: title.trim() === "" ? "Imported chat" : title.trim(),
       pinned: value.pinned === true,
+      createdAt,
       turns,
     },
     skipped,

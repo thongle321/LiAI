@@ -48,7 +48,7 @@ export function fakeSessionStore(
 } {
   const sessions = new Map<
     string,
-    { title: string; pinned: boolean; turns: StoredMessage[]; seq: number }
+    { title: string; pinned: boolean; turns: StoredMessage[]; seq: number; createdAt?: string }
   >();
   // Row ids, like the real store mints on append. Seeded turns get
   // stable, readable ids so a test can name one in a truncateFrom call.
@@ -73,7 +73,7 @@ export function fakeSessionStore(
     create: async () => {
       calls.creates += 1;
       const id = `s-${calls.creates}`;
-      sessions.set(id, { title: "", pinned: false, turns: [], seq: 0 });
+      sessions.set(id, { title: "", pinned: false, turns: [], seq: 0, createdAt: new Date().toISOString() });
       return id;
     },
     get: async (sessionId: string) => {
@@ -92,7 +92,7 @@ export function fakeSessionStore(
     append: async (sessionId: string, turn: StoredTurn, id?: string) => {
       let row = sessions.get(sessionId);
       if (!row) {
-        row = { title: "", pinned: false, turns: [], seq: 0 };
+        row = { title: "", pinned: false, turns: [], seq: 0, createdAt: new Date().toISOString() };
         sessions.set(sessionId, row);
       }
       // Same rule as the real store: a caller-supplied id pins the row, so
@@ -109,6 +109,7 @@ export function fakeSessionStore(
           title: row.title,
           pinned: row.pinned,
           updatedAt: row.seq,
+          createdAt: row.createdAt ?? new Date().toISOString(),
         }))
         .sort((a, b) => (a.pinned === b.pinned ? 0 : a.pinned ? -1 : 1)),
     renameSession: async (id: string, title: string) => {
@@ -247,7 +248,14 @@ export function fakeSessionStore(
     applySessionSnapshotToGlobal: async (sessionId: string) => {
       const override = overrides.get(sessionId);
       if (!override?.sampler) return false;
-      globalSettings.set(GLOBAL_CHAT_SETTINGS_KEY, override.sampler as SamplerParams);
+      globalSettings.set(GLOBAL_CHAT_SETTINGS_KEY, override.sampler);
+      return true;
+    },
+    setSessionCreatedAt: async (sessionId: string, createdAt: string): Promise<boolean> => {
+      const row = sessions.get(sessionId);
+      if (!row) return false;
+      // Store createdAt for import purposes
+      row.createdAt = createdAt;
       return true;
     },
   };

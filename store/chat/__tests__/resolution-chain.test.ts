@@ -14,7 +14,7 @@ import type { AgentStep } from "@/types/chat.ts";
 
 // Minimal fake session store for resolution chain tests
 function createFakeSessionStore(): SessionStore & {
-  _sessions: Map<string, { title: string; pinned: boolean; companion?: string; source: "companion" | "custom" | null; override?: SessionOverride }>;
+  _sessions: Map<string, { title: string; pinned: boolean; companion?: string; source: "companion" | "custom" | null; override?: SessionOverride; createdAt?: string }>;
   _messages: Map<string, StoredMessage[]>;
   _drafts: Map<string, string>;
   _globalSettings: Map<string, unknown>;
@@ -22,7 +22,7 @@ function createFakeSessionStore(): SessionStore & {
   _activeSessionId: string | null;
 } {
   const store: SessionStore & {
-    _sessions: Map<string, { title: string; pinned: boolean; companion?: string; source: "companion" | "custom" | null; override?: SessionOverride }>;
+    _sessions: Map<string, { title: string; pinned: boolean; companion?: string; source: "companion" | "custom" | null; override?: SessionOverride; createdAt?: string }>;
     _messages: Map<string, StoredMessage[]>;
     _drafts: Map<string, string>;
     _globalSettings: Map<string, unknown>;
@@ -62,6 +62,7 @@ function createFakeSessionStore(): SessionStore & {
         title: row.title,
         pinned: row.pinned,
         updatedAt: row.pinned ? 1 : 0,
+        createdAt: row.createdAt ?? new Date().toISOString(),
       }));
     },
 
@@ -196,6 +197,13 @@ function createFakeSessionStore(): SessionStore & {
       return true;
     },
 
+    async setSessionCreatedAt(sessionId: string, createdAt: string): Promise<boolean> {
+      const row = store._sessions.get(sessionId);
+      if (!row) return false;
+      row.createdAt = createdAt;
+      return true;
+    },
+
     popLastAssistant: async () => false,
     truncateFrom: async () => false,
   };
@@ -222,7 +230,7 @@ async function resolveSamplerChain(
 
   // If custom, use session snapshot wholesale
   if (settingsSource === "custom" && customOverride?.sampler) {
-    return customOverride.sampler as SamplerParams;
+    return customOverride.sampler; // Now returns complete SamplerParams
   }
 
   // Apply persona tuning over global
@@ -324,6 +332,7 @@ describe("resolution chain", () => {
       };
       const customOverride: SessionOverride = {
         sampler: {
+          ...DEFAULT_SAMPLER,
           temperature: 0.95,
           topK: 80,
           topP: 0.99,
@@ -356,8 +365,11 @@ describe("resolution chain", () => {
       };
       const customOverride: SessionOverride = {
         sampler: {
+          ...DEFAULT_SAMPLER,
           temperature: 0.99,
         },
+        thinking: true,
+        effort: "high",
       };
 
       const result = await resolveSamplerChain(
@@ -395,6 +407,31 @@ describe("resolution chain", () => {
       expect(result.topK).toEqual(100);
       // Non-overridden fields from base
       expect(result.topP).toEqual(0.9);
+    });
+  });
+
+  describe("session creation date for drawer grouping", () => {
+    it("listSessions includes createdAt for age-based grouping", async () => {
+      const store = createFakeSessionStore();
+      const id = await store.create();
+      const sessions = await store.listSessions();
+      expect(sessions[0].createdAt).toBeDefined();
+      expect(typeof sessions[0].createdAt).toEqual("string");
+    });
+
+    it("setSessionCreatedAt updates the session creation date", async () => {
+      const store = createFakeSessionStore();
+      const id = await store.create();
+      const newDate = "2024-06-15T12:00:00.000Z";
+      expect(await store.setSessionCreatedAt(id, newDate)).toEqual(true);
+
+      const sessions = await store.listSessions();
+      expect(sessions[0].createdAt).toEqual(newDate);
+    });
+
+    it("setSessionCreatedAt returns false for non-existent session", async () => {
+      const store = createFakeSessionStore();
+      expect(await store.setSessionCreatedAt("ghost", "2024-01-01T00:00:00.000Z")).toEqual(false);
     });
   });
 });

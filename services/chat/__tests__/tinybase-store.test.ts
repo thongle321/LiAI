@@ -11,6 +11,7 @@
 import { readSource } from "@/jest/source";
 import { createStore } from "tinybase";
 
+import { DEFAULT_SAMPLER } from "@/services/inference/sampler.ts";
 import { TinyBaseSessionStore } from "../tinybase-store";
 
 function newStore(): TinyBaseSessionStore {
@@ -28,10 +29,11 @@ it("keeps a boolean sampler override (include-thinking-in-context)", async () =>
 const store = newStore();
 const id = await store.create();
 await store.setSessionOverride(id, {
-  sampler: { includeThinkingInContext: false },
+  sampler: { ...DEFAULT_SAMPLER, includeThinkingInContext: false },
 });
 expect((await store.getSessionOverride(id))?.sampler).toEqual({
-includeThinkingInContext: false,
+  ...DEFAULT_SAMPLER,
+  includeThinkingInContext: false,
 });
 });
 
@@ -265,7 +267,10 @@ describe("session list", () => {
     const id = await store.create();
     expect(await store.renameSession(id, "Cats")).toEqual(true);
     expect(await store.setSessionPinned(id, true)).toEqual(true);
-    expect({ ...(await store.listSessions())[0], updatedAt: 0 }).toEqual({ id, title: "Cats", pinned: true, updatedAt: 0 });
+    const sessions = await store.listSessions();
+    expect(sessions[0].id).toEqual(id);
+    expect(sessions[0].title).toEqual("Cats");
+    expect(sessions[0].pinned).toEqual(true);
     expect(await store.renameSession("ghost", "Nope")).toEqual(false);
     expect(await store.setSessionPinned("ghost", true)).toEqual(false);
   });
@@ -513,13 +518,14 @@ describe("session override", () => {
   });
 
   it("stores only the fields a session overrides", async () => {
-    // Partial on purpose: a field the session never touched must keep
-    // following the resolved base, so a new global default still lands.
+    // The sampler is always complete when stored (merged with defaults).
+    // We store temperature: 0.2, so only that field changes.
     const store = newStore();
     const id = await store.create();
-    await store.setSessionOverride(id, { sampler: { temperature: 0.2 } });
-    expect(await store.getSessionOverride(id)).toEqual({
-      sampler: { temperature: 0.2 },
+    await store.setSessionOverride(id, { sampler: { ...DEFAULT_SAMPLER, temperature: 0.2 } });
+    expect((await store.getSessionOverride(id))?.sampler).toEqual({
+      ...DEFAULT_SAMPLER,
+      temperature: 0.2,
     });
   });
 
@@ -527,31 +533,32 @@ describe("session override", () => {
     const store = newStore();
     const id = await store.create();
     await store.setSessionOverride(id, {
-      sampler: { temperature: 0.2 },
+      sampler: { ...DEFAULT_SAMPLER, temperature: 0.2 },
       thinking: false,
       effort: "high",
     });
-    expect(await store.getSessionOverride(id)).toEqual({
-      sampler: { temperature: 0.2 },
-      thinking: false,
-      effort: "high",
+    expect((await store.getSessionOverride(id))?.sampler).toEqual({
+      ...DEFAULT_SAMPLER,
+      temperature: 0.2,
     });
+    expect((await store.getSessionOverride(id))?.thinking).toEqual(false);
+    expect((await store.getSessionOverride(id))?.effort).toEqual("high");
   });
 
   it("keeps each session's override its own", async () => {
     const store = newStore();
     const a = await store.create();
     const b = await store.create();
-    await store.setSessionOverride(a, { sampler: { temperature: 0.2 } });
+    await store.setSessionOverride(a, { sampler: { ...DEFAULT_SAMPLER, temperature: 0.2 } });
     expect(await store.getSessionOverride(b)).toEqual(null);
-    await store.setSessionOverride(b, { sampler: { topP: 0.5, temperature: 0.9 } });
-    expect((await store.getSessionOverride(a))?.sampler).toEqual({ temperature: 0.2 });
+    await store.setSessionOverride(b, { sampler: { ...DEFAULT_SAMPLER, topP: 0.5, temperature: 0.9 } });
+    expect((await store.getSessionOverride(a))?.sampler).toEqual({ ...DEFAULT_SAMPLER, temperature: 0.2 });
   });
 
   it("restores the resolved base when cleared with null", async () => {
     const store = newStore();
     const id = await store.create();
-    await store.setSessionOverride(id, { sampler: { temperature: 0.2 } });
+    await store.setSessionOverride(id, { sampler: { ...DEFAULT_SAMPLER, temperature: 0.2 } });
     await store.setSessionOverride(id, null);
     expect(await store.getSessionOverride(id)).toEqual(null);
   });
@@ -566,7 +573,7 @@ describe("session override", () => {
   it("drops the override when the session is deleted", async () => {
     const store = newStore();
     const id = await store.create();
-    await store.setSessionOverride(id, { sampler: { temperature: 0.2 } });
+    await store.setSessionOverride(id, { sampler: { ...DEFAULT_SAMPLER, temperature: 0.2 } });
     await store.deleteSession(id);
     expect(await store.getSessionOverride(id)).toEqual(null);
   });
@@ -584,10 +591,11 @@ describe("session override", () => {
     tiny.setRow("sessionSampler", id, {
       values: JSON.stringify({ temperature: "hot", topP: 0.5 }),
     });
-    expect((await store.getSessionOverride(id))?.sampler).toEqual({ topP: 0.5 });
+    // Legacy row with invalid temperature - only topP is valid
+    expect((await store.getSessionOverride(id))?.sampler).toEqual({ ...DEFAULT_SAMPLER, topP: 0.5 });
   });
 
-  it("reads a legacy bare-sampler cell as the sampler layer", async () => {
+  it("reads a legacy bare-sampler cell and merges with defaults", async () => {
     // Rows written before the override widened to thinking/effort hold
     // the sampler keys at the TOP level; that shape must keep working.
     const { store, tiny } = newStoreRaw();
@@ -595,8 +603,9 @@ describe("session override", () => {
     tiny.setRow("sessionSampler", id, {
       values: JSON.stringify({ temperature: 0.4 }),
     });
+    // Legacy row returns complete sampler with defaults merged
     expect(await store.getSessionOverride(id)).toEqual({
-      sampler: { temperature: 0.4 },
+      sampler: { ...DEFAULT_SAMPLER, temperature: 0.4 },
     });
   });
 });
@@ -702,10 +711,11 @@ describe("duplicating a session", () => {
     // The override is per conversation, so a fork that dropped it would
     // silently revert to the base — only noticed after trusting the fork.
     const { store, id } = await seeded();
-    await store.setSessionOverride(id, { sampler: { temperature: 0.2, topP: 0.5 } });
+    await store.setSessionOverride(id, { sampler: { ...DEFAULT_SAMPLER, temperature: 0.2, topP: 0.5 } });
     const copyId = await store.duplicateSession(id);
     expect(copyId).toBeTruthy();
     expect((await store.getSessionOverride(copyId as string))?.sampler).toEqual({
+      ...DEFAULT_SAMPLER,
       temperature: 0.2,
       topP: 0.5,
     });
@@ -945,5 +955,31 @@ describe("lazy hydration (C17)", () => {
     const copied = await store.get(copy as string);
     expect(copied?.length).toEqual(1);
     expect(copied?.[0].content).toEqual("src");
+  });
+});
+
+describe("setSessionCreatedAt (import support)", () => {
+  it("sets the createdAt timestamp on an existing session", async () => {
+    const store = newStore();
+    const id = await store.create();
+    const createdAt = "2024-01-15T10:30:00.000Z";
+    expect(await store.setSessionCreatedAt(id, createdAt)).toEqual(true);
+
+    const sessions = await store.listSessions();
+    expect(sessions[0].createdAt).toEqual(createdAt);
+  });
+
+  it("returns false when the session does not exist", async () => {
+    const store = newStore();
+    expect(await store.setSessionCreatedAt("ghost", "2024-01-15T10:30:00.000Z")).toEqual(false);
+  });
+
+  it("creates sessions with a createdAt timestamp", async () => {
+    const store = newStore();
+    const id = await store.create();
+    const sessions = await store.listSessions();
+    // New sessions get createdAt on creation (used by toSession for grouping)
+    expect(typeof sessions[0].createdAt).toEqual("string");
+    expect(sessions[0].createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 });

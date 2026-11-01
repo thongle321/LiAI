@@ -23,11 +23,14 @@ export function newId(): string {
 }
 
 export function toSession(row: SessionInfo): ChatSession {
+  // Use createdAt for grouping when available (for proper age-based grouping),
+  // fall back to updatedAt for legacy sessions without createdAt
+  const at = row.createdAt ? new Date(row.createdAt).getTime() : row.updatedAt;
   return {
     id: row.id,
     title: row.title,
     pinned: row.pinned === true,
-    at: row.updatedAt,
+    at,
   };
 }
 
@@ -55,5 +58,8 @@ export function toMessages(turns: StoredMessage[]): ChatMessage[] {
     // Carried straight through: a reloaded reply must still know how it
     // ended, or the context banner and turn footer lose their subject.
     ...(turn.outcome !== undefined ? { outcome: turn.outcome } : {}),
+    // Author fields: derived from role for normal turns, present for imported data
+    ...(turn.authorId !== undefined ? { authorId: turn.authorId } : {}),
+    ...(turn.author !== undefined ? { author: turn.author } : {}),
   }));
 }

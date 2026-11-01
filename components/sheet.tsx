@@ -13,6 +13,11 @@
  *    - Safe-area insets are handled natively (footer absorbs the bottom
  *      inset), so no manual `insets.bottom` padding anywhere.
  *
+ *  PocketPal parity: use `<Sheet.Actions>` as a child component, rendered
+ *  BELOW the ScrollView content with proper bottom padding. This ensures
+ *  the content scrolls to its natural end before the actions, and users
+ *  can reach the bottom of long forms. The actions are in a sticky footer.
+ *
  *  `scrollable` (the shared prop) picks the body element:
  *    - true  -> the shared Sheet renders the ScrollView and plugs it in.
  *    - false -> the caller's body IS the scroller (e.g. a FlatList); pass
@@ -28,8 +33,10 @@
  */
 
 import {
+  Children,
   useEffect,
   useRef,
+  type ReactElement,
   type ReactNode,
   type Ref,
 } from "react";
@@ -47,6 +54,26 @@ import { X } from "lucide-react-native";
 
 import { useColors } from "@/themes/tokens.ts";
 import { cn } from "@/utils/cn.ts";
+
+/** Actions component rendered as a child of Sheet (PocketPal pattern).
+ *  This is rendered BELOW the scrollable content, allowing the content
+ *  to scroll to its natural end before the sticky actions footer. */
+export function SheetActions({ children }: { children: ReactNode }) {
+  return (
+    <View className="px-4 pt-2.5 gap-2.5" style={{ paddingBottom: 10 }}>
+      {children}
+    </View>
+  );
+}
+
+/** Check if a React node is a Sheet.Actions element */
+function isSheetActionsElement(node: ReactNode): node is ReactElement<{ children: ReactNode }> {
+  return (
+    typeof node === "object" &&
+    node !== null &&
+    (node as ReactElement).type === SheetActions
+  );
+}
 
 export function Sheet({
   visible,
@@ -66,6 +93,7 @@ export function Sheet({
   visible: boolean;
   onClose: () => void;
   title?: string;
+  /** @deprecated Use <Sheet.Actions> as a child instead. */
   actions?: ReactNode;
   scrollable?: boolean;
   scrollableOptions?: { scrollingExpandsSheet?: boolean; contentInsetAdjustment?: "automatic" | "never" | "safe-area" | "footer" };
@@ -129,9 +157,20 @@ export function Sheet({
     </View>
   );
 
-  const actionsBar = actions ? (
+  // PocketPal parity: extract Sheet.Actions from children as a child component pattern
+  // When children include <Sheet.Actions>, render its content in the footer slot
+  const childrenArray = Children.toArray(children);
+  const actionsFromChild = childrenArray.find(isSheetActionsElement);
+  const bodyChildren = Children.toArray(children).filter((child) => !isSheetActionsElement(child));
+
+  // Prefer <Sheet.Actions> child over deprecated `actions` prop
+  const actionsContent = actionsFromChild
+    ? (actionsFromChild as ReactElement<{ children: ReactNode }>).props.children
+    : actions;
+
+  const actionsBar = actionsContent ? (
     <View className="px-4 pt-2.5 gap-2.5" style={{ paddingBottom: 10 }}>
-      {actions}
+      {actionsContent}
     </View>
   ) : null;
 
@@ -142,11 +181,11 @@ export function Sheet({
       contentContainerClassName="px-4 pb-4"
       keyboardShouldPersistTaps="handled"
     >
-      {children}
+      {bodyChildren}
     </ScrollView>
   ) : (
     <View testID={testID} className={cn("px-4", fill && "flex-1")}>
-      {children}
+      {bodyChildren}
     </View>
   );
 
@@ -189,4 +228,5 @@ export function Sheet({
   );
 }
 
-
+// Attach Actions as a subcomponent for PocketPal parity
+Sheet.Actions = SheetActions;

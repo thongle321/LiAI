@@ -244,46 +244,13 @@ export function CompanionEditorSheet({
       ? generateFinalSystemPrompt(draft.systemPrompt, draft.parameters)
       : draft.systemPrompt;
 
+  // PocketPal parity: use Sheet.Actions as a child component for proper scrolling
   return (
     <Sheet
       visible={companion !== null}
       onClose={onClose}
       title={isEdit ? `Edit Companion: ${draft.name || "Untitled"}` : "New Companion"}
-      actions={
-        <View className="flex-row items-center justify-between">
-          {isEdit ? (
-            <Pressable
-              onPress={remove}
-              className="min-h-12 justify-center"
-              accessibilityRole="button"
-              accessibilityLabel="Delete companion"
-            >
-              <Text className="text-body text-danger">Delete</Text>
-            </Pressable>
-          ) : (
-            <View />
-          )}
-          <View className="flex-row items-center gap-2">
-            <Pressable
-              onPress={onClose}
-              className="btn btn--secondary active:opacity-80"
-              accessibilityRole="button"
-              accessibilityLabel="Cancel"
-            >
-              <Text className="text-body">Cancel</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => void save()}
-              disabled={!canSave}
-              className={`btn btn--primary active:opacity-80${canSave ? "" : " opacity-40"}`}
-              accessibilityRole="button"
-              accessibilityLabel="Save companion"
-            >
-              <Text className="text-action">Save</Text>
-            </Pressable>
-          </View>
-        </View>
-      }
+      testID="companion-editor-sheet"
     >
       <RowSizeProvider label="text-body-md" desc="text-body-sm">
         <CompanionTextRow
@@ -454,11 +421,11 @@ export function CompanionEditorSheet({
           )}
         </View>
         {draft.modelRef !== null &&
-        !downloaded.some((m) => m.id === draft.modelRef?.id) ? (
-          <Text className="mb-3 text-body-sm text-quiet">
-            {draft.modelRef.name} isn&apos;t downloaded — find it in Models.
-          </Text>
-        ) : null}
+          !downloaded.some((m) => m.id === draft.modelRef?.id) ? (
+            <Text className="mb-3 text-body-sm text-quiet">
+              {draft.modelRef.name} isn&apos;t downloaded — find it in Models.
+            </Text>
+          ) : null}
 
         <Pressable
           onPress={() => setGenVisible(true)}
@@ -490,6 +457,44 @@ export function CompanionEditorSheet({
           />
         ) : null}
       </RowSizeProvider>
+
+      {/* PocketPal parity: Sheet.Actions rendered as child for proper scroll behavior */}
+      <Sheet.Actions>
+        <View className="flex-row items-center justify-between">
+          {isEdit ? (
+            <Pressable
+              onPress={remove}
+              className="min-h-12 justify-center"
+              accessibilityRole="button"
+              accessibilityLabel="Delete companion"
+            >
+              <Text className="text-body text-danger">Delete</Text>
+            </Pressable>
+          ) : (
+            <View />
+          )}
+          <View className="flex-row items-center gap-2">
+            <Pressable
+              onPress={onClose}
+              className="btn btn--secondary active:opacity-80"
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+            >
+              <Text className="text-body">Cancel</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => void save()}
+              disabled={!canSave}
+              className={`btn btn--primary active:opacity-80${canSave ? "" : " opacity-40"}`}
+              accessibilityRole="button"
+              accessibilityLabel="Save companion"
+            >
+              <Text className="text-action">Save</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Sheet.Actions>
+
       <CompanionGenerationSettingsSheet
         visible={genVisible}
         base={draft.completionSettings}
@@ -537,12 +542,29 @@ function CompanionGenerationSettingsSheet({
     return out as Partial<SamplerParams>;
   }
 
+  // PocketPal parity: use Sheet.Actions as a child component
   return (
     <Sheet
       visible={visible}
       onClose={onClose}
       title="Companion Generation Settings"
-      actions={
+      testID="companion-generation-settings-sheet"
+    >
+      <SettingsSection plain>
+        <SamplerRows
+          sampler={draft}
+          jinjaEnabled={false}
+          onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+          onJinjaChange={() => {}}
+        />
+      </SettingsSection>
+      {/* JINJA is global, not per-companion — the row is part of the shared
+          component, so it is rendered inert here. */}
+      <View className="pointer-events-none mb-2 opacity-0" collapsable={false}>
+        <Switch value={false} onValueChange={() => {}} />
+      </View>
+
+      <Sheet.Actions>
         <View className="flex-row items-center justify-between">
           <Pressable
             onPress={() => onSave(null)}
@@ -561,21 +583,7 @@ function CompanionGenerationSettingsSheet({
             <Text className="text-action">Save</Text>
           </Pressable>
         </View>
-      }
-    >
-      <SettingsSection plain>
-        <SamplerRows
-          sampler={draft}
-          jinjaEnabled={false}
-          onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
-          onJinjaChange={() => {}}
-        />
-      </SettingsSection>
-      {/* JINJA is global, not per-companion — the row is part of the shared
-          component, so it is rendered inert here. */}
-      <View className="pointer-events-none mb-2 opacity-0" collapsable={false}>
-        <Switch value={false} onValueChange={() => {}} />
-      </View>
+      </Sheet.Actions>
     </Sheet>
   );
 }

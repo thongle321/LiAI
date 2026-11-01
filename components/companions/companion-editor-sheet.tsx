@@ -201,13 +201,18 @@ export function CompanionEditorSheet({
       defaultModel: draft.modelRef ?? undefined,
       completionSettings: draft.completionSettings ?? undefined,
     };
-    if (isEdit && draft.id !== null) {
-      await updateCompanion(draft.id, { ...base, greeting });
-    } else {
-      await createCompanion({
-        ...base,
-        ...(greeting !== null ? { greeting } : {}),
-      });
+    const saved =
+      isEdit && draft.id !== null
+        ? await updateCompanion(draft.id, { ...base, greeting })
+        : await createCompanion({
+            ...base,
+            ...(greeting !== null ? { greeting } : {}),
+          });
+    // A null write means the store could not reach storage (it swallows the
+    // error). Closing here would discard everything the user just typed.
+    if (saved === null) {
+      Alert.alert("Couldn't save companion", "Storage isn't ready. Try again.");
+      return;
     }
     onClose();
   }
@@ -221,7 +226,14 @@ export function CompanionEditorSheet({
         text: "Delete",
         style: "destructive",
         onPress: () => {
-          void deleteCompanion(id).then(() => onClose());
+          void deleteCompanion(id).then((ok) => {
+            if (ok) onClose();
+            else
+              Alert.alert(
+                "Couldn't delete companion",
+                "Storage isn't ready. Try again.",
+              );
+          });
         },
       },
     ]);

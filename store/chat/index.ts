@@ -372,11 +372,26 @@ async function sessionCustomOverride(
 /** Pact talent names for THIS conversation (tool gating). Always from
  *  the session's companion, regardless of settings source: the pact is the
  *  source of truth for tool availability, exactly like PocketPal — a
- *  custom-settings session keeps its persona's tools. */
+ *  custom-settings session keeps its persona's tools.
+ *
+ *  The ACTIVE model gets the last word: a local model probed as unable to
+ *  call tools receives no schemas (services/chat/tool-compat.ts). Sending
+ *  them anyway is what kills a companion turn before its first token, and
+ *  the persona does not need tools to be herself. */
 async function defaultTalentNames(sessionId: string | null): Promise<string[]> {
   try {
     const companion = await sessionCompanion(sessionId);
-    return companion?.pact?.talents.map((t) => t.name) ?? [];
+    const names = companion?.pact?.talents.map((t) => t.name) ?? [];
+    if (names.length === 0) return [];
+    const { callableTalentNames } = await import("../../services/chat/tool-compat.ts");
+    const { useModelStore } = await import("../model-store.ts");
+    const m = useModelStore.getState();
+    return callableTalentNames({
+      providerType: m.activeProviderType,
+      talentNames: names,
+      supportsTools: m.models.find((model) => model.id === m.activeModelId)
+        ?.supportsTools,
+    });
   } catch {
     return [];
   }

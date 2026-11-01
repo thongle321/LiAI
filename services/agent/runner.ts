@@ -55,6 +55,12 @@ export type AgentEvent =
   | { type: "run_finished" }
   | { type: "run_failed"; error: string };
 
+/** One spelling of a caught failure. Both catches use it so the
+ *  `run_failed` event and `AgentResult.error` can never disagree. */
+function failureMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export interface AgentResult {
   /** The whole reply: every text segment, not only the last one. */
   text: string;
@@ -70,6 +76,12 @@ export interface AgentResult {
    *  filling the context is not how THIS answer finished, and OR-ing
    *  every turn would mark a turn that recovered as failed. */
   outcome?: TurnOutcomeFlags;
+  /** The engine's own failure sentence, when a completion threw before it
+   *  produced anything. Carried out of the loop because the caller has to
+   *  decide what the user reads: the native string is what names the cause
+   *  ("Failed to render chat template", "Context is full"), and a silent
+   *  empty run would replace all of them with one useless sentence. */
+  error?: string;
 }
 
 export interface AgentRunOptions {
@@ -303,11 +315,9 @@ export async function runLocalAgent(options: AgentRunOptions): Promise<AgentResu
           pendingCompletion = null;
         }
       } catch (err) {
-        onEvent({
-          type: "run_failed",
-          error: err instanceof Error ? err.message : String(err),
-        });
-        return { text, steps, promptTokens, completionTokens, hitMaxTurns: false, ...(blocks.length > 0 ? { blocks } : {}) };
+        const failure = failureMessage(err);
+        onEvent({ type: "run_failed", error: failure });
+        return { text, steps, promptTokens, completionTokens, hitMaxTurns: false, error: failure, ...(blocks.length > 0 ? { blocks } : {}) };
       }
       // C3: promptTokens is occupancy — tokens HELD against the window —
       // so the LAST step's figure is the thread's (every step shares one
@@ -526,10 +536,8 @@ endFlags = {
       ...(blocks.length > 0 ? { blocks } : {}),
     };
   } catch (err) {
-    onEvent({
-      type: "run_failed",
-      error: err instanceof Error ? err.message : String(err),
-    });
+    const failure = failureMessage(err);
+    onEvent({ type: "run_failed", error: failure });
     return {
       text,
       ...(reasoning !== "" ? { reasoning } : {}),
@@ -537,6 +545,7 @@ endFlags = {
       promptTokens,
       completionTokens,
       hitMaxTurns: false,
+      error: failure,
       ...(endFlags !== undefined ? { outcome: endFlags } : {}),
       ...(blocks.length > 0 ? { blocks } : {}),
     };

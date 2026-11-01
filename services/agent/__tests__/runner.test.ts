@@ -103,6 +103,29 @@ const sixSearches = (): EngineToolCall[] =>
     call(`c${i}`, "web_search", { query: `q${i}` }),
   );
 
+describe("runLocalAgent failures", () => {
+  it("reports the engine's failure message on a turn that threw", async () => {
+    const events: AgentEvent[] = [];
+    const out = await run(
+      {
+        completion: async () => {
+          throw new Error("Failed to render chat template");
+        },
+        stopCompletion: async () => {},
+      },
+      asFetch(async () => new Response("{}")),
+      events,
+    );
+
+    // The native sentence is the only clue to WHAT failed; losing it turns
+    // every engine fault into the same "empty reply" bubble.
+    expect(out.text).toBe("");
+    expect(out.steps).toEqual([]);
+    expect(out.error).toBe("Failed to render chat template");
+    expect(events.some((e) => e.type === "run_failed")).toBe(true);
+  });
+});
+
 describe("runLocalAgent tool calls", () => {
   it("starts every call before dispatching and finishes them in call order", async () => {
     const alpha = deferred<Response>();

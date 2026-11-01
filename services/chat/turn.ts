@@ -368,8 +368,12 @@ export function createTurnRunner(deps: TurnDeps) {
     }
     // Backend parity: an empty reply with no tool provenance is a failed
     // turn (error bubble), never a persisted empty assistant message.
+    // WHEN the runner's engine turn threw, that native sentence is the
+    // cause — re-throw it rather than masking every engine fault behind
+    // "empty reply": send.ts classifies those strings (context-full,
+    // tool-args parse, speculative init) and cannot classify a replacement.
     if (result.text.trim() === "" && result.steps.length === 0) {
-      throw new Error("empty reply");
+      throw new Error(result.error ?? "empty reply");
     }
     const steps: AgentStep[] = result.steps.map((s, position) => ({
       id: s.id,

@@ -93,8 +93,9 @@ settings_source contract below.
 - `usePalLoadHint` fires only for the local engine (remote providers report
   no `n_ctx`); the hint is deferred to a follow-up only if it proves noisy.
 - Model-compat one-time warning (companion declares talents, model advertises no
-  tool support): deferred — the runner already rejects unadvertised calls
-  and surfaces them as failed steps, so nothing breaks without it.
+  tool support): implemented after this record (hooks/useToolCompatWarning.ts).
+  LiAI additionally WITHHOLDS the pact in that case while PocketPal only warns —
+  see `2026-11-01-companion-tools-gating.md`.
 - Per-session thinking/effort overrides ride the same session-override cell
   as the sampler (absorbed from the earlier per-session override work);
   they layer over the per-model/global resolvers, sampler-first.

@@ -28,13 +28,14 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Alert, Pressable, Switch, Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 
 import {
   DEFAULT_SAMPLER,
   resolveSampler,
   type SamplerParams,
 } from "@/services/inference/sampler.ts";
+import { loadGlobalPreset } from "@/services/chat/preset.ts";
 import type { SessionOverride } from "@/services/chat/session-store.ts";
 import { useShallow } from "zustand/react/shallow";
 import { useInference } from "@/store/inference.ts";
@@ -136,20 +137,8 @@ export function GenerationSettingsSheet({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      try {
-        const { getSessionStore } = await import("../../services/chat/tinybase.ts");
-        const store = await getSessionStore().catch(() => null);
-        if (store && !cancelled) {
-          const global = await store.getGlobalChatSettings().catch(() => null);
-          if (global && !cancelled) {
-            setPreset(global);
-          } else if (!cancelled) {
-            setPreset({ ...DEFAULT_SAMPLER });
-          }
-        }
-      } catch {
-        if (!cancelled) setPreset({ ...DEFAULT_SAMPLER });
-      }
+      const resolved = await loadGlobalPreset();
+      if (!cancelled) setPreset(resolved);
     })();
     return () => {
       cancelled = true;
@@ -388,19 +377,15 @@ export function GenerationSettingsSheet({
           <View pointerEvents={isCompanion ? "none" : "auto"} className={isCompanion ? "opacity-40" : undefined}>
             <SamplerRows
               sampler={draft.sampler}
-              jinjaEnabled={draft.jinja}
+              // JINJA is global, so in 'companion' mode it is not this
+              // companion's value to show — the row is omitted, not dimmed.
+              jinja={isCompanion ? undefined : { enabled: draft.jinja, onChange: setDraftJinja }}
               errors={errors}
               onChange={apply}
-              onJinjaChange={setDraftJinja}
             />
           </View>
         ) : null}
       </SettingsSection>
-      {/* JINJA is global, not per-companion — the row is part of the shared
-          component, so it is rendered inert here. */}
-      <View className="pointer-events-none mb-2 opacity-0" collapsable={false}>
-        <Switch value={false} onValueChange={() => {}} />
-      </View>
 
       <Sheet.Actions>
         {/* 'companion' mode owns no settings to save or reset: the row shows

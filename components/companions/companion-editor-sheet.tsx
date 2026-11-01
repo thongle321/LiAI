@@ -11,14 +11,7 @@
  */
 
 import { useEffect, useState } from "react";
-import {
-  Alert,
-  Pressable,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Alert, Pressable, Text, TextInput, View } from "react-native";
 
 import { useColors } from "@/themes/tokens.ts";
 import { Sheet } from "@/components/sheet.tsx";
@@ -29,12 +22,7 @@ import {
   SettingsSection,
   ToggleRow,
 } from "@/components/settings-rows.tsx";
-import { SamplerRows } from "@/components/chat/sampler-rows.tsx";
-import {
-  DEFAULT_SAMPLER,
-  resolveSampler,
-  type SamplerParams,
-} from "@/services/inference/sampler.ts";
+import type { SamplerParams } from "@/services/inference/sampler.ts";
 import {
   generateFinalSystemPrompt,
   parseCompanionTemplate,
@@ -44,6 +32,7 @@ import { shareCompanions } from "@/services/companions/share-companions.ts";
 import { useCompanions } from "@/store/companions.ts";
 import { useModelStore } from "@/store/model-store.ts";
 import type { Companion, CompanionModelRef, ParameterDefinition } from "@/types/companion.ts";
+import { CompanionGenerationSettingsSheet } from "./companion-generation-settings-sheet.tsx";
 
 /** Preset card colors — PocketPal ships preset gradients; without a
  *  gradient library the pair is kept (accent strip on the card) and
@@ -156,6 +145,9 @@ export function CompanionEditorSheet({
 
   const isEdit = draft.id !== null;
   const canSave = draft.name.trim() !== "";
+  /** One fallback for a companion that has no name yet, shared by the editor
+   *  title and the nested generation sheet. */
+  const displayName = draft.name.trim() || "Untitled";
 
   async function save(): Promise<void> {
     if (!canSave) return;
@@ -249,7 +241,7 @@ export function CompanionEditorSheet({
     <Sheet
       visible={companion !== null}
       onClose={onClose}
-      title={isEdit ? `Edit Companion: ${draft.name || "Untitled"}` : "New Companion"}
+      title={isEdit ? `Edit Companion: ${displayName}` : "New Companion"}
       testID="companion-editor-sheet"
     >
       <RowSizeProvider label="text-body-md" desc="text-body-sm">
@@ -497,6 +489,7 @@ export function CompanionEditorSheet({
 
       <CompanionGenerationSettingsSheet
         visible={genVisible}
+        name={displayName}
         base={draft.completionSettings}
         onClose={() => setGenVisible(false)}
         onSave={(completionSettings) => {
@@ -504,86 +497,6 @@ export function CompanionEditorSheet({
           setGenVisible(false);
         }}
       />
-    </Sheet>
-  );
-}
-
-/** Per-companion generation settings (PocketPal's PalGenerationSettingsSheet):
- *  a partial sampler layered over the global preset when this companion's
- *  session follows it. Edits buffer in a draft; Save hands the partial
- *  back — Reset clears it entirely (back to "follow preset"). */
-function CompanionGenerationSettingsSheet({
-  visible,
-  base,
-  onClose,
-  onSave,
-}: {
-  visible: boolean;
-  base: Partial<SamplerParams> | null;
-  onClose: () => void;
-  onSave: (settings: Partial<SamplerParams> | null) => void;
-}) {
-  const [draft, setDraft] = useState<SamplerParams>(() =>
-    resolveSampler(DEFAULT_SAMPLER, base),
-  );
-  useEffect(() => {
-    if (visible) setDraft(resolveSampler(DEFAULT_SAMPLER, base));
-  }, [visible, base]);
-
-  function partialFrom(full: SamplerParams): Partial<SamplerParams> {
-    // Only fields that differ from the DEFAULTS are stored — a companion that
-    // merely confirms defaults should not pin them against future
-    // preset changes (the same partial contract the session override
-    // keeps).
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(DEFAULT_SAMPLER) as Array<keyof SamplerParams>) {
-      if (full[key] !== DEFAULT_SAMPLER[key]) out[key] = full[key];
-    }
-    return out as Partial<SamplerParams>;
-  }
-
-  // PocketPal parity: use Sheet.Actions as a child component
-  return (
-    <Sheet
-      visible={visible}
-      onClose={onClose}
-      title="Companion Generation Settings"
-      testID="companion-generation-settings-sheet"
-    >
-      <SettingsSection plain>
-        <SamplerRows
-          sampler={draft}
-          jinjaEnabled={false}
-          onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
-          onJinjaChange={() => {}}
-        />
-      </SettingsSection>
-      {/* JINJA is global, not per-companion — the row is part of the shared
-          component, so it is rendered inert here. */}
-      <View className="pointer-events-none mb-2 opacity-0" collapsable={false}>
-        <Switch value={false} onValueChange={() => {}} />
-      </View>
-
-      <Sheet.Actions>
-        <View className="flex-row items-center justify-between">
-          <Pressable
-            onPress={() => onSave(null)}
-            className="min-h-12 justify-center"
-            accessibilityRole="button"
-            accessibilityLabel="Reset to preset"
-          >
-            <Text className="text-body">Reset to preset</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => onSave(partialFrom(draft))}
-            className="btn btn--primary active:opacity-80"
-            accessibilityRole="button"
-            accessibilityLabel="Save"
-          >
-            <Text className="text-action">Save</Text>
-          </Pressable>
-        </View>
-      </Sheet.Actions>
     </Sheet>
   );
 }

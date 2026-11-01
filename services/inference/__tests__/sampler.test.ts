@@ -10,6 +10,7 @@ import {
   DEFAULT_SAMPLER,
   parseSampler,
   resolveSampler,
+  diffSampler,
   toLlamaSampler,
   type SamplerParams,
 } from "../sampler";
@@ -115,6 +116,22 @@ describe("sampler precedence", () => {
   it("clamps a per-model override into range instead of trusting it", () => {
     const resolved = resolveSampler(global, { topP: 4 });
     expect(resolved.topP).toEqual(1);
+  });
+});
+
+describe("sampler diff", () => {
+  const baseline: SamplerParams = { ...DEFAULT_SAMPLER, temperature: 0.5 };
+
+  it("is null when the form only confirms the baseline", () => {
+    expect(diffSampler(baseline, { ...baseline })).toBeNull();
+  });
+
+  it("carries only the fields that differ", () => {
+    expect(diffSampler(baseline, { ...baseline, topK: 20 })).toEqual({ topK: 20 });
+  });
+
+  it("counts a field that returned to the baseline as no override", () => {
+    expect(diffSampler(baseline, { ...baseline, temperature: 0.5 })).toBeNull();
   });
 });
 

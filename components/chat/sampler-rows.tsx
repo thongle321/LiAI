@@ -14,7 +14,8 @@
  *
  * JINJA is built (grilling Q5): a per-turn llama.rn completion flag that
  * defaults to on; the switch pins it either way, threaded through
- * store → turn → engine like enableThinking.
+ * store → turn → engine like enableThinking. It is a GLOBAL engine flag, so a
+ * caller that cannot store it passes no `jinja` group and the row is omitted.
  *
  * N PREDICT and SEED are text fields, not steppers: their ranges are wide
  * enough that a stepper is unusable, and a specific seed is meant to be
@@ -41,17 +42,18 @@ function fixed(value: number, places = 2): string {
 
 export function SamplerRows({
   sampler,
-  jinjaEnabled,
+  jinja,
   errors,
   onChange,
-  onJinjaChange,
 }: {
   sampler: SamplerParams;
-  jinjaEnabled: boolean;
+  /** JINJA is a GLOBAL engine flag, not a per-session or per-companion one.
+   *  A sheet that cannot store it omits this group and the row disappears,
+   *  rather than showing a switch that does nothing. */
+  jinja?: { enabled: boolean; onChange: (on: boolean) => void };
   /** Save-time validation marks (Q6=C) for the typed fields. */
   errors?: Partial<Record<"seed" | "nPredict", string>>;
   onChange: (patch: Partial<SamplerParams>) => void;
-  onJinjaChange: (on: boolean) => void;
 }) {
   return (
     // PocketPal's CompletionSettings rungs: label 11 / description 12
@@ -237,12 +239,14 @@ export function SamplerRows({
         error={errors?.seed}
         onCommit={(seed) => onChange({ seed })}
       />
-      <ToggleRow
-        label="JINJA"
-        description="Use the model's built-in Jinja chat template when it ships one. Off falls back to llama.cpp's plain template."
-        on={jinjaEnabled}
-        onPress={() => onJinjaChange(!jinjaEnabled)}
-      />
+      {jinja ? (
+        <ToggleRow
+          label="JINJA"
+          description="Use the model's built-in Jinja chat template when it ships one. Off falls back to llama.cpp's plain template."
+          on={jinja.enabled}
+          onPress={() => jinja.onChange(!jinja.enabled)}
+        />
+      ) : null}
     </RowSizeProvider>
   );
 }

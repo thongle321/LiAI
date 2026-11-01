@@ -268,6 +268,7 @@ export function HFModelSearch({
         titleEllipsize
         scrollable={false}
         scrollableRef={detailsListRef}
+        fill
         style={{ flex: 1 }}
         /* PocketParity (HFModelSearch.tsx:91-100 enableContentPanningGesture:
             false): the file list scrolls IN PLACE; a scroll gesture never

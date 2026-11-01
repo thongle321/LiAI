@@ -18,6 +18,11 @@
  *    - false -> the caller's body IS the scroller (e.g. a FlatList); pass
  *               it through `scrollableRef` so TrueSheet can coordinate.
  *
+ *  `fill` is the third axis, for `scrollable={false}` only: the body takes
+ *  the sheet's whole height instead of sizing to its content. Leave it off
+ *  unless the body is itself a scroller - the `'auto'` detent measures a
+ *  `flex-1` body against nothing and the content collapses.
+ *
  *  `lazy={false}` mounts content up front so the `'auto'` detent measures
  *  settled content instead of the first-present frame.
  */
@@ -41,6 +46,7 @@ import { TrueSheet, type TrueSheet as TrueSheetType, type TrueSheetProps } from 
 import { X } from "lucide-react-native";
 
 import { useColors } from "@/themes/tokens.ts";
+import { cn } from "@/utils/cn.ts";
 
 export function Sheet({
   visible,
@@ -53,6 +59,7 @@ export function Sheet({
   children,
   testID,
   scrollableRef: providedScrollableRef,
+  fill = false,
   ref,
   style,
 }: {
@@ -69,6 +76,13 @@ export function Sheet({
    *  it can bound the viewport and coordinate gestures. Ignored when
    *  `scrollable` is true (the shared ScrollView is plugged instead). */
   scrollableRef?: TrueSheetProps["scrollableRef"];
+  /** Non-scrollable body only: let the body take the sheet's full height
+   *  instead of sizing to its content. Only callers whose body is itself a
+   *  scroller (a FlatList) want this — they need a bounded height to scroll
+   *  in place, and the bound comes from the sheet's own `style` (see
+   *  HFModelSearch's details sheet). Everything else must stay content-
+   *  sized, or the `'auto'` detent measures a collapse. */
+  fill?: boolean;
   ref?: Ref<TrueSheetType>;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -131,7 +145,7 @@ export function Sheet({
       {children}
     </ScrollView>
   ) : (
-    <View testID={testID} className="px-4 flex-1">
+    <View testID={testID} className={cn("px-4", fill && "flex-1")}>
       {children}
     </View>
   );

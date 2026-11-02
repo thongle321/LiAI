@@ -45,7 +45,10 @@ import { useCompanions } from "@/store/companions.ts";
 import { SamplerRows } from "./sampler-rows.tsx";
 import { Sheet } from "../sheet.tsx";
 import { ResetMenu } from "../reset-menu";
-import { RowSizeProvider, Segmented, SettingsSection } from "../settings-rows.tsx";
+import { RowLabel, RowSizeProvider, SettingsSection } from "../settings-rows.tsx";
+import SegmentedControl from "@expo/ui/community/segmented-control";
+import { useColors, useColorScheme } from "@/themes/tokens.ts";
+import * as Haptics from "expo-haptics";
 
 type Mode = "companion" | "session" | "preset";
 
@@ -84,6 +87,8 @@ export function GenerationSettingsSheet({
   // PocketPal: with an active companion the source toggle shows (companion ⇄ custom);
   // without one the sheet keeps LiAI's session/preset split.
   const hasCompanion = companion !== undefined;
+  const colors = useColors();
+  const scheme = useColorScheme();
   // One useShallow unit: all five fields feed the draft, so the sheet
   // re-renders only when one of them changes.
   const { jinjaEnabled, setJinjaEnabled, load } = useInference(
@@ -331,36 +336,50 @@ export function GenerationSettingsSheet({
         {/* Their settingsSource label is labelMedium 12 — one rung above
             the card'S 11, so this zone pins it separately. */}
         <RowSizeProvider label="text-body-sm" desc="text-body-sm">
-          <Segmented<Mode>
-            label="Settings source"
-            description={
-              hasSession
-                ? isCompanion
-                  ? `${companion.name}'s generation settings apply. Choose Session to tune this conversation on its own.`
-                  : undefined
-                : "Start a conversation to give it its own settings. Until then these are the preset."
-            }
-            value={mode}
-            options={availableModes}
-            displayFor={(m) =>
-              m === "companion"
-                ? `Companion (${companion?.name ?? "persona"})`
-                : m === "session"
-                  ? "Session"
-                  : "Preset"
-            }
-            onPick={(m) => {
-              setMode(m);
-              // PocketPal parity: the toggle writes the source
-              // IMMEDIATELY, not on Save — 'custom' takes effect the
-              // moment the user asks for it, and back to 'companion' makes
-              // the session follow the persona again (its stored
-              // override stays, inert, for the next flip).
-              if (hasSession && (m === "companion" || m === "session")) {
-                void setSettingsSource(m === "companion" ? "companion" : "custom");
+          <View className="py-2">
+            <RowLabel
+              label="Settings source"
+              description={
+                hasSession
+                  ? isCompanion
+                    ? `${companion.name}'s generation settings apply. Choose Session to tune this conversation on its own.`
+                    : undefined
+                  : "Start a conversation to give it its own settings. Until then these are the preset."
               }
-            }}
-          />
+            />
+            <View className="mt-2">
+              <SegmentedControl
+                testID="settings-source-segmented"
+                values={availableModes.map((m) =>
+                  m === "companion"
+                    ? `Companion (${companion?.name ?? "persona"})`
+                    : m === "session"
+                      ? "Session"
+                      : "Preset",
+                )}
+                selectedIndex={Math.max(0, availableModes.indexOf(mode))}
+                appearance={scheme}
+                tintColor={colors.primary}
+                style={{ width: "100%" }}
+                onChange={(event) => {
+                  void Haptics.selectionAsync();
+                  const next = availableModes[event.nativeEvent.selectedSegmentIndex];
+                  if (next === undefined) return;
+                  setMode(next);
+                  // PocketPal parity: the toggle writes the source
+                  // IMMEDIATELY, not on Save — 'custom' takes effect the
+                  // moment the user asks for it, and back to 'companion' makes
+                  // the session follow the persona again (its stored
+                  // override stays, inert, for the next flip).
+                  if (hasSession && (next === "companion" || next === "session")) {
+                    void setSettingsSource(
+                      next === "companion" ? "companion" : "custom",
+                    );
+                  }
+                }}
+              />
+            </View>
+          </View>
         </RowSizeProvider>
       </View>
       {serverDefaultsNote !== null ? (

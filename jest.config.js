@@ -71,6 +71,8 @@ module.exports = {
     '^@expo/ui$': '<rootDir>/__mocks__/external/@expo/ui.tsx',
     '^@expo/ui/community/menu$':
       '<rootDir>/__mocks__/external/@expo/ui-community-menu.tsx',
+    '^@expo/ui/community/segmented-control$':
+      '<rootDir>/__mocks__/external/@expo/ui-community-segmented-control.tsx',
     '^expo-speech$': '<rootDir>/__mocks__/external/expo-speech.ts',
     '^expo-speech-recognition$':
       '<rootDir>/__mocks__/external/expo-speech-recognition.ts',

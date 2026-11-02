@@ -8,7 +8,7 @@
  *  carries the selection state without inventing a management gear.
  */
 
-import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ChatPickerSheet } from "../chat-picker-sheet.tsx";
@@ -68,11 +68,19 @@ function readySpec(id: string, name: string) {
 
 function setup(companionId: string | null = "pip", companion: Companion = pip) {
   mockCompanionSeed = companion;
+  // Replace activateModel with a synchronous test double that immediately
+  // moves the active model pointer. The eager-load coordinator's own logic
+  // is tested in services/inference/__tests__/eager-load.test.ts.
   act(() => {
     useModelStore.setState({
       models: [readySpec("alpha", "Alpha"), readySpec("beta", "Beta")],
       remoteApis: [],
       activeModelId: "alpha",
+      activateModel: async (id: string) => {
+        act(() => {
+          useModelStore.setState({ activeModelId: id, activeProviderType: "local" });
+        });
+      },
     });
     useChatStore.setState({
       sessionId: null,

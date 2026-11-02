@@ -96,6 +96,10 @@ export interface DownloadsSlice {
   /** Load-guard learned ceiling (PocketPal largestSuccessfulLoad parity) */
   largestSuccessfulBytes: number;
 
+  /** Raise the learned ceiling after a successful load. Only raises —
+   *  never lowers. Called by the eager-load coordinator on success. */
+  updateLargestSuccessfulBytes: (requirementBytes: number) => void;
+
   /** Dismiss the failure dialog: clears the stored reason WITHOUT
    *  touching downloadStatus — the row keeps offering Retry (C1) —
    *  and a re-failure writes a fresh reason, reopening the dialog. */
@@ -195,6 +199,10 @@ export interface ActiveSlice {
   isContextLoading: boolean;
   /** The model id currently being loaded, for button-level loading indicator. */
   loadingModelId: string | null;
+  /** The last successfully loaded local model id. Persisted so cold launch
+   *  can warm it up during splash. Set only by successful local loads; never
+   *  by remote activation. Cleared on explicit offload. */
+  lastUsedModelId: string | null;
 
   setActiveModel: (
     modelId: string | null,
@@ -204,6 +212,22 @@ export interface ActiveSlice {
   /** Set the loading model id (null to clear). Called by the Models screen
    *  around the eager reloadLocalEngine call. */
   setLoadingModel: (modelId: string | null) => void;
+  /** Record the last successfully loaded local model. Called by the
+   *  eager-load coordinator on successful load. */
+  setLastUsedModel: (modelId: string | null) => void;
+  /** Clear the last-used model record. Called on explicit offload so a
+   *  deliberate unload is never resurrected at launch. */
+  clearLastUsedModel: () => void;
+  /** Single activation entry point: "make this the running model".
+   *  Routes local models to the eager-load coordinator (with supersession,
+   *  memory gate, calibration) and remote providers to their existing
+   *  activation path (no native context, no warm-up record). Callers no
+   *  longer choose between the two paths themselves. */
+  activateModel: (modelOrProviderId: string) => Promise<void>;
+  /** Offload the currently active model: releases the engine slot and
+   *  clears the active pointer. Routes through the eager-load coordinator
+   *  so it is serialized with loads and cannot race an in-flight load. */
+  offloadModel: () => Promise<void>;
 }
 
 export interface PersistenceSlice {

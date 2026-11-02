@@ -77,8 +77,7 @@ export function ChatPickerSheet({
   const models = useModelStore((s) => s.models);
   const remoteApis = useModelStore((s) => s.remoteApis);
   const activeModelId = useModelStore((s) => s.activeModelId);
-  const setActiveModel = useModelStore((s) => s.setActiveModel);
-  const setActiveRemoteApi = useModelStore((s) => s.setActiveRemoteApi);
+  const activateModel = useModelStore((s) => s.activateModel);
 
   const sessionId = useChatStore((s) => s.sessionId);
   const sessionCompanionId = useChatStore((s) => s.sessionCompanionId);
@@ -108,11 +107,11 @@ export function ChatPickerSheet({
   }, [visible]);
 
   function selectModel(id: string, host: string | undefined): void {
-    // A local entry has no `host`. Asking `remoteApis.some(...)` instead
-    // would be an opposite test on the same list, so the day a local id
-    // equalled a remote id the picker would switch as the wrong kind.
-    if (host === undefined) setActiveModel(id, "local");
-    else setActiveRemoteApi(id);
+    // Single activation dispatch: routes local models through the eager-load
+    // coordinator (supersession, gate, calibration) and remote providers
+    // through their existing path. The picker no longer chooses between the
+    // two paths itself.
+    activateModel(id);
     onClose();
   }
 

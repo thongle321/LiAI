@@ -82,6 +82,7 @@ export function ModelSelector({
         }
       }}
       show={displayFor}
+      variant="outlined"
     />
   );
 }

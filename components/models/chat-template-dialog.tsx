@@ -57,6 +57,7 @@ export function ChatTemplateDialog({
             onChange(getChatTemplate(name));
           }}
           show={(name) => name}
+          variant="outlined"
         />
         {/* The two notes PocketPal shows under the picker (en.json:440-441).
             Jinja, not Nunjucks: llama.rn applies jinja templates, and

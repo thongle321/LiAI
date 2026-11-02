@@ -7,6 +7,7 @@
 export {
   createChatStore,
   useChatStore,
+  reloadLocalEngine,
 } from "./chat/index.ts";
 export type { ChatDeps, ChatState, ChatCtx, Connection } from "./chat/index.ts";
 export type { ChatMessage, ChatSession } from "@/types/chat.ts";

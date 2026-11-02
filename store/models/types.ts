@@ -191,12 +191,19 @@ export interface SettingsSlice {
 export interface ActiveSlice {
   activeModelId: string | null;
   activeProviderType: "local" | "remote" | null;
+  /** True while a model context is being loaded (eager load on Load press). */
+  isContextLoading: boolean;
+  /** The model id currently being loaded, for button-level loading indicator. */
+  loadingModelId: string | null;
 
   setActiveModel: (
     modelId: string | null,
     providerType?: "local" | "remote",
   ) => void;
   getActiveModel: () => ModelSpec | null;
+  /** Set the loading model id (null to clear). Called by the Models screen
+   *  around the eager reloadLocalEngine call. */
+  setLoadingModel: (modelId: string | null) => void;
 }
 
 export interface PersistenceSlice {

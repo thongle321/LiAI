@@ -10,6 +10,8 @@ export const createActiveSlice: StateCreator<ModelStore, [], [], ActiveSlice> = 
 ) => ({
   activeModelId: null,
   activeProviderType: null,
+  isContextLoading: false,
+  loadingModelId: null,
 
   setActiveModel: (modelId, providerType = "local") => {
     // Unload clears both: a null id with a stranded provider type reads as a
@@ -23,5 +25,9 @@ export const createActiveSlice: StateCreator<ModelStore, [], [], ActiveSlice> = 
     const { activeModelId, models } = get();
     if (!activeModelId) return null;
     return models.find((m) => m.id === activeModelId) || null;
+  },
+
+  setLoadingModel: (modelId) => {
+    set({ isContextLoading: modelId !== null, loadingModelId: modelId });
   },
 });

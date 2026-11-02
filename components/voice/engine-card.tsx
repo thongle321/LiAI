@@ -121,7 +121,7 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
   const currentVoice = c.currentVoice;
   const { expanded, setExpanded, previewingId, errorNote, setErrorNote } = c;
   const { installable, lowDisk, freeBytes, ringProgress, sizeMb } = c;
-  const { track, onRemove, onTapVoice } = c;
+  const { track, onRemove, onTapVoice, previewVoice } = c;
   const {
     startEngineDownload,
     pauseEngineDownload,
@@ -286,6 +286,19 @@ export function EngineCard({ engineId }: { engineId: NeuralEngineId }) {
                       <Text className="flex-1 font-sans text-body-md text-primary-text">
                         {voice.name}
                       </Text>
+                      <Pressable
+                        onPress={() => previewVoice(voice)}
+                        accessibilityRole="button"
+                        accessibilityLabel={previewing ? "Stop preview" : "Preview"}
+                        className="flex items-center justify-center"
+                        testID={`tts-voice-preview-${engineId}-${voice.id}`}
+                      >
+                        {previewing ? (
+                          <Square size={18} color={colors.primary} />
+                        ) : (
+                          <Play size={18} color={colors.primary} />
+                        )}
+                      </Pressable>
                     </Pressable>
                   );
                 })}

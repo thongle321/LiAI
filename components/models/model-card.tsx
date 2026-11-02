@@ -20,7 +20,7 @@
  */
 
 import { useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import {
   ChevronsDownUp,
@@ -120,6 +120,10 @@ export function ModelCard({
   const pauseModelDownload = useModelStore((s) => s.pauseModelDownload);
   const resumeModelDownload = useModelStore((s) => s.resumeModelDownload);
   const cancelModelDownload = useModelStore((s) => s.cancelModelDownload);
+  // Loading state for eager model load (PocketPal parity)
+  const isContextLoading = useModelStore((s) => s.isContextLoading);
+  const loadingModelId = useModelStore((s) => s.loadingModelId);
+  const isLoadingThisModel = isContextLoading && loadingModelId === item.id;
   const title = settings.displayName || item.name;
   // Only the file size, never the parameter count next to it: "0.6B" beside
   // "751 MB" reads as two competing sizes for one model.
@@ -281,15 +285,29 @@ export function ModelCard({
             {actions.includes("load") || actions.includes("offload") ? (
               <Pressable
                 onPress={isActive ? onDeactivate : onActivate}
+                disabled={isLoadingThisModel}
                 className="btn btn--tonal active:opacity-80 flex-1"
                 accessibilityRole="button"
-                accessibilityLabel={isActive ? `Offload ${title}` : `Load ${title}`}
+                accessibilityLabel={
+                  isLoadingThisModel
+                    ? "Loading model"
+                    : isActive
+                      ? `Offload ${title}`
+                      : `Load ${title}`
+                }
               >
                 {/* PocketParity: the reference's glyph pair — a play circle
                     while the model is loadable, an eject once it is loaded
                     (ModelCard.tsx renderModelLoadButton). Its label is
-                    already the state word, so the icon reinforces. */}
-                {isActive ? (
+                    already the state word, so the icon reinforces.
+                    During eager load, show a spinner (PocketPal's loading prop). */}
+                {isLoadingThisModel ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.primary}
+                    style={{ marginRight: 8 }}
+                  />
+                ) : isActive ? (
                   <Eject size={16} color={colors.primary} />
                 ) : (
                   <Play size={16} color={colors.primary} />
@@ -298,7 +316,11 @@ export function ModelCard({
                   {/* PocketParity: the loaded model's button says "Offload"
                         (en.json models.modelCard.buttons.offload) — the state word
                         is the label, and the glyph reinforces it. */}
-                  {isActive ? "Offload" : "Load"}
+                  {isLoadingThisModel
+                    ? "Loading..."
+                    : isActive
+                      ? "Offload"
+                      : "Load"}
                 </Text>
               </Pressable>
             ) : null}

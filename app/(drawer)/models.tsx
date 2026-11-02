@@ -23,7 +23,7 @@ import { useLocalModelImport } from "@/hooks/useLocalModelImport.ts";
 import { useLoadGuard } from "@/hooks/useLoadGuard.ts";
 import { useShallow } from "zustand/react/shallow";
 import { useModelStore } from "@/store/model-store.ts";
-import { useChatStore } from "@/store/chat.ts";
+import { useChatStore, reloadLocalEngine } from "@/store/chat.ts";
 import { useModelsUi } from "@/store/models-ui.ts";
 import { isProviderActive } from "@/services/search/model-providers.ts";
 import {
@@ -59,6 +59,7 @@ export default function ModelsRoute() {
   const loadPresets = useModelStore((s) => s.loadPresets);
   const resetModelSettings = useModelStore((s) => s.resetModelSettings);
   const setActiveModel = useModelStore((s) => s.setActiveModel);
+  const setLoadingModel = useModelStore((s) => s.setLoadingModel);
   const setActiveRemoteApi = useModelStore((s) => s.setActiveRemoteApi);
   const removeRemoteApi = useModelStore((s) => s.removeRemoteApi);
   const startSpecDownload = useModelStore((s) => s.startSpecDownload);
@@ -219,8 +220,14 @@ export default function ModelsRoute() {
           key={spec.id}
           item={spec}
           isActive={activeModelId === spec.id}
-          onActivate={() => {
+          onActivate={async () => {
             setActiveModel(spec.id, "local");
+            setLoadingModel(spec.id);
+            try {
+              await reloadLocalEngine();
+            } finally {
+              setLoadingModel(null);
+            }
             // navigate, not push: repeated activations would stack duplicate
             // /chat entries and make back behave inconsistently.
             if (autoNavigateToChat) router.navigate("/chat");

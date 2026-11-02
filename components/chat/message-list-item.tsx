@@ -17,7 +17,7 @@ import { ActivityIndicator, Image as RNImage, Pressable, Text, View } from "reac
 import type { ReactNode } from "react";
 import { memo, useState } from "react";
 import Animated from "react-native-reanimated";
-import { CheckCheck, CircleAlert, Wrench } from "lucide-react-native";
+import { AlertTriangle, CheckCheck, CircleAlert, Wrench } from "lucide-react-native";
 
 import { useColors } from "@/themes/tokens.ts";
 import { formatTime, formatToolMetrics } from "@/utils/format.ts";
@@ -200,6 +200,7 @@ export const MessageListItem = memo(function MessageListItem({
             <View
               className="rounded-xl bg-surface-3 px-4 py-3"
               style={{
+                maxWidth: widths.user,
                 shadowColor: "#000000",
                 shadowOffset: { width: 0, height: 1 },
                 shadowOpacity: 0.04,
@@ -288,6 +289,22 @@ export const MessageListItem = memo(function MessageListItem({
             return <ToolBlock key={step.id} step={step} />;
           })}
         </View>,
+      )}
+      {/* Inline error for failed assistant turn (PocketPal parity:
+          ToolErrorBlock pattern — icon + label + message, no banner). */}
+      {settled && message.error !== undefined && (
+        <View
+          className="surface bg-surface-1 flex-row items-start gap-2 px-3 py-2 basis-full"
+          accessibilityLiveRegion="polite"
+        >
+          <AlertTriangle size={14} color={colors.error} />
+          <View className="flex-1">
+            <Text className="font-sans-semibold text-caption text-error">
+              Reply failed
+            </Text>
+            <Text className="mt-0.5 text-quiet">{message.error.message}</Text>
+          </View>
+        </View>
       )}
       {settled && (
         <MessageActions

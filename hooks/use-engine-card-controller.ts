@@ -107,6 +107,23 @@ export function useEngineCardController(engineId: NeuralEngineId) {
     setErrorNote(null);
   }
 
+  /** Speak a canned sample through `voice` so the user can hear it before
+   *  selecting it. Ported from PocketPal's `preview()` — the preview button
+   *  is separate from the row's select tap (spec Q16). */
+  function previewVoice(voice: Voice): void {
+    if (engineGroupState(downloads[engineId]).kind !== "ready") return;
+    if (voice.engine !== engineId) return;
+    if (previewingId === voice.id) {
+      setPreviewingId(null);
+      void stop();
+      return;
+    }
+    setPreviewingId(voice.id);
+    setErrorNote(null);
+    const messageId = `preview:${voice.engine}:${voice.id}`;
+    track(play(VOICE_PREVIEW_SAMPLE, { voice, messageId }));
+  }
+
   return {
     meta,
     group,
@@ -123,6 +140,7 @@ export function useEngineCardController(engineId: NeuralEngineId) {
     track,
     onRemove,
     onTapVoice,
+    previewVoice,
     downloads,
     currentVoice,
     startEngineDownload,

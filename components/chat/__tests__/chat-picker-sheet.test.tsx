@@ -106,8 +106,13 @@ describe("ChatPickerSheet", () => {
   it("switches to the Companions tab", () => {
     setup();
     fireEvent.press(screen.getByTestId("chat-picker-tab-companions"));
-    expect(screen.getByText("Pip")).toBeTruthy();
-    expect(screen.queryByText("Alpha")).toBeNull();
+    // With horizontal paging FlatList, both tab contents are mounted but only one is visible.
+    // Check that the Companions tab button is marked as selected.
+    const companionsTab = screen.getByTestId("chat-picker-tab-companions");
+    expect(companionsTab.props.accessibilityState).toMatchObject({ selected: true });
+    // And the Models tab is not selected
+    const modelsTab = screen.getByTestId("chat-picker-tab-models");
+    expect(modelsTab.props.accessibilityState).toMatchObject({ selected: false });
   });
 
   it("activates the tapped companion and closes", () => {

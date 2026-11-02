@@ -223,10 +223,6 @@ until someone runs the app.
 (llama.rn, vision-camera, expo-thinking-orbs through Skia, SQLite, and the
 rest). Add a fake here
 rather than a per-suite `jest.mock` factory when more than one suite needs it.
-**prompt_material/** is the design board the visual system derives from — four
-screenshots cited as provenance by `global.css`, `themes/tokens.ts` and
-`PRODUCT.md`. Reference material, never shipped, and not an asset: no screen
-imports from it, so it stays out of `constants/images.ts`.
 **pocketpal-ai/** is the vendored reference app — read it, never edit it.
 **plugins/** holds Expo config plugins. Native tweaks live here so `expo prebuild` regenerates them; never hand-edit `android/` or `ios/`.
 **android/** is committed (PocketPal's way; `expo prebuild --clean` regenerates it from `app.json` + `plugins/` — restore anything else from git). Its manifest carries the two
@@ -285,10 +281,7 @@ Use StyleSheet or inline styles for:
 
 - Shadows (different per platform)
 
-- Use Expo UI native components when neither built-in Universal components nor community components provide a suitable solution that works on both iOS and Android. 
-These components use UniversalStyle instead of className. Prefer universal components whenever possible. 
-If a component is platform-specific, keep the iOS and Android implementations in separate .ios.tsx / .android.tsx file and never branch inline. 
-Never import a platform-specific component on the wrong platform, as it can crash the app. Compose import mounting on iOS is a crash, not a fallback.
+- Use Expo UI native components. If a component is platform-specific, keep the iOS and Android implementations in separate .ios.tsx / .android.tsx file and never branch inline. Never import a platform-specific component on the wrong platform, as it can crash the app. Compose import mounting on iOS is a crash, not a fallback.
   
 - Use Lucide icons (`lucide-react-native`). Match the replaced glyph's size and color (colors from `themes/tokens.ts`).
 

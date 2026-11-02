@@ -89,6 +89,7 @@ export function Sheet({
   fill = false,
   ref,
   style,
+  detents = ["auto"],
 }: {
   visible: boolean;
   onClose: () => void;
@@ -111,6 +112,9 @@ export function Sheet({
    *  HFModelSearch's details sheet). Everything else must stay content-
    *  sized, or the `'auto'` detent measures a collapse. */
   fill?: boolean;
+  /** TrueSheet detents. Default: ["auto"] for content-sized sheets.
+   *  Use fixed fractions (e.g., [0.7]) for PocketPal-style fixed-height sheets. */
+  detents?: TrueSheetProps["detents"];
   ref?: Ref<TrueSheetType>;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -196,7 +200,7 @@ export function Sheet({
         if (typeof ref === "function") ref(instance);
         else if (ref) ref.current = instance;
       }}
-      detents={["auto"]}
+      detents={detents}
       dismissible
       grabber
       lazy={false}
@@ -214,6 +218,8 @@ export function Sheet({
       ]}
       header={header}
       footer={actionsBar ?? undefined}
+      footerOptions={{ position: "absolute" }}
+      footerStyle={{ backgroundColor: colors.surface1 }}
       scrollableRef={resolvedScrollRef ?? undefined}
       scrollableOptions={scrollableOptions ?? { scrollingExpandsSheet: false }}
       onDidDismiss={() => {

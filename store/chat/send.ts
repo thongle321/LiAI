@@ -20,6 +20,11 @@ import { useModelStore } from "../model-store.ts";
 import { useVoice } from "../voice.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
 
+/** Streaming throttle (PocketParity: ChatSessionStore.ts STREAMING_THROTTLE_MS = 30).
+ *  Accumulates per-token updates and applies them at most every 30ms to
+ *  prevent "Maximum update depth exceeded" from runaway token deltas. */
+const STREAMING_THROTTLE_MS = 30;
+
 /** Pure: last user message before (excluding) a bubble. */
 export function priorUserTextIn(messages: ChatMessage[], beforeId: string): ChatMessage | null {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -169,6 +174,49 @@ export function createSendSlice(
     set({ sending: false, turnStartedAt: null, pendingToolName: null });
   }
 
+  // Streaming throttle state (PocketParity: ChatSessionStore.ts streamingThrottleTimer)
+  // Accumulates token/reasoning deltas and flushes at most every STREAMING_THROTTLE_MS.
+  let streamingThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingTextDelta = "";
+  let pendingReasoning = "";
+  let lastStreamingFlush = 0;
+
+  /** Schedule a throttled flush of accumulated streaming updates. */
+  function scheduleStreamingFlush(assistantId: string): void {
+    if (streamingThrottleTimer) return;
+    streamingThrottleTimer = setTimeout(() => {
+      streamingThrottleTimer = null;
+      flushStreamingUpdates(assistantId);
+      lastStreamingFlush = Date.now();
+    }, STREAMING_THROTTLE_MS);
+  }
+
+  /** Flush accumulated text and reasoning updates immediately. */
+  function flushStreamingUpdates(assistantId: string): void {
+    const textDelta = pendingTextDelta;
+    const reasoningDelta = pendingReasoning;
+    pendingTextDelta = "";
+    pendingReasoning = "";
+    if (textDelta || reasoningDelta) {
+      updateBubble(assistantId, (m) => ({
+        ...(textDelta ? { text: m.text + textDelta } : {}),
+        ...(reasoningDelta ? { reasoning: reasoningDelta } : {}),
+      }));
+    }
+  }
+
+  /** Queue a text token for throttled update. */
+  function queueTextUpdate(assistantId: string, token: string): void {
+    pendingTextDelta += token;
+    scheduleStreamingFlush(assistantId);
+  }
+
+  /** Queue a reasoning update for throttled update (replaces, not appends). */
+  function queueReasoningUpdate(assistantId: string, cumulative: string): void {
+    pendingReasoning = cumulative;
+    scheduleStreamingFlush(assistantId);
+  }
+
   /** Handle a turn that filled the context window (or hit it mid-tool). */
   function handleContextFull(
     assistantId: string,
@@ -314,12 +362,12 @@ export function createSendSlice(
         },
         (token) => {
           if (gen !== ctx.streamGen) return;
-          updateBubble(opts.assistantId, (m) => ({ text: m.text + token }));
+          queueTextUpdate(opts.assistantId, token);
           useVoice.getState().onAssistantMessageChunk(opts.assistantId, token);
         },
         (cumulative) => {
           if (gen !== ctx.streamGen) return;
-          updateBubble(opts.assistantId, { reasoning: cumulative });
+          queueReasoningUpdate(opts.assistantId, cumulative);
           const delta = cumulative.startsWith(prevReasoning)
             ? cumulative.slice(prevReasoning.length)
             : cumulative;
@@ -351,6 +399,8 @@ export function createSendSlice(
         updateBubble(opts.assistantId, { streaming: false });
         return;
       }
+      // Flush any pending streaming updates before finalizing the bubble.
+      flushStreamingUpdates(opts.assistantId);
       updateBubble(opts.assistantId, {
         text: outcome.reply,
         ...(outcome.reasoning !== undefined ? { reasoning: outcome.reasoning } : {}),
@@ -391,6 +441,13 @@ export function createSendSlice(
       if (gen !== ctx.streamGen) {
         updateBubble(opts.assistantId, { streaming: false });
         return;
+      }
+      // Flush any pending streaming updates before handling the error.
+      flushStreamingUpdates(opts.assistantId);
+      // Clear the throttle timer to prevent a stale flush after error handling.
+      if (streamingThrottleTimer) {
+        clearTimeout(streamingThrottleTimer);
+        streamingThrottleTimer = null;
       }
       const message = err instanceof Error ? err.message : "Local run failed";
 
@@ -506,6 +563,14 @@ export function createSendSlice(
     } finally {
       // Success, failure or supersede: idle must hold no timer.
       endStreamYield();
+      // Clear any pending streaming throttle to prevent leakage into next turn.
+      if (streamingThrottleTimer) {
+        clearTimeout(streamingThrottleTimer);
+        streamingThrottleTimer = null;
+      }
+      pendingTextDelta = "";
+      pendingReasoning = "";
+      lastStreamingFlush = 0;
       // Only THIS turn's handle leaves the slot: a newer turn already
       // installing its own must keep it.
       if (ctx.active.handle === handle) ctx.active.handle = null;

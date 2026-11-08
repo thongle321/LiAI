@@ -126,7 +126,7 @@ export function createCompanionsStore(
         },
 
         importCompanions: async (raw) => {
-          const parsed = parseCompanionsJson(raw);
+          const parsed = await parseCompanionsJson(raw);
           if ("error" in parsed) return { imported: 0, skipped: 0, error: parsed.error };
           const repo = await getRepo().catch(() => null);
           if (!repo) {

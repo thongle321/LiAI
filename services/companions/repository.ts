@@ -20,7 +20,8 @@ export interface CompanionRepository {
   /** Mint an id + timestamps and persist. Returns the stored companion. */
   create(data: Omit<Companion, "id" | "created_at" | "updated_at">): Promise<Companion>;
   /** Merge-patch: `undefined` fields leave the stored value untouched,
-   *  `null` ERASES a clearable field (greeting, defaultModel). Throws
+   *  `null` ERASES a clearable field (see `ClearableCompanionField` in
+   *  types/companion.ts). Throws
    *  when the id is unknown — a patch on nothing is a bug to surface,
    *  not a silent no-op. */
   update(id: string, patch: CompanionUpdate): Promise<Companion>;

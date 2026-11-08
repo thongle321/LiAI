@@ -375,4 +375,46 @@ describe("model store persistence", () => {
       sortBy: "downloads",
     });
   });
+
+  it("round-trips the last-used model id across cold starts", async () => {
+    const kv = memoryStorage();
+    const first = await coldStart(kv);
+
+    first.getState().setLastUsedModel("m1");
+    await flush();
+
+    const second = await coldStart(kv);
+    expect(second.getState().lastUsedModelId).toBe("m1");
+  });
+
+  it("clears the last-used model id on explicit offload", async () => {
+    const kv = memoryStorage();
+    const first = await coldStart(kv);
+
+    first.getState().setLastUsedModel("m1");
+    await flush();
+
+    // Simulate offload clearing the last-used model
+    first.getState().clearLastUsedModel();
+    await flush();
+
+    const second = await coldStart(kv);
+    expect(second.getState().lastUsedModelId).toBeNull();
+  });
+
+  it("persists lastUsedModelId as null on fresh install", async () => {
+    const kv = memoryStorage();
+    const store = await coldStart(kv);
+    expect(store.getState().lastUsedModelId).toBeNull();
+  });
+
+  it("migrates legacy state with lastUsedModelId as null", async () => {
+    const kv = memoryStorage({
+      [STORAGE_KEY]: JSON.stringify([spec({ id: "m1" })]),
+      [ACTIVE_MODEL_KEY]: JSON.stringify({ modelId: "m1", providerType: "local" }),
+    });
+
+    const store = await coldStart(kv);
+    expect(store.getState().lastUsedModelId).toBeNull();
+  });
 });

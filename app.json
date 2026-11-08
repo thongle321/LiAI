@@ -6,6 +6,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "splash": {
+        "image": "./assets/splash.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#ffffff",
+        "imageWidth": 449
+    },
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
@@ -22,10 +28,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#F8FAFC",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+          "foregroundImage": "./assets/adaptive-icon.png",
+          "backgroundColor": "#ffffff"
       },
       "predictiveBackGestureEnabled": true,
       "softwareKeyboardLayoutMode": "resize",
@@ -63,7 +67,7 @@
         "expo-build-properties",
         {
           "android": {
-	    "minSdkVersion": 26, 
+	    "minSdkVersion": 26,
             "compileSdkVersion": 37,
             "targetSdkVersion": 36,
             "buildToolsVersion": "37.0.0",
@@ -124,4 +128,3 @@
     }
   }
 }
-

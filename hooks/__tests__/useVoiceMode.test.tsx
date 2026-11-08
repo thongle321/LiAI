@@ -10,6 +10,7 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 import { useVoiceMode, useVoiceSession, activeVoiceModeController } from "@/hooks/useVoiceMode.ts";
 import type { VoiceModeDeps, VoiceCapture } from "@/hooks/useVoiceMode.ts";
 import type { AsrTier } from "@/services/asr/types.ts";
+import { VOICE_START_TIMEOUT_MS } from "@/services/voice/constants.ts";
 import type {
   VoiceEngine,
   VoiceTurn,
@@ -19,6 +20,7 @@ import type {
 } from "@/services/voice/types.ts";
 import type { VoiceChatPort } from "@/services/voice/chat-port.ts";
 import { useAsrStore } from "@/store/asr.ts";
+import { useModelStore } from "@/store/model-store.ts";
 import { useVoice } from "@/store/voice.ts";
 import { PHONON_VOICES } from "@/services/tts/engines/phonon/voices";
 import { useVoiceModeSession, voiceModeSessionApi } from "@/store/voice-mode.ts";
@@ -410,6 +412,274 @@ describe("entry gates", () => {
       kind: "tts",
       bytes: PHONON_RUNTIME,
     });
+  });
+});
+
+describe("sheet dismissal", () => {
+  it("a stale setup close leaves the memory sheet on screen", async () => {
+    const rig = makeRig({
+      // wont_fit: chat 2 GB + whisper base busts the 5 GB phone's budget.
+      deviceMemory: async () => ({ os: "android", totalBytes: 5_000_000_000 }),
+      chatBytes: async () => 2_000_000_000,
+    });
+
+    await act(async () => {
+      await rig.result.current.requestEntry();
+    });
+    expect(rig.result.current.sheet?.kind).toBe("memory");
+
+    act(() => rig.result.current.dismissSheet("setup"));
+    expect(rig.result.current.sheet?.kind).toBe("memory");
+
+    act(() => rig.result.current.dismissSheet("memory"));
+    expect(rig.result.current.sheet).toBeNull();
+  });
+
+  it("a stale memory close leaves the setup sheet on screen", async () => {
+    armStore({ isSelectedTierReady: false });
+    const rig = makeRig();
+
+    await act(async () => {
+      await rig.result.current.requestEntry();
+    });
+    expect(rig.result.current.sheet?.kind).toBe("setup");
+
+    act(() => rig.result.current.dismissSheet("memory"));
+    expect(rig.result.current.sheet?.kind).toBe("setup");
+
+    act(() => rig.result.current.dismissSheet("setup"));
+    expect(rig.result.current.sheet).toBeNull();
+  });
+});
+
+describe("setup completion waits for the chat model", () => {
+  const controller = () => {
+    const c = activeVoiceModeController();
+    if (c === null) throw new Error("no controller mounted");
+    return c;
+  };
+
+  beforeEach(() => {
+    useModelStore.setState({
+      activeModelId: "m1",
+      activeProviderType: "local",
+      isContextLoading: true,
+    });
+  });
+
+  afterEach(() => {
+    useModelStore.setState({
+      activeModelId: null,
+      activeProviderType: null,
+      isContextLoading: false,
+    });
+  });
+
+  it("waits for the chat model to finish loading before reading memory", async () => {
+    const deviceMemory = jest.fn(async () => ({
+      os: "android" as const,
+      totalBytes: 8_000_000_000,
+    }));
+    const rig = makeRig({ deviceMemory });
+
+    let done!: Promise<void>;
+    act(() => {
+      done = rig.result.current.setupDone();
+    });
+    // Let the gate's async work settle: a controller that does NOT wait
+    // reaches the memory read by now.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(rig.result.current.sheet).toBeNull();
+    expect(deviceMemory).not.toHaveBeenCalled();
+
+    act(() => {
+      useModelStore.setState({ isContextLoading: false });
+    });
+    await act(async () => {
+      await done;
+    });
+
+    expect(deviceMemory).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(rig.result.current.phase).toBe("listening");
+    });
+  });
+
+  it("ignores a voice tap while the wait is pending", async () => {
+    const deviceMemory = jest.fn(async () => ({
+      os: "android" as const,
+      totalBytes: 8_000_000_000,
+    }));
+    const rig = makeRig({ deviceMemory });
+
+    let done!: Promise<void>;
+    act(() => {
+      done = rig.result.current.setupDone();
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // A tap mid-wait must not run the entry gates a second time.
+    await act(async () => {
+      await rig.result.current.requestEntry();
+    });
+    expect(checkMicAccess).not.toHaveBeenCalled();
+    expect(deviceMemory).not.toHaveBeenCalled();
+
+    act(() => {
+      useModelStore.setState({ isContextLoading: false });
+    });
+    await act(async () => {
+      await done;
+    });
+    expect(deviceMemory).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs only the latest of two setup completions", async () => {
+    const deviceMemory = jest.fn(async () => ({
+      os: "android" as const,
+      totalBytes: 8_000_000_000,
+    }));
+    const rig = makeRig({ deviceMemory });
+
+    let first!: Promise<void>;
+    let second!: Promise<void>;
+    act(() => {
+      first = rig.result.current.setupDone();
+    });
+    act(() => {
+      second = rig.result.current.setupDone();
+    });
+
+    act(() => {
+      useModelStore.setState({ isContextLoading: false });
+    });
+    await act(async () => {
+      await Promise.all([first, second]);
+    });
+
+    // The superseded completion must not measure memory a second time.
+    expect(deviceMemory).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(rig.result.current.phase).toBe("listening");
+    });
+  });
+
+  it("warns instead of measuring when the chat model never settles", async () => {
+    jest.useFakeTimers();
+    const deviceMemory = jest.fn(async () => ({
+      os: "android" as const,
+      totalBytes: 8_000_000_000,
+    }));
+    const rig = makeRig({ deviceMemory });
+
+    let done!: Promise<void>;
+    act(() => {
+      done = rig.result.current.setupDone();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(VOICE_START_TIMEOUT_MS + 100);
+    });
+    await act(async () => {
+      await done;
+    });
+
+    expect(deviceMemory).not.toHaveBeenCalled();
+    expect(rig.result.current.issue).toContain("Taking too long");
+    expect(rig.result.current.phase).toBe("closed");
+    expect(rig.capture.started).toBe(0);
+    jest.useRealTimers();
+  });
+
+  it("holds the memory read until the app returns to the foreground", async () => {
+    const deviceMemory = jest.fn(async () => ({
+      os: "android" as const,
+      totalBytes: 8_000_000_000,
+    }));
+    const rig = makeRig({ deviceMemory });
+    controller().onAppStateChange("active", "background");
+
+    let done!: Promise<void>;
+    act(() => {
+      done = rig.result.current.setupDone();
+    });
+    act(() => {
+      useModelStore.setState({ isContextLoading: false });
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // Backgrounded: the model settled, but the wait still holds.
+    expect(deviceMemory).not.toHaveBeenCalled();
+    expect(rig.result.current.phase).toBe("closed");
+
+    act(() => {
+      controller().onAppStateChange("background", "active");
+    });
+    await act(async () => {
+      await done;
+    });
+
+    expect(deviceMemory).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-run the memory gate over an open session", async () => {
+    const deviceMemory = jest.fn(async () => ({
+      os: "android" as const,
+      totalBytes: 8_000_000_000,
+    }));
+    const rig = makeRig({ deviceMemory });
+    await enterOpen(rig);
+    expect(deviceMemory).toHaveBeenCalledTimes(1);
+
+    let done!: Promise<void>;
+    act(() => {
+      done = rig.result.current.setupDone();
+    });
+    act(() => {
+      useModelStore.setState({ isContextLoading: false });
+    });
+    await act(async () => {
+      await done;
+    });
+
+    expect(deviceMemory).toHaveBeenCalledTimes(1);
+    expect(rig.result.current.phase).toBe("listening");
+  });
+
+  it("a screen that lost focus shows nothing when setup completes", async () => {
+    mockFocusNow = false;
+    try {
+      const deviceMemory = jest.fn(async () => ({
+        os: "android" as const,
+        totalBytes: 8_000_000_000,
+      }));
+      const host = makeRig({ deviceMemory });
+      // The screen mounts and reports its focus (false) to the controller.
+      renderHook(() => useVoiceSession("voice"));
+
+      let done!: Promise<void>;
+      act(() => {
+        done = host.result.current.setupDone();
+      });
+      act(() => {
+        useModelStore.setState({ isContextLoading: false });
+      });
+      await act(async () => {
+        await done;
+      });
+
+      expect(deviceMemory).not.toHaveBeenCalled();
+      expect(host.result.current.sheet).toBeNull();
+      expect(host.result.current.phase).toBe("closed");
+      expect(host.capture.started).toBe(0);
+    } finally {
+      mockFocusNow = true;
+    }
   });
 });
 

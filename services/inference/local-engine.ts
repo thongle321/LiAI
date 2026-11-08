@@ -205,6 +205,11 @@ export function createLocalEngine(ctx: LlamaContextLike): CompletionEngine {
           ...(request.addGenerationPrompt !== undefined
             ? { add_generation_prompt: request.addGenerationPrompt }
             : {}),
+          // Structured output (JSON schema) — both local and remote engines
+          // accept this via response_format with json_schema.
+          ...(request.responseFormat
+            ? { response_format: request.responseFormat }
+            : {}),
         },
         (data) => {
           const reasoning = data.reasoning_content ?? "";

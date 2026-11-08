@@ -13,10 +13,13 @@
 import {
   clearAutoReleased,
   decideAutoRelease,
+  decideLastUsedWarmUp,
   markAutoReleased,
   restoreAutoReleasedModel,
   type AutoReleaseActive,
   type AutoReleaseDeps,
+  type LastUsedDeps,
+  warmUpLastUsedModel,
 } from "../auto-release";
 
 /** A fake world: a persisted flag, an active model, and a reload counter. */
@@ -257,6 +260,156 @@ describe("restoreAutoReleasedModel", () => {
     // The app opened without the model: the next launch must not hold the
     // splash for the same wait again.
     expect(state.releasedModelId).toBeNull();
+    expect(warn).toHaveBeenCalled();
+  });
+});
+
+describe("decideLastUsedWarmUp", () => {
+  it("does nothing when there is no last-used model", () => {
+    expect(
+      decideLastUsedWarmUp({
+        lastUsedModelId: null,
+        active: { modelId: null, providerType: null, downloaded: false },
+      }),
+    ).toEqual("none");
+  });
+
+  it("does nothing when an active model already exists", () => {
+    expect(
+      decideLastUsedWarmUp({
+        lastUsedModelId: "m1",
+        active: { modelId: "m2", providerType: "local", downloaded: true },
+      }),
+    ).toEqual("none");
+  });
+
+  it("warms up when no active model and last-used model is downloaded", () => {
+    expect(
+      decideLastUsedWarmUp({
+        lastUsedModelId: "m1",
+        active: { modelId: null, providerType: "local", downloaded: true },
+      }),
+    ).toEqual("warm");
+  });
+
+  it("clears the record when the last-used model is not downloaded", () => {
+    expect(
+      decideLastUsedWarmUp({
+        lastUsedModelId: "m1",
+        active: { modelId: null, providerType: "local", downloaded: false },
+      }),
+    ).toEqual("clear");
+  });
+
+  it("clears the record for a remote provider", () => {
+    expect(
+      decideLastUsedWarmUp({
+        lastUsedModelId: "m1",
+        active: { modelId: null, providerType: "remote", downloaded: true },
+      }),
+    ).toEqual("clear");
+  });
+});
+
+describe("warmUpLastUsedModel", () => {
+  function lastUsedWorld(overrides: Partial<LastUsedDeps> = {}) {
+    const state = {
+      lastUsedModelId: null as string | null,
+      active: {
+        modelId: null,
+        providerType: "local" as "local" | "remote" | null,
+        downloaded: true,
+      } as AutoReleaseActive,
+      loads: 0,
+      writes: [] as (string | null)[],
+    };
+    const base: LastUsedDeps = {
+      readLastUsedModelId: async () => state.lastUsedModelId,
+      writeLastUsedModelId: async (id) => {
+        state.writes.push(id);
+        state.lastUsedModelId = id;
+      },
+      readActive: async () => state.active,
+      loadModel: async () => {
+        state.loads += 1;
+      },
+    };
+    return { state, deps: { ...base, ...overrides } };
+  }
+
+  it("does nothing when there is no last-used id", async () => {
+    const { state, deps } = lastUsedWorld();
+
+    await warmUpLastUsedModel(deps);
+
+    expect(state.loads).toEqual(0);
+    expect(state.writes).toEqual([]);
+  });
+
+  it("does nothing when an active model already exists", async () => {
+    const { state, deps } = lastUsedWorld();
+    state.lastUsedModelId = "m1";
+    state.active = { modelId: "m2", providerType: "local", downloaded: true };
+
+    await warmUpLastUsedModel(deps);
+
+    expect(state.loads).toEqual(0);
+    expect(state.writes).toEqual([]);
+  });
+
+  it("warms up the last-used model and clears the record on success", async () => {
+    const { state, deps } = lastUsedWorld();
+    state.lastUsedModelId = "m1";
+
+    await warmUpLastUsedModel(deps);
+
+    expect(state.loads).toEqual(1);
+    expect(state.writes).toEqual([null]);
+  });
+
+  it("clears the record without loading when the model is not downloaded", async () => {
+    const { state, deps } = lastUsedWorld();
+    state.lastUsedModelId = "m1";
+    state.active = { modelId: null, providerType: "local", downloaded: false };
+
+    await warmUpLastUsedModel(deps);
+
+    expect(state.loads).toEqual(0);
+    expect(state.writes).toEqual([null]);
+  });
+
+  it("never rejects when the load fails, and KEEPS the record for the next try", async () => {
+    const { state, deps } = lastUsedWorld({
+      loadModel: async () => {
+        throw new Error("out of memory");
+      },
+    });
+    state.lastUsedModelId = "m1";
+
+    await expect(warmUpLastUsedModel(deps)).resolves.toBeUndefined();
+
+    expect(state.writes).toEqual([]); // record stays
+  });
+
+  it("never rejects when the flag cannot even be read", async () => {
+    const { deps } = lastUsedWorld({
+      readLastUsedModelId: async () => {
+        throw new Error("storage unavailable");
+      },
+    });
+
+    await expect(warmUpLastUsedModel(deps)).resolves.toBeUndefined();
+  });
+
+  it("gives up on a load that never settles, clears the record so next launch does not wait again", async () => {
+    const { state, deps } = lastUsedWorld({
+      loadModel: () => new Promise<void>(() => {}),
+    });
+    state.lastUsedModelId = "m1";
+
+    await warmUpLastUsedModel(deps, 10);
+
+    expect(state.writes).toEqual([null]);
     expect(warn).toHaveBeenCalled();
   });
 });

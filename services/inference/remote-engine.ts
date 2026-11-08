@@ -143,6 +143,11 @@ export function createRemoteEngine(
                     },
                   }
               : {}),
+            // Structured output (JSON schema) — OpenAI-compatible endpoints
+            // accept response_format with json_schema.
+            ...(request.responseFormat
+              ? { response_format: request.responseFormat }
+              : {}),
           }),
           signal: controller.signal,
         });

@@ -75,6 +75,9 @@ import {
 } from "@/components/chat/greeting-bubble.tsx";
 import { useCompanions } from "@/store/companions.ts";
 import { recommendedContextTokens } from "@/services/agent/registry.ts";
+import { resolveGreeting } from "@/services/chat/greeting.ts";
+import { CompanionEditorSheet } from "@/components/companions/companion-editor-sheet.tsx";
+import type { Companion } from "@/types/companion.ts";
 
 export default function ChatRoute() {
   const colors = useColors();
@@ -147,8 +150,7 @@ export default function ChatRoute() {
     () => setChatWarning(null),
     [setChatWarning],
   );
-  const setActiveModel = useModelStore((s) => s.setActiveModel);
-  const setActiveRemoteApi = useModelStore((s) => s.setActiveRemoteApi);
+  const activateModel = useModelStore((s) => s.activateModel);
   const allModels = useModelStore((s) => s.models);
   const remoteApis = useModelStore((s) => s.remoteApis);
   // Regenerate and edit both start a turn, so they need a live engine —
@@ -165,18 +167,17 @@ export default function ChatRoute() {
   );
   /** Switch to a model chosen from a message's "Regenerate with…".
    *
-   *  Uses the SAME discriminator the two menus label with -- a local entry
-   *  has no `host`. Asking `remoteApis.some(...)` instead would be an
-   *  opposite test on the same list: the day a local id equalled a remote
-   *  id, the menu would say "local" and this would switch as remote. */
+   *  Uses the single activation dispatch: routes local models through the
+   *  eager-load coordinator (supersession, gate, calibration) and remote
+   *  providers through their existing path. No surface chooses between the
+   *  two paths itself. */
   const switchToModel = useCallback(
     (modelId: string) => {
       const target = menuModels.find((m) => m.id === modelId);
       if (target === undefined) return;
-      if (target.host === undefined) setActiveModel(modelId, "local");
-      else setActiveRemoteApi(modelId);
+      activateModel(modelId);
     },
-    [menuModels, setActiveModel, setActiveRemoteApi],
+    [menuModels, activateModel],
   );
   // Row actions carry the message id instead of closing over the row: a
   // per-row arrow is a fresh prop identity on every screen render, which
@@ -275,11 +276,13 @@ export default function ChatRoute() {
   // companion; the hook owns the decision and the warned-set.
   useToolCompatWarning(activeCompanion);
   // Greeting only with a loaded model and an EMPTY, unsearched thread —
-  // exactly PocketPal's render predicate. Never persisted.
-  const greeting =
-    emptyState && !showPlaceholder && activeCompanion?.greeting?.text
-      ? activeCompanion.greeting
-      : undefined;
+  // exactly PocketPal's render predicate. Never persisted. The bubble and
+  // the chips are independent halves: a companion can ship prompts with no
+  // greeting text.
+  const greeting = resolveGreeting(
+    activeCompanion,
+    emptyState && !showPlaceholder,
+  );
   // One-shot context hint (PocketPal's usePalLoadHint): a companion whose heavy
   // talent wants a bigger window than the loaded one gets ONE notice per
   // (companion, context, talents) signature. Local engine only — a remote
@@ -436,6 +439,13 @@ export default function ChatRoute() {
   // which lands on Models every time. The companion now lives here rather
   // than in the header.
   const [pickerOpen, setPickerOpen] = useState(false);
+  // The picker's gear opens the editor for the BOUND companion. Same
+  // ownership rule as the companions route: the route holds a
+  // Partial-or-null whose non-null state shows the shared editor sheet
+  // (save/delete call onClose themselves).
+  const [editingCompanion, setEditingCompanion] = useState<Partial<Companion> | null>(
+    null,
+  );
   const searchBarEntering = fadeEntering(motionDuration);
   const searchBarExiting = fadeExiting(motionDuration);
 
@@ -544,7 +554,7 @@ export default function ChatRoute() {
                 <ChatEmptyPlaceholder
                   onSelectModel={() => setPickerOpen(true)}
                 />
-              ) : greeting !== undefined && activeCompanion !== undefined ? (
+              ) : greeting?.text != null && activeCompanion !== undefined ? (
                 // The bubbles' own horizontal padding lives inside
                 // GreetingBubble (px-4); px-6 here matches the list's p-6 so
                 // the bubble keeps the margin it had as overlay content.
@@ -641,11 +651,11 @@ export default function ChatRoute() {
           {/* Suggested-prompt chips (PocketPal's chip row): above the
               composer, only on an empty thread with a greeting. Tapping
               one SENDS it like any user message. */}
-          {greeting?.suggestedPrompts !== undefined &&
-          greeting.suggestedPrompts.length > 0 &&
+          {greeting !== undefined &&
+          greeting.prompts.length > 0 &&
           !sending ? (
             <SuggestedPromptChips
-              prompts={greeting.suggestedPrompts}
+              prompts={greeting.prompts}
               onSend={(text) => void send(text)}
             />
           ) : null}
@@ -699,6 +709,16 @@ export default function ChatRoute() {
       <ChatPickerSheet
         visible={pickerOpen}
         onClose={() => setPickerOpen(false)}
+        onOpenEditor={(companion) => setEditingCompanion(companion)}
+      />
+      {/* The gear's handoff: open the editor over this screen the same way
+          the companions route does over the grid. Editing writes through
+          the companions store, so the bound companion's active row (greeting,
+          system prompt, default model) picks the change up with no
+          re-activation. */}
+      <CompanionEditorSheet
+        companion={editingCompanion}
+        onClose={() => setEditingCompanion(null)}
       />
     </SafeAreaView>
   );

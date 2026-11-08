@@ -55,6 +55,7 @@ export type ModelStateSource = Pick<
   | "toolCompatWarnedModels"
   | "pendingProjectionCleanup"
   | "searchFilters"
+  | "lastUsedModelId"
 >;
 
 /** The persisted slice of the model store. */
@@ -100,5 +101,6 @@ export function persistedState(
     toolCompatWarnedModels: state.toolCompatWarnedModels,
     pendingProjectionCleanup: state.pendingProjectionCleanup,
     searchFilters: state.searchFilters,
+    lastUsedModelId: state.lastUsedModelId,
   };
 }

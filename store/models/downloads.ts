@@ -61,6 +61,15 @@ export const createDownloadsSlice: StateCreator<ModelStore, [], [], DownloadsSli
 ) => ({
   largestSuccessfulBytes: 0,
 
+  /** Raise the learned ceiling after a successful load. Only raises —
+   *  never lowers. Called by the eager-load coordinator on success. */
+  updateLargestSuccessfulBytes: (requirementBytes: number) => {
+    const current = get().largestSuccessfulBytes;
+    if (requirementBytes > current) {
+      set({ largestSuccessfulBytes: requirementBytes });
+    }
+  },
+
   clearDownloadError: (specId) => {
     // The reason only — the failed state stays, so the row still says
     // Retry after the dialog is dismissed (C1).

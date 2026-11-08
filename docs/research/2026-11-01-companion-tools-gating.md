@@ -21,9 +21,11 @@ failure text that the runner had already captured for its `run_failed` event.
 
 The turn is otherwise identical; the companion changes exactly one thing: her
 PACT talents become engine `tools` (`turn.ts` → `deriveToolSchemas`, faithful to
-`pocketpal-ai/src/store/ChatSessionStore.ts:1535-1545`). Pip seeds all five
-talents. A no-companion chat sends `tools: []`. A model whose chat template has
-no slot for tool schemas can fail the engine call before emitting a token.
+`pocketpal-ai/src/store/ChatSessionStore.ts:1535-1545`). Pip seeded all five
+talents at the time of this investigation (that default has since been removed
+— see the update at the end). A no-companion chat sends `tools: []`. A model
+whose chat template has no slot for tool schemas can fail the engine call
+before emitting a token.
 
 ## Fix
 
@@ -68,3 +70,19 @@ jinja probe says nothing about a server.
   covered by a test — the resolver's dependencies are reached through
   dynamic imports, which jest's CJS runtime does not mock, so the wiring is
   covered by the pure gate's cases plus review rather than end to end.
+
+## Update 2026-11-03 — Pip ships with no tools by default (PocketPal parity)
+
+The seeding above ("Pip seeds all five talents") was a deliberate divergence:
+it kept first-run chats at the always-on tool set. It is now removed to match
+PocketPal's `initializePipPal`, whose pal data has **no `pact`** at all. So:
+
+- `PIP_COMPANION` (`services/companions/builtins.ts`) no longer carries a
+  `pact`; `ALL_TALENT_NAMES` is gone.
+- `defaultTalentNames` already treats a missing pact as `[]`, so a first-run
+  chat with Pip sends no tool schemas. Tools become opt-in per companion via
+  the editor's Tools section (which still writes `pact: { talents }`).
+- `store/__tests__/companions-store.test.ts` now asserts the seeded Pip has
+  no tools; `services/companions/__tests__/companion-json.test.ts` carries its
+  own pact so the codec test still proves talent round-tripping.
+

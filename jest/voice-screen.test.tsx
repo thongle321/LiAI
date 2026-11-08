@@ -224,7 +224,7 @@ describe("VoiceScreen", () => {
     expect(screen.getByText("Set up voice mode")).toBeOnTheScreen();
     expect(screen.getByTestId("voice-setup-continue")).toBeOnTheScreen();
     fireEvent.press(screen.getByTestId("voice-setup-cancel"));
-    expect(actions.dismissSheet).toHaveBeenCalledTimes(1);
+    expect(actions.dismissSheet).toHaveBeenCalledWith("setup");
   });
 
   it("the memory sheet renders the fit; smaller model routes to Models", () => {

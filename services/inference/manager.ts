@@ -1,7 +1,12 @@
 /** One-slot engine manager: local context cached by file, remote per provider.
  *
  * Switching models stops the old engine first so generation never answers
- * on the wrong model. Factories inject (tests pass fakes); the app wires
+ * on the wrong model. Every slot operation — ensure (load/switch),
+ * stopActive, releaseAll — is internally serialized on a promise-chain
+ * mutex (the TTS runtime's shape, spec "The engine manager owns
+ * serialization"): a queued caller observes the slot state its predecessor
+ * left, teardown errors stay best-effort and never block the queue.
+ * Factories inject (tests pass fakes); the app wires
  * the llama loader + remote BYOK factory. Errors propagate — the turn
  * builder maps them to the bubble.
  */
@@ -64,6 +69,10 @@ export class EngineManager {
   private key: string | null = null;
   private engine: CompletionEngine | null = null;
   private release: (() => Promise<void>) | null = null;
+  /** FIFO chain of pending operations — every slot op queues behind the
+   *  last (same shape as the TTS runtime), so a caller arrives at the
+   *  slot state its predecessor left, never mid-switch. */
+  private opMutex: Promise<unknown> = Promise.resolve();
 
   private readonly loader: EngineLoader;
   private readonly getRemoteKey: (providerId: string) => Promise<string | null>;
@@ -76,46 +85,73 @@ export class EngineManager {
     this.getRemoteKey = getRemoteKey;
   }
 
-  /** Engine for the source, reusing the slot when the key matches. */
+  /** Run `fn` as the only slot operation, chained onto the queue. */
+  private serialize<T>(fn: () => Promise<T>): Promise<T> {
+    const next = this.opMutex.then(fn, fn);
+    // Keep the chain alive when `fn` rejects. Swallow only here; the
+    // returned promise still propagates the rejection to the caller.
+    this.opMutex = next.catch(() => undefined);
+    return next;
+  }
+
+  /** Does the slot hold a live context right now?
+   *  The eager-load coordinator's warm check (spec "Already loaded
+   *  short-circuit"): a caller cannot sensibly read this through ensure()
+   *  without triggering the work it is trying to avoid. A read, not a
+   *  write — install/teardown stay serialized. */
+  isLoaded(): boolean {
+    return this.engine !== null;
+  }
+
+  /** Engine for the source, reusing the slot when the key matches.
+   *  The key is evaluated inside the serialized section: a queued caller
+   *  keys against the slot its predecessor left, so overlapping ensures
+   *  switch once instead of racing. */
   async ensure(
     source: EngineSource,
     mmprojPath?: string,
     init?: LlamaInitParams,
   ): Promise<CompletionEngine> {
-    const key =
-      source.kind === "local"
-        ? `local:${source.fileName}:${mmprojPath ?? "none"}:${init ? initKey(init) : "default"}`
-        : `remote:${source.provider.id}`;
-    if (this.engine && this.key === key) return this.engine;
-    if (this.engine) await quiet(this.engine.stopCompletion());
-    if (this.release) await quiet(this.release());
-    this.engine = null;
-    this.release = null;
-    if (source.kind === "local") {
-      const loaded = await this.loader.loadLocal(source.fileName, mmprojPath, init);
-      this.engine = loaded.engine;
-      this.release = loaded.release;
-    } else {
-      const provider = source.provider;
-      this.engine = this.loader.createRemote(provider, () =>
-        this.getRemoteKey(provider.id),
-      );
-    }
-    this.key = key;
-    return this.engine;
+    return this.serialize(async () => {
+      const key =
+        source.kind === "local"
+          ? `local:${source.fileName}:${mmprojPath ?? "none"}:${init ? initKey(init) : "default"}`
+          : `remote:${source.provider.id}`;
+      if (this.engine && this.key === key) return this.engine;
+      if (this.engine) await quiet(this.engine.stopCompletion());
+      if (this.release) await quiet(this.release());
+      this.engine = null;
+      this.release = null;
+      if (source.kind === "local") {
+        const loaded = await this.loader.loadLocal(source.fileName, mmprojPath, init);
+        this.engine = loaded.engine;
+        this.release = loaded.release;
+      } else {
+        const provider = source.provider;
+        this.engine = this.loader.createRemote(provider, () =>
+          this.getRemoteKey(provider.id),
+        );
+      }
+      this.key = key;
+      return this.engine;
+    });
   }
 
   /** Stop the live generation without dropping the loaded model. */
   async stopActive(): Promise<void> {
-    if (this.engine) await quiet(this.engine.stopCompletion());
+    await this.serialize(async () => {
+      if (this.engine) await quiet(this.engine.stopCompletion());
+    });
   }
 
   /** Stop and drop the slot (model switch, new conversation teardown). */
   async releaseAll(): Promise<void> {
-    if (this.engine) await quiet(this.engine.stopCompletion());
-    if (this.release) await quiet(this.release());
-    this.engine = null;
-    this.release = null;
-    this.key = null;
+    await this.serialize(async () => {
+      if (this.engine) await quiet(this.engine.stopCompletion());
+      if (this.release) await quiet(this.release());
+      this.engine = null;
+      this.release = null;
+      this.key = null;
+    });
   }
 }

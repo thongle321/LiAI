@@ -6,34 +6,40 @@
  * suggested prompts, color, recommended model, and the nested per-companion
  * generation settings. Delete lives in the actions row for edits.
  *
- * NOT ported (decided): AI prompt generation (useAIPrompt is carried,
- * never written) and thumbnail images. Video template: none.
+ * NOT ported (decided): thumbnail images (carried, unused). Video template: none.
+ * AI prompt generation: IMPLEMENTED (useAIPrompt, promptGenerationModel, generatingPrompt).
  */
 
 import { useEffect, useState } from "react";
-import { Alert, Pressable, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 
-import { useColors } from "@/themes/tokens.ts";
 import { Sheet } from "@/components/sheet.tsx";
 import {
   ActionRow,
-  RowLabel,
   RowSizeProvider,
   SettingsSection,
   ToggleRow,
 } from "@/components/settings-rows.tsx";
+import { CompanionTextRow } from "./companion-text-row.tsx";
+import { DynamicParameterFields } from "./dynamic-parameter-fields.tsx";
 import { ModelSelector } from "./model-selector.tsx";
-import type { SamplerParams } from "@/services/inference/sampler.ts";
-import {
-  generateFinalSystemPrompt,
-  parseCompanionTemplate,
-} from "@/utils/companion-template.ts";
+import { ThumbnailPicker } from "./thumbnail-picker.tsx";
+import { generateFinalSystemPrompt } from "@/utils/companion-template.ts";
 import { TALENT_NAMES } from "@/services/agent/registry.ts";
+import { talentDescription, talentLabel } from "@/services/companions/talent-display.ts";
+import {
+  buildCompanionFields,
+  type CompanionEditorDraft,
+} from "@/services/companions/editor-draft.ts";
+import { buildGenerationPrompt, GENERATION_SCHEMA } from "@/services/companions/ai-prompt-generation.ts";
+import { resolveCompanionModelStatus } from "@/services/companions/model-availability.ts";
+import { formatBytes } from "@/services/models/progress.ts";
 import { shareCompanions } from "@/services/companions/share-companions.ts";
 import { useCompanions } from "@/store/companions.ts";
 import { useModelStore } from "@/store/model-store.ts";
-import type { Companion, CompanionModelRef, ParameterDefinition } from "@/types/companion.ts";
+import type { Companion } from "@/types/companion.ts";
 import { CompanionGenerationSettingsSheet } from "./companion-generation-settings-sheet.tsx";
+import { useStructuredOutput } from "@/hooks/useStructuredOutput.ts";
 
 /** Preset card colors — PocketPal ships preset gradients; without a
  *  gradient library the pair is kept (accent strip on the card) and
@@ -46,56 +52,8 @@ const COLOR_PAIRS: ReadonlyArray<readonly [string, string]> = [
   ["#B45309", "#FEF3C7"],
 ];
 
-function CompanionTextRow({
-  label,
-  description,
-  value,
-  placeholder,
-  multiline,
-  onChangeText,
-}: {
-  label: string;
-  description?: string;
-  value: string;
-  placeholder?: string;
-  multiline?: boolean;
-  onChangeText: (text: string) => void;
-}) {
-  const colors = useColors();
-  return (
-    <View className="mb-5">
-      <RowLabel label={label} description={description} />
-      <TextInput
-        value={value}
-        placeholder={placeholder}
-        placeholderTextColor={colors.secondaryTextMuted}
-        multiline={multiline}
-        onChangeText={onChangeText}
-        className={`min-h-10 rounded-lg border border-border bg-surface-1 px-3 py-2 font-sans text-body-md text-primary-text${
-          multiline ? " min-h-28" : ""
-        }`}
-        accessibilityLabel={label}
-      />
-    </View>
-  );
-}
-
 /** A draft companion: everything the form edits, id only in edit mode. */
-interface EditorDraft {
-  id: string | null;
-  name: string;
-  description: string;
-  systemPrompt: string;
-  originalSystemPrompt: string;
-  parameters: Record<string, unknown>;
-  parameterSchema: ParameterDefinition[];
-  talentNames: Set<string>;
-  greetingText: string;
-  suggestedPrompts: string;
-  color: readonly [string, string] | null;
-  modelRef: CompanionModelRef | null;
-  completionSettings: Partial<SamplerParams> | null;
-}
+type EditorDraft = CompanionEditorDraft;
 
 function draftFrom(companion: Partial<Companion> | null): EditorDraft {
   const p = companion ?? {};
@@ -103,10 +61,12 @@ function draftFrom(companion: Partial<Companion> | null): EditorDraft {
     id: p.id ?? null,
     name: p.name ?? "",
     description: p.description ?? "",
+    thumbnail: p.thumbnail_url ?? "",
     // The TEMPLATE is what gets edited and stored (rendered at
     // completion time); the pristine copy anchors "changed?" detection.
     systemPrompt: p.systemPrompt ?? "",
     originalSystemPrompt: p.originalSystemPrompt ?? p.systemPrompt ?? "",
+    isSystemPromptChanged: p.isSystemPromptChanged ?? false,
     parameters: { ...(p.parameters ?? {}) },
     parameterSchema: p.parameterSchema ?? [],
     talentNames: new Set((p.pact?.talents ?? []).map((t) => t.name)),
@@ -115,6 +75,13 @@ function draftFrom(companion: Partial<Companion> | null): EditorDraft {
     color: p.color ?? null,
     modelRef: p.defaultModel ?? null,
     completionSettings: p.completionSettings ?? null,
+    // The form never edits capabilities; carrying the stored value is what
+    // keeps an edit from resetting it (PocketPal: `pal.capabilities || {}`).
+    capabilities: p.capabilities ?? {},
+    // AI prompt generation
+    useAIPrompt: p.useAIPrompt ?? false,
+    promptGenerationModel: p.promptGenerationModel ?? null,
+    generatingPrompt: p.generatingPrompt ?? "",
   };
 }
 
@@ -128,6 +95,7 @@ export function CompanionEditorSheet({
 }) {
   const [draft, setDraft] = useState<EditorDraft>(() => draftFrom(companion));
   const [genVisible, setGenVisible] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const createCompanion = useCompanions((s) => s.createCompanion);
   const updateCompanion = useCompanions((s) => s.updateCompanion);
   const deleteCompanion = useCompanions((s) => s.deleteCompanion);
@@ -136,7 +104,14 @@ export function CompanionEditorSheet({
     draft.id === null ? undefined : s.companions.find((p) => p.id === draft.id),
   );
   const models = useModelStore((s) => s.models);
+  const presets = useModelStore((s) => s.presets);
+  const startDownload = useModelStore((s) => s.startDownload);
   const downloaded = models.filter((m) => m.downloadStatus === "completed");
+  // PocketPal's ModelNotAvailable: a linked model that is not on this phone.
+  const modelStatus = resolveCompanionModelStatus(draft.modelRef, models, presets);
+
+  // AI Prompt Generation hook
+  const { generate, isGenerating, isBusy, stop, error } = useStructuredOutput();
 
   useEffect(() => {
     if (companion !== null) setDraft(draftFrom(companion));
@@ -152,54 +127,29 @@ export function CompanionEditorSheet({
 
   async function save(): Promise<void> {
     if (!canSave) return;
-    // Template pass: a schema block in the prompt defines the parameters
-    // (roleplay ships one); entered values win over schema defaults.
-    const parsed = parseCompanionTemplate(draft.systemPrompt);
-    const schema = parsed.parameterSchema.length > 0 ? parsed.parameterSchema : draft.parameterSchema;
-    const parameters: Record<string, unknown> = { ...parsed.defaultParameters };
-    for (const key of Object.keys(parameters)) {
-      const entered = draft.parameters[key];
-      if (typeof entered === "string" && entered !== "") parameters[key] = entered;
-    }
-    const talents = [...draft.talentNames]
-      .filter((name) => (TALENT_NAMES as readonly string[]).includes(name))
-      .map((name) => ({ name, necessity: "required" as const }));
-    // `null` ERASES the greeting on update (the repo's clearable gate);
-    // a create has nothing to erase, and the Companion type takes undefined.
-    const greeting =
-      draft.greetingText.trim() !== ""
-        ? {
-            text: draft.greetingText.trim(),
-            suggestedPrompts: draft.suggestedPrompts
-              .split("\n")
-              .map((s) => s.trim())
-              .filter((s) => s !== ""),
-          }
-        : null;
-    const base = {
-      type: "local" as const,
-      name: draft.name.trim(),
-      description: draft.description.trim() || undefined,
-      systemPrompt: draft.systemPrompt,
-      originalSystemPrompt: draft.originalSystemPrompt || draft.systemPrompt,
-      isSystemPromptChanged:
-        draft.systemPrompt !== (draft.originalSystemPrompt || draft.systemPrompt),
-      useAIPrompt: false,
-      parameters,
-      parameterSchema: schema,
-      capabilities: {},
-      source: "local" as const,
-      pact: { talents },
-      color: (draft.color as [string, string] | null) ?? undefined,
-      defaultModel: draft.modelRef ?? undefined,
-      completionSettings: draft.completionSettings ?? undefined,
-    };
+    const fields = buildCompanionFields(draft);
+    // On update the clearable fields travel as `null` when empty, which is
+    // the repository's erase signal (`undefined` would leave the stored
+    // value in place). A create omits them instead.
     const saved =
       isEdit && draft.id !== null
-        ? await updateCompanion(draft.id, { ...base, greeting })
+        ? await updateCompanion(draft.id, {
+            ...fields.base,
+            greeting: fields.greeting,
+            defaultModel: fields.defaultModel,
+            description: fields.description,
+            completionSettings: fields.completionSettings,
+            thumbnail_url: fields.thumbnail,
+          })
         : await createCompanion({
-            ...base,
-            ...(greeting !== null ? { greeting } : {}),
+            ...fields.base,
+            ...(fields.greeting !== null ? { greeting: fields.greeting } : {}),
+            ...(fields.defaultModel !== null ? { defaultModel: fields.defaultModel } : {}),
+            ...(fields.description !== null ? { description: fields.description } : {}),
+            ...(fields.completionSettings !== null
+              ? { completionSettings: fields.completionSettings }
+              : {}),
+            ...(fields.thumbnail !== null ? { thumbnail_url: fields.thumbnail } : {}),
           });
     // A null write means the store could not reach storage (it swallows the
     // error). Closing here would discard everything the user just typed.
@@ -258,6 +208,11 @@ export function CompanionEditorSheet({
           placeholder="What this companion is for"
           onChangeText={(description) => patch({ description })}
         />
+        <ThumbnailPicker
+          value={draft.thumbnail}
+          onChange={(thumbnail) => patch({ thumbnail })}
+          onClear={() => patch({ thumbnail: "" })}
+        />
         <CompanionTextRow
           label="System prompt"
           description={
@@ -270,27 +225,81 @@ export function CompanionEditorSheet({
           multiline
           onChangeText={(systemPrompt) => patch({ systemPrompt })}
         />
-        {draft.parameterSchema.length > 0 ? (
-          <>
-            <Text className="mb-2 font-sans-semibold text-body-md text-primary-text">
-              Parameters
-            </Text>
-            <SettingsSection plain>
-              {draft.parameterSchema.map((param) => (
-                <CompanionTextRow
-                  key={param.key}
-                  label={param.label}
-                  description={param.description}
-                  value={String(draft.parameters[param.key] ?? "")}
-                  placeholder={param.placeholder}
-                  onChangeText={(value) =>
-                    patch({ parameters: { ...draft.parameters, [param.key]: value } })
+        {/* AI Prompt Generation */}
+        <SettingsSection plain>
+          <ToggleRow
+            label="Generate with AI"
+            description="Use an AI model to generate the system prompt from your instructions."
+            on={draft.useAIPrompt}
+            onPress={() => patch({ useAIPrompt: !draft.useAIPrompt })}
+          />
+          {draft.useAIPrompt ? (
+            <>
+              <ModelSelector
+                value={draft.promptGenerationModel}
+                onChange={(model) => patch({ promptGenerationModel: model })}
+                label="Generation Model"
+                placeholder="Select model"
+              />
+              <CompanionTextRow
+                label="Instructions"
+                description="Describe what kind of companion you want. The AI will generate a system prompt."
+                value={draft.generatingPrompt}
+                placeholder="e.g. A helpful coding assistant that explains concepts clearly"
+                multiline
+                onChangeText={(generatingPrompt) => patch({ generatingPrompt })}
+              />
+              <Pressable
+                onPress={async () => {
+                  if (!draft.generatingPrompt.trim()) {
+                    Alert.alert("No instructions", "Please describe what kind of companion you want.");
+                    return;
                   }
-                />
-              ))}
-            </SettingsSection>
-          </>
-        ) : null}
+                  if (!draft.promptGenerationModel) {
+                    Alert.alert("No model selected", "Please select a generation model.");
+                    return;
+                  }
+                  setGenerating(true);
+                  try {
+                    const prompt = buildGenerationPrompt(draft.generatingPrompt, draft.promptGenerationModel);
+                    const result = await generate(prompt, GENERATION_SCHEMA);
+                    const generatedPrompt = result?.prompt as string | undefined;
+                    if (generatedPrompt) {
+                      patch({ systemPrompt: generatedPrompt });
+                      // Only set originalSystemPrompt if it's not already set
+                      const currentOriginal = draft.originalSystemPrompt || draft.systemPrompt;
+                      if (!currentOriginal || currentOriginal === draft.systemPrompt) {
+                        patch({ originalSystemPrompt: generatedPrompt });
+                      }
+                      patch({ isSystemPromptChanged: false });
+                    } else {
+                      Alert.alert("Generation failed", "The model did not return a valid prompt. Try again.");
+                    }
+                  } catch {
+                    Alert.alert("Generation error", error ?? "Failed to generate prompt. Try again.");
+                  } finally {
+                    setGenerating(false);
+                  }
+                }}
+                disabled={isGenerating || isBusy || !draft.generatingPrompt.trim() || !draft.promptGenerationModel}
+                className="mt-2 min-h-10 items-center justify-center rounded-lg bg-primary px-4 active:opacity-80"
+                accessibilityRole="button"
+                accessibilityLabel="Generate system prompt with AI"
+              >
+                <Text className="text-action">{isGenerating ? "Generating…" : "Generate"}</Text>
+              </Pressable>
+            </>
+          ) : null}
+        </SettingsSection>
+        {draft.parameterSchema.length > 0 ? (
+            <DynamicParameterFields
+              schema={draft.parameterSchema}
+              values={draft.parameters}
+              onChange={(key, value) =>
+                patch({ parameters: { ...draft.parameters, [key]: value } })
+              }
+            />
+          ) : null}
         {/* Preview so a templated prompt is inspectable without a chat. */}
         {draft.parameterSchema.length > 0 && renderedPreview !== draft.systemPrompt ? (
           <View className="mb-5 rounded-lg border border-border bg-surface-2 p-3">
@@ -308,7 +317,8 @@ export function CompanionEditorSheet({
           {TALENT_NAMES.map((name) => (
             <ToggleRow
               key={name}
-              label={name.replace("_", " ")}
+              label={talentLabel(name)}
+              description={talentDescription(name)}
               on={draft.talentNames.has(name)}
               onPress={() => {
                 const next = new Set(draft.talentNames);
@@ -376,6 +386,34 @@ export function CompanionEditorSheet({
             placeholder="Select model"
           />
         )}
+
+        {modelStatus.state === "downloadable" ? (
+          <View className="mb-5 rounded-lg border border-border bg-surface-1 p-3">
+            <Text className="text-body-sm text-secondary-text">
+              Recommended model: {modelStatus.name} ({formatBytes(modelStatus.size)})
+            </Text>
+            <Pressable
+              onPress={() =>
+                void startDownload(modelStatus.presetId, modelStatus.file)
+              }
+              className="mt-2 min-h-10 items-center justify-center rounded-lg bg-primary px-3 active:opacity-80"
+              accessibilityRole="button"
+              accessibilityLabel={`Download ${modelStatus.name}`}
+            >
+              <Text className="text-body-sm text-on-primary">Download</Text>
+            </Pressable>
+          </View>
+        ) : modelStatus.state === "downloading" ? (
+          <Text className="mb-5 text-body-sm text-secondary-text">
+            Downloading {draft.modelRef?.name ?? "the model"}…{" "}
+            {Math.round(modelStatus.progress)}%
+          </Text>
+        ) : modelStatus.state === "unavailable" ? (
+          <Text className="mb-5 text-body-sm text-quiet">
+            “{modelStatus.name}” isn’t in the catalog any more. Pick a downloaded
+            model above.
+          </Text>
+        ) : null}
 
         <Pressable
           onPress={() => setGenVisible(true)}

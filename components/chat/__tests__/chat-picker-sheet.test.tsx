@@ -4,8 +4,9 @@
  *  opening tab (PocketPal's `activeTab='models'`), the Companions tab lists
  *  installed companions with a capability subtitle (never the description),
  *  selecting either kind closes the sheet, the "No companion" unbind row
- *  only appears while one is actually bound, and the active companion
- *  carries the selection state without inventing a management gear.
+ *  only appears while one is actually bound, and the active companion row
+ *  carries the reference's settings gear (the editor handoff) while every
+ *  other row signals selection through the tint alone.
  */
 
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
@@ -42,6 +43,7 @@ jest.mock("@/store/companions.ts", () => ({
 }));
 
 const onClose = jest.fn();
+const onOpenEditor = jest.fn<void, [Companion]>();
 
 const pip: Companion = {
   ...PIP_COMPANION,
@@ -66,7 +68,11 @@ function readySpec(id: string, name: string) {
   });
 }
 
-function setup(companionId: string | null = "pip", companion: Companion = pip) {
+function setup(
+  companionId: string | null = "pip",
+  companion: Companion = pip,
+  editor?: (companion: Companion) => void,
+) {
   mockCompanionSeed = companion;
   // Replace activateModel with a synchronous test double that immediately
   // moves the active model pointer. The eager-load coordinator's own logic
@@ -94,7 +100,7 @@ function setup(companionId: string | null = "pip", companion: Companion = pip) {
         insets: { top: 47, left: 0, right: 0, bottom: 34 },
       }}
     >
-      <ChatPickerSheet visible onClose={onClose} />
+      <ChatPickerSheet visible onClose={onClose} onOpenEditor={editor} />
     </SafeAreaProvider>,
   );
 }
@@ -167,9 +173,9 @@ describe("ChatPickerSheet", () => {
   });
 
   it("marks the active companion row through the selection state only", () => {
-    // No PalsHub here, so the reference's settings gear has no surface to
-    // live on (management is the Companions screen) — the tint pair is the
-    // ONLY active signal, and the accessibility state stays truthful.
+    // With no editor callback the row carries NO gear — the tint pair is
+    // the whole active signal, and the accessibility state stays truthful.
+    // (The gear itself is pinned by the editor-handoff tests below.)
     setup("pip");
     fireEvent.press(screen.getByTestId("chat-picker-tab-companions"));
     const row = screen.getByLabelText("Use companion Pip");
@@ -181,5 +187,28 @@ describe("ChatPickerSheet", () => {
     fireEvent.press(screen.getByTestId("chat-picker-tab-companions"));
     const row = screen.getByLabelText("Use companion Pip");
     expect(row.props.accessibilityState).toMatchObject({ selected: false });
+  });
+
+  it("puts the editor gear on the active companion row", () => {
+    // PocketPal's ChatPalModelPickerSheet: the gear sits beside the active
+    // pal only — other rows have neither the icon nor a second meaning.
+    setup("pip", pip, onOpenEditor);
+    fireEvent.press(screen.getByTestId("chat-picker-tab-companions"));
+    expect(screen.getByLabelText("Edit Pip")).toBeTruthy();
+    expect(screen.queryByLabelText("Edit Lookie")).toBeNull();
+  });
+
+  it("hides the gear when no companion is bound", () => {
+    setup(null, pip, onOpenEditor);
+    fireEvent.press(screen.getByTestId("chat-picker-tab-companions"));
+    expect(screen.queryByLabelText("Edit Pip")).toBeNull();
+  });
+
+  it("hands the bound companion to the editor and closes the sheet", () => {
+    setup("pip", pip, onOpenEditor);
+    fireEvent.press(screen.getByTestId("chat-picker-tab-companions"));
+    fireEvent.press(screen.getByLabelText("Edit Pip"));
+    expect(onOpenEditor).toHaveBeenCalledWith(pip);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

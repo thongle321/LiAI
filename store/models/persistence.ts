@@ -272,6 +272,7 @@ async function migrateLegacyIfNeeded(storage: KeyValueStorage): Promise<void> {
     toolCompatWarnedModels,
     pendingProjectionCleanup,
     searchFilters,
+    lastUsedModelId: null,
   };
 
   await storage.setItem(

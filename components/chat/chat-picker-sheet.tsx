@@ -39,7 +39,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Dimensions, FlatList, Pressable, Text, View } from "react-native";
 import { KeyboardControllerNative } from "react-native-keyboard-controller";
-import { Check, X } from "lucide-react-native";
+import { Check, Settings, X } from "lucide-react-native";
 
 import { Sheet } from "../sheet.tsx";
 import { useColors } from "@/themes/tokens.ts";
@@ -66,9 +66,12 @@ function capabilityText(companion: Companion): string {
 export function ChatPickerSheet({
   visible,
   onClose,
+  onOpenEditor,
 }: {
   visible: boolean;
   onClose: () => void;
+  /** Open the editor for the given companion. */
+  onOpenEditor?: (companion: Companion) => void;
 }) {
   const colors = useColors();
   const [activeTabIndex, setActiveTabIndex] = useState(1); // 0 = companions, 1 = models (PocketPal default)
@@ -148,19 +151,35 @@ export function ChatPickerSheet({
         renderItem={({ item: companion }) => {
           const selected = companion.id === effectiveCompanionId;
           return (
-            <Pressable
-              onPress={() => {
-                void activate(companion);
-                onClose();
-              }}
-              className={`border-b border-border px-4 py-4 ${selected ? "bg-surface-3 border-primary" : ""}`}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              accessibilityLabel={`Use companion ${companion.name}`}
-            >
-              <Text className="text-body-lg text-primary-text">{companion.name}</Text>
-              <Text className="text-body-md text-secondary-text">{capabilityText(companion)}</Text>
-            </Pressable>
+            <View className={`flex-row items-center justify-between border-b border-border px-4 py-4 ${selected ? "bg-surface-3 border-primary" : ""}`}>
+              <Pressable
+                onPress={() => {
+                  void activate(companion);
+                  onClose();
+                }}
+                className="flex-1"
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`Use companion ${companion.name}`}
+              >
+                <Text className="text-body-lg text-primary-text">{companion.name}</Text>
+                <Text className="text-body-md text-secondary-text">{capabilityText(companion)}</Text>
+              </Pressable>
+              {selected && onOpenEditor ? (
+                <Pressable
+                  onPress={() => {
+                    onOpenEditor(companion);
+                    onClose();
+                  }}
+                  className="icon-btn h-8 w-8 ml-2"
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit ${companion.name}`}
+                  hitSlop={4}
+                >
+                  <Settings size={18} color={colors.primaryText} />
+                </Pressable>
+              ) : null}
+            </View>
           );
         }}
         ListHeaderComponent={

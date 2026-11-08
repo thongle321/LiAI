@@ -60,7 +60,7 @@ export default function VoiceScreen() {
     // Cleanup before the camera: ending an open session stops its mic
     // capture synchronously (the engine release finishes behind us), and
     // a parked gate sheet is dismissed so returning lands clean on the orb.
-    if (sheet !== null) dismissSheet();
+    if (sheet !== null) dismissSheet(sheet.kind);
     if (phase !== "closed") void end();
     setVisionOn(true);
   };
@@ -105,13 +105,13 @@ export default function VoiceScreen() {
         <VoiceSetupSheet
           visible
           onDone={() => void setupDone()}
-          onClose={dismissSheet}
+          onClose={() => dismissSheet("setup")}
         />
       )}
       {sheet?.kind === "memory" && (
         <VoiceMemorySheet
           fit={sheet.fit}
-          onClose={dismissSheet}
+          onClose={() => dismissSheet("memory")}
           chatModelName={chatModelName}
           voiceName={voiceName}
           onContinue={() => void continueAnyway()}

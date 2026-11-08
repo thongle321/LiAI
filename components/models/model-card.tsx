@@ -27,6 +27,7 @@ import {
   ChevronsUpDown,
   Cpu,
   Eject,
+  ImageOff,
   Play,
   Settings,
   Trash2,
@@ -120,6 +121,7 @@ export function ModelCard({
   const pauseModelDownload = useModelStore((s) => s.pauseModelDownload);
   const resumeModelDownload = useModelStore((s) => s.resumeModelDownload);
   const cancelModelDownload = useModelStore((s) => s.cancelModelDownload);
+  const startProjectorDownload = useModelStore((s) => s.startProjectorDownload);
   // Loading state for eager model load (PocketPal parity)
   const isContextLoading = useModelStore((s) => s.isContextLoading);
   const loadingModelId = useModelStore((s) => s.loadingModelId);
@@ -149,6 +151,20 @@ export function ModelCard({
     downloadable: onDownload !== undefined,
   });
   const dot = statusDotState({ status: item.downloadStatus, isActive });
+
+  /** Spec Q3 (docs/specs/2026-10-06-vision-toggle-and-projector-selection.md):
+   *  the warning fires when vision is on, a projector is recorded, and it
+   *  is not on disk. The same rule ModelCardDetails renders expanded; the
+   *  collapsed copy (PocketParity: PocketPal #1053 moved the affordance to
+   *  the card above the fold) keeps it one tap away without expanding. */
+  const projectorFile = item.projector;
+  const showProjectorOffer =
+    item.supportsVision === true &&
+    item.visionEnabled !== false &&
+    projectorFile !== undefined &&
+    item.downloadStatus !== "completed" &&
+    item.downloadStatus !== "downloading" &&
+    item.downloadStatus !== "paused";
 
   /** Both destructive actions confirm first (PocketParity: ModelCard.tsx
    *  :220-232 for delete, :247-257 for remove). The two wordings are the
@@ -256,6 +272,28 @@ export function ModelCard({
             the failure this line exists to prevent. */}
         {onDownload && item.downloadStatus !== "completed" && fit.message ? (
           <Text className="storage-warning mt-2">{fit.message}</Text>
+        ) : null}
+
+        {/* Spec Q3's collapsed copy: the offer hides while a transfer runs —
+            the cancel row below IS the progress readout then, and a second
+            affordance beside it would only compete (PocketParity: the
+            reference swaps the offer for a progress row, #1053). */}
+        {showProjectorOffer && projectorFile ? (
+          <Pressable
+            testID="projection-warning-badge"
+            onPress={() => void startProjectorDownload(item.id)}
+            className="mt-2 min-h-12 flex-row items-center gap-2 self-start rounded-lg border border-border px-4 py-2 active:opacity-80"
+            accessibilityRole="button"
+            accessibilityLabel="Download projection model"
+          >
+            <ImageOff size={16} color={colors.error} />
+            <Text className="font-sans text-body-sm text-error">
+              Download projection model
+            </Text>
+            <Text className="text-quiet">
+              {formatBytes(projectorFile.size)}
+            </Text>
+          </Pressable>
         ) : null}
 
         {/* One row (PocketParity: styles.ts:156-172 — gap 8, the primary

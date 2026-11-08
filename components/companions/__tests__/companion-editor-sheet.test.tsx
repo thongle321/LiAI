@@ -11,6 +11,8 @@ import { Alert } from "react-native";
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 import { CompanionEditorSheet } from "../companion-editor-sheet.tsx";
+import { useModelStore } from "@/store/model-store.ts";
+import { makePreset } from "@/jest/fixtures/models.ts";
 import {
   createNewAssistantCompanion,
   createNewRoleplayCompanion,
@@ -29,9 +31,17 @@ jest.mock("@/store/companions.ts", () => ({
     }),
 }));
 
+/** The real model store is a singleton; each case states its own catalog. */
+const realStartDownload = useModelStore.getState().startDownload;
+
 beforeEach(() => {
   jest.clearAllMocks();
   jest.spyOn(Alert, "alert").mockImplementation(() => {});
+  useModelStore.setState({
+    models: [],
+    presets: [],
+    startDownload: realStartDownload,
+  });
 });
 
 describe("CompanionEditorSheet create", () => {
@@ -139,5 +149,52 @@ describe("CompanionEditorSheet edit", () => {
       "Couldn't delete companion",
       expect.any(String),
     );
+  });
+
+  it("offers a download for a linked model the catalog still ships", async () => {
+    const preset = makePreset({
+      id: "p",
+      name: "Preset One",
+      files: [{ name: "p.gguf", size: 99, downloadUrl: "u" }],
+    });
+    const startDownload = jest.fn(() => Promise.resolve());
+    useModelStore.setState({
+      models: [],
+      presets: [preset],
+      startDownload: startDownload as never,
+    });
+    render(
+      <CompanionEditorSheet
+        companion={{
+          ...stored,
+          defaultModel: {
+            id: "preset-p-p.gguf",
+            name: "Preset One",
+            author: "Author",
+            file: { name: "p.gguf", size: 99 },
+          },
+        }}
+        onClose={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Recommended model: Preset One/)).toBeOnTheScreen();
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText("Download Preset One"));
+    });
+    expect(startDownload).toHaveBeenCalledWith("p", preset.files[0]);
+  });
+
+  it("says so when the linked model is gone from the catalog", () => {
+    render(
+      <CompanionEditorSheet
+        companion={{
+          ...stored,
+          defaultModel: { id: "gone", name: "Gone Model", author: "Author" },
+        }}
+        onClose={jest.fn()}
+      />,
+    );
+    expect(screen.getByText(/isn’t in the catalog any more/)).toBeOnTheScreen();
   });
 });

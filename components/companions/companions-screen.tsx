@@ -11,14 +11,15 @@
  * model, then land on Chat. The tap surface opens the editor.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { Alert, FlatList, Pressable, Text, View, useWindowDimensions } from "react-native";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { Alert, FlatList, Pressable, RefreshControl, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Plus, FolderOpen } from "lucide-react-native";
 
 import { useColors } from "@/themes/tokens.ts";
 import { ScreenHeader } from "@/components/screen-header.tsx";
 import { CompanionCard } from "@/components/companions/companion-card.tsx";
+import { AddPalMenu } from "./add-pal-menu.tsx";
 import { useCompanions, ensureCompanionsLoaded } from "@/store/companions.ts";
 import { pickCompanionsFile } from "@/services/companions/share-companions.ts";
 import {
@@ -46,10 +47,21 @@ export function CompanionsScreen({
   const loaded = useCompanions((s) => s.loaded);
   const importCompanions = useCompanions((s) => s.importCompanions);
   const [filter, setFilter] = useState<Filter>("all");
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const { width } = useWindowDimensions();
 
   useEffect(() => {
     void ensureCompanionsLoaded();
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await ensureCompanionsLoaded();
+    } finally {
+      setRefreshing(false);
+    }
   }, []);
 
   const columns = Math.max(Math.floor((width - GAP * 2) / MIN_CARD_WIDTH), 1);
@@ -60,20 +72,6 @@ export function CompanionsScreen({
     const withTools = (p: Companion) => (p.pact?.talents.length ?? 0) > 0;
     return companions.filter((p) => (filter === "tools" ? withTools(p) : !withTools(p)));
   }, [companions, filter]);
-
-  function addMenu(): void {
-    Alert.alert("New Companion", "Pick a template", [
-      {
-        text: "Assistant",
-        onPress: () => onCreate(createNewAssistantCompanion()),
-      },
-      {
-        text: "Roleplay",
-        onPress: () => onCreate(createNewRoleplayCompanion()),
-      },
-      { text: "Cancel", style: "cancel" },
-    ]);
-  }
 
   async function importFromFile(): Promise<void> {
     try {
@@ -106,15 +104,24 @@ export function CompanionsScreen({
             >
               <FolderOpen size={20} color={colors.primaryText} />
             </Pressable>
-            <Pressable
-              onPress={addMenu}
-              className="icon-btn"
-              accessibilityRole="button"
-              accessibilityLabel="Create companion"
-              hitSlop={4}
+            <AddPalMenu
+              onCreate={onCreate}
+              isOpen={addMenuOpen}
+              onToggle={setAddMenuOpen}
             >
-              <Plus size={22} color={colors.primaryText} />
-            </Pressable>
+              {({ onPress, ref }) => (
+                <Pressable
+                  ref={ref}
+                  onPress={onPress}
+                  className="icon-btn"
+                  accessibilityRole="button"
+                  accessibilityLabel="Create companion"
+                  hitSlop={4}
+                >
+                  <Plus size={22} color={colors.primaryText} />
+                </Pressable>
+              )}
+            </AddPalMenu>
           </View>
         }
       />
@@ -155,6 +162,9 @@ export function CompanionsScreen({
               <CompanionCard companion={item} onOpen={() => onOpen(item)} />
             </View>
           )}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
         />
       )}
     </SafeAreaView>

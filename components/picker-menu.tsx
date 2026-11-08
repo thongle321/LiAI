@@ -15,6 +15,12 @@ export interface PickerMenuProps<T extends string> {
   onChange: (value: T) => void;
   /** Display text for a value. */
   show: (value: T) => string;
+  /** Public trigger shape:
+   *  - "text" (default): the compact right-side trigger PickerRow uses.
+   *  - "outlined": PocketPal's Selector trigger — a full-width boxed
+   *    control, the same width whether a value is selected or not — for
+   *    pickers that stand alone in a column (sheets). */
+  variant?: "text" | "outlined";
 }
 
 export function PickerMenu<T extends string>(_: PickerMenuProps<T>) {

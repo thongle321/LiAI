@@ -22,16 +22,21 @@ import type { Engine, EngineId } from "./types.ts";
 export class TTSRuntime {
   /** The engine currently holding the native slot; null when released. */
   private active: Engine | null = null;
-  /** FIFO chain of pending operations — guarantees no concurrent swaps. */
+  /** FIFO chain of pending operations - guarantees no concurrent swaps. */
   private opMutex: Promise<unknown> = Promise.resolve();
+  /** When true, the active engine must be reloaded on next acquire. */
+  private stale = false;
 
   /** Run `fn` with `engine` guaranteed to be the active engine. */
   async acquire<T>(engine: Engine, fn: () => Promise<T>): Promise<T> {
     return this.serialize(async () => {
-      if (this.active?.id !== engine.id) {
-        await this.releaseInternal();
+      if (this.active?.id !== engine.id || this.stale) {
+        if (this.active !== null) {
+          await this.releaseInternal();
+        }
         await engine.loadInto();
         this.active = engine;
+        this.stale = false;
       }
       return fn();
     });
@@ -59,10 +64,29 @@ export class TTSRuntime {
     return this.active?.id ?? null;
   }
 
+  /**
+   * Mark `engineId` for a reload at its next `acquire`, when it is the
+   * active engine. Never releases here: releasing under an active stream
+   * hangs its finalize.
+   */
+  invalidate(engineId: EngineId): void {
+    if (engineId === this.active?.id) {
+      this.stale = true;
+    }
+  }
+
+  /** Test/diagnostic reset. */
+  _resetForTests(): void {
+    this.active = null;
+    this.stale = false;
+    this.opMutex = Promise.resolve();
+  }
+
   private async releaseInternal(): Promise<void> {
     const prev = this.active;
     if (prev === null) return;
     this.active = null;
+    this.stale = false;
     // A slot swap must not leave the previous engine audible.
     try {
       await prev.stop();

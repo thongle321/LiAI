@@ -21,9 +21,11 @@ import { ScreenHeader } from "@/components/screen-header.tsx";
 import { ContentColumn } from "@/components/content-column.tsx";
 import { useLocalModelImport } from "@/hooks/useLocalModelImport.ts";
 import { useLoadGuard } from "@/hooks/useLoadGuard.ts";
+import { useMemoryGate } from "@/hooks/useMemoryGate.ts";
+import { readTotalMemory } from "@/services/models/device-tiers.ts";
+import { useInference } from "@/store/inference.ts";
 import { useShallow } from "zustand/react/shallow";
 import { useModelStore } from "@/store/model-store.ts";
-import { useChatStore } from "@/store/chat.ts";
 import { useModelsUi } from "@/store/models-ui.ts";
 import { isProviderActive } from "@/services/search/model-providers.ts";
 import {
@@ -58,14 +60,11 @@ export default function ModelsRoute() {
   const reconcileInterrupted = useModelStore((s) => s.reconcileInterrupted);
   const loadPresets = useModelStore((s) => s.loadPresets);
   const resetModelSettings = useModelStore((s) => s.resetModelSettings);
-  const setActiveModel = useModelStore((s) => s.setActiveModel);
-  const setActiveRemoteApi = useModelStore((s) => s.setActiveRemoteApi);
+  const activateModel = useModelStore((s) => s.activateModel);
+  const offloadModel = useModelStore((s) => s.offloadModel);
   const removeRemoteApi = useModelStore((s) => s.removeRemoteApi);
   const startSpecDownload = useModelStore((s) => s.startSpecDownload);
   const activeHfToken = useModelStore((s) => s.activeHfToken);
-  // Unload must free memory, not just detach: point the model store at
-  // nothing AND drop the engine's cached context so the next Load reloads.
-  const releaseEngine = useChatStore((s) => s.releaseEngine);
   // C1: ONE failure slot for the whole screen — the dialog auto-opens
   // from failed store state (PocketPal's dialog reaction), covering
   // every card type that can fail. Narrow stable read: progress ticks
@@ -88,6 +87,14 @@ export default function ModelsRoute() {
   const router = useRouter();
   const importLocalModel = useLocalModelImport();
   const guard = useLoadGuard();
+  const memoryGate = useMemoryGate();
+  const [totalMemory, setTotalMemory] = useState<number | null>(null);
+
+  // Read total device RAM once on mount
+  useEffect(() => {
+    void readTotalMemory().then(setTotalMemory);
+  }, []);
+
   // Stable selectors plus one useShallow read set: actions subscribe
   // alone, the expansion/filter flags move as one shallow unit.
   const loadUi = useModelsUi((s) => s.load);
@@ -199,7 +206,7 @@ export default function ModelsRoute() {
           item={provider}
           isActive={isProviderActive(activeModelId, item.id)}
           reachable={remoteCaps[item.id]?.reachable}
-          onActivate={() => setActiveRemoteApi(item.id)}
+          onActivate={() => activateModel(item.id)}
           onRemove={() => {
             // removeRemoteApi rejects if SecureStore refuses the delete;
             // the row is already gone either way, so there is nothing to
@@ -214,20 +221,47 @@ export default function ModelsRoute() {
     const spec = specById.get(item.id);
     if (spec === undefined) return null;
     if (spec.downloadStatus === "completed") {
+      // Resolve draft model for memory gate (speculative decoding)
+      let draftModel: ModelSpec | null = null;
+      const inference = useInference.getState();
+      if (inference.speculativeEnabled && inference.draftModelId) {
+        const draft = models.find((m) => m.id === inference.draftModelId);
+        if (draft && draft.downloadStatus === "completed") {
+          draftModel = draft;
+        }
+      }
+
+      // Resolve projector bytes for vision
+      const projectionBytes = spec.projector?.size ?? 0;
+
       return (
         <ModelCard
           key={spec.id}
           item={spec}
           isActive={activeModelId === spec.id}
-          onActivate={() => {
-            setActiveModel(spec.id, "local");
-            // navigate, not push: repeated activations would stack duplicate
-            // /chat entries and make back behave inconsistently.
-            if (autoNavigateToChat) router.navigate("/chat");
+          onActivate={async () => {
+            // Memory gate: confirm before loading if requirement exceeds ceiling
+            memoryGate(
+              {
+                model: spec,
+                draftModel,
+                projectionBytes,
+                totalMemory,
+              },
+              async () => {
+                // Single activation dispatch: routes local models through the
+                // eager-load coordinator (supersession, gate, calibration) and
+                // remote providers through their existing path. The Models
+                // screen no longer chooses between the two paths itself.
+                await activateModel(spec.id);
+                if (autoNavigateToChat) router.navigate("/chat");
+              },
+            );
           }}
           onDeactivate={() => {
-            setActiveModel(null);
-            releaseEngine();
+            // Offload rides the same coordinator: slot released and pointer
+            // cleared inside its lock, so it cannot race an in-flight load.
+            void offloadModel();
           }}
           onSettings={() => setSettingsModel(spec)}
         />

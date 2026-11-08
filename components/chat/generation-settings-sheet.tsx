@@ -35,6 +35,7 @@ import {
   resolveSampler,
   type SamplerParams,
 } from "@/services/inference/sampler.ts";
+import { loadGlobalPreset } from "@/services/chat/preset.ts";
 import type { SessionOverride } from "@/services/chat/session-store.ts";
 import { useShallow } from "zustand/react/shallow";
 import { useInference } from "@/store/inference.ts";
@@ -44,7 +45,10 @@ import { useCompanions } from "@/store/companions.ts";
 import { SamplerRows } from "./sampler-rows.tsx";
 import { Sheet } from "../sheet.tsx";
 import { ResetMenu } from "../reset-menu";
-import { RowSizeProvider, Segmented, SettingsSection } from "../settings-rows.tsx";
+import { RowLabel, RowSizeProvider, SettingsSection } from "../settings-rows.tsx";
+import SegmentedControl from "@expo/ui/community/segmented-control";
+import { useColors, useColorScheme } from "@/themes/tokens.ts";
+import * as Haptics from "expo-haptics";
 
 type Mode = "companion" | "session" | "preset";
 
@@ -83,23 +87,18 @@ export function GenerationSettingsSheet({
   // PocketPal: with an active companion the source toggle shows (companion ⇄ custom);
   // without one the sheet keeps LiAI's session/preset split.
   const hasCompanion = companion !== undefined;
+  const colors = useColors();
+  const scheme = useColorScheme();
   // One useShallow unit: all five fields feed the draft, so the sheet
   // re-renders only when one of them changes.
-  const {
-    sampler: preset,
-    jinjaEnabled,
-    setSampler,
-    setJinjaEnabled,
-    load,
-  } = useInference(
+  const { jinjaEnabled, setJinjaEnabled, load } = useInference(
     useShallow((s) => ({
-      sampler: s.sampler,
       jinjaEnabled: s.jinjaEnabled,
-      setSampler: s.setSampler,
       setJinjaEnabled: s.setJinjaEnabled,
       load: s.load,
     })),
   );
+  const [preset, setPreset] = useState<SamplerParams>({ ...DEFAULT_SAMPLER });
   const [mode, setMode] = useState<Mode>("session");
   const [override, setOverride] = useState<Partial<SamplerParams> | null>(null);
   // The WHOLE override as loaded (sampler + thinking + effort): Save
@@ -139,11 +138,23 @@ export function GenerationSettingsSheet({
     void load();
   }, []);
 
-  // Load this conversation's override whenever the sheet opens on it.
+  // Load global preset from KV store
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const resolved = await loadGlobalPreset();
+      if (!cancelled) setPreset(resolved);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible]);
+
+  // Load this conversation'S override whenever the sheet opens on it.
   // The override carries sampler + thinking + effort; this sheet edits
   // the SAMPLER layer, so it reads `.sampler` and commits back through
   // the whole override (Save must not erase thinking/effort it does not
-  // show). Skipped in 'companion' mode: the companion's settings have no session
+  // show). Skipped in 'companion' mode: the companion'S settings have no session
   // override to read.
   useEffect(() => {
     if (!visible || mode !== "session") return;
@@ -163,7 +174,7 @@ export function GenerationSettingsSheet({
   }, [visible, mode, sessionId]);
 
   // The sheet opens on the source the conversation actually has: 'companion'
-  // when a persona is bound (PocketPal's default), else 'session'.
+  // when a persona is bound (PocketPal'S default), else 'session'.
   useEffect(() => {
     if (!visible) return;
     setMode(hasCompanion ? "companion" : "session");
@@ -225,7 +236,7 @@ export function GenerationSettingsSheet({
     if (isSession) {
       void (async () => {
         const { getSessionStore } = await import("../../services/chat/tinybase.ts");
-      const store = await getSessionStore().catch(() => null);
+        const store = await getSessionStore().catch(() => null);
         if (store && sessionId) {
           await store
             .setSessionOverride(sessionId, {
@@ -236,7 +247,14 @@ export function GenerationSettingsSheet({
         }
       })();
     } else {
-      setSampler(current.sampler);
+      void (async () => {
+        const { getSessionStore } = await import("../../services/chat/tinybase.ts");
+        const store = await getSessionStore().catch(() => null);
+        if (store) {
+          await store.saveGlobalChatSettings(current.sampler).catch(() => null);
+          setPreset(current.sampler);
+        }
+      })();
     }
     // JINJA is a global and commits in either mode. The include-thinking
     // flag needs no work here: it lives INSIDE the sampler object the
@@ -253,7 +271,21 @@ export function GenerationSettingsSheet({
     if (!commitDraft()) return;
     // PocketPal order: save the session, apply the same values to the
     // preset, then confirm.
-    if (draft) setSampler(draft.sampler);
+    void (async () => {
+      try {
+        const { getSessionStore } = await import("../../services/chat/tinybase.ts");
+        const store = await getSessionStore().catch(() => null);
+        if (store && sessionId) {
+          await store.applySessionSnapshotToGlobal(sessionId);
+          if (draft) setPreset(draft.sampler);
+        } else if (store && draft) {
+          await store.saveGlobalChatSettings(draft.sampler);
+          setPreset(draft.sampler);
+        }
+      } catch {
+        if (draft) setPreset(draft.sampler);
+      }
+    })();
     onClose();
     Alert.alert(
       "Saved as preset",
@@ -280,7 +312,7 @@ export function GenerationSettingsSheet({
     setDraft((d) => (d ? { ...d, jinja: on } : d));
   }
 
-  // Resets touch the DRAFT only — PocketPal's reset buttons edit the form,
+  // Resets touch the DRAFT only — PocketPal'S reset buttons edit the form,
   // Save commits it.
   function resetToPreset(): void {
     setDraft((d) => (d ? { ...d, sampler: { ...preset } } : d));
@@ -290,105 +322,64 @@ export function GenerationSettingsSheet({
     setDraft((d) => (d ? { ...d, sampler: { ...DEFAULT_SAMPLER } } : d));
   }
 
+  // PocketPal parity: use Sheet.Actions as a child component for proper scrolling
   return (
     <Sheet
       visible={visible}
       onClose={onClose}
       title={title}
-      actions={
-        /* Pinned action row (PocketPal's Sheet.Actions) — see Sheet.tsx.
-           'companion' mode owns no settings to save or reset: the row shows
-           only the close affordance via the sheet's own X. */
-        isCompanion ? (
-          <View />
-        ) : (
-        <View className="flex-row items-center justify-between">
-          {isSession ? (
-            <ResetMenu
-              items={[
-                { label: "Reset to preset", onPress: resetToPreset },
-                { label: "Reset to System Defaults", onPress: resetToDefault },
-              ]}
-            />
-          ) : (
-            <Pressable
-              onPress={resetToDefault}
-              className="min-h-12 justify-center"
-              accessibilityRole="button"
-              accessibilityLabel="Reset to System Defaults"
-            >
-              <Text className="text-body">
-                Reset to System Defaults
-              </Text>
-            </Pressable>
-          )}
-          <View className="flex-row items-center gap-2">
-            {isSession ? (
-              <Pressable
-                onPress={handleSaveAsPreset}
-                className="btn btn--secondary active:opacity-80"
-                accessibilityRole="button"
-                accessibilityLabel="Save as preset"
-              >
-                <Text className="text-body">Save as preset</Text>
-              </Pressable>
-            ) : null}
-            <Pressable
-              onPress={handleSave}
-              className="btn btn--primary active:opacity-80"
-              style={{
-                shadowColor: "#000000",
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.06,
-                shadowRadius: 6,
-                elevation: 2,
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Save"
-            >
-              <Text className="text-action">Save</Text>
-            </Pressable>
-          </View>
-        </View>
-        )
-      }
+      testID="generation-settings-sheet"
     >
       {/* PocketPal: the source control sits ABOVE the card, not inside it
           (styles.settingsSourceContainer: horizontal margin, 16 below). */}
       <View className="px-3 mb-4">
         {/* Their settingsSource label is labelMedium 12 — one rung above
-            the card's 11, so this zone pins it separately. */}
+            the card'S 11, so this zone pins it separately. */}
         <RowSizeProvider label="text-body-sm" desc="text-body-sm">
-          <Segmented<Mode>
-            label="Settings source"
-            description={
-              hasSession
-                ? isCompanion
-                  ? `${companion.name}'s generation settings apply. Choose Session to tune this conversation on its own.`
-                  : undefined
-                : "Start a conversation to give it its own settings. Until then these are the preset."
-            }
-            value={mode}
-            options={availableModes}
-            displayFor={(m) =>
-              m === "companion"
-                ? `Companion (${companion?.name ?? "persona"})`
-                : m === "session"
-                  ? "Session"
-                  : "Preset"
-            }
-            onPick={(m) => {
-              setMode(m);
-              // PocketPal parity: the toggle writes the source
-              // IMMEDIATELY, not on Save — 'custom' takes effect the
-              // moment the user asks for it, and back to 'companion' makes
-              // the session follow the persona again (its stored
-              // override stays, inert, for the next flip).
-              if (hasSession && (m === "companion" || m === "session")) {
-                void setSettingsSource(m === "companion" ? "companion" : "custom");
+          <View className="py-2">
+            <RowLabel
+              label="Settings source"
+              description={
+                hasSession
+                  ? isCompanion
+                    ? `${companion.name}'s generation settings apply. Choose Session to tune this conversation on its own.`
+                    : undefined
+                  : "Start a conversation to give it its own settings. Until then these are the preset."
               }
-            }}
-          />
+            />
+            <View className="mt-2">
+              <SegmentedControl
+                testID="settings-source-segmented"
+                values={availableModes.map((m) =>
+                  m === "companion"
+                    ? `Companion (${companion?.name ?? "persona"})`
+                    : m === "session"
+                      ? "Session"
+                      : "Preset",
+                )}
+                selectedIndex={Math.max(0, availableModes.indexOf(mode))}
+                appearance={scheme}
+                tintColor={colors.primary}
+                style={{ width: "100%" }}
+                onChange={(event) => {
+                  void Haptics.selectionAsync();
+                  const next = availableModes[event.nativeEvent.selectedSegmentIndex];
+                  if (next === undefined) return;
+                  setMode(next);
+                  // PocketPal parity: the toggle writes the source
+                  // IMMEDIATELY, not on Save — 'custom' takes effect the
+                  // moment the user asks for it, and back to 'companion' makes
+                  // the session follow the persona again (its stored
+                  // override stays, inert, for the next flip).
+                  if (hasSession && (next === "companion" || next === "session")) {
+                    void setSettingsSource(
+                      next === "companion" ? "companion" : "custom",
+                    );
+                  }
+                }}
+              />
+            </View>
+          </View>
         </RowSizeProvider>
       </View>
       {serverDefaultsNote !== null ? (
@@ -398,21 +389,79 @@ export function GenerationSettingsSheet({
       ) : null}
       {/* One divider-less card, 24px rhythm — CompletionSettings' shape.
           In 'companion' mode the rows are INERT (no pointer events, dimmed):
-          the values shown are the companion's, and a slider that moved and
+          the values shown are the companion'S, and a slider that moved and
           snapped back would be a lie. */}
       <SettingsSection plain>
         {draft ? (
           <View pointerEvents={isCompanion ? "none" : "auto"} className={isCompanion ? "opacity-40" : undefined}>
             <SamplerRows
               sampler={draft.sampler}
-              jinjaEnabled={draft.jinja}
+              // JINJA is global, so in 'companion' mode it is not this
+              // companion's value to show — the row is omitted, not dimmed.
+              jinja={isCompanion ? undefined : { enabled: draft.jinja, onChange: setDraftJinja }}
               errors={errors}
               onChange={apply}
-              onJinjaChange={setDraftJinja}
             />
           </View>
         ) : null}
       </SettingsSection>
+
+      <Sheet.Actions>
+        {/* 'companion' mode owns no settings to save or reset: the row shows
+           only the close affordance via the sheet'S own X. */}
+        {isCompanion ? (
+          <View />
+        ) : (
+          <View className="flex-row items-center justify-between">
+            {isSession ? (
+              <ResetMenu
+                items={[
+                  { label: "Reset to preset", onPress: resetToPreset },
+                  { label: "Reset to System Defaults", onPress: resetToDefault },
+                ]}
+              />
+            ) : (
+              <Pressable
+                onPress={resetToDefault}
+                className="min-h-12 justify-center"
+                accessibilityRole="button"
+                accessibilityLabel="Reset to System Defaults"
+              >
+                <Text className="text-body">
+                  Reset to System Defaults
+                </Text>
+              </Pressable>
+            )}
+            <View className="flex-row items-center gap-2">
+              {isSession ? (
+                <Pressable
+                  onPress={handleSaveAsPreset}
+                  className="btn btn--secondary active:opacity-80"
+                  accessibilityRole="button"
+                  accessibilityLabel="Save as preset"
+                >
+                  <Text className="text-body">Save as preset</Text>
+                </Pressable>
+              ) : null}
+              <Pressable
+                onPress={handleSave}
+                className="btn btn--primary active:opacity-80"
+                style={{
+                  shadowColor: "#000000",
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.06,
+                  shadowRadius: 6,
+                  elevation: 2,
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Save"
+              >
+                <Text className="text-action">Save</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+      </Sheet.Actions>
     </Sheet>
   );
 }

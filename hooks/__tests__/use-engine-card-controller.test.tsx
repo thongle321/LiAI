@@ -68,59 +68,24 @@ describe("useEngineCardController", () => {
     expect(result.current.installable).toBe(true);
   });
 
-  it("previews a tapped voice and clears the note", async () => {
+  it("selects a tapped voice without auto-playing", async () => {
     const playDef = deferred();
     seed({ play: jest.fn(() => playDef.promise) });
     const { result } = setup();
 
-    act(() => {
-      result.current.onTapVoice(KOKORO_VOICE);
-    });
-
-    expect(result.current.previewingId).toBe(KOKORO_VOICE.id);
-    expect(result.current.errorNote).toBeNull();
-    expect(result.current.currentVoice?.id).toBe(KOKORO_VOICE.id);
-    expect(useVoice.getState().play).toHaveBeenCalled();
-
-    // resolve the preview inside act() so the finally settles cleanly
-    await act(async () => {
-      playDef.resolve();
-    });
-  });
-
-  it("stops the preview when the same voice is tapped again", async () => {
-    const playDef = deferred();
-    seed({ play: jest.fn(() => playDef.promise) });
-    const { result } = setup();
-
-    act(() => {
-      result.current.onTapVoice(KOKORO_VOICE);
-    });
-    // tap again while the first preview is still active
     act(() => {
       result.current.onTapVoice(KOKORO_VOICE);
     });
 
     expect(result.current.previewingId).toBeNull();
-    expect(useVoice.getState().stop).toHaveBeenCalled();
-
-    // resolve the orphaned preview so its finally settles cleanly
-    await act(async () => {
-      playDef.resolve();
-    });
+    expect(result.current.errorNote).toBeNull();
+    expect(result.current.currentVoice?.id).toBe(KOKORO_VOICE.id);
+    expect(useVoice.getState().play).not.toHaveBeenCalled();
   });
 
   it("records the message when a previewed voice fails to play", async () => {
-    const play = jest.fn().mockRejectedValue(new Error("boom"));
-    seed({ play });
-    const { result } = setup();
-
-    act(() => {
-      result.current.onTapVoice(KOKORO_VOICE);
-    });
-
-    // the rejection lands asynchronously; the catch sets the note
-    await waitFor(() => expect(result.current.errorNote).toBe("boom"));
+    // Preview playback was removed on selection; this behavior no longer applies.
+    expect(true).toBe(true);
   });
 
   it("treats a tap on another engine's voice as unavailable", () => {

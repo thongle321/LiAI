@@ -5,33 +5,21 @@
  *  state mapping, no redesign), the per-phase status title + hint strings
  *  with the error-variant slot for the session's last issue, the muted
  *  override (Microphone off), live-region phase announcements for screen
- *  readers, the mic-mute control, and the drag-handle row
- *  the collapse-to-bar gesture enters through. Everything is read from the
- *  session circuit the caller passes (the store-backed surface of
- *  hooks/useVoiceMode); the only local state is the caption toggle.
- *
- *  The Voice tab renders its session through this component; the chat
- *  surface never mounts it (contrast the research doc's overlay framing,
- *  rejected in the parity spec).
+ *  readers, the mic-mute control, and the End control. Collapse-to-bar was
+ *  removed: voice is its own tab, so there is no bar to collapse into.
  */
 
-import { useEffect, useState, type ReactElement } from "react";
-import { BackHandler, Pressable, ScrollView, Text, View } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
-import { scheduleOnRN } from "react-native-worklets";
-import { openSettings } from "expo-linking";
+import { useEffect, type ReactElement } from "react";
+import { AccessibilityInfo, Pressable, ScrollView, Text, View } from "react-native";
+import Animated from "react-native-reanimated";
+import { X } from "lucide-react-native";
 
 import {
   MOTION_DURATION_MS,
   fadeEntering,
 } from "@/utils/motion.ts";
-import { pullsCollapse } from "@/utils/voice-collapse.ts";
+import { useColors } from "@/themes/tokens.ts";
+import { openSettings } from "expo-linking";
 import { useVoiceLevels } from "expo-thinking-orbs";
 import type { VoiceModeSurface } from "@/hooks/useVoiceMode.ts";
 import {
@@ -54,20 +42,19 @@ export function VoiceFullView({
   mic,
   voice,
 }: VoiceFullViewProps): ReactElement {
+  const colors = useColors();
   const {
     phase,
     micMuted,
-    heard,
     reply,
     issue,
     needsMicSettings,
     requestEntry,
     tapCloud,
     toggleMute,
-    collapse,
+    end,
   } = voice;
   const open = phase !== "closed";
-  const speaking = phase === "speaking";
   // An issue with no live session is a dead gate — the orb freezes as
   // `failed`. Mid-session problems keep the shell live; the text explains.
   const failed = issue !== null && !open;
@@ -82,77 +69,16 @@ export function VoiceFullView({
     }
   };
 
-  // Captions: tap the heard line to toggle the live transcript.
-  const [captionsOn, setCaptionsOn] = useState(true);
-
-  // Collapse to the in-tab bar (spec: voice-tab hands-free parity). The
-  // gesture is scoped to the handle row because the session view scrolls —
-  // the reference drags the whole overlay; an in-tab divergence. The pull
-  // shows as rubber-band resistance on the row; the collapse / spring-back
-  // hop happens in onEnd. Tapping the row is the same exit.
-  const reduceMotion = useReducedMotion();
-  const handleDrag = useSharedValue(0);
-  const handleStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: handleDrag.value }],
-  }));
-  const pullDown = Gesture.Pan()
-    .activeOffsetY(15)
-    .withTestId("voice-view-pull")
-    .onUpdate((event) => {
-      if (!reduceMotion) {
-        // Rubber-band: the row follows at a fraction of the finger so the
-        // pull reads as resistance, not as progress.
-        handleDrag.value = Math.max(0, event.translationY) / 3;
-      }
-    })
-    .onEnd((event) => {
-      if (pullsCollapse(event.translationY, event.velocityY)) {
-        scheduleOnRN(collapse);
-        return;
-      }
-      if (!reduceMotion) {
-        handleDrag.value = withSpring(0);
-      }
-    });
-
+  // Announce status changes to screen readers (PocketPal parity).
   useEffect(() => {
     if (!open) return;
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      collapse();
-      return true;
-    });
-    return () => subscription.remove();
-  }, [open, collapse]);
+    const title = voiceModeStateLabel(phase, micMuted);
+    const message = issue !== null ? `${title}. ${issue}` : title;
+    void AccessibilityInfo.announceForAccessibility(message);
+  }, [open, phase, micMuted, issue]);
 
   return (
     <ScrollView contentContainerClassName="flex-1 items-center justify-center px-8">
-      {/* The collapse row (issue 04): drag handle + hint, tap = collapse,
-          pull-down = collapse at the reference's thresholds. Mounted only
-          in a live session — the closed gate has nothing to collapse. */}
-      {open && (
-        <GestureDetector gesture={pullDown}>
-          <Pressable
-            onPress={collapse}
-            accessibilityRole="button"
-            accessibilityLabel="Collapse voice view"
-            testID="voice-view-collapse"
-            className="items-center py-3"
-          >
-            <Animated.View
-              style={handleStyle}
-              className="items-center"
-            >
-              <View
-                className="h-[5px] w-10 rounded-full bg-border"
-              />
-              <Text className="mt-1 font-sans text-xs text-secondary-text">
-                Pull down to collapse
-              </Text>
-            </Animated.View>
-          </Pressable>
-        </GestureDetector>
-      )}
-
       <VoiceOrbHero
         phase={phase}
         failed={failed}
@@ -185,18 +111,6 @@ export function VoiceFullView({
           {voiceModeHintLabel(phase, micMuted)}
         </Text>
       )}
-      {/* Heard slot never unmounts: nbsp holds the line when silent.
-          Tap to toggle captions. Hidden while the machine speaks — the
-          reply caption takes over below. */}
-      <Pressable
-        onPress={() => setCaptionsOn((v) => !v)}
-        accessibilityRole="button"
-        accessibilityLabel={captionsOn ? "Hide captions" : "Show captions"}
-      >
-        <Text className="mt-3 min-h-12 text-center font-sans text-body-md text-secondary-text">
-          {captionsOn && heard !== "" && !speaking ? heard : " "}
-        </Text>
-      </Pressable>
 
       {reply !== null && reply !== "" && (
         <Text className="mt-4 text-center font-sans text-body-md text-primary-text">
@@ -238,11 +152,20 @@ export function VoiceFullView({
         </View>
       )}
 
-      {/* The mute control replaces its reserved slot (issue 05): toggling
-          mutes the capture without ending the session; the orb above
-          renders the greyed, frozen treatment while it is live. */}
+      {/* The mute + End controls (PocketPal full-view control row). */}
       {open && (
-        <VoiceMuteControl muted={micMuted} onToggle={toggleMute} size="full" />
+        <View className="mt-8 flex-row items-center gap-6">
+          <VoiceMuteControl muted={micMuted} onToggle={toggleMute} size="full" />
+          <Pressable
+            onPress={() => void end()}
+            accessibilityRole="button"
+            accessibilityLabel="End voice session"
+            testID="voice-end"
+            className="h-16 w-16 items-center justify-center rounded-full bg-error active:opacity-80"
+          >
+            <X size={24} color={colors.onPrimary} />
+          </Pressable>
+        </View>
       )}
     </ScrollView>
   );

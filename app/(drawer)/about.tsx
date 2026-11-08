@@ -22,7 +22,7 @@ export default function AboutScreen() {
           A calm mind.{"\n"}A smarter everyday.
         </Text>
         <Text className="mt-6 text-center text-quiet">
-          Your AI runs on this device. Nothing leaves it unless you ask.
+          Your AI runs on this device.
         </Text>
       </View>
     </SafeAreaView>

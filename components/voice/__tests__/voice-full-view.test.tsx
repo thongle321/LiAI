@@ -14,13 +14,7 @@
  */
 
 import { fireEvent, render, screen } from "@testing-library/react-native";
-import { BackHandler } from "react-native";
-import { State } from "react-native-gesture-handler";
-import {
-  fireGestureHandler,
-  getByGestureTestId,
-} from "react-native-gesture-handler/jest-utils";
-import { openSettings, } from "expo-linking";
+import { openSettings } from "expo-linking";
 
 import type { useVoiceMode } from "@/hooks/useVoiceMode.ts";
 import type { VoiceModeSheet } from "@/hooks/useVoiceMode.ts";
@@ -42,8 +36,6 @@ const actions = {
   openModels: jest.fn(() => {}),
   tapCloud: jest.fn(() => {}),
   toggleMute: jest.fn(() => {}),
-  collapse: jest.fn(() => {}),
-  expand: jest.fn(() => {}),
   end: jest.fn(async () => {}),
 };
 
@@ -162,56 +154,19 @@ describe("VoiceFullView orb phase mapping + tap dispatch", () => {
   });
 });
 
-describe("VoiceFullView collapse (issue 04)", () => {
-  const pull = (translationY: number, velocityY = 0) =>
-    fireGestureHandler(getByGestureTestId("voice-view-pull"), [
-      { state: State.BEGAN, translationY: 0, velocityY: 0 },
-      { state: State.ACTIVE, translationY: translationY / 2, velocityY },
-      { state: State.END, translationY, velocityY },
-    ]);
-
-  it("the handle row is live in a session: tapping it collapses", () => {
+describe("VoiceFullView end control", () => {
+  it("the End button is live in a session and hands end off to the controller", () => {
     renderView(surface({ phase: "listening" }));
 
-    expect(screen.getByLabelText("Collapse voice view")).toBeOnTheScreen();
-    fireEvent.press(screen.getByLabelText("Collapse voice view"));
-    expect(actions.collapse).toHaveBeenCalledTimes(1);
+    const end = screen.getByTestId("voice-end");
+    fireEvent.press(end);
+    expect(actions.end).toHaveBeenCalledTimes(1);
   });
 
-  it("the gate is closed: nothing collapses", () => {
+  it("the End button stays out of the closed gate", () => {
     renderView(surface({ phase: "closed" }));
 
-    expect(screen.queryByLabelText("Collapse voice view")).not.toBeOnTheScreen();
-  });
-
-  it("a long pull collapses; a short slow pull spring back", () => {
-    renderView(surface({ phase: "listening" }));
-
-    pull(120);
-    expect(actions.collapse).toHaveBeenCalledTimes(1);
-
-    actions.collapse.mockClear();
-    pull(30, 100);
-    expect(actions.collapse).not.toHaveBeenCalled();
-  });
-
-  it("a quick flick collapses however short", () => {
-    renderView(surface({ phase: "listening" }));
-
-    pull(30, 1200);
-    expect(actions.collapse).toHaveBeenCalledTimes(1);
-  });
-
-  it("Android back collapses the view", () => {
-    const addListener = jest.spyOn(BackHandler, "addEventListener");
-    renderView(surface({ phase: "listening" }));
-
-    const add = addListener.mock.calls.at(-1)!;
-    expect(add[0]).toBe("hardwareBackPress");
-    const handler = add[1] as () => boolean;
-    expect(handler()).toBe(true);
-    expect(actions.collapse).toHaveBeenCalledTimes(1);
-    addListener.mockRestore();
+    expect(screen.queryByTestId("voice-end")).not.toBeOnTheScreen();
   });
 });
 

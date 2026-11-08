@@ -10,7 +10,7 @@
  *  entry gate re-asks the mic on every press, so this sheet needn't.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppState, Pressable, Text, View } from "react-native";
 
 import { setupTierFor } from "@/store/asr.ts";
@@ -19,6 +19,8 @@ import { useVoice } from "@/store/voice.ts";
 import { Sheet } from "@/components/sheet.tsx";
 import { WhisperModelRow } from "@/components/voice/whisper-model-row.tsx";
 import { ensureMicAccess } from "@/services/voice/mic-access.ts";
+import { hasVoiceFile, ensureVoiceFile } from "@/services/tts/voiceFiles.ts";
+import type { Voice } from "@/services/tts/types.ts";
 
 export function VoiceSetupSheet({
   visible,
@@ -30,10 +32,16 @@ export function VoiceSetupSheet({
   /** Called once the tier is downloaded (if needed) and the mic is granted. */
   onDone: () => void;
 }) {
+  type VoiceFileState = "present" | "missing" | "downloading" | "failed";
+  const voiceKey = (v: Voice | null) => (v ? `${v.engine}:${v.id}` : null);
+
   const tier = useAsrStore((s) => setupTierFor(s.selectedTier, s.downloadStates));
   const tierReady = useAsrStore((s) => s.isSelectedTierReady);
-  const downloading = useAsrStore((s) => s.downloadStates[tier] === "downloading");
+  const [file, setFile] = useState<VoiceFileState | null>(null);
+  const downloading =
+    useAsrStore((s) => s.downloadStates[tier] === "downloading") || file === "downloading";
   const downloadModel = useAsrStore((s) => s.downloadModel);
+
   const currentVoice = useVoice((s) => s.currentVoice);
   const voiceName = currentVoice?.name ?? "System voice";
   const [mic, setMic] = useState<"pending" | "granted" | "refused">("pending");
@@ -42,12 +50,44 @@ export function VoiceSetupSheet({
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
 
+  const checkedVoice = currentVoice && currentVoice.engine !== "system" ? voiceKey(currentVoice) : null;
+
+  useEffect(() => {
+    setFile(null);
+    const v = currentVoice;
+    if (!visible || !v || v.engine === "system") {
+      return;
+    }
+    let active = true;
+    void hasVoiceFile(v).then((present) => {
+      if (active) setFile(present ? "present" : "missing");
+    });
+    return () => {
+      active = false;
+    };
+  }, [visible, checkedVoice]);
+
+  const setupInterrupted = () =>
+    !visibleRef.current || AppState.currentState === "background";
+
   const proceed = async () => {
+    const target = currentVoice;
     setBusy(true);
     try {
       if (!tierReady) {
         await downloadModel(tier);
-        if (!visibleRef.current || AppState.currentState === "background") {
+        if (!useAsrStore.getState().isSelectedTierReady || setupInterrupted()) {
+          return;
+        }
+      }
+      if (target && target.engine !== "system") {
+        if (file !== "present") setFile("downloading");
+        const downloaded = await ensureVoiceFile(target);
+        if (voiceKey(useVoice.getState().currentVoice) !== voiceKey(target)) {
+          return;
+        }
+        setFile(downloaded ? "present" : "failed");
+        if (!downloaded || setupInterrupted()) {
           return;
         }
       }
@@ -86,7 +126,15 @@ export function VoiceSetupSheet({
             Voice
           </Text>
           <Text className="mt-1 text-quiet">
-            {voiceName} · ready
+            {currentVoice && currentVoice.engine !== "system"
+              ? file === "present"
+                ? `${voiceName} — ready`
+                : file === "failed"
+                  ? `${voiceName} — download failed`
+                  : file === "downloading"
+                    ? `${voiceName} — downloading`
+                    : `${voiceName} — not downloaded`
+              : `${voiceName} — ready`}
           </Text>
         </View>
         <Text

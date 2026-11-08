@@ -2,6 +2,7 @@
 
 import { createChatStore } from "../chat.ts";
 import { startStreamYield } from "../chat/send.ts";
+import { useInference } from "../inference.ts";
 import type { TurnRunner } from "../chat/types.ts";
 import { flushTick } from "@/jest/fixtures/search-transport.ts";
 import {
@@ -354,6 +355,73 @@ describe("chat store turns", () => {
       code: "llm_error",
       message: "boom",
     });
+  });
+
+  it("turns a thrown 'Context is full' into a banner turn, not a raw error", async () => {
+    // PocketPal parity: prompt-processing overflow throws before a token
+    // exists. The banner owns the explanation, so no "Completion failed"
+    // dump reaches the snackbar and the bubble is not an error bubble.
+    const { runTurn } = fakeRunTurn([{ fail: "Context is full" }]);
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+    });
+    await useStore.getState().send("hi");
+    const state = useStore.getState();
+    const bubble = state.messages[1];
+    expect(state.sending).toBe(false);
+    expect(state.chatWarning).toBe(null);
+    expect(bubble.error).toBe(undefined);
+    expect(bubble.streaming).toBe(false);
+    expect(bubble.outcome).toEqual({ contextFull: true });
+    // `used` is pinned to the window the prompt filled, so the banner's
+    // freshness gate holds and clears when the window is raised.
+    expect(bubble.usage?.promptTokens).toBe(useInference.getState().nCtx);
+  });
+
+  it("keeps a partial reply when the window runs out mid-stream", async () => {
+    const runTurn: TurnRunner = async (_text, _paths, onToken) => {
+      onToken?.("half an answer");
+      throw new Error("Context is full");
+    };
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+    });
+    await useStore.getState().send("hi");
+    const bubble = useStore.getState().messages[1];
+    expect(bubble.text).toBe("half an answer");
+    expect(bubble.error).toBe(undefined);
+    expect(bubble.outcome).toEqual({ contextFull: true, interrupted: true });
+  });
+
+  it("explains a truncated tool call instead of dumping the parser error", async () => {
+    const { runTurn } = fakeRunTurn([
+      { fail: "Failed to parse tool call arguments as JSON" },
+    ]);
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+    });
+    await useStore.getState().send("hi");
+    const state = useStore.getState();
+    // The empty turn is gone; only the user's question remains.
+    expect(state.messages.map((m) => m.role)).toEqual(["user"]);
+    expect(state.chatWarning?.message).toContain("Tool call cut off");
+    expect(state.chatWarning?.severity).toBe("warning");
+  });
+
+  it("explains a failed draft context instead of dumping the native error", async () => {
+    const { runTurn } = fakeRunTurn([{ fail: "Failed to create draft context" }]);
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+    });
+    await useStore.getState().send("hi");
+    const state = useStore.getState();
+    expect(state.messages.map((m) => m.role)).toEqual(["user"]);
+    expect(state.chatWarning?.message).toContain("speculative decoding");
+    expect(state.chatWarning?.recoverable).toBe(false);
   });
 
   it("retry on a failed assistant reruns the prior question", async () => {

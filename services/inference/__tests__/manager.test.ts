@@ -194,3 +194,103 @@ describe("EngineManager", () => {
     expect(loads).toEqual(2);
   });
 });
+
+describe("EngineManager serialization", () => {
+  /** Loader counting loads and per-file releases, for serialization cases.
+   *  With a `started` signal, resolves it when the first load begins —
+   *  so a test can interleave while that load is still unresolved. */
+  function countingLoader(started?: () => void) {
+    const engines = new Map<string, ReturnType<typeof fakeEngine>>();
+    const released: string[] = [];
+    let loads = 0;
+    let fired = false;
+    const loader = {
+      loadLocal: async (file: string) => {
+        loads += 1;
+        if (started && !fired) {
+          fired = true;
+          started();
+        }
+        const engine = fakeEngine();
+        engines.set(file, engine);
+        return {
+          engine,
+          release: async () => {
+            released.push(file);
+          },
+        };
+      },
+      createRemote: () => fakeEngine(),
+    };
+    return { engines, released, loader, loadsCount: () => loads };
+  }
+
+  it("two overlapping ensures for different models yield one switch", async () => {
+    const { engines, released, loader, loadsCount } = countingLoader();
+    const manager = new EngineManager(loader, async () => null);
+    const first = manager.ensure({ kind: "local", fileName: "a.gguf" });
+    const second = manager.ensure({ kind: "local", fileName: "b.gguf" });
+    const [engineA, engineB] = await Promise.all([first, second]);
+    expect(engineA).toBe(engines.get("a.gguf"));
+    expect(engineB).toBe(engines.get("b.gguf"));
+    // One switch: B torn its predecessor down exactly once, not raced over it.
+    expect(released).toEqual(["a.gguf"]);
+    expect(engines.get("a.gguf")?.stops).toEqual(1);
+    expect(loadsCount()).toEqual(2);
+    // The winner's engine is what a subsequent caller receives — no reload.
+    const again = await manager.ensure({ kind: "local", fileName: "b.gguf" });
+    expect(again).toBe(engineB);
+    expect(loadsCount()).toEqual(2);
+  });
+
+  it("a release arriving mid-ensure waits and clears the installed slot", async () => {
+    let markStarted: () => void = () => {};
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const { released, loader, loadsCount } = countingLoader(markStarted);
+    const manager = new EngineManager(loader, async () => null);
+    // Invoke the release while the ensure's load is still unresolved.
+    const ensurePromise = manager.ensure({ kind: "local", fileName: "a.gguf" });
+    await started;
+    const releasePromise = manager.releaseAll();
+    await Promise.all([ensurePromise, releasePromise]);
+    // The queued release ran after ensure completed: it tore the installed
+    // context down and left the slot empty — not a no-op against nothing.
+    expect(released).toEqual(["a.gguf"]);
+    await manager.ensure({ kind: "local", fileName: "a.gguf" });
+    expect(loadsCount()).toEqual(2);
+  });
+
+  it("a rejecting teardown does not break the queue", async () => {
+    let loads = 0;
+    const manager = new EngineManager(
+      {
+        loadLocal: async (file) => {
+          loads += 1;
+          if (file === "bad.gguf") throw new Error("load failed");
+          return { engine: fakeEngine(), release: async () => {} };
+        },
+        createRemote: () => fakeEngine(),
+      },
+      async () => null,
+    );
+    const failing = manager.ensure({ kind: "local", fileName: "bad.gguf" });
+    const queued = manager.ensure({ kind: "local", fileName: "b.gguf" });
+    await expect(failing).rejects.toThrow("load failed");
+    // The queued ensure still runs — and still swaps the slot to its model.
+    await expect(queued).resolves.toBeTruthy();
+    const again = await manager.ensure({ kind: "local", fileName: "b.gguf" });
+    expect(loads).toEqual(2); // the queued load happened exactly once
+    expect(again).toBeTruthy();
+  });
+
+  it("release after release is a no-op against the empty slot", async () => {
+    const { released, loader } = countingLoader();
+    const manager = new EngineManager(loader, async () => null);
+    await manager.ensure({ kind: "local", fileName: "a.gguf" });
+    await manager.releaseAll();
+    await manager.releaseAll();
+    expect(released).toEqual(["a.gguf"]); // one native teardown, not two
+  });
+});

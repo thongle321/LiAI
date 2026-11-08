@@ -19,7 +19,8 @@ export async function shareCompanions(companions: Companion[]): Promise<void> {
   const path = `${dir}/${filename}`;
   // SAFETY: "utf8" is the legacy EncodingType.UTF8 literal; the options
   // bag is structural so the literal needs only this bridge.
-  await FS.writeAsStringAsync(path, toCompanionsJson(companions), {
+  const json = await toCompanionsJson(companions);
+  await FS.writeAsStringAsync(path, json, {
     encoding: "utf8",
   } as WriteOptions);
   if (!(await Sharing.isAvailableAsync())) {

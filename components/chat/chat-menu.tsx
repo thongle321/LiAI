@@ -20,6 +20,7 @@ import {
   Text,
   TextInput,
   View,
+  type ViewInstance,
 } from "react-native";
 import Animated from "react-native-reanimated";
 import {
@@ -122,7 +123,7 @@ export function ChatMenu({
   onOpenSearch: () => void;
 }) {
   const colors = useColors();
-  const btnRef = useRef<View | null>(null);
+  const btnRef = useRef<ViewInstance | null>(null);
   const [open, setOpen] = useState(false);
   // The panel unmounts with `open` so `exiting` plays, while the Modal
   // lingers for exactly the exit duration. Same pairing as the models
@@ -144,8 +145,7 @@ export function ChatMenu({
   const models = useModelStore((s) => s.models);
   const remoteApis = useModelStore((s) => s.remoteApis);
   const activeModelId = useModelStore((s) => s.activeModelId);
-  const setActiveModel = useModelStore((s) => s.setActiveModel);
-  const setActiveRemoteApi = useModelStore((s) => s.setActiveRemoteApi);
+  const activateModel = useModelStore((s) => s.activateModel);
   const importChat = useChatImport();
 
   const hasSession = sessionId !== null;
@@ -358,8 +358,12 @@ onPress={() => setPanel("export")}
                       chevron={isLocal && m.active}
                       onPress={() =>
                         run(() => {
-                          if (isLocal) setActiveModel(m.id, "local");
-                          else setActiveRemoteApi(m.id);
+                          // Single activation dispatch: routes local models
+                          // through the eager-load coordinator (supersession,
+                          // gate, calibration) and remote providers through
+                          // their existing path. The menu no longer chooses
+                          // between the two paths itself.
+                          activateModel(m.id);
                         })
                       }
                     />
@@ -458,3 +462,5 @@ function BackRow({ label, onPress }: { label: string; onPress: () => void }) {
     </Pressable>
   );
 }
+
+

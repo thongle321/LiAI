@@ -1,6 +1,7 @@
+import "react-native-gesture-handler";
 import "../global.css";
 import { Stack } from "expo-router";
-import { ThemeProvider, DefaultTheme, DarkTheme } from "expo-router/react-navigation";
+import { ThemeProvider, DefaultTheme, DarkTheme } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as SystemUI from "expo-system-ui";
 import {
@@ -9,7 +10,7 @@ import {
   Inter_600SemiBold,
   useFonts,
 } from "@expo-google-fonts/inter";
-import { Host } from "@expo/ui";
+import { View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider, useKeyboardState } from "react-native-keyboard-controller";
@@ -59,8 +60,8 @@ function KeyboardVisibilitySync() {
 }
 
 export default function RootLayout() {
-  // Reactive to the theme so the Host seed, the status bar and the stack's
-  // content background follow the App Settings toggle.
+  // Reactive to the theme so the status bar and the stack's content
+  // background follow the App Settings toggle.
   const colors = useColors();
   const scheme = useColorScheme();
 
@@ -117,13 +118,12 @@ export default function RootLayout() {
   if (!loaded && !error) return null;
 
   return (
-    // One Host for the whole app: it seeds every @expo/ui subtree with
-    // Signal Blue and the app's OWN scheme, so native switches, sheets
-    // and pickers land in LiAI's world instead of the platform's default.
-    // The scheme must be passed explicitly: leaving it unset makes the
-    // Host follow the DEVICE scheme, so a stored "light" on a dark device
-    // renders the native subtrees dark against a light JS tree.
-    <Host colorScheme={scheme} seedColor={colors.primary} style={{ flex: 1 }}>
+    // A plain View wrapper (no @expo/ui Host): in SDK 58 a root Host
+    // wrapping the whole app interfered with Pressable touch dispatch on
+    // Android, so every @expo/ui subtree now carries its own Host (see
+    // settings-rows, picker-menu, etc.). flex:1 keeps the navigator filling
+    // the screen; the native background follows via SystemUI above.
+    <View style={{ flex: 1 }}>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       {/* Fluid Type (DESIGN.md): scoped --text-* overrides so every
           text-* class re-resolves at this device's width (375dp base,
@@ -162,7 +162,7 @@ export default function RootLayout() {
                 screens before onboarding completes (D1-1): with guard=false
                 the navigator has no drawer to resolve to, so it falls back to
                 the initial route (index), which redirects to onboarding. */}
-            <Stack.Protected guard={onboarded}>
+            <Stack.Protected guard={onboarded} redirectTo="/onboarding/welcome">
               <Stack.Screen name="(drawer)" options={{ animation: "none" }} />
             </Stack.Protected>
             <Stack.Screen name="onboarding" />
@@ -172,6 +172,6 @@ export default function RootLayout() {
         </KeyboardProvider>
         </GestureHandlerRootView>
       </ScopedVariables>
-    </Host>
+    </View>
   );
 }

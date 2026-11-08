@@ -28,16 +28,18 @@
  * about which models exist or which is active. Management stays on the
  * Models and Companions screens, as PocketPal's picker defers to theirs.
  *
- * Keyboard: built on the shared Sheet (TrueSheet) for avoidance. Like
- * PocketPal's picker it DISMISSES the keyboard on open: it rises from the
- * bottom where the composer lives, and leaving the keyboard up would park
- * the field over the sheet.
+ * TrueSheet parity (PocketPal's ChatPalModelPickerSheet):
+ * - Fixed 70% detent (not 'auto')
+ * - Horizontal paging FlatList for tabs (swipe between Models/Companions)
+ * - scrollableRef for each tab's vertical content
+ * - enableContentPanningGesture={false} (only grabber moves sheet)
+ * - Dismisses keyboard on open (rises from bottom where composer lives)
  */
 
-import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Dimensions, FlatList, Pressable, Text, View } from "react-native";
 import { KeyboardControllerNative } from "react-native-keyboard-controller";
-import { Check, X } from "lucide-react-native";
+import { Check, Settings, X } from "lucide-react-native";
 
 import { Sheet } from "../sheet.tsx";
 import { useColors } from "@/themes/tokens.ts";
@@ -64,19 +66,21 @@ function capabilityText(companion: Companion): string {
 export function ChatPickerSheet({
   visible,
   onClose,
+  onOpenEditor,
 }: {
   visible: boolean;
   onClose: () => void;
+  /** Open the editor for the given companion. */
+  onOpenEditor?: (companion: Companion) => void;
 }) {
   const colors = useColors();
-  const [tab, setTab] = useState<Tab>("models");
+  const [activeTabIndex, setActiveTabIndex] = useState(1); // 0 = companions, 1 = models (PocketPal default)
 
   const companions = useCompanions((s) => s.companions);
   const models = useModelStore((s) => s.models);
   const remoteApis = useModelStore((s) => s.remoteApis);
   const activeModelId = useModelStore((s) => s.activeModelId);
-  const setActiveModel = useModelStore((s) => s.setActiveModel);
-  const setActiveRemoteApi = useModelStore((s) => s.setActiveRemoteApi);
+  const activateModel = useModelStore((s) => s.activateModel);
 
   const sessionId = useChatStore((s) => s.sessionId);
   const sessionCompanionId = useChatStore((s) => s.sessionCompanionId);
@@ -89,136 +93,205 @@ export function ChatPickerSheet({
   const effectiveCompanionId =
     sessionId !== null ? sessionCompanionId : stagedCompanionId;
 
+  // Scrollable refs for each tab's vertical content
+  const companionsListRef = useRef<FlatList<Companion> | null>(null);
+  const modelsListRef = useRef<FlatList<{ id: string; name: string; host?: string; active?: boolean }> | null>(null);
+
+  // Combined scrollableRef for TrueSheet - points to the active tab's list
+  const scrollableRef = activeTabIndex === 0 ? companionsListRef : modelsListRef;
+
+  const options = useMemo(() => pickableModels(models, remoteApis, activeModelId), [models, remoteApis, activeModelId]);
+
   useEffect(() => {
     if (!visible) return;
-    setTab("models");
+    setActiveTabIndex(1); // Open on Models tab (PocketPal parity)
     KeyboardControllerNative.dismiss(false, true);
     void ensureCompanionsLoaded();
   }, [visible]);
 
-  const options = pickableModels(models, remoteApis, activeModelId);
-
   function selectModel(id: string, host: string | undefined): void {
-    // A local entry has no `host`. Asking `remoteApis.some(...)` instead
-    // would be an opposite test on the same list, so the day a local id
-    // equalled a remote id the picker would switch as the wrong kind.
-    if (host === undefined) setActiveModel(id, "local");
-    else setActiveRemoteApi(id);
+    // Single activation dispatch: routes local models through the eager-load
+    // coordinator (supersession, gate, calibration) and remote providers
+    // through their existing path. The picker no longer chooses between the
+    // two paths itself.
+    activateModel(id);
     onClose();
   }
 
-  return (
-    <Sheet visible={visible} onClose={onClose}>
-      <View className="flex-row h-[50px] items-center gap-2 border-b border-border px-2 pb-0">
-        {TABS.map((t) => {
-          const active = tab === t.id;
-          return (
-            <Pressable
-              key={t.id}
-              onPress={() => setTab(t.id)}
-              testID={`chat-picker-tab-${t.id}`}
-              // The active tab's pill (reference activeTab): a tinted
-              // ground with the emphasized label; the inactive one is
-              // bare, secondary text.
-              className={`min-h-9 justify-center rounded-lg px-3 py-1 ${
-                active ? "bg-surface-2" : ""
-              }`}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
-            >
-              <Text
-                className={`font-sans text-title ${
-                  active ? "text-primary-text font-sans-semibold" : "text-secondary-text"
-                }`}
-              >
-                {t.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+  const renderTab = (tab: Tab, label: string, index: number) => (
+    <Pressable
+      key={tab}
+      onPress={() => {
+        setActiveTabIndex(index);
+        pagerRef.current?.scrollToIndex({ index, animated: true });
+      }}
+      testID={`chat-picker-tab-${tab}`}
+      className={`min-h-9 justify-center rounded-lg px-3 py-1 flex-1 items-center ${
+        activeTabIndex === index ? "bg-surface-2" : ""
+      }`}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: activeTabIndex === index }}
+    >
+      <Text
+        className={`font-sans text-title ${
+          activeTabIndex === index ? "text-primary-text font-sans-semibold" : "text-secondary-text"
+        }`}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
 
-      {tab === "companions" ? (
-        <View>
-          {effectiveCompanionId !== null && (
-            <Pressable
-              onPress={() => {
-                void setActiveCompanion(null);
-                onClose();
-              }}
-              className="flex-row items-center gap-3 border-b border-border px-4 py-4 active:bg-surface-3"
-              accessibilityRole="button"
-              accessibilityLabel="No companion"
-            >
-              <X size={18} color={colors.primaryText} />
-              <View className="flex-1">
-                <Text className="text-body-lg text-primary-text">No companion</Text>
-                <Text className="text-body-md text-secondary-text">Disable this companion</Text>
-              </View>
-            </Pressable>
-          )}
-          {companions.length === 0 ? (
-            <Text className="px-4 py-3 text-quiet">
-              No companions yet — create one on the Companions screen.
-            </Text>
-          ) : (
-            companions.map((companion) => {
-              const selected = companion.id === effectiveCompanionId;
-              return (
+  const renderCompanionsContent = () => (
+    <View className="grow" style={{ width: "100%" }}>
+      <FlatList
+        ref={companionsListRef}
+        data={companions}
+        keyExtractor={(c) => c.id}
+        renderItem={({ item: companion }) => {
+          const selected = companion.id === effectiveCompanionId;
+          return (
+            <View className={`flex-row items-center justify-between border-b border-border px-4 py-4 ${selected ? "bg-surface-3 border-primary" : ""}`}>
+              <Pressable
+                onPress={() => {
+                  void activate(companion);
+                  onClose();
+                }}
+                className="flex-1"
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`Use companion ${companion.name}`}
+              >
+                <Text className="text-body-lg text-primary-text">{companion.name}</Text>
+                <Text className="text-body-md text-secondary-text">{capabilityText(companion)}</Text>
+              </Pressable>
+              {selected && onOpenEditor ? (
                 <Pressable
-                  key={companion.id}
                   onPress={() => {
-                    void activate(companion);
+                    onOpenEditor(companion);
                     onClose();
                   }}
-                  className={`border-b border-border px-4 py-4 ${
-                    selected ? "bg-surface-3 border-primary" : ""
-                  }`}
+                  className="icon-btn h-8 w-8 ml-2"
                   accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  accessibilityLabel={`Use companion ${companion.name}`}
+                  accessibilityLabel={`Edit ${companion.name}`}
+                  hitSlop={4}
                 >
-                  <Text className="text-body-lg text-primary-text">
-                    {companion.name}
-                  </Text>
-                  <Text className="text-body-md text-secondary-text">
-                    {capabilityText(companion)}
-                  </Text>
+                  <Settings size={18} color={colors.primaryText} />
                 </Pressable>
-              );
-            })
-          )}
-        </View>
-      ) : options.length === 0 ? (
-        <Text className="px-1 py-3 text-quiet">
-          No models are ready yet — download one on the Models screen.
-        </Text>
-      ) : (
-        <View className="gap-1 pt-1">
-          {options.map((m) => (
-            <Pressable
-              key={m.id}
-              onPress={() => selectModel(m.id, m.host)}
-              className={`min-h-12 flex-row items-center gap-3 rounded-lg px-4 py-4 ${
-                m.active ? "bg-surface-2" : ""
-              }`}
-              accessibilityRole="button"
-              accessibilityState={{ selected: m.active }}
-              accessibilityLabel={
-                m.host === undefined ? m.name : `${m.name} (${m.host})`
-              }
-            >
-              <View className="flex-1">
-                <Text className="text-body">{m.name}</Text>
-                {m.host !== undefined && (
-                  <Text className="text-quiet">{m.host}</Text>
-                )}
-              </View>
-              {m.active && <Check size={18} color={colors.primary} />}
-            </Pressable>
-          ))}
-        </View>
-      )}
+              ) : null}
+            </View>
+          );
+        }}
+        ListHeaderComponent={
+          effectiveCompanionId !== null
+            ? (
+                <Pressable
+                  onPress={() => {
+                    void setActiveCompanion(null);
+                    onClose();
+                  }}
+                  className="border-b border-border px-4 py-4 active:bg-surface-3"
+                  accessibilityRole="button"
+                  accessibilityLabel="No companion"
+                >
+                  <View className="flex-row items-center gap-3">
+                    <X size={18} color={colors.primaryText} />
+                    <View className="flex-1">
+                      <Text className="text-body-lg text-primary-text">No companion</Text>
+                      <Text className="text-body-md text-secondary-text">Disable this companion</Text>
+                    </View>
+                  </View>
+                </Pressable>
+              )
+            : undefined
+        }
+        ListEmptyComponent={
+          companions.length === 0 ? (
+            <View className="px-4 py-3">
+              <Text className="text-quiet">No companions yet — create one on the Companions screen.</Text>
+            </View>
+          ) : undefined
+        }
+        keyboardShouldPersistTaps="handled"
+      />
+    </View>
+  );
+
+  const renderModelsContent = () => (
+    <View className="grow" style={{ width: "100%" }}>
+      <FlatList
+        ref={modelsListRef}
+        data={options}
+        keyExtractor={(m) => m.id}
+        renderItem={({ item: m }) => (
+          <Pressable
+            onPress={() => selectModel(m.id, m.host)}
+            className={`min-h-12 flex-row items-center gap-3 rounded-lg px-4 py-4 ${m.active ? "bg-surface-2" : ""}`}
+            accessibilityRole="button"
+            accessibilityState={{ selected: m.active }}
+            accessibilityLabel={m.host === undefined ? m.name : `${m.name} (${m.host})`}
+          >
+            <View className="flex-1">
+              <Text className="text-body">{m.name}</Text>
+              {m.host !== undefined && <Text className="text-quiet">{m.host}</Text>}
+            </View>
+            {m.active && <Check size={18} color={colors.primary} />}
+          </Pressable>
+        )}
+        ListEmptyComponent={
+          options.length === 0 ? (
+            <View className="px-1 py-3">
+              <Text className="text-quiet">No models are ready yet — download one on the Models screen.</Text>
+            </View>
+          ) : undefined
+        }
+        keyboardShouldPersistTaps="handled"
+      />
+    </View>
+  );
+
+  const renderContent = ({ item }: { item: { id: Tab; label: string } }) => (
+    <View style={{ width: "100%" }}>
+      {item.id === "companions" ? renderCompanionsContent() : renderModelsContent()}
+    </View>
+  );
+
+  // Horizontal paging FlatList ref for programmatic scrolling
+  const pagerRef = useRef<FlatList<{ id: Tab; label: string }> | null>(null);
+
+  // Screen width for getItemLayout (each page = full screen width)
+  const screenWidth = Dimensions.get("window").width;
+
+  return (
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      detents={[0.7]}
+      scrollable={false}
+      scrollableRef={scrollableRef}
+      scrollableOptions={{ scrollingExpandsSheet: false }}
+      style={{ flex: 1 }}
+    >
+      <View className="flex-row h-[50px] items-center gap-2 border-b border-border px-2 pb-0">
+        {TABS.map((t, i) => renderTab(t.id, t.label, i))}
+      </View>
+      <FlatList
+        ref={pagerRef}
+        data={TABS}
+        renderItem={renderContent}
+        keyExtractor={(item) => item.id}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        bounces={false}
+        scrollEnabled={true}
+        initialScrollIndex={activeTabIndex}
+        getItemLayout={(_, index) => ({ length: screenWidth, offset: screenWidth * index, index })}
+        onScroll={(e) => {
+          const index = Math.round(e.nativeEvent.contentOffset.x / e.nativeEvent.layoutMeasurement.width);
+          if (index !== activeTabIndex) setActiveTabIndex(index);
+        }}
+      />
     </Sheet>
   );
 }

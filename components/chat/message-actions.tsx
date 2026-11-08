@@ -117,12 +117,18 @@ export function MessageActions({
   }
 
   return (
-    <View className="mt-2 flex-row flex-wrap items-center gap-x-1.5 gap-y-0.5 pb-3">
+    // PocketPal's AssistantTurnFooter container (their styles.ts:7-12):
+    // one row, gap 5, paddingBottom 12. No flex-wrap and no spacing
+    // boxes — the row reads as a status line: speak, copy, then the
+    // joined timing string inline. The glyphs clear the 48dp touch floor
+    // through hitSlop (16dp glyph + 2×16 slop = 48dp), PocketPal's own
+    // device, rather than a 48dp press box that would spread the icons
+    // apart and push the stats onto their own line.
+    <View className="mt-1 flex-row items-center gap-x-[5px] pb-3">
       {canSpeak && hasText ? (
         <Pressable
           onPress={toggleSpeak}
-          className="icon-btn"
-          hitSlop={14}
+          hitSlop={16}
           accessibilityRole="button"
           accessibilityLabel={speaking ? "Stop speaking" : "Speak message"}
           testID="footer-speak"
@@ -140,8 +146,7 @@ export function MessageActions({
             void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
             copy(text);
           }}
-          className="icon-btn"
-          hitSlop={14}
+          hitSlop={16}
           accessibilityRole="button"
           accessibilityLabel={copied ? "Copied" : "Copy message"}
           testID="footer-copy"

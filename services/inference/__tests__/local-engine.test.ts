@@ -298,34 +298,34 @@ describe("completion stop signals (G1/G4)", () => {
     expect(out.timings?.msPerToken).toEqual(40);
   });
 
-  it("projects prompt throughput for the footer, when the engine reports it", async () => {
+  it("never surfaces prompt throughput on LOCAL turns (PocketPal origin gate)", async () => {
+    // PocketPal's AssistantTurnFooter comment: llama.rn reports
+    // prompt_per_second on local turns, "so origin gates them rather than
+    // presence". The whole footer row is a status line the reader skims —
+    // a local turn prints ms/token, tokens/sec, TTFT (matches the
+    // reported target layout), and the prompt rate is not part of it.
+    // Gated at the ENGINE (not the footer) because our remote engine
+    // reports no timings at all: a timings key that would present here
+    // could only ever come from a remote engine's own projection, so an
+    // origin gate and a presence gate are the same rule already.
     const out = await run({
       timings: { prompt_ms: 120, prompt_per_second: 640.5, prompt_n: 5 },
     });
-    expect(out.timings?.promptTokensPerSecond).toEqual(640.5);
-  });
-
-  it("leaves prompt throughput ABSENT, not zero, when unreported", async () => {
-    // "the engine did not report it" and "the engine reported zero" are
-    // different facts, and only one of them should reach the footer.
-    const out = await run({ timings: { prompt_ms: 120 } });
     expect(out.timings?.promptTokensPerSecond).toEqual(undefined);
     expect("promptTokensPerSecond" in (out.timings ?? {})).toEqual(false);
-  });
 
-  it("keeps a REPORTED zero, so a measured zero is not mistaken for silence", async () => {
-    const out = await run({ timings: { prompt_ms: 120, prompt_per_second: 0 } });
-    expect(out.timings?.promptTokensPerSecond).toEqual(0);
-  });
+    const zero = await run({
+      timings: { prompt_ms: 120, prompt_per_second: 0 },
+    });
+    expect(zero.timings?.promptTokensPerSecond).toEqual(undefined);
 
-  it("drops a non-finite prompt throughput rather than carrying NaN", async () => {
-    const out = await run({
+    const nan = await run({
       timings: { prompt_ms: 120, prompt_per_second: Number.NaN },
     });
-    expect(out.timings?.promptTokensPerSecond).toEqual(undefined);
     const inf = await run({
       timings: { prompt_ms: 120, prompt_per_second: Number.POSITIVE_INFINITY },
     });
+    expect(nan.timings?.promptTokensPerSecond).toEqual(undefined);
     expect(inf.timings?.promptTokensPerSecond).toEqual(undefined);
   });
 

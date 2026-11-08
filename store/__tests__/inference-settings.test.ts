@@ -45,7 +45,6 @@ describe("inference store", () => {
         // defaults/persist round trip as the thinking overrides.
         effortOverrides: s.effortOverrides,
         jinjaEnabled: s.jinjaEnabled,
-        sampler: s.sampler,
         useHexagonNpu: s.useHexagonNpu,
         useWeightRepacking: s.useWeightRepacking,
         imageMaxTokens: s.imageMaxTokens,
@@ -59,31 +58,13 @@ describe("inference store", () => {
     expect(s.loaded).toEqual(true);
   });
 
-  it("patches the sampler, clamps it, and survives a reload", async () => {
-    const useStore = createInferenceStore(storage);
-    await useStore.getState().load();
-    useStore.getState().setSampler({ temperature: 0.15, topP: 9 });
-    await new Promise((r) => setTimeout(r, 0));
-    const s = useStore.getState();
-    expect(s.sampler.temperature).toEqual(0.15);
-    expect(s.sampler.topP).toEqual(1);
-
-    const raw = storage.data[INFERENCE_KEY];
-    expect(raw).toBeTruthy();
-    const reloaded = createInferenceStore(memoryStorage({ [INFERENCE_KEY]: raw }));
-    await reloaded.getState().load();
-    expect(reloaded.getState().sampler.temperature).toEqual(0.15);
-    expect(reloaded.getState().sampler.topP).toEqual(1);
-  });
-
-  it("fills a missing or corrupt sampler from an older save", () => {
+  it("ignores legacy sampler in stored inference params", () => {
     const noSampler = parseInferenceParams(JSON.stringify({ nCtx: 8192 }));
     expect(noSampler.nCtx).toEqual(8192);
-    expect(noSampler.sampler).toEqual(DEFAULT_SAMPLER);
-    const badSampler = parseInferenceParams(
-      JSON.stringify({ sampler: { temperature: "hot" } }),
+    const withSampler = parseInferenceParams(
+      JSON.stringify({ nCtx: 4096, sampler: { temperature: 0.15 } }),
     );
-    expect(badSampler.sampler.temperature).toEqual(DEFAULT_SAMPLER.temperature);
+    expect(withSampler.nCtx).toEqual(4096);
   });
 
   it("clamps context and gpu layers into range", async () => {

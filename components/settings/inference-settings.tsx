@@ -14,6 +14,8 @@
 import { useEffect } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
 import { ExternalLink } from "lucide-react-native";
+import * as Haptics from "expo-haptics";
+import SegmentedControl from "@expo/ui/community/segmented-control";
 
 import {
   CACHE_TYPES,
@@ -30,12 +32,12 @@ import {
 import { useShallow } from "zustand/react/shallow";
 import { useModelStore } from "@/store/model-store";
 import { useModelsUi } from "@/store/models-ui.ts";
-import { useColors } from "@/themes/tokens.ts";
+import { useColors, useColorScheme } from "@/themes/tokens.ts";
 import { SHOWS_WEIGHT_REPACKING, useDeviceAccelerators } from "./inference-device";
 import {
   AdvancedGroup,
   PickerRow,
-  Segmented,
+  RowLabel,
   SettingsSection,
   SliderRow,
   TextFieldRow,
@@ -51,6 +53,7 @@ const OPENCL_DOCS_URL =
 
 export function ModelInitializationSettings() {
   const colors = useColors();
+  const scheme = useColorScheme();
   // One useShallow unit: all 31 fields render here, so the section
   // re-renders only when one of them changes — never on memory/loading
   // writes owned by the sibling sections below.
@@ -250,12 +253,24 @@ export function ModelInitializationSettings() {
             step={1}
             onChange={setImageMaxTokens}
           />
-          <Segmented<FlashAttn>
-            label="Flash Attention"
-            value={flashAttn}
-            options={FLASH_OPTIONS}
-            onPick={setFlashAttn}
-          />
+          <View className="py-2">
+            <RowLabel label="Flash Attention" />
+            <View className="mt-2">
+              <SegmentedControl
+                values={["Auto", "On", "Off"]}
+                selectedIndex={Math.max(0, FLASH_OPTIONS.indexOf(flashAttn))}
+                appearance={scheme}
+                tintColor={colors.primary}
+                style={{ width: "100%" }}
+                onChange={(event) => {
+                  void Haptics.selectionAsync();
+                  const index = event.nativeEvent.selectedSegmentIndex;
+                  const next = FLASH_OPTIONS[index];
+                  if (next !== undefined) setFlashAttn(next);
+                }}
+              />
+            </View>
+          </View>
           <PickerRow<CacheType>
             label="Key Cache Type"
             options={CACHE_TYPES}

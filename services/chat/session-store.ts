@@ -48,6 +48,14 @@ export interface StoredTurn {
   /** Ordered blocks for the reply, when the turn was written with them.
    * Stored as a JSON column; old rows read through the blocksOf splitter. */
   blocks?: TurnBlock[];
+  /** Photos attached to this turn (G8), as borrowed file URIs.
+   * Persisted on user turns; old rows read as absent (no photos). */
+  images?: string[];
+  /** Author identity: "user" or "assistant" role ID for display.
+   *  Derived from role for normal turns, stored for imported data. */
+  authorId?: "user" | "assistant";
+  /** Optional authorship payload for display (name, avatar, etc). */
+  author?: { name?: string; avatar?: string };
 }
 
 /** A stored turn AS READ BACK, carrying the row id it was persisted under.
@@ -70,11 +78,13 @@ export function draftSlot(sessionId: string | null): string {
   return sessionId ?? "new";
 }
 
-/** One conversation's own settings override — the 'custom' layer of the
- *  session → companion → global chain. Every field optional: a field the user
- *  never touched stays absent so the layer below reaches it. */
+/** One conversation's own settings snapshot — the 'custom' layer of the
+ *  session → companion → global chain. When source is 'custom', this FULL
+ *  snapshot replaces the chain entirely. When null or partial, missing fields
+ *  inherit from the resolved base. Sampler is a COMPLETE object (not partial)
+ *  because custom sessions need self-contained settings. */
 export interface SessionOverride {
-  sampler?: Partial<SamplerParams>;
+  sampler?: SamplerParams;
   thinking?: boolean;
   effort?: EffortLevel;
 }
@@ -96,6 +106,8 @@ export interface SessionCatalog {
   setTitleIfEmpty(sessionId: string, title: string): Promise<void>;
   /** Fork a conversation. Null when the source does not exist. */
   duplicateSession(sessionId: string): Promise<string | null>;
+  /** Set the creation date of a session (for imports). Returns false when the session does not exist. */
+  setSessionCreatedAt(sessionId: string, createdAt: string): Promise<boolean>;
 }
 
 /** Reading and writing a conversation's turns. */
@@ -135,10 +147,26 @@ export interface SessionSettings {
   ): Promise<void>;
 }
 
+/** Global chat settings KV store (PocketPal parity). */
+export interface GlobalChatSettings {
+  /** Key/value accessor pair for global settings rows. */
+  getGlobalSetting(key: string): Promise<unknown | null>;
+  setGlobalSetting(key: string, value: unknown): Promise<void>;
+  /** Read global chat completion settings (returns null if unset). */
+  getGlobalChatSettings(): Promise<SamplerParams | null>;
+  /** Save global chat completion settings. */
+  saveGlobalChatSettings(settings: SamplerParams): Promise<void>;
+  /** Reset global chat completion settings to defaults. */
+  resetGlobalChatSettings(): Promise<void>;
+  /** Apply a session's snapshot to the global preset. */
+  applySessionSnapshotToGlobal(sessionId: string): Promise<boolean>;
+}
+
 /** Composite port: a full session store. Prefer depending on one of the
  *  four focused ports above when a caller only needs a slice. */
 export interface SessionStore
   extends SessionCatalog,
     TurnWriter,
     DraftStore,
-    SessionSettings {}
+    SessionSettings,
+    GlobalChatSettings {}

@@ -205,3 +205,18 @@ export function resolveSampler(
   }
   return parseSampler(merged);
 }
+
+/** What `full` overrides relative to `baseline`, field by field — the stored
+ *  shape of "this companion tunes these knobs". `null` when nothing differs,
+ *  which is how a form says "follow the baseline" without pinning today's
+ *  numbers against a later baseline change. */
+export function diffSampler(
+  baseline: SamplerParams,
+  full: SamplerParams,
+): Partial<SamplerParams> | null {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(DEFAULT_SAMPLER) as Array<keyof SamplerParams>) {
+    if (full[key] !== baseline[key]) out[key] = full[key];
+  }
+  return Object.keys(out).length > 0 ? (out as Partial<SamplerParams>) : null;
+}

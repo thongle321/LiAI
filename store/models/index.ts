@@ -111,6 +111,10 @@ export function createModelStore(storage: KeyValueStorage) {
               r.searchFilters && typeof r.searchFilters === "object"
                 ? (r.searchFilters as HFSearchFilters)
                 : currentState.searchFilters,
+            lastUsedModelId:
+              typeof r.lastUsedModelId === "string" || r.lastUsedModelId === null
+                ? (r.lastUsedModelId as string | null)
+                : currentState.lastUsedModelId,
             hydrated: currentState.hydrated,
           };
         },

@@ -131,7 +131,7 @@ Files touched: `services/agent/runner.ts`, `services/agent/search.ts`,
 
 ---
 
-## 4. Model stays unloaded after app switch (#1008) — PARTIAL
+## 4. Model stays unloaded after app switch (#1008) — **SHIPPED (superseded by single-activation dispatch)**
 
 Commit: `171ccf4a` — 2 files, +533/-13.
 
@@ -139,20 +139,27 @@ What pocketpal does: fix app-state transition handling so a model auto-released
 on background actually reloads on foreground; uses `pendingModelId` gating and
 `contextOperationMutex` to avoid races; updates `appState` before branching.
 
-LiAI current state: auto-release lives in `services/inference/auto-release.ts` +
-`store/inference.ts` (`autoReleasedModelId`), with offload in
-`hooks/useEngineOffload.ts`. Different shape than pocketpal's ModelStore, but the
-same bug class (reload not firing on quick switch) is plausible.
+LiAI current state: **shipped via single-activation dispatch (issue 06)**. The
+eager-load coordinator (`services/inference/eager-load.ts`) now owns the entire
+eager Load/Offload lifecycle with a serialized mutex and last-one-wins
+supersession. The auto-release restore (`services/inference/auto-release.ts`)
+routes through the same coordinator (`reloadSpecific`), so a quick
+background → foreground → background → foreground sequence cannot interleave a
+restore with a manual load, and the restore can never double-release. The
+Models screen, composer picker, and chat surfaces all call the single
+`activateModel` dispatch on the model store, which routes local models through
+the coordinator and remote providers through their existing path. No surface
+chooses between the two paths itself.
 
-Verdict: audit LiAI's reload path first; port the race-fix pattern
-(`pendingModelId` + mutex gating) into `auto-release.ts` if the bug reproduces.
-Small if reproducible.
+Deliberate divergence that remains: lazy turn-time loading is unchanged (sends
+still build the engine through the same slot when no eager load ran). This is
+recorded in `docs/research/2026-10-06-pocketpal-models-screen-audit.md` and the
+spec's Out of Scope section.
 
-Files likely touched: `services/inference/auto-release.ts`,
-`services/inference/offload.ts`, `store/inference.ts`,
-`hooks/useEngineOffload.ts`.
-
-Risks: only worth doing if the crash/unload is reproducible on device.
+Files touched: `store/models/active.ts` (new `activateModel`/`offloadModel`),
+`app/(drawer)/models.tsx`, `components/chat/chat-picker-sheet.tsx`,
+`components/chat/chat-menu.tsx`, `services/inference/eager-load.ts`,
+`services/inference/auto-release.ts`.
 
 ---
 

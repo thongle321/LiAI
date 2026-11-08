@@ -9,7 +9,7 @@
  * Store shape (TinyBase 10's Store is not generic; cells arrive as
  * AnyObject, so every read goes through a narrowing helper below and the
  * typed contract lives on the SessionStore port):
- *   sessions  { title, pinned, updatedAt, seq, activeCompanionId?, settingsSource? }
+ *   sessions  { title, pinned, createdAt, updatedAt, seq, activeCompanionId?, settingsSource? }
  *   messages  { sessionId, role, content, type, at, seq, usage* }
  *   toolRuns  { messageId, position, tool, input?, result?, ok?, data?,
  *               metrics? }
@@ -36,6 +36,9 @@ import { sanitizeBlocks } from "./blocks.ts";
 import { DEFAULT_SAMPLER, type SamplerParams } from "../inference/sampler.ts";
 import { isEffortLevel } from "@/utils/reasoning-capability.ts";
 import { newId } from "./messages.ts";
+
+/** PocketPal parity key for global chat completion settings. */
+export const GLOBAL_CHAT_SETTINGS_KEY = "newChatCompletionSettings";
 
 /** Row id: the timestamp prefix keeps ids unique across restarts, the
  *  counter keeps them ordered inside one millisecond. Named apart from
@@ -85,6 +88,8 @@ interface MessageRow {
   /** Flat sibling of the other timings -- TinyBase has no nested cell.
    *  Absent on rows written before the field existed. */
   promptTokensPerSecond?: number;
+  /** Photos attached to this turn (borrowed URIs). Stored as JSON. */
+  images?: string[];
 }
 
 function messageRowFrom(raw: unknown): MessageRow | null {
@@ -113,6 +118,13 @@ function messageRowFrom(raw: unknown): MessageRow | null {
     // the splitter on load — never a crash in the renderer.
     ...(sanitizeBlocks(raw["blocks"]) !== undefined
       ? { blocks: sanitizeBlocks(raw["blocks"]) }
+      : {}),
+    ...(Array.isArray(raw["images"])
+      ? {
+          images: (raw["images"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          ),
+        }
       : {}),
     ...(typeof raw["promptMs"] === "number"
       ? {
@@ -185,6 +197,7 @@ export class TinyBaseSessionStore implements SessionStore {
     this.store.setRow("sessions", id, {
       title,
       pinned: false,
+      createdAt: new Date().toISOString(),
       updatedAt: Date.now(),
       seq: this.nextSeq(),
     });
@@ -244,6 +257,9 @@ export class TinyBaseSessionStore implements SessionStore {
       seq,
       ...(turn.reasoning !== undefined ? { reasoning: turn.reasoning } : {}),
       ...(turn.blocks !== undefined ? { blocks: turn.blocks } : {}),
+      ...(turn.images !== undefined && turn.images.length > 0
+        ? { images: turn.images }
+        : {}),
       ...(turn.usage !== undefined
         ? {
             promptTokens: turn.usage.promptTokens,
@@ -311,6 +327,9 @@ export class TinyBaseSessionStore implements SessionStore {
       at: row.at,
       ...(row.reasoning !== undefined ? { reasoning: row.reasoning } : {}),
       ...(row.blocks !== undefined ? { blocks: row.blocks } : {}),
+      ...(row.images !== undefined && row.images.length > 0
+        ? { images: row.images }
+        : {}),
       // Rebuilt as the nested shape the port declares, from the flat
       // columns. Omitted entirely when the engine reported nothing, so an
       // old row simply has no `outcome` key.
@@ -402,12 +421,21 @@ export class TinyBaseSessionStore implements SessionStore {
         pinned: isRecord(raw) && raw["pinned"] === true,
         updatedAt: isRecord(raw) ? num(raw["updatedAt"]) : 0,
         seq: isRecord(raw) ? num(raw["seq"]) : 0,
+        createdAt: isRecord(raw) && typeof raw["createdAt"] === "string"
+          ? raw["createdAt"]
+          : undefined,
       }))
       .sort((a, b) => {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
         return b.seq - a.seq;
       })
-      .map(({ id, title, pinned, updatedAt }) => ({ id, title, pinned, updatedAt }));
+      .map(({ id, title, pinned, updatedAt, createdAt }) => ({
+        id,
+        title,
+        pinned,
+        updatedAt,
+        createdAt,
+      }));
   }
 
   async renameSession(sessionId: string, title: string): Promise<boolean> {
@@ -579,9 +607,9 @@ export class TinyBaseSessionStore implements SessionStore {
   }
 
   /** The session override cell holds `{sampler, thinking?, effort?}`.
-   *  A bare sampler-only object (rows written before thinking/effort
-   *  existed) parses as `{sampler}` — the legacy shape IS the sampler
-   *  keys at the top level, exactly like parseVoiceState's v1 read. */
+   *  The sampler is a COMPLETE object (not partial) when stored in new
+   *  format; legacy partial rows are merged with defaults to produce a
+   *  complete sampler that can be used wholesale. */
   async getSessionOverride(sessionId: string): Promise<SessionOverride | null> {
     const raw = this.store.getCell("sessionSampler", sessionId, "values");
     if (typeof raw !== "string" || raw === "") return null;
@@ -593,28 +621,59 @@ export class TinyBaseSessionStore implements SessionStore {
     }
     if (!isRecord(parsed)) return null;
     const override: SessionOverride = {};
-    // New shape nests under `sampler`; a legacy cell IS the sampler keys
-    // at the top level. Reading both is what keeps old rows working.
+    // New format nests sampler under `sampler` key; legacy format has
+    // sampler keys at the top level. Detect and handle both.
+    const isLegacy = !isRecord(parsed["sampler"]);
     const samplerSource = isRecord(parsed["sampler"]) ? parsed["sampler"] : parsed;
     const sampler = this.samplerOf(samplerSource);
-    if (sampler) override.sampler = sampler;
+    if (sampler) {
+      // For legacy rows, we need to return a complete sampler by merging
+      // defaults with the legacy partial. For new format, the sampler is
+      // already complete (or we merge defaults for missing fields).
+      override.sampler = this.completeSampler(sampler);
+    }
     if (typeof parsed["thinking"] === "boolean") override.thinking = parsed["thinking"];
     if (isEffortLevel(parsed["effort"])) override.effort = parsed["effort"];
     return Object.keys(override).length > 0 ? override : null;
   }
 
-  /** Finite numbers AND booleans count as an override: a boolean flag
-   *  (includeThinkingInContext) is a real per-session choice, and a
-   *  number-only filter would silently drop `false` and fall back to the
-   *  preset. A half-written save still degrades the same way. */
-  private samplerOf(parsed: Record<string, unknown>): Partial<SamplerParams> | null {
-    const out: Record<string, number | boolean> = {};
+  /** Parse sampler fields from stored data, returning a partial or complete
+   *  SamplerParams depending on what was found. Returns null if no valid
+   *  fields were present. */
+  private samplerOf(parsed: Record<string, unknown>): SamplerParams | null {
+    const out: Record<string, number | boolean | string> = {};
+    let found = false;
     for (const key of Object.keys(DEFAULT_SAMPLER)) {
       const v = parsed[key];
-      if (typeof v === "number" && Number.isFinite(v)) out[key] = v;
-      else if (typeof v === "boolean") out[key] = v;
+      if (typeof v === "number" && Number.isFinite(v)) {
+        out[key] = v;
+        found = true;
+      } else if (typeof v === "boolean") {
+        out[key] = v;
+        found = true;
+      }
     }
-    return Object.keys(out).length > 0 ? (out as Partial<SamplerParams>) : null;
+    // Check for any string fields (mirostat, etc.)
+    if (parsed["mirostat"] === 0 || parsed["mirostat"] === 1 || parsed["mirostat"] === 2) {
+      out["mirostat"] = parsed["mirostat"];
+      found = true;
+    }
+    if (!found) return null;
+    // Merge with defaults to produce a complete SamplerParams
+    return { ...DEFAULT_SAMPLER, ...out };
+  }
+
+  /** Ensure a sampler is complete by merging with defaults if needed.
+   *  This handles both legacy partials and new-format objects that may
+   *  have been written without all fields. */
+  private completeSampler(sampler: SamplerParams): SamplerParams {
+    // If all default keys are present and valid, the sampler is already complete
+    const hasAllDefaults = Object.keys(DEFAULT_SAMPLER).every((key) =>
+      key in sampler && sampler[key as keyof SamplerParams] !== undefined,
+    );
+    if (hasAllDefaults) return sampler;
+    // Merge with defaults to fill in any missing fields
+    return { ...DEFAULT_SAMPLER, ...sampler };
   }
 
   async setSessionOverride(
@@ -675,6 +734,15 @@ export class TinyBaseSessionStore implements SessionStore {
     return true;
   }
 
+  async setSessionCreatedAt(
+    sessionId: string,
+    createdAt: string,
+  ): Promise<boolean> {
+    if (!this.store.hasRow("sessions", sessionId)) return false;
+    this.store.setCell("sessions", sessionId, "createdAt", createdAt);
+    return true;
+  }
+
   async getActiveSessionId(): Promise<string | null> {
     const value = this.store.getValue("activeSessionId");
     return typeof value === "string" ? value : null;
@@ -683,5 +751,54 @@ export class TinyBaseSessionStore implements SessionStore {
   async setActiveSessionId(sessionId: string | null): Promise<void> {
     if (sessionId === null) this.store.delValue("activeSessionId");
     else this.store.setValue("activeSessionId", sessionId);
+  }
+
+  async getGlobalSetting(key: string): Promise<unknown | null> {
+    const raw = this.store.getCell("globalSettings", key, "value");
+    if (typeof raw !== "string" || raw === "") return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  async setGlobalSetting(key: string, value: unknown): Promise<void> {
+    if (value === undefined || value === null) {
+      this.store.delRow("globalSettings", key);
+      return;
+    }
+    this.store.setCell("globalSettings", key, "value", JSON.stringify(value));
+  }
+
+  async getGlobalChatSettings(): Promise<SamplerParams | null> {
+    const raw = await this.getGlobalSetting(GLOBAL_CHAT_SETTINGS_KEY);
+    if (!raw || typeof raw !== "object") return null;
+    // Reuse sampler parsing logic
+    const { parseSampler } = await import("../inference/sampler.ts");
+    // parseSampler expects the full sampler object shape
+    try {
+      const parsed = parseSampler(raw as Partial<SamplerParams>);
+      // If it's effectively default and was never explicitly set? But better to return what we have
+      // Check if it's been meaningfully set - but easier to just parse
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  async saveGlobalChatSettings(settings: SamplerParams): Promise<void> {
+    await this.setGlobalSetting(GLOBAL_CHAT_SETTINGS_KEY, settings);
+  }
+
+  async resetGlobalChatSettings(): Promise<void> {
+    await this.setGlobalSetting(GLOBAL_CHAT_SETTINGS_KEY, null);
+  }
+
+  async applySessionSnapshotToGlobal(sessionId: string): Promise<boolean> {
+    const override = await this.getSessionOverride(sessionId);
+    if (!override?.sampler) return false;
+    await this.saveGlobalChatSettings(override.sampler);
+    return true;
   }
 }

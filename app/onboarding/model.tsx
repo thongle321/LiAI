@@ -82,8 +82,7 @@ export default function ModelStep() {
         {/* On-device is the product's core claim (ADR-0008) — the old copy
             said models "run on LiAI's server", which is simply not true. */}
         <Text className="mt-2 text-quiet">
-          Your model runs entirely on this phone. Bigger is smarter and slower —
-          start with the highlighted tier.
+          Bigger is smarter and slower — start with the highlighted tier.
         </Text>
         {ramUnknown && (
           <Text className="mt-2 text-quiet">

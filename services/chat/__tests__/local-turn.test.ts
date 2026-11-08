@@ -186,6 +186,27 @@ describe("createTurnRunner", () => {
     await await expect(runTurn("hi", { sessionId: null, history: [] }, undefined)).rejects.toThrow(/empty reply/);
   });
 
+  it("surfaces the engine's own failure instead of masking it as empty reply", async () => {
+    const runTurn = createTurnRunner({
+      ...deps(),
+      engine: {
+        ...deps().engine,
+        ensureEngine: async () => ({
+          completion: async () => {
+            throw new Error("Failed to render chat template");
+          },
+          stopCompletion: async () => {},
+        }),
+      },
+    });
+    // The bubble must say WHY the turn died; send.ts classifies the native
+    // strings (context-full, tool-args parse), and it cannot classify a
+    // sentence we replaced with "empty reply".
+    await expect(runTurn("hi", { sessionId: null, history: [] }, undefined)).rejects.toThrow(
+      "Failed to render chat template",
+    );
+  });
+
   it("removes only the files the turn itself wrote (D5-4)", async () => {
     const removed: string[] = [];
     const images = ["data:image/jpeg;base64,AAA", "data:image/jpeg;base64,BB"];

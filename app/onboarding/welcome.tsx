@@ -25,7 +25,7 @@ export default function WelcomeStep() {
           {APP_NAME}
         </Text>
         <Text className="mt-2 text-center font-sans text-body-lg text-secondary-text">
-          A calm mind.{"\n"}A smarter everyday.
+          A calm mind. A smarter everyday.
         </Text>
         <View className="mt-8">
           {ROWS.map((r) => (

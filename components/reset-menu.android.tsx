@@ -30,41 +30,41 @@ export function ResetMenu({ items }: ResetMenuProps) {
       accessibilityState={{ expanded: open }}
     >
       <Host matchContents ignoreSafeArea="keyboard" colorScheme={scheme} seedColor={colors.primary}>
-        <ExposedDropdownMenuBox expanded={open} onExpandedChange={setOpen}>
-          <Row
-            verticalAlignment="center"
-            horizontalArrangement="start"
-            modifiers={[menuAnchor()]}
-          >
-            <ComposeText color={colors.primary} style={{ fontSize: typeScale.bodyMd.size }}>
-              Reset
-            </ComposeText>
-          </Row>
-          <ExposedDropdownMenu
-            expanded={open}
-            onDismissRequest={() => setOpen(false)}
-            // Same floor lesson as PickerMenu: a menu sized to a short
-            // anchor wraps every option into a one-word column.
-            modifiers={[defaultMinSize({ minWidth: 200 })]}
-          >
-            {items.map((item) => (
-              <DropdownMenuItem
-                key={item.label}
-                onClick={() => {
-                  setOpen(false);
-                  item.onPress();
-                }}
-              >
-                <DropdownMenuItem.Text>
-                  <ComposeText color={colors.primaryText} style={{ fontSize: typeScale.bodyMd.size }}>
-                    {item.label}
-                  </ComposeText>
-                </DropdownMenuItem.Text>
-              </DropdownMenuItem>
-            ))}
-          </ExposedDropdownMenu>
-        </ExposedDropdownMenuBox>
-      </Host>
+          <ExposedDropdownMenuBox expanded={open} onExpandedChange={setOpen}>
+            <Row
+              verticalAlignment="center"
+              horizontalArrangement="start"
+              modifiers={[menuAnchor()]}
+            >
+              <ComposeText color={colors.primary} style={{ fontSize: typeScale.bodyMd.size }}>
+                Reset
+              </ComposeText>
+            </Row>
+            <ExposedDropdownMenu
+              expanded={open}
+              onDismissRequest={() => setOpen(false)}
+              // Same floor lesson as PickerMenu: a menu sized to a short
+              // anchor wraps every option into a one-word column.
+              modifiers={[defaultMinSize({ minWidth: 200 })]}
+            >
+              {items.map((item) => (
+                <DropdownMenuItem
+                  key={item.label}
+                  onClick={() => {
+                    setOpen(false);
+                    item.onPress();
+                  }}
+                >
+                  <DropdownMenuItem.Text>
+                    <ComposeText color={colors.primaryText} style={{ fontSize: typeScale.bodyMd.size }}>
+                      {item.label}
+                    </ComposeText>
+                  </DropdownMenuItem.Text>
+                </DropdownMenuItem>
+              ))}
+            </ExposedDropdownMenu>
+          </ExposedDropdownMenuBox>
+        </Host>
       <ChevronDown size={16} color={colors.primary} />
     </Pressable>
   );

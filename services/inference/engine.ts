@@ -121,6 +121,17 @@ export interface CompletionRequest {
   /** Per-model add-generation-prompt override (PocketPal parity).
    *  llama.rn only. */
   addGenerationPrompt?: boolean;
+  /** Structured output: JSON schema the response must conform to.
+   *  Used for AI prompt generation and other structured tasks.
+   *  Both local (llama.rn) and remote (OpenAI-compatible) engines
+   *  support this via `response_format: { type: "json_schema", ... }`. */
+  responseFormat?: {
+    type: "json_schema";
+    json_schema: {
+      strict: boolean;
+      schema: object;
+    };
+  };
 }
 
 /** PocketPal's CompletionEngine shape: stream + stop. */

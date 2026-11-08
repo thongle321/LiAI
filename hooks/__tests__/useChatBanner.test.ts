@@ -124,6 +124,55 @@ describe("useChatBanner", () => {
     expect(result.current.banner.variant).toBe("none");
   });
 
+  it("speaks for an aborted turn that never produced a word", () => {
+    // The native layer threw "Context is full" before the first token. The
+    // bubble is empty, and its usage is pinned to the window the turn
+    // filled — the same shape the send slice writes.
+    const { result } = setup({
+      messages: [
+        assistant({
+          text: "",
+          outcome: { contextFull: true },
+          usage: { promptTokens: NCtx, completionTokens: 0, totalTokens: NCtx },
+        }),
+      ],
+    });
+
+    expect(result.current.banner.variant).toBe("context-full");
+    expect(result.current.contextFullShowing).toBe(true);
+    expect(result.current.fill).toBe(100);
+  });
+
+  it("clears the aborted turn's banner once the window is raised", () => {
+    const { result, rerender } = setup({
+      messages: [
+        assistant({
+          text: "",
+          outcome: { contextFull: true },
+          usage: { promptTokens: NCtx, completionTokens: 0, totalTokens: NCtx },
+        }),
+      ],
+    });
+    expect(result.current.bannerShowing).toBe(true);
+
+    // "More room" reloads at a larger nCtx. The pinned `used` now sits more
+    // than a runway below the window, so the banner is stale and goes.
+    rerender({
+      messages: [
+        assistant({
+          text: "",
+          outcome: { contextFull: true },
+          usage: { promptTokens: NCtx, completionTokens: 0, totalTokens: NCtx },
+        }),
+      ],
+      nCtx: NCtx + 1024,
+      activeModelId: "local-model",
+      activeProviderType: "local",
+      remoteCaps: {},
+    });
+    expect(result.current.bannerShowing).toBe(false);
+  });
+
   it("escalates the wording after two context-full turns in a row", () => {
     const { result } = setup({ messages: [fullTurn(NCtx), fullTurn(NCtx)] });
 

@@ -57,7 +57,7 @@ function providerRequiresKey(id: SearchProviderId): boolean {
 }
 
 /** The key editor, as a sheet: a secret should not sit on the settings
- *  screen waiting to be read over someone's shoulder. */
+ *  screen waiting to be read over someone'S shoulder. */
 function ProviderKeySheet({
   providerId,
   onClose,
@@ -140,57 +140,17 @@ function ProviderKeySheet({
   }
 
   return (
-    // Short sheet on the shared Sheet: TrueSheet's auto detent sizes to
-    // the content, and the dialog's native resize keeps it above the
+    // Short sheet on the shared Sheet: TrueSheet'S auto detent sizes to
+    // the content, and the dialog'S native resize keeps it above the
     // keyboard — the body never pads or scrolls for the keyboard itself.
     <Sheet
       visible={providerId !== null}
       onClose={onClose}
       title="API key"
       testID="search-key-sheet"
-      actions={
-        /* Pinned action row (PocketPal's Sheet.Actions) — see Sheet.tsx. */
-        <View className="flex-row items-center justify-between gap-2">
-          {hasKey ? (
-            <Pressable
-              onPress={() => void clear()}
-              disabled={busy !== null}
-              className={
-                busy !== null ? "btn btn--ghost active:opacity-80 btn--disabled flex-1" : "btn btn--ghost active:opacity-80 flex-1"
-              }
-              accessibilityRole="button"
-              accessibilityLabel="Clear Key"
-            >
-              {busy === "clear" ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Text className="text-body">Clear Key</Text>
-              )}
-            </Pressable>
-          ) : null}
-          <Pressable
-            onPress={() => void save()}
-            disabled={!draft.trim() || busy !== null}
-            className={
-              !draft.trim() || busy !== null
-                ? "btn btn--primary active:opacity-80 btn--disabled flex-1"
-                : "btn btn--primary active:opacity-80 flex-1"
-            }
-            accessibilityRole="button"
-            accessibilityLabel="Set Key"
-          >
-            {busy === "save" ? (
-              <ActivityIndicator size="small" color={colors.surface1} />
-            ) : (
-              <Text className="text-action">Set Key</Text>
-            )}
-          </Pressable>
-        </View>
-      }
     >
       <Text className="mb-4 font-sans text-body-md text-primary-text">
-        {/* Q8: their sentence, brand-swapped. */}
-        {"Let the assistant search the web with its own tools. Bring your own API key — LiAI never holds your keys or routes your queries."}
+        {"Bring your own API key. LiAI never holds your keys."}
       </Text>
       <Text className="font-sans-semibold text-body-sm text-primary-text">API key</Text>
       {providerId !== null && !providerRequiresKey(providerId) && (
@@ -229,6 +189,45 @@ function ProviderKeySheet({
       {error !== null ? (
         <Text className="mt-2 font-sans text-body-sm text-error">{error}</Text>
       ) : null}
+      <Sheet.Actions>
+        {/* Pinned action row (PocketPal'S Sheet.Actions) — see Sheet.tsx. */}
+        <View className="flex-row items-center justify-between gap-2">
+          {hasKey ? (
+            <Pressable
+              onPress={() => void clear()}
+              disabled={busy !== null}
+              className={
+                busy !== null ? "btn btn--ghost active:opacity-80 btn--disabled flex-1" : "btn btn--ghost active:opacity-80 flex-1"
+              }
+              accessibilityRole="button"
+              accessibilityLabel="Clear Key"
+            >
+              {busy === "clear" ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text className="text-body">Clear Key</Text>
+              )}
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={() => void save()}
+            disabled={!draft.trim() || busy !== null}
+            className={
+              !draft.trim() || busy !== null
+                ? "btn btn--primary active:opacity-80 btn--disabled flex-1"
+                : "btn btn--primary active:opacity-80 flex-1"
+            }
+            accessibilityRole="button"
+            accessibilityLabel="Set Key"
+          >
+            {busy === "save" ? (
+              <ActivityIndicator size="small" color={colors.surface1} />
+            ) : (
+              <Text className="text-action">Set Key</Text>
+            )}
+          </Pressable>
+        </View>
+      </Sheet.Actions>
     </Sheet>
   );
 }

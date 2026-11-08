@@ -63,6 +63,7 @@ import {
   EFFORT_LEVELS,
 } from "@/utils/reasoning-capability.ts";
 import { useColors } from "@/themes/tokens.ts";
+import { useShallow } from "zustand/react/shallow";
 
 /** PocketPal's 1px hairline Divider between rows. */
 function Divider() {
@@ -153,7 +154,7 @@ export function ModelSettingsSheet({
     modelId === null ? undefined : s.models.find((m) => m.id === modelId),
   );
   // A catalog preset passes its own view and has no row until it is
-  // downloaded; the store's row takes over the moment the file lands — same
+  // downloaded; the store' row takes over the moment the file lands — same
   // id, so every setting saved here survives the download (PocketParity: the
   // reference keys per-model settings the same way).
   const spec = stored ?? model;
@@ -161,6 +162,7 @@ export function ModelSettingsSheet({
   const thinkingOverrides = useInference((s) => s.thinkingOverrides);
   const setEffortOverride = useInference((s) => s.setEffortOverride);
   const effortOverrides = useInference((s) => s.effortOverrides);
+  const isRemote = spec?.origin === "remote_api";
 
   const [displayName, setDisplayName] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
@@ -176,6 +178,22 @@ export function ModelSettingsSheet({
   const [chatTemplate, setChatTemplate] = useState("");
   const [templateName, setTemplateName] = useState("custom");
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+
+  // Include reasoning-related state that was previously using different selectors
+  const thinkingOn = isRemote
+    ? resolveThinking({
+        modelId,
+        reasoning: spec?.reasoning,
+        overrides: thinkingOverrides,
+      }).enabled ?? false
+    : false;
+  const effortLevel = modelId === null ? null : (effortOverrides[modelId] ?? null);
+  const effortArmed = effortLevel !== null;
+
+  // The Sheet stays mounted so its dismiss animation plays on close;
+  // `visible` drives show/hide, and the contents render null when
+  // there is no model to configure (D4-1).
+  const templatePreview = chatTemplate.trim().slice(0, 30);
 
   useEffect(() => {
     if (modelId) {
@@ -197,8 +215,6 @@ export function ModelSettingsSheet({
       setTemplateDialogOpen(false);
     }
   }, [modelId]);
-
-  const isRemote = spec?.origin === "remote_api";
 
   function addStopWord(): void {
     const words = parseStopWords(stopWordDraft);
@@ -251,7 +267,7 @@ export function ModelSettingsSheet({
     onClose();
   }
 
-  /** PocketPal's Reset: defaults persist immediately and the temp state
+  /** PocketPal'S Reset: defaults persist immediately and the temp state
    *  resyncs to match, so the sheet still shows what is now stored. */
   function handleReset(): void {
     if (!modelId || isRemote) return;
@@ -271,33 +287,260 @@ export function ModelSettingsSheet({
     setTemplateName("custom");
   }
 
-  // Reasoning: axis 1 (on/off) through the thinking override the composer
-  // pill already owns; axis 2 (effort) through the per-model level.
-  const thinkingOn =
-    resolveThinking({
-      modelId,
-      reasoning: spec?.reasoning,
-      overrides: thinkingOverrides,
-    }).enabled ?? false;
-  const effortLevel = modelId === null ? null : (effortOverrides[modelId] ?? null);
-  const effortArmed = effortLevel !== null;
-
   // The Sheet stays mounted so its dismiss animation plays on close;
   // `visible` drives show/hide, and the contents render null when
   // there is no model to configure (D4-1).
-  const templatePreview = chatTemplate.trim().slice(0, 30);
-
+  // PocketPal parity: use Sheet.Actions as a child component for proper scrolling
   return (
     <Sheet
       visible={modelId !== null}
       onClose={onClose}
       title="Model Settings"
       testID="model-settings-sheet"
-      actions={
-        /* Pinned action row — PocketPal's Sheet.Actions (ModelSettingsSheet.tsx
-           in the reference). One row, right-aligned: the text-weight Reset
-           and Cancel share the left, the contained Save Changes takes the
-           right. */
+    >
+      {modelId !== null && (
+        <>
+          {/* Local models only (PocketPal'S !isRemote guards). A remote
+              endpoint has no GGUF to name, prompt or template — only its
+              reasoning posture is ours to configure. */}
+          {!isRemote && (
+            <View className="pb-4">
+              {/* Model Name — PocketPal'S titleMediumLight label ABOVE the
+                  field (ModelSettings.tsx:196-206). */}
+              <View className="pb-2">
+                <Text className="pb-2 font-sans text-body-lg text-primary-text">
+                  Model Name
+                </Text>
+                <TextInput
+                  value={displayName}
+                  onChangeText={setDisplayName}
+                  className="input"
+                  placeholderTextColor={colors.secondaryText}
+                  accessibilityLabel="Model name"
+                />
+              </View>
+
+              {/* Token settings: a bare label+switch row, a conditional token
+                  field, then a divider. PocketPal has no "Token settings"
+                  heading — the dividers are the structure (ModelSettings.tsx:110-160). */}
+              <View className="py-2">
+                <Divider />
+                <ToggleRow
+                  label="BOS"
+                  on={addBosToken}
+                  onPress={() => setAddBosToken((v) => !v)}
+                />
+                {addBosToken ? (
+                  <TextInput
+                    value={bosToken}
+                    onChangeText={setBosToken}
+                    placeholder="BOS Token"
+                    className="input mb-2"
+                    placeholderTextColor={colors.secondaryText}
+                    autoCapitalize="none"
+                    accessibilityLabel="BOS token"
+                  />
+                ) : null}
+                <Divider />
+                <ToggleRow
+                  label="EOS"
+                  on={addEosToken}
+                  onPress={() => setAddEosToken((v) => !v)}
+                />
+                {addEosToken ? (
+                  <TextInput
+                    value={eosToken}
+                    onChangeText={setEosToken}
+                    placeholder="EOS Token"
+                    className="input mb-2"
+                    placeholderTextColor={colors.secondaryText}
+                    autoCapitalize="none"
+                    accessibilityLabel="EOS token"
+                  />
+                ) : null}
+                <Divider />
+                <ToggleRow
+                  label="Add Generation Prompt"
+                  // Absent = never overridden = llama.cpp'S own default (true).
+                  on={addGenerationPrompt ?? true}
+                  onPress={() => setAddGenerationPrompt(!(addGenerationPrompt ?? true))}
+                />
+                <Divider />
+              </View>
+
+              <View className="py-2">
+                <Field label="System Prompt">
+                  <TextInput
+                    value={systemPrompt}
+                    onChangeText={setSystemPrompt}
+                    placeholder="Personality and instructions for this model"
+                    className="input min-h-15"
+                    placeholderTextColor={colors.secondaryText}
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                    accessibilityLabel="System prompt"
+                  />
+                </Field>
+              </View>
+
+              {/* Template row: a faded preview with an Edit affordance that
+                  opens the base-template dialog (PocketPal'S MaskedView +
+                  Edit button, ModelSettings.tsx:124-147). Label and preview
+                  share one line, Edit sits at the end. */}
+              <Divider />
+              <View className="mt-3 flex-row items-center gap-3">
+                <Text className="font-sans text-body-lg text-primary-text">
+                  Template:
+                </Text>
+                <TemplatePreview text={templatePreview} />
+                <Pressable
+                  onPress={() => setTemplateDialogOpen(true)}
+                  className="min-h-12 justify-center px-2"
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit chat template"
+                >
+                  <Text className="font-sans text-body-lg text-primary">Edit</Text>
+                </Pressable>
+              </View>
+              <Divider />
+
+              {/* STOP WORDS: label, chips with a close affordance, then the
+                  add field (ModelSettings.tsx:149-190). */}
+              <View className="mt-4 pb-4">
+                <Text className="mb-2 font-sans text-xs text-secondary-text">
+                  STOP WORDS
+                </Text>
+                {stopWords.length > 0 ? (
+                  <View className="mb-2 flex-row flex-wrap gap-2">
+                    {stopWords.map((word) => (
+                      <View
+                        key={word}
+                        className="flex-row items-center rounded-sm bg-surface-2 pl-3"
+                      >
+                        <Text
+                          numberOfLines={1}
+                          // The field accepts a PASTED list, so one chip can
+                          // arrive holding a long phrase. flex-wrap re-flows the
+                          // row BETWEEN chips; it cannot break one chip, whose
+                          // width is its content — hence the bound here too.
+                          className="max-w-[70%] text-quiet"
+                        >
+                          {word}
+                        </Text>
+                        <Pressable
+                          onPress={() => setStopWords((prev) => prev.filter((w) => w !== word))}
+                          className="icon-btn"
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove stop word ${word}`}
+                        >
+                          <X size={14} color={colors.secondaryText} />
+                        </Pressable>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+                <TextInput
+                  value={stopWordDraft}
+                  onChangeText={setStopWordDraft}
+                  onSubmitEditing={addStopWord}
+                  placeholder="Add new stop word"
+                  className="input"
+                  placeholderTextColor={colors.secondaryText}
+                  autoCapitalize="none"
+                  returnKeyType="done"
+                  multiline={false}
+                  accessibilityLabel="Add new stop word"
+                />
+              </View>
+
+              {spec?.supportsVision === true ? (
+                <>
+                  <Divider />
+                  <Text className="section-title mb-3 mt-4">Multimodal Settings</Text>
+                  <ModelMultimodalSection model={spec} />
+                </>
+              ) : null}
+            </View>
+          )}
+
+          {/* Reasoning — always, including remote models (PocketPal parity). */}
+          <View className="mt-4">
+            <Divider />
+            <Text className="section-title mb-3 mt-4">Reasoning</Text>
+            <ToggleRow
+              label="Reasoning model"
+              on={thinkingOn}
+              onPress={() => setThinkingOverride(modelId, !thinkingOn)}
+            />
+            <Text className="mb-3 mt-1 font-sans text-body-md text-secondary-text">
+              Show the thinking control for this model, even if it wasn&apos;t
+              auto-detected.
+            </Text>
+            {thinkingOn ? (
+              <>
+                <ToggleRow
+                  label="Supports graded effort"
+                  on={effortArmed}
+                  onPress={() =>
+                    setEffortOverride(
+                      modelId,
+                      effortArmed ? null : DEFAULT_EFFORT_LEVEL,
+                    )
+                  }
+                />
+                {effortArmed ? (
+                  <View className="mt-1">
+                    <Text className="mb-2 font-sans text-body-md text-secondary-text">
+                      Effort levels this model supports
+                    </Text>
+                    <View className="flex-row flex-wrap gap-2">
+                      {EFFORT_LEVELS.map((level) => {
+                        const selected = effortLevel === level;
+                        return (
+                          <Pressable
+                            key={level}
+                            onPress={() => setEffortOverride(modelId, level)}
+                            className={`min-h-12 flex-row items-center gap-1 rounded-sm border px-3 ${
+                              selected ? "border-border bg-surface-3" : "border-border bg-surface-1"
+                            }`}
+                            accessibilityRole="radio"
+                            accessibilityState={{ selected }}
+                            accessibilityLabel={`Effort ${EFFORT_LABELS[level]}`}
+                          >
+                            {selected ? (
+                              <Check size={14} color={colors.primary} />
+                            ) : null}
+                            <Text
+                              className={`font-sans text-body-sm ${
+                                selected ? "text-primary" : "text-secondary-text"
+                              }`}
+                            >
+                              {EFFORT_LABELS[level]}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ) : null}
+              </>
+            ) : null}
+          </View>
+
+          <ChatTemplateDialog
+            visible={templateDialogOpen}
+            onClose={() => setTemplateDialogOpen(false)}
+            config={templateConfig()}
+            onChange={applyTemplateConfig}
+          />
+        </>
+      )}
+      <Sheet.Actions>
+        {/* Pinned action row — PocketPal'S Sheet.Actions
+           (ModelSettingsSheet.tsx in the reference). One row, right-aligned: 
+           the text-weight Reset and Cancel share the left, the contained Save 
+           Changes takes the right. */}
         <View className="flex-row items-center justify-between gap-2.5">
           <View className="flex-row items-center gap-2.5">
             {!isRemote ? (
@@ -336,246 +579,7 @@ export function ModelSettingsSheet({
             </Pressable>
           ) : null}
         </View>
-      }
-    >
-      {modelId !== null && (
-        <>
-      {/* Local models only (PocketPal's !isRemote guards). A remote
-          endpoint has no GGUF to name, prompt or template — only its
-          reasoning posture is ours to configure. */}
-      {!isRemote ? (
-        <>
-          {/* Model Name — PocketPal's titleMediumLight label ABOVE the
-              field (ModelSettings.tsx:196-206). */}
-          <View className="pb-2">
-            <Text className="pb-2 font-sans text-body-lg text-primary-text">
-              Model Name
-            </Text>
-            <TextInput
-              value={displayName}
-              onChangeText={setDisplayName}
-              className="input"
-              placeholderTextColor={colors.secondaryText}
-              accessibilityLabel="Model name"
-            />
-          </View>
-
-          {/* Token settings: a bare label+switch row, a conditional token
-              field, then a divider. PocketPal has no "Token settings"
-              heading — the dividers are the structure (ModelSettings.tsx:110-160). */}
-          <View className="py-2">
-            <Divider />
-            <ToggleRow
-              label="BOS"
-              on={addBosToken}
-              onPress={() => setAddBosToken((v) => !v)}
-            />
-            {addBosToken ? (
-              <TextInput
-                value={bosToken}
-                onChangeText={setBosToken}
-                placeholder="BOS Token"
-                className="input mb-2"
-                placeholderTextColor={colors.secondaryText}
-                autoCapitalize="none"
-                accessibilityLabel="BOS token"
-              />
-            ) : null}
-            <Divider />
-            <ToggleRow
-              label="EOS"
-              on={addEosToken}
-              onPress={() => setAddEosToken((v) => !v)}
-            />
-            {addEosToken ? (
-              <TextInput
-                value={eosToken}
-                onChangeText={setEosToken}
-                placeholder="EOS Token"
-                className="input mb-2"
-                placeholderTextColor={colors.secondaryText}
-                autoCapitalize="none"
-                accessibilityLabel="EOS token"
-              />
-            ) : null}
-            <Divider />
-            <ToggleRow
-              label="Add Generation Prompt"
-              // Absent = never overridden = llama.cpp's own default (true).
-              on={addGenerationPrompt ?? true}
-              onPress={() => setAddGenerationPrompt(!(addGenerationPrompt ?? true))}
-            />
-            <Divider />
-          </View>
-
-          <View className="py-2">
-            <Field label="System Prompt">
-              <TextInput
-                value={systemPrompt}
-                onChangeText={setSystemPrompt}
-                placeholder="Personality and instructions for this model"
-                className="input min-h-15"
-                placeholderTextColor={colors.secondaryText}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-                accessibilityLabel="System prompt"
-              />
-            </Field>
-          </View>
-
-          {/* Template row: a faded preview with an Edit affordance that
-              opens the base-template dialog (PocketPal's MaskedView +
-              Edit button, ModelSettings.tsx:124-147). Label and preview
-              share one line, Edit sits at the end. */}
-          <Divider />
-          <View className="mt-3 flex-row items-center gap-3">
-            <Text className="font-sans text-body-lg text-primary-text">
-              Template:
-            </Text>
-            <TemplatePreview text={templatePreview} />
-            <Pressable
-              onPress={() => setTemplateDialogOpen(true)}
-              className="min-h-12 justify-center px-2"
-              accessibilityRole="button"
-              accessibilityLabel="Edit chat template"
-            >
-              <Text className="font-sans text-body-lg text-primary">Edit</Text>
-            </Pressable>
-          </View>
-          <Divider />
-
-          {/* STOP WORDS: label, chips with a close affordance, then the
-              add field (ModelSettings.tsx:149-190). */}
-          <View className="mt-4 mb-6">
-            <Text className="mb-2 font-sans text-xs text-secondary-text">
-              STOP WORDS
-            </Text>
-            {stopWords.length > 0 ? (
-              <View className="mb-2 flex-row flex-wrap gap-2">
-                {stopWords.map((word) => (
-                  <View
-                    key={word}
-                    className="flex-row items-center rounded-sm bg-surface-2 pl-3"
-                  >
-                    <Text
-                      numberOfLines={1}
-                      // The field accepts a PASTED list, so one chip can
-                      // arrive holding a long phrase. flex-wrap re-flows the
-                      // row BETWEEN chips; it cannot break one chip, whose
-                      // width is its content — hence the bound here too.
-                      className="max-w-[70%] text-quiet"
-                    >
-                      {word}
-                    </Text>
-                    <Pressable
-                      onPress={() => setStopWords((prev) => prev.filter((w) => w !== word))}
-                      className="icon-btn"
-                      accessibilityRole="button"
-                      accessibilityLabel={`Remove stop word ${word}`}
-                    >
-                      <X size={14} color={colors.secondaryText} />
-                    </Pressable>
-                  </View>
-                ))}
-              </View>
-            ) : null}
-            <TextInput
-              value={stopWordDraft}
-              onChangeText={setStopWordDraft}
-              onSubmitEditing={addStopWord}
-              placeholder="Add new stop word"
-              className="input"
-              placeholderTextColor={colors.secondaryText}
-              autoCapitalize="none"
-              returnKeyType="done"
-              multiline={false}
-              accessibilityLabel="Add new stop word"
-            />
-          </View>
-
-          {spec?.supportsVision === true ? (
-            <>
-              <Divider />
-              <Text className="section-title mb-3 mt-4">Multimodal Settings</Text>
-              <ModelMultimodalSection model={spec} />
-            </>
-          ) : null}
-        </>
-      ) : null}
-
-      {/* Reasoning — always, including remote models (PocketPal parity). */}
-      <View className="mt-4">
-        <Divider />
-        <Text className="section-title mb-3 mt-4">Reasoning</Text>
-        <ToggleRow
-          label="Reasoning model"
-          on={thinkingOn}
-          onPress={() => setThinkingOverride(modelId, !thinkingOn)}
-        />
-        <Text className="mb-3 mt-1 font-sans text-body-md text-secondary-text">
-          Show the thinking control for this model, even if it wasn&apos;t
-          auto-detected.
-        </Text>
-        {thinkingOn ? (
-          <>
-            <ToggleRow
-              label="Supports graded effort"
-              on={effortArmed}
-              onPress={() =>
-                setEffortOverride(
-                  modelId,
-                  effortArmed ? null : DEFAULT_EFFORT_LEVEL,
-                )
-              }
-            />
-            {effortArmed ? (
-              <View className="mt-1">
-                <Text className="mb-2 font-sans text-body-md text-secondary-text">
-                  Effort levels this model supports
-                </Text>
-                <View className="flex-row flex-wrap gap-2">
-                  {EFFORT_LEVELS.map((level) => {
-                    const selected = effortLevel === level;
-                    return (
-                      <Pressable
-                        key={level}
-                        onPress={() => setEffortOverride(modelId, level)}
-                        className={`min-h-12 flex-row items-center gap-1 rounded-sm border px-3 ${
-                          selected ? "border-border bg-surface-3" : "border-border bg-surface-1"
-                        }`}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected }}
-                        accessibilityLabel={`Effort ${EFFORT_LABELS[level]}`}
-                      >
-                        {selected ? (
-                          <Check size={14} color={colors.primary} />
-                        ) : null}
-                        <Text
-                          className={`font-sans text-body-sm ${
-                            selected ? "text-primary" : "text-secondary-text"
-                          }`}
-                        >
-                          {EFFORT_LABELS[level]}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : null}
-          </>
-        ) : null}
-      </View>
-
-      <ChatTemplateDialog
-        visible={templateDialogOpen}
-        onClose={() => setTemplateDialogOpen(false)}
-        config={templateConfig()}
-        onChange={applyTemplateConfig}
-      />
-        </>
-      )}
+      </Sheet.Actions>
     </Sheet>
   );
 }

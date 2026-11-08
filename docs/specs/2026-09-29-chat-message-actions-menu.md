@@ -1,7 +1,7 @@
 # Spec: Chat message actions (long-press menu, edit-and-resend, cross-model retry)
 
 Date: 2026-09-29
-Status: Draft — awaiting sign-off. **Steps 1 and 3 shipped** (see §3.1, §3.5).
+Status: Draft — awaiting sign-off. **Steps 1, 3, 4, 5 and 6 shipped** (see §3.1, §3.5).
 Audit source: `docs/research/2026-09-29-pocketpal-chat-feature-audit.md` §4 (G3)
 
 > **Decisions taken 2026-09-29 (grilling session), which changed this spec:**
@@ -178,20 +178,41 @@ implementations — SwiftUI `Menu`/`ContextMenu` on iOS, a Compose `DropdownMenu
 
 Three platform caveats, from the same types file. Read before implementing:
 
-- **Skip icons.** `image` is `SFSymbol | ImageSourcePropType`: an SF Symbol name renders on
-  iOS and is *ignored* on Android; an `ImageSource` renders on Android and is *ignored* on
-  iOS. Supplying both is the only way to get icons on both platforms, and `titleColor` /
-  `imageColor` are documented as unreliable on iOS. **Titles alone are the low-friction
-  choice**; add icons only if the design demands them.
+- **Icons are platform-native, iOS-only in practice.** *Amended 2026-10-30: the earlier
+  "skip icons" recommendation was overridden — the bubble menu now carries SF Symbols.*
+  `image` is `SFSymbol | ImageSourcePropType`: an SF Symbol name renders on iOS and is
+  *ignored* on Android; an `ImageSource` renders on Android and is *ignored* on iOS.
+  Supplying both is the only way to get icons on both platforms, and `titleColor` /
+  `imageColor` are documented as unreliable on iOS. We ship the SF Symbol strings
+  (`doc.on.doc`, `arrow.clockwise`, `square.grid.2x2`, `pencil`) and accept that Android
+  shows titles only, because a Lucide renderer is not an option here — the package takes
+  a symbol name or an image source, and no rasteriser is installed to turn one into the
+  other.
 - **No programmatic open on iOS.** `MenuComponentRef.show()` is Android-only and warns on
   iOS (“SwiftUI `Menu`/`ContextMenu` have no programmatic open API”). Long-press as the
   trigger sidesteps this entirely — which is why `shouldOpenOnLongPress` is the right
   primitive here and not merely a convenience.
-- **Do not rely on `onOpenMenu` / `onCloseMenu`.** Both are `@platform android`; iOS exposes
-  no close hook to forward.
+- **`onOpenMenu` / `onCloseMenu` are Android-only**; iOS exposes neither.
 
-Haptic: `expo-haptics` is a direct dependency (`package.json:22`) imported only by
-`hooks/useVoiceLoop.ts`. Fire `impactLight` on the row's long-press before the menu opens.
+Haptic (*amended 2026-10-30*): the row's own `Pressable onLongPress` was replaced by the
+menu's `onOpenMenu`, which fires exactly once when the menu actually opens. On iOS the
+system `ContextMenu` supplies its own open haptic; there is no hook to add ours to, so
+iOS relies on the system's. Gated on `settled`, so the empty mid-stream menu is silent.
+
+Menu items are additionally not gated on model availability where PocketPal does not gate
+them: **Regenerate with…** stays enabled without a loaded model, because switching model is
+the recovery path when the active one is not loaded (`ChatView.tsx:781` gates it only on
+stopping / voice mode). **Regenerate** and **Edit** do use `canRun`, matching their
+`!canGenerate` gates.
+
+**The menu is always the root element** (*added 2026-10-30*). It used to return a plain
+`<View>` while a reply streamed and `<MenuView>` once it settled — different element types,
+so React unmounted the whole bubble subtree the moment generation finished (markdown
+re-parsed, previews re-fetched, a visible flash). Now `MenuView` is always the root and only
+`actions` is gated on `settled`. Accepted trade-off: long-pressing a still-streaming bubble
+opens an empty menu. `components/chat/__tests__/message-menu.test.tsx` pins the no-remount
+behaviour.
+
 
 Items:
 
@@ -224,10 +245,10 @@ This is a design call, not an audit finding (audit §6.5). Flagged for sign-off.
 | --- | --- | --- |
 | 1 | ~~`SessionStore.truncateFrom` + TinyBase impl + test~~ **DONE** | Shipped 2026-09-29. Seven cases, including the `toolRuns` cascade and the out-of-range guards. |
 | 2 | ~~`truncateFrom` test doubles as the delete check~~ **DONE** | Covered by step 1's cascade + out-of-range cases. |
-| 3 | Long-press + haptic + `MenuView` with Copy / Delete | Smallest user-visible slice. **This is the next step**, and the first thing that makes `truncateFrom` reachable. |
-| 4 | Regenerate-from-any-turn | Reuses step 1's port method. |
-| 5 | Edit mode: state, bar, draft seeding, commit-on-send | Largest piece; touches the composer, which is the most regression-prone surface on the screen (see §5). |
-| 6 | Regenerate-with-another-model via `subactions` | Last — it is step 4 plus a submenu, and it is the least often used. |
+| 3 | ~~Long-press + haptic + `MenuView` with Copy / Delete~~ **DONE** | Shipped as Copy · Regenerate · Regenerate with… · Edit (delete was CUT, §header). Rebuilt 2026-10-30 on `@expo/ui/community/menu`. |
+| 4 | ~~Regenerate-from-any-turn~~ **DONE** | Reuses step 1's port method. |
+| 5 | ~~Edit mode: state, bar, draft seeding, commit-on-send~~ **DONE** | Largest piece; touches the composer, the most regression-prone surface on the screen (§5). |
+| 6 | ~~Regenerate-with-another-model via `subactions`~~ **DONE** | A real native submenu, with host disambiguation and the active model checked. |
 
 ---
 
@@ -302,4 +323,6 @@ Same reasoning rules out the store's current treatment of the voice and attach i
   had a photo silently drops it. Our types carry one image per turn (`types/chat.ts`), so
   this is small whenever it is wanted — but nobody has asked, and guessing here would be
   inventing behaviour.
-- **The iOS long-press haptic** remains best-effort and unverified on hardware (§3.5).
+- **The iOS long-press haptic** is the system `ContextMenu`'s own, not ours (§3.5): the
+  package exposes no iOS open hook, so there is nowhere to fire `impactAsync` from that
+  would not double up on Android. Still unverified on hardware.

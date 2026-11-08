@@ -30,6 +30,7 @@ export async function readExportSessions(
       id,
       title: row?.title ?? "Untitled",
       pinned: row?.pinned ?? false,
+      createdAt: row?.createdAt,
       updatedAt: row?.updatedAt ?? Date.now(),
       turns,
     });

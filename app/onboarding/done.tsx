@@ -22,7 +22,7 @@ export default function DoneStep() {
           You're set
         </Text>
         <Text className="mt-2 text-center font-sans text-body-lg text-secondary-text">
-          Ask anything, anytime.{"\n"}LiAI remembers what matters.
+          Ask anything, anytime.
         </Text>
         <Pressable
           onPress={() => void complete("/chat")}

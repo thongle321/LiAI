@@ -61,6 +61,8 @@ export interface Companion {
   name: string;
   description?: string;
   thumbnail_url?: string;
+  /** Base64-encoded thumbnail for export only (not stored). */
+  thumbnail_data?: string;
 
   /** Current system prompt; a Mustache template when `parameterSchema`
    *  is non-empty (rendered with `parameters` at completion time). */
@@ -70,6 +72,12 @@ export interface Companion {
   isSystemPromptChanged: boolean;
   /** Carried for AI prompt generation parity; no UI writes it yet. */
   useAIPrompt: boolean;
+
+  /** Model used for AI prompt generation (if useAIPrompt is true). */
+  promptGenerationModel?: CompanionModelRef;
+
+  /** User's instructions for AI prompt generation. */
+  generatingPrompt?: string;
 
   defaultModel?: CompanionModelRef;
   /** Gradient colors for the companion card [primary, secondary]. */
@@ -102,10 +110,19 @@ export interface Companion {
 
 /** Fields a `null` ERASES (undefined leaves untouched) — the write gate
  *  the repository enforces per field, exactly like PocketPal's. */
-type ClearableCompanionField = "greeting" | "defaultModel";
+type ClearableCompanionField =
+  | "greeting"
+  | "defaultModel"
+  | "description"
+  | "completionSettings"
+  | "thumbnail_url";
 
 export type CompanionUpdate = Omit<Partial<Companion>, ClearableCompanionField> & {
-  [K in ClearableCompanionField]?: Companion[K] | null;
+  greeting?: Companion["greeting"] | null;
+  defaultModel?: Companion["defaultModel"] | null;
+  description?: Companion["description"] | null;
+  completionSettings?: Companion["completionSettings"] | null;
+  thumbnail_url?: Companion["thumbnail_url"] | null;
 };
 
 // ---------------------------------------------------------------------------

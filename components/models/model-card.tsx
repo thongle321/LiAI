@@ -20,13 +20,14 @@
  */
 
 import { useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import {
   ChevronsDownUp,
   ChevronsUpDown,
   Cpu,
   Eject,
+  ImageOff,
   Play,
   Settings,
   Trash2,
@@ -120,6 +121,11 @@ export function ModelCard({
   const pauseModelDownload = useModelStore((s) => s.pauseModelDownload);
   const resumeModelDownload = useModelStore((s) => s.resumeModelDownload);
   const cancelModelDownload = useModelStore((s) => s.cancelModelDownload);
+  const startProjectorDownload = useModelStore((s) => s.startProjectorDownload);
+  // Loading state for eager model load (PocketPal parity)
+  const isContextLoading = useModelStore((s) => s.isContextLoading);
+  const loadingModelId = useModelStore((s) => s.loadingModelId);
+  const isLoadingThisModel = isContextLoading && loadingModelId === item.id;
   const title = settings.displayName || item.name;
   // Only the file size, never the parameter count next to it: "0.6B" beside
   // "751 MB" reads as two competing sizes for one model.
@@ -145,6 +151,20 @@ export function ModelCard({
     downloadable: onDownload !== undefined,
   });
   const dot = statusDotState({ status: item.downloadStatus, isActive });
+
+  /** Spec Q3 (docs/specs/2026-10-06-vision-toggle-and-projector-selection.md):
+   *  the warning fires when vision is on, a projector is recorded, and it
+   *  is not on disk. The same rule ModelCardDetails renders expanded; the
+   *  collapsed copy (PocketParity: PocketPal #1053 moved the affordance to
+   *  the card above the fold) keeps it one tap away without expanding. */
+  const projectorFile = item.projector;
+  const showProjectorOffer =
+    item.supportsVision === true &&
+    item.visionEnabled !== false &&
+    projectorFile !== undefined &&
+    item.downloadStatus !== "completed" &&
+    item.downloadStatus !== "downloading" &&
+    item.downloadStatus !== "paused";
 
   /** Both destructive actions confirm first (PocketParity: ModelCard.tsx
    *  :220-232 for delete, :247-257 for remove). The two wordings are the
@@ -254,6 +274,28 @@ export function ModelCard({
           <Text className="storage-warning mt-2">{fit.message}</Text>
         ) : null}
 
+        {/* Spec Q3's collapsed copy: the offer hides while a transfer runs —
+            the cancel row below IS the progress readout then, and a second
+            affordance beside it would only compete (PocketParity: the
+            reference swaps the offer for a progress row, #1053). */}
+        {showProjectorOffer && projectorFile ? (
+          <Pressable
+            testID="projection-warning-badge"
+            onPress={() => void startProjectorDownload(item.id)}
+            className="mt-2 min-h-12 flex-row items-center gap-2 self-start rounded-lg border border-border px-4 py-2 active:opacity-80"
+            accessibilityRole="button"
+            accessibilityLabel="Download projection model"
+          >
+            <ImageOff size={16} color={colors.error} />
+            <Text className="font-sans text-body-sm text-error">
+              Download projection model
+            </Text>
+            <Text className="text-quiet">
+              {formatBytes(projectorFile.size)}
+            </Text>
+          </Pressable>
+        ) : null}
+
         {/* One row (PocketParity: styles.ts:156-172 — gap 8, the primary
             action flex:1, the rest bare icon buttons). Wraps so a long name
             plus four actions reflow instead of clipping at 320pt. Nothing
@@ -263,10 +305,10 @@ export function ModelCard({
         {actions.length > 1 ? (
           <View className="mt-3 flex-row flex-wrap items-center gap-2">
             {actions.includes("download") && onDownload ? (
-              /* Polish (2026-10-26, user request): the download control
-                 rides the card's icon column instead of a text pill —
-                 deliberate DIVERGENCE from PocketParity, whose preset
-                 cards keep the wide text button (ModelCard.tsx). */
+              /* PocketParity: the reference's not-downloaded branch keeps
+                 the wide text button (ModelCard.tsx:454-478, styled by
+                 styles.ts:183-188), so the primary slot is Download + label,
+                 not an icon. */
               <DownloadButton
                 status={item.downloadStatus}
                 progress={item.downloadProgress}
@@ -274,22 +316,36 @@ export function ModelCard({
                 onPause={() => void pauseModelDownload(item.id)}
                 onResume={() => void resumeModelDownload(item.id)}
                 disabled={!fit.fits || item.downloadStatus === "completed"}
-                iconOnly
+                stretch
               />
             ) : null}
 
             {actions.includes("load") || actions.includes("offload") ? (
               <Pressable
                 onPress={isActive ? onDeactivate : onActivate}
+                disabled={isLoadingThisModel}
                 className="btn btn--tonal active:opacity-80 flex-1"
                 accessibilityRole="button"
-                accessibilityLabel={isActive ? `Offload ${title}` : `Load ${title}`}
+                accessibilityLabel={
+                  isLoadingThisModel
+                    ? "Loading model"
+                    : isActive
+                      ? `Offload ${title}`
+                      : `Load ${title}`
+                }
               >
                 {/* PocketParity: the reference's glyph pair — a play circle
                     while the model is loadable, an eject once it is loaded
                     (ModelCard.tsx renderModelLoadButton). Its label is
-                    already the state word, so the icon reinforces. */}
-                {isActive ? (
+                    already the state word, so the icon reinforces.
+                    During eager load, show a spinner (PocketPal's loading prop). */}
+                {isLoadingThisModel ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.primary}
+                    style={{ marginRight: 8 }}
+                  />
+                ) : isActive ? (
                   <Eject size={16} color={colors.primary} />
                 ) : (
                   <Play size={16} color={colors.primary} />
@@ -298,7 +354,11 @@ export function ModelCard({
                   {/* PocketParity: the loaded model's button says "Offload"
                         (en.json models.modelCard.buttons.offload) — the state word
                         is the label, and the glyph reinforces it. */}
-                  {isActive ? "Offload" : "Load"}
+                  {isLoadingThisModel
+                    ? "Loading..."
+                    : isActive
+                      ? "Offload"
+                      : "Load"}
                 </Text>
               </Pressable>
             ) : null}

@@ -22,7 +22,7 @@ import { EMPTY_DOWNLOADS, useVoice } from "@/store/voice.ts";
 const INSTALL_KOKORO = /^Install the Kokoro/;
 
 /** Same for a voice row — the other body branch, for a ready model. */
-const VOICE_ROW = /^Speak with /;
+const VOICE_ROW = /^Select /;
 
 /** The header is the only disclosure control on the card. */
 function header(): ReturnType<typeof screen.getByLabelText> {

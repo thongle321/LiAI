@@ -1,7 +1,7 @@
 /** The tool-compat warning's verdict: one notice per model, only when a
  *  companion's talents and the model's capabilities disagree. */
 
-import { TOOL_COMPAT_WARNING, shouldWarnToolCompat } from "../tool-compat";
+import { TOOL_COMPAT_WARNING, callableTalentNames, shouldWarnToolCompat } from "../tool-compat";
 import type { ToolCompatInput } from "../tool-compat";
 
 function input(overrides: Partial<ToolCompatInput> = {}): ToolCompatInput {
@@ -49,5 +49,32 @@ describe("TOOL_COMPAT_WARNING", () => {
     expect(TOOL_COMPAT_WARNING).toBe(
       "This model may not support tool calling. Results may be unreliable.",
     );
+  });
+});
+
+describe("callableTalentNames", () => {
+  it("drops the pact when the local model cannot call tools", () => {
+    // A companion still chats with her persona prompt; her talents are the
+    // one thing this model cannot take, and attaching their schemas is what
+    // fails the turn before a token.
+    expect(callableTalentNames(input())).toEqual([]);
+  });
+
+  it("keeps the pact for a model that supports tools", () => {
+    expect(callableTalentNames(input({ supportsTools: true }))).toEqual([
+      "web_search",
+    ]);
+  });
+
+  it("keeps the pact when the model was never probed", () => {
+    expect(callableTalentNames(input({ supportsTools: undefined }))).toEqual([
+      "web_search",
+    ]);
+  });
+
+  it("keeps the pact for a remote provider, whatever the local verdict says", () => {
+    expect(callableTalentNames(input({ providerType: "remote" }))).toEqual([
+      "web_search",
+    ]);
   });
 });

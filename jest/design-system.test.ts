@@ -268,9 +268,9 @@ function variantColors(variant: string): Record<string, string> {
  *  `uniwind` through a resolver that cannot see it. The file is two flat
  *  `key: "#hex",` blocks, so the parse below is exact. */
 function palette(name: "lightColors" | "darkColors"): Record<string, string> {
-  const source = readFileSync(join(ROOT, "themes/tokens.ts"), "utf8");
+  const source = readFileSync(join(ROOT, "themes/tokens/colors.ts"), "utf8");
   const start = source.indexOf(`export const ${name} = {`);
-  if (start === -1) throw new Error(`themes/tokens.ts has no ${name}`);
+  if (start === -1) throw new Error(`themes/tokens/colors.ts has no ${name}`);
   const body = source.slice(start, source.indexOf("} as const;", start));
   const out: Record<string, string> = {};
   for (const [, key, value] of body.matchAll(/^\s*([A-Za-z]\w*):\s*"([^"]+)",/gm)) {

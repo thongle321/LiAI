@@ -12,6 +12,7 @@ import { render } from "@testing-library/react-native";
 import { Text, View } from "react-native";
 
 import { BottomSheet, Host, Picker, Slider, Switch } from "@expo/ui";
+import SegmentedControl from "@expo/ui/community/segmented-control";
 import * as Font from "expo-font";
 import * as Linking from "expo-linking";
 import * as Speech from "expo-speech";
@@ -42,6 +43,17 @@ describe("@expo/ui stub", () => {
     );
     expect(getByText("inside a Host")).toBeTruthy();
     expect(getByText("sheet body")).toBeTruthy();
+  });
+});
+
+describe("@expo/ui/community/segmented-control stub", () => {
+  it("renders a pressable per value", () => {
+    const { getByText } = render(
+      <SegmentedControl values={["Auto", "On", "Off"]} selectedIndex={0} />,
+    );
+    expect(getByText("Auto")).toBeTruthy();
+    expect(getByText("On")).toBeTruthy();
+    expect(getByText("Off")).toBeTruthy();
   });
 });
 

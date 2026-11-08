@@ -179,7 +179,7 @@ class ChatRenderer extends Renderer implements RendererInterface {
   }
 }
 
-const renderer = new ChatRenderer({ selectable: true });
+const renderer = new ChatRenderer({ selectable: false });
 
 /** The bubble body rung, resolved against the ACTIVE palette at render
  *  (these used to be module-scope constants frozen on the light snapshot).

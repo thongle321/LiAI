@@ -46,6 +46,7 @@ import { voiceMemoryFit, type DeviceMemory } from "@/services/voice/memory-fit.t
 import { Endpointer } from "@/services/voice/endpointer.ts";
 import { VOICE_CAPTURE_SETTLE_MS, VOICE_MIC_WATCHDOG_MS, VOICE_START_TIMEOUT_MS } from "@/services/voice/constants.ts";
 import { TTS_ENGINE_RUNTIME_BYTES } from "@/services/tts/constants.ts";
+import { hasVoiceFile } from "@/services/tts/voiceFiles.ts";
 import { int16PcmToFloat32 } from "@/services/asr/energyVad.ts";
 import type {
   VoiceEngine,
@@ -126,6 +127,20 @@ class VoiceModeController {
   /** True between an audio interruption's `began` and its resume: the
    *  controller-internal half of the pause (the UI rides micMuted). */
   private pausedByInterruption = false;
+  /** The app's lifecycle, tracked here so a setup completion can wait for
+   *  the foreground (reference: ModelStore's appState). The host hook
+   *  subscribes to AppState and keeps this current. */
+  private appState: AppStateStatus = "active";
+  /** The originating screen's focus. Defaults true so the controller can
+   *  run without a screen (tests, headless entry); useVoiceSession reports
+   *  the real value for the mounted Voice tab. */
+  private focused = true;
+  /** True between a setup completion's start and its memory check: a
+   *  voice tap meanwhile must not run the gates a second time. */
+  private setupPending = false;
+  /** Monotonic id: only the latest setup completion may act. */
+  private setupWait = 0;
+  private setupWaitTimer: ReturnType<typeof setInterval> | null = null;
   private readonly endpointer = new Endpointer();
   private micWatchdog: ReturnType<typeof setTimeout> | null = null;
   private micRetried = false;
@@ -156,8 +171,53 @@ class VoiceModeController {
     this.sessionStore.set(patch);
   }
 
+  /** Is the chat side quiet enough to measure? The reference waits for
+   *  `appState === 'active'` plus a settled context (or no active model).
+   *  LiAI has no context handle, so `isContextLoading` is the settle
+   *  signal; a remote provider never loads a context. */
+  private chatModelSettled(): boolean {
+    const s = useModelStore.getState();
+    const modelSettled =
+      s.activeProviderType === "remote" ||
+      s.activeModelId === null ||
+      !s.isContextLoading;
+    return this.appState === "active" && modelSettled;
+  }
+
+  /** The reference's `when(predicate, {timeout})`, without mobx: a poll
+   *  that also observes the controller-owned appState (no store event
+   *  fires for a lifecycle change). */
+  private waitUntil(
+    predicate: () => boolean,
+    timeoutMs: number,
+  ): Promise<void> {
+    if (predicate()) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      const started = Date.now();
+      const interval = setInterval(() => {
+        if (this.disposed) {
+          clearInterval(interval);
+          reject(new Error("voice mode disposed"));
+          return;
+        }
+        if (predicate()) {
+          clearInterval(interval);
+          if (this.setupWaitTimer === interval) this.setupWaitTimer = null;
+          resolve();
+          return;
+        }
+        if (Date.now() - started >= timeoutMs) {
+          clearInterval(interval);
+          if (this.setupWaitTimer === interval) this.setupWaitTimer = null;
+          reject(new Error("voice mode setup timed out"));
+        }
+      }, 50);
+      this.setupWaitTimer = interval;
+    });
+  }
+
   async requestEntry(origin: VoiceSessionOrigin = "voice"): Promise<void> {
-    if (this.open || this.disposed) return;
+    if (this.open || this.disposed || this.setupPending) return;
     // The exit-on-blur anchor: remember WHOSE screen asked, even when a
     // gate fails (a parked sheet belongs to the originating screen).
     this.writeCircuit({ origin });
@@ -200,6 +260,11 @@ class VoiceModeController {
     // The setup gate: tier ready AND mic already granted. Everything else
     // is what VoiceSetupSheet exists to fix (tier download and/or the ask).
     if (!asrStore.isSelectedTierReady || mic !== "granted") {
+      this.writeCircuit({ sheet: { kind: "setup" } });
+      return;
+    }
+    const voice = useVoice.getState().currentVoice;
+    if (voice !== null && voice.engine !== "system" && !(await hasVoiceFile(voice))) {
       this.writeCircuit({ sheet: { kind: "setup" } });
       return;
     }
@@ -258,9 +323,45 @@ class VoiceModeController {
     this.deps.openModels();
   }
 
-  setupDone(): Promise<void> {
+  /** The setup sheet's completion: wait for the chat side to settle, then
+   *  run the memory check. Only the latest completion acts, a left screen
+   *  shows nothing, and a model that never settles warns instead of
+   *  measuring a half-loaded turn. */
+  async setupDone(): Promise<void> {
+    const wait = ++this.setupWait;
+    this.setupPending = true;
     this.writeCircuit({ sheet: null });
-    return this.requestEntry(this.sessionStore.get().origin ?? "voice");
+    let timedOut = false;
+    try {
+      await this.waitUntil(
+        () => this.chatModelSettled(),
+        VOICE_START_TIMEOUT_MS,
+      );
+    } catch {
+      timedOut = true;
+    }
+    if (wait === this.setupWait) this.setupPending = false;
+    if (
+      wait !== this.setupWait ||
+      !this.focused ||
+      this.disposed ||
+      this.open
+    ) {
+      return;
+    }
+    if (timedOut) {
+      this.notifyError("Taking too long to load — tap the mic to try again.");
+      return;
+    }
+    if (!this.deps.isModelReady()) {
+      this.writeCircuit({
+        issue: "Load a chat model first — pick one in Models.",
+        sheet: null,
+      });
+      this.deps.openModels();
+      return;
+    }
+    await this.checkMemoryAndEnter();
   }
 
   private setPhase(phase: VoiceModePhase): void {
@@ -280,8 +381,12 @@ class VoiceModeController {
   }
 
   /** The UI putting a parked gate sheet away; a session-circuit write like
-   *  any other, so it stays this class's lane. */
-  dismissSheet(): void {
+   *  any other, so it stays this class's lane. A `kind` makes the close
+   *  sheet-specific: a late dismiss from a sheet the circuit has already
+   *  replaced must not clear the one now on screen. */
+  dismissSheet(kind?: NonNullable<VoiceModeSheet>["kind"]): void {
+    const current = this.sessionStore.get().sheet;
+    if (kind !== undefined && current?.kind !== kind) return;
     this.writeCircuit({ sheet: null });
   }
 
@@ -300,6 +405,8 @@ class VoiceModeController {
     await this.exiting;
     if (this.open || this.disposed) return;
     this.open = true;
+    useVoice.getState().setVoiceOutputActive(true);
+    useVoice.getState().setHoldFirstChunk(true);
     const session = ++this.session;
     this.setPhase("starting");
     // Every open presents full-screen; a stale `bar` from a previous
@@ -393,6 +500,7 @@ class VoiceModeController {
       } catch (err) {
         console.warn("[voiceMode] interrupt on exit failed:", err);
       }
+      useVoice.getState().setVoiceOutputActive(false);
       try {
         await this.deps.engine.release();
       } catch (err) {
@@ -406,6 +514,10 @@ class VoiceModeController {
   /** Screen gone: no session, and none may start until remounted. */
   dispose(): void {
     this.disposed = true;
+    if (this.setupWaitTimer) {
+      clearInterval(this.setupWaitTimer);
+      this.setupWaitTimer = null;
+    }
     this.deps.port.onReply = null;
     this.exit("dispose");
   }
@@ -455,10 +567,17 @@ class VoiceModeController {
     void this.startCapture(this.session);
   }
 
+  /** The originating screen's focus, reported by useVoiceSession. A setup
+   *  completion that lands after the screen was left shows nothing. */
+  setFocused(focused: boolean): void {
+    this.focused = focused;
+  }
+
   onAppStateChange(
     previous: AppStateStatus | null,
     next: AppStateStatus,
   ): void {
+    this.appState = next;
     if (!this.open) return;
     if (next === "background") {
       this.exit("background");
@@ -732,7 +851,7 @@ export interface VoiceModeSurface {
   sheet: VoiceModeSheet;
   /** Starts the entry gates from `origin`'s screen (default: voice tab). */
   requestEntry(origin?: VoiceSessionOrigin): Promise<void>;
-  dismissSheet(): void;
+  dismissSheet(kind?: NonNullable<VoiceModeSheet>["kind"]): void;
   setupDone(): Promise<void>;
   continueAnyway(): Promise<void>;
   openModels(): void;
@@ -757,7 +876,8 @@ function useVoiceSurface(): VoiceModeSurface {
     [],
   );
   const dismissSheet = useCallback(
-    () => activeController?.dismissSheet(),
+    (kind?: NonNullable<VoiceModeSheet>["kind"]) =>
+      activeController?.dismissSheet(kind),
     [],
   );
   const setupDone = useCallback(
@@ -817,7 +937,7 @@ export function useVoiceMode(deps: VoiceModeDeps = {}): VoiceModeSurface {
   });
 
   useEffect(() => {
-    let previous: AppStateStatus | null = AppState.currentState;
+    let previous: AppStateStatus | null = AppState.currentState as AppStateStatus | null;
     const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
       const from = previous;
       previous = next;
@@ -825,7 +945,7 @@ export function useVoiceMode(deps: VoiceModeDeps = {}): VoiceModeSurface {
     });
     // OS-level audio interruptions (a call, an alarm) ride the fork's
     // event: the controller pauses, resumes unmuted on the way back.
-    const interruptions = onAudioInterruption((event) =>
+    const interruptions = onAudioInterruption((event: AudioInterruptionProps) =>
       controller.onAudioInterruption(event),
     );
     return () => {
@@ -848,6 +968,12 @@ export function useVoiceSession(
 ): VoiceModeSurface {
   const focused = useIsFocused();
   useEffect(() => {
+    activeVoiceModeController()?.setFocused(focused);
+    return () => {
+      activeVoiceModeController()?.setFocused(false);
+    };
+  }, [focused]);
+  useEffect(() => {
     if (!focused) return;
     return () => {
       // Focus lost: end a session this screen started; leave one that
@@ -863,3 +989,4 @@ export function useVoiceSession(
   }, [focused, origin]);
   return useVoiceSurface();
 }
+

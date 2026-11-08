@@ -14,7 +14,8 @@
  *
  * JINJA is built (grilling Q5): a per-turn llama.rn completion flag that
  * defaults to on; the switch pins it either way, threaded through
- * store → turn → engine like enableThinking.
+ * store → turn → engine like enableThinking. It is a GLOBAL engine flag, so a
+ * caller that cannot store it passes no `jinja` group and the row is omitted.
  *
  * N PREDICT and SEED are text fields, not steppers: their ranges are wide
  * enough that a stepper is unusable, and a specific seed is meant to be
@@ -22,18 +23,20 @@
  */
 
 import {
+  RowLabel,
   RowSizeProvider,
-  Segmented,
   SliderRow,
   TextFieldRow,
   ToggleRow,
 } from "../settings-rows.tsx";
+import SegmentedControl from "@expo/ui/community/segmented-control";
+import { useColors, useColorScheme } from "@/themes/tokens.ts";
+import * as Haptics from "expo-haptics";
+import { View } from "react-native";
 import type { MirostatMode, SamplerParams } from "@/services/inference/sampler.ts";
 
 const MIROSTAT_OPTIONS: MirostatMode[] = [0, 1, 2];
 const MIROSTAT_LABELS = ["Off", "v1", "v2"] as const;
-const UNLIMITED = "unlimited";
-const CUSTOM = "custom";
 
 function fixed(value: number, places = 2): string {
   return value.toFixed(places);
@@ -41,30 +44,50 @@ function fixed(value: number, places = 2): string {
 
 export function SamplerRows({
   sampler,
-  jinjaEnabled,
+  jinja,
   errors,
   onChange,
-  onJinjaChange,
 }: {
   sampler: SamplerParams;
-  jinjaEnabled: boolean;
+  /** JINJA is a GLOBAL engine flag, not a per-session or per-companion one.
+   *  A sheet that cannot store it omits this group and the row disappears,
+   *  rather than showing a switch that does nothing. */
+  jinja?: { enabled: boolean; onChange: (on: boolean) => void };
   /** Save-time validation marks (Q6=C) for the typed fields. */
   errors?: Partial<Record<"seed" | "nPredict", string>>;
   onChange: (patch: Partial<SamplerParams>) => void;
-  onJinjaChange: (on: boolean) => void;
 }) {
+  const colors = useColors();
+  const scheme = useColorScheme();
   return (
     // PocketPal's CompletionSettings rungs: label 11 / description 12
     // (CompletionSettings.tsx labelSmall + their styles.ts 12).
     <RowSizeProvider label="text-xs" desc="text-body-sm">
-      <Segmented<string>
-        label="N PREDICT"
-        description="Hard cap on generated tokens. Unlimited lets the model stop itself."
-        value={sampler.nPredict === -1 ? UNLIMITED : CUSTOM}
-        options={[UNLIMITED, CUSTOM]}
-        displayFor={(v) => (v === UNLIMITED ? "Unlimited" : "Custom")}
-        onPick={(v) => onChange({ nPredict: v === UNLIMITED ? -1 : 1024 })}
-      />
+      <View className="py-2">
+        <RowLabel
+          label="N PREDICT"
+          description="Hard cap on generated tokens. Unlimited lets the model stop itself."
+        />
+        <View className="mt-2">
+          <SegmentedControl
+            testID="n-predict-segmented"
+            values={["Unlimited", "Custom"]}
+            selectedIndex={sampler.nPredict === -1 ? 0 : 1}
+            appearance={scheme}
+            tintColor={colors.primary}
+            style={{ width: "100%" }}
+            onChange={(event) => {
+              void Haptics.selectionAsync();
+              // PocketPal resets a freshly-switched Custom length to 1024;
+              // any previously typed value is discarded on the toggle.
+              onChange({
+                nPredict:
+                  event.nativeEvent.selectedSegmentIndex === 0 ? -1 : 1024,
+              });
+            }}
+          />
+        </View>
+      </View>
       {sampler.nPredict !== -1 ? (
         <TextFieldRow
           label="Custom length"
@@ -197,14 +220,29 @@ export function SamplerRows({
         step={0.01}
         onChange={(penaltyPresence) => onChange({ penaltyPresence })}
       />
-      <Segmented<MirostatMode>
-        label="Mirostat"
-        description="Hold a target entropy instead of sampling freely. V2 is the better one."
-        value={sampler.mirostat}
-        options={MIROSTAT_OPTIONS}
-        displayFor={(m) => MIROSTAT_LABELS[m]}
-        onPick={(mirostat) => onChange({ mirostat })}
-      />
+      <View className="py-2">
+        <RowLabel
+          label="Mirostat"
+          description="Hold a target entropy instead of sampling freely. V2 is the better one."
+        />
+        <View className="mt-2">
+          <SegmentedControl
+            testID="mirostat-segmented"
+            values={MIROSTAT_LABELS as unknown as string[]}
+            selectedIndex={Math.max(0, MIROSTAT_OPTIONS.indexOf(sampler.mirostat))}
+            appearance={scheme}
+            tintColor={colors.primary}
+            style={{ width: "100%" }}
+            onChange={(event) => {
+              void Haptics.selectionAsync();
+              const index = event.nativeEvent.selectedSegmentIndex;
+              const next = MIROSTAT_OPTIONS[index];
+              if (next === undefined) return;
+              onChange({ mirostat: next });
+            }}
+          />
+        </View>
+      </View>
       {sampler.mirostat !== 0 ? (
         <>
           <SliderRow
@@ -237,12 +275,14 @@ export function SamplerRows({
         error={errors?.seed}
         onCommit={(seed) => onChange({ seed })}
       />
-      <ToggleRow
-        label="JINJA"
-        description="Use the model's built-in Jinja chat template when it ships one. Off falls back to llama.cpp's plain template."
-        on={jinjaEnabled}
-        onPress={() => onJinjaChange(!jinjaEnabled)}
-      />
+      {jinja ? (
+        <ToggleRow
+          label="JINJA"
+          description="Use the model's built-in Jinja chat template when it ships one. Off falls back to llama.cpp's plain template."
+          on={jinja.enabled}
+          onPress={() => jinja.onChange(!jinja.enabled)}
+        />
+      ) : null}
     </RowSizeProvider>
   );
 }

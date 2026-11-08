@@ -50,6 +50,13 @@ export interface ToolCompatInput extends ToolCompatFacts {
  *  the warned-set does not change whether a pair mismatches, only whether
  *  the user has already been told about it. */
 export function toolCompatMismatch(facts: ToolCompatFacts): boolean {
+  return cannotCallTools(facts);
+}
+
+/** The capability fact underneath both decisions: this (companion, model)
+ *  pair has talents to call and a local model probed as unable to call
+ *  them. Named separately so the gate below is not "not the warning". */
+function cannotCallTools(facts: ToolCompatFacts): boolean {
   if (facts.providerType !== "local") return false;
   if (facts.talentNames.length === 0) return false;
   if (facts.supportsTools !== false) return false;
@@ -62,4 +69,18 @@ export function toolCompatMismatch(facts: ToolCompatFacts): boolean {
 export function shouldWarnToolCompat(input: ToolCompatInput): boolean {
   if (input.alreadyWarned) return false;
   return toolCompatMismatch(input);
+}
+
+/** The pact a turn may ACTUALLY advertise.
+ *
+ *  A model probed as unable to call tools gets none: its chat template has
+ *  no slot for tool schemas, and attaching them is what fails the engine
+ *  turn before it emits a token — the companion's whole chat dies because
+ *  of her talents. Dropping them keeps the persona and the conversation.
+ *
+ *  "Never probed" and a remote provider both keep the pact: the local
+ *  jinja verdict says nothing about a server, and an unknown verdict must
+ *  not silently disable a capability the model may well have. */
+export function callableTalentNames(facts: ToolCompatFacts): string[] {
+  return cannotCallTools(facts) ? [] : facts.talentNames;
 }

@@ -122,7 +122,7 @@ Legend: **ported** = landed in this session · **present** = already there befor
 | HuggingFace link row | **ported** | `hfUrl?: string` on `ModelSpec`, set in `buildHfModelSpec`, rendered in `ModelCardDetails.tsx` |
 | Download progress bar + speed | present | `ModelBits.tsx`, `store\models\downloads.ts` |
 | Download / pause / resume / cancel / retry | present | `store\models\downloads.ts`, `ModelCard.tsx` |
-| Load / Offload (activate / release) | present | `store\models\active.ts`, `ModelCard.tsx` |
+| Load / Offload (activate / release) | **ported** | `store\models\active.ts` `activateModel`/`offloadModel` (single dispatch routing local→eager-load coordinator, remote→existing path), `ModelCard.tsx` |
 | Delete model | present | `store\models\catalog.ts` `removeModel` |
 | Auto-navigate to chat after activation | present | `models.tsx`, `store\modelsUi.ts` |
 | Settings sheet: rename, system prompt | present | `components\models\ModelSettingsSheet.tsx` |

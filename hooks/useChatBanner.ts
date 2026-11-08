@@ -22,7 +22,11 @@ import {
   type BannerResolution,
   type BannerVariant,
 } from "@/services/chat/banner-variant.ts";
-import { effectiveNCtx, fillPercent } from "@/services/chat/context-fill.ts";
+import {
+  effectiveNCtx,
+  fillPercent,
+  remoteProviderId,
+} from "@/services/chat/context-fill.ts";
 import { talentDefinitions } from "@/services/agent/registry.ts";
 import type { ChatMessage } from "@/types/chat.ts";
 import type { RemoteCaps } from "@/types/models.ts";
@@ -48,8 +52,6 @@ export interface UseChatBanner {
   /** Hide the current variant for exactly one turn. */
   dismiss: () => void;
 }
-
-const REMOTE_ID_PREFIX = "remote-";
 
 export function useChatBanner(input: ChatBannerInput): UseChatBanner {
   const { messages, nCtx, activeModelId, activeProviderType, remoteCaps } =
@@ -80,14 +82,14 @@ export function useChatBanner(input: ChatBannerInput): UseChatBanner {
   // the C7 /props contextLength, which is unknown until a probe lands — and
   // an unknown window never warns and never fills.
   const isRemote = activeProviderType === "remote";
+  const providerId = remoteProviderId(activeModelId);
   const windowSize = effectiveNCtx({
     isRemote,
     localNCtx: nCtx,
     remoteContextLength:
-      activeModelId?.startsWith(REMOTE_ID_PREFIX) === true
-        ? remoteCaps[activeModelId.slice(REMOTE_ID_PREFIX.length)]
-            ?.contextLength
-        : undefined,
+      providerId === undefined
+        ? undefined
+        : remoteCaps[providerId]?.contextLength,
   });
 
   // Every HTML preview surface in the conversation. The soft-cap notice

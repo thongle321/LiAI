@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 import { Alert, Linking, Pressable, Text, View } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 
-import { ExternalLink, ImageOff } from "lucide-react-native";
+import { ExternalLink } from "lucide-react-native";
 
 import { useShallow } from "zustand/react/shallow";
 import { useInference } from "@/store/inference.ts";
@@ -80,7 +80,6 @@ export function ModelCardDetails({
   const [totalMemory, setTotalMemory] = useState<number | null>(null);
   const [projectorSheetOpen, setProjectorSheetOpen] = useState(false);
   const setVisionEnabled = useModelStore((s) => s.setVisionEnabled);
-  const startProjectorDownload = useModelStore((s) => s.startProjectorDownload);
   const activeModelId = useModelStore((s) => s.activeModelId);
   const releaseEngine = useChatStore((s) => s.releaseEngine);
   // PocketParity: the reference's expanded panel describes a model that is
@@ -175,11 +174,6 @@ export function ModelCardDetails({
         : 0,
   });
   const visionReady = visionActive({ visionEnabled: visionOn, status: projector });
-  const projectorMissing =
-    item.supportsVision === true &&
-    visionOn &&
-    item.projector !== undefined &&
-    projector === "missing";
   const isActive = activeModelId === item.id;
 
   // Reclassify heal: a vision spec whose projector record never landed
@@ -242,9 +236,7 @@ export function ModelCardDetails({
           <Text className="font-sans text-body-md text-primary-text">
             Estimated memory: ~{formatBytes(estimate)}
           </Text>
-          <Text className="text-quiet">
-            Weights + context cache at your current settings.
-          </Text>
+          {/* Weights + context cache at current settings. */}
           {totalMemory !== null && estimate > totalMemory * 0.9 ? (
             <Text className="mt-2 font-sans text-body-md text-error">
               This model needs more RAM than this device has. It may fail to load.
@@ -274,26 +266,12 @@ export function ModelCardDetails({
             on={visionOn}
             onPress={() => toggleVision(!visionOn)}
           />
-          {!visionOn ? (
-            <Text className="text-quiet">
-              Vision is off — this model answers text only.
-            </Text>
-          ) : null}
+          {/* Vision off: text only. */}
           {visionOn ? (
             <>
-              {projectorMissing ? (
-                <Pressable
-                  onPress={() => void startProjectorDownload(item.id)}
-                  className="mt-2 min-h-12 flex-row items-center gap-2 self-start rounded-lg border border-border px-4 py-2"
-                  accessibilityRole="button"
-                  accessibilityLabel="Download projection model"
-                >
-                  <ImageOff size={16} color={colors.error} />
-                  <Text className="font-sans text-body-sm text-error">
-                    Download projection model
-                  </Text>
-                </Pressable>
-              ) : null}
+              {/* The missing-projection offer lives on the collapsed card
+                  (model-card.tsx, PocketParity #1053): one owner, so this
+                  expanded panel carries only the selector. */}
               {item.projector !== undefined || (item.projectorCandidates?.length ?? 0) > 0 ? (
                 <Pressable
                   onPress={() => setProjectorSheetOpen(true)}

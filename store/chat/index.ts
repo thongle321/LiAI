@@ -23,7 +23,7 @@ import { selectEngineSource, type EngineSource } from "@/services/inference/engi
 import { EngineManager } from "@/services/inference/manager.ts";
 import type { LlamaInitParams } from "@/services/inference/local-engine.ts";
 import { projectorPathForFileName } from "@/services/inference/mmproj.ts";
-import { resolveSampler, type SamplerParams } from "@/services/inference/sampler.ts";
+import { DEFAULT_SAMPLER, resolveSampler, type SamplerParams } from "@/services/inference/sampler.ts";
 import { resolveThinking } from "@/services/inference/thinking.ts";
 import {
   resolveEffort,
@@ -36,6 +36,11 @@ import {
   resolveComputeDevices,
 } from "@/services/inference/deviceSelection.ts";
 import { createRemoteEngine } from "@/services/inference/remote-engine.ts";
+import {
+  createEagerLoad,
+  type EagerLoad,
+  type LocalEngineTarget,
+} from "@/services/inference/eager-load.ts";
 import { resolveImage } from "@/services/storage/images.ts";
 import { createTurnRunner, type TurnDeps } from "@/services/chat/turn.ts";
 import { holdScreen, releaseScreen } from "@/services/chat/keep-awake.ts";
@@ -99,23 +104,21 @@ export async function defaultGetStore(): Promise<SessionStore | null> {
  *  after setting the size, so a failure is caught while the user is still
  *  looking at the sheet.
  *
- *  Throws on a failed load, and leaves the slot EMPTY in that case (ensure()
- *  drops it before loading), which is why the caller re-initialises. */
-export async function reloadLocalEngine(): Promise<void> {
-  const source = await defaultEngineSource();
-  // No source means no model is selected — nothing to reload, and the
-  // caller's try/catch must not fire over a state it cannot fix.
-  if (!source) return;
-  await getManager().ensure(
-    source,
-    source.kind === "local"
-      ? await projectorPathForFileName(source.fileName)
-      : undefined,
-    // The init MUST ride along: without it the key stays on "default",
-    // ensure() returns the warm context, and this function — the
-    // context-full banner's whole recovery — reloads nothing (finding 1).
-    source.kind === "local" ? await resolveInit() : undefined,
-  );
+ *  Routed through the eager-load coordinator (spec "One eager-load
+ *  coordinator"): the reload is serialized with the Models screen's
+ *  Load/Offload and stands down under supersession. Throws on a failed
+ *  load, and leaves the slot EMPTY in that case (ensure() drops it before
+ *  loading), which is why the caller re-initialises.
+ *
+ *  If `modelId` is provided, reloads that SPECIFIC model (used by
+ *  auto-release restore). Verifies the model is still active inside the
+ *  mutex before switching (PocketParity: pendingModelId check). */
+export async function reloadLocalEngine(modelId?: string): Promise<void> {
+  const eager = getEagerLoad();
+  if (modelId) {
+    return eager.reloadSpecific(modelId);
+  }
+  return eager.reload();
 }
 
 /** The init params a local load runs with — the ONE source for both the
@@ -193,10 +196,75 @@ async function resolveInit(): Promise<LlamaInitParams> {
   };
 }
 
+/** Compute the memory requirement for a load target using the same
+ *  estimator the memory gate uses (chip honesty). Runs during pre-flight
+ *  so the number is available for calibration on successful load. */
+async function computeLoadRequirementForTarget(input: {
+  source: { kind: "local"; fileName: string };
+  modelId: string;
+  models: import("@/types/models.ts").ModelSpec[];
+}): Promise<number> {
+  const [fs, engine, inference, modelsMod] = await Promise.all([
+    import("expo-file-system/legacy"),
+    import("../../services/inference/engine.ts"),
+    import("../inference.ts"),
+    import("../../services/models/memoryEstimator.ts"),
+  ]);
+  const params = inference.useInference.getState();
+  const docsDir = fs.documentDirectory ?? "";
+
+  // Find the model spec
+  const spec = input.models.find((m) => m.id === input.modelId);
+  if (!spec) return 0;
+
+  // Main model memory model
+  const mainModel: import("@/services/models/memoryEstimator.ts").MemoryModel = {
+    size: spec.files.reduce((sum, f) => sum + f.size, 0),
+    gguf: modelsMod.toMemoryMetadata(spec.ggufMetadata),
+  };
+
+  // Projector bytes if vision is enabled
+  let projectionBytes: number | undefined;
+  if (spec.projector && spec.visionEnabled !== false) {
+    projectionBytes = spec.projector.size;
+  }
+
+  // Draft model if speculative decoding is enabled and draft is downloaded
+  let draft: import("@/services/models/memoryEstimator.ts").MemoryModel | undefined;
+  if (params.speculativeEnabled && params.draftModelId) {
+    const draftSpec = input.models.find(
+      (m) => m.id === params.draftModelId && m.downloadStatus === "completed",
+    );
+    if (draftSpec) {
+      draft = {
+        size: draftSpec.files.reduce((sum, f) => sum + f.size, 0),
+        gguf: modelsMod.toMemoryMetadata(draftSpec.ggufMetadata),
+      };
+    }
+  }
+
+  // Build context from current inference settings
+  const context: import("@/services/models/memoryEstimator.ts").MemoryContext = {
+    nCtx: params.nCtx,
+    cacheK: params.cacheK,
+    cacheV: params.cacheV,
+    nUbatch: params.nUbatch,
+    specDraftCacheK: params.specDraftCacheK,
+    specDraftCacheV: params.specDraftCacheV,
+  };
+
+  return modelsMod.estimateModelMemory(
+    mainModel,
+    projectionBytes,
+    draft,
+    context,
+  );
+}
+
 /** One process-wide engine slot (local context cached by file). */
 let manager: EngineManager | null = null;
 
-function getManager(): EngineManager {
+export function getManager(): EngineManager {
   if (!manager) {
     manager = new EngineManager(
       {
@@ -245,6 +313,118 @@ function getManager(): EngineManager {
     );
   }
   return manager;
+}
+
+/** One process-wide eager-load coordinator (spec "One eager-load
+ *  coordinator").
+ *
+ *  The Models screen's Load/Offload and every eager reload (the context
+ *  ladder's recovery, the auto-release restore) ride THIS instance: one
+ *  lock, one pending claim, so the whole eager path is serialized end to
+ *  end instead of only the native swap inside the manager.
+ *
+ *  All collaborators reach stores through dynamic imports (the same rule
+ *  the rest of this file follows): the module is importable in plain-Node
+ *  suites until one is actually used. */
+let eagerLoad: EagerLoad | null = null;
+
+export function getEagerLoad(): EagerLoad {
+  if (!eagerLoad) {
+    eagerLoad = createEagerLoad({
+      readActive: async () => {
+        const { useModelStore } = await import("../model-store.ts");
+        const m = useModelStore.getState();
+        return { modelId: m.activeModelId, providerType: m.activeProviderType };
+      },
+      isSlotWarm: async () => getManager().isLoaded(),
+      resolveTarget: async (modelId) => {
+        const { useModelStore } = await import("../model-store.ts");
+        const m = useModelStore.getState();
+        // A null id is the reload shape: resolve what the pointer names.
+        // An id is the eager-load shape: resolve THAT model, never the
+        // pointer — the caller's intent must survive a pointer that has
+        // already moved (the coordinator moves it).
+        const source = selectEngineSource({
+          activeModelId: modelId ?? m.activeModelId,
+          activeProviderType: modelId === null ? m.activeProviderType : "local",
+          models: m.models,
+          remoteApis: m.remoteApis,
+        });
+        // Local only: a remote equality here would be a provider id — not
+        // this coordinator's business.
+        if (!source || source.kind !== "local") return null;
+
+        // Compute memory requirement for calibration (chip honesty: same
+        // estimator the memory gate uses). This runs during pre-flight so
+        // the number is available when the load succeeds.
+        const resolvedModelId = modelId ?? m.activeModelId;
+        const requirementBytes = resolvedModelId
+          ? await computeLoadRequirementForTarget({
+              source,
+              modelId: resolvedModelId,
+              models: m.models,
+            })
+          : 0;
+
+        return {
+          source,
+          // Projector resolution OUTSIDE the lock (the pre-flight half);
+          // the slot key includes the mmproj path, so a late-arriving pair
+          // is a real reload, never a reused blind context.
+          mmprojPath: await projectorPathForFileName(source.fileName),
+          // The init MUST ride along: without it the key stays "default"
+          // and ensure() returns the warm context, reloading nothing.
+          init: await resolveInit(),
+          requirementBytes,
+        };
+      },
+      switchEngine: async (target: LocalEngineTarget) => {
+        await getManager().ensure(
+          target.source,
+          target.mmprojPath,
+          target.init,
+        );
+      },
+      releaseSlot: () => getManager().releaseAll(),
+      // Store writes are fire-and-forget module reads away; the coordinator
+      // settles what it observes, the store state is the truth it settles ON.
+      setActiveModel: (modelId) => {
+        void (async () => {
+          const { useModelStore } = await import("../model-store.ts");
+          useModelStore.getState().setActiveModel(modelId, "local");
+        })();
+      },
+      setLoadingModel: (modelId) => {
+        void (async () => {
+          const { useModelStore } = await import("../model-store.ts");
+          useModelStore.getState().setLoadingModel(modelId);
+        })();
+      },
+      // Calibration: on successful load, raise the learned ceiling AND
+      // record the last-used model for cold-launch warm-up.
+      // Called with the requirement bytes that were actually loaded.
+      onLoadSuccess: (requirementBytes) => {
+        void (async () => {
+          const { useModelStore } = await import("../model-store.ts");
+          const m = useModelStore.getState();
+          useModelStore.getState().updateLargestSuccessfulBytes(requirementBytes);
+          // Record the active model as last-used for cold-launch warm-up.
+          // Only set for local models (activeProviderType === "local").
+          if (m.activeProviderType === "local" && m.activeModelId) {
+            useModelStore.getState().setLastUsedModel(m.activeModelId);
+          }
+        })();
+      },
+      // Clear the last-used model record on explicit offload.
+      clearLastUsedModel: () => {
+        void (async () => {
+          const { useModelStore } = await import("../model-store.ts");
+          useModelStore.getState().clearLastUsedModel();
+        })();
+      },
+    });
+  }
+  return eagerLoad;
 }
 
 /** The model row a freshly loaded file belongs to, and the store that owns it.
@@ -372,11 +552,26 @@ async function sessionCustomOverride(
 /** Pact talent names for THIS conversation (tool gating). Always from
  *  the session's companion, regardless of settings source: the pact is the
  *  source of truth for tool availability, exactly like PocketPal — a
- *  custom-settings session keeps its persona's tools. */
+ *  custom-settings session keeps its persona's tools.
+ *
+ *  The ACTIVE model gets the last word: a local model probed as unable to
+ *  call tools receives no schemas (services/chat/tool-compat.ts). Sending
+ *  them anyway is what kills a companion turn before its first token, and
+ *  the persona does not need tools to be herself. */
 async function defaultTalentNames(sessionId: string | null): Promise<string[]> {
   try {
     const companion = await sessionCompanion(sessionId);
-    return companion?.pact?.talents.map((t) => t.name) ?? [];
+    const names = companion?.pact?.talents.map((t) => t.name) ?? [];
+    if (names.length === 0) return [];
+    const { callableTalentNames } = await import("../../services/chat/tool-compat.ts");
+    const { useModelStore } = await import("../model-store.ts");
+    const m = useModelStore.getState();
+    return callableTalentNames({
+      providerType: m.activeProviderType,
+      talentNames: names,
+      supportsTools: m.models.find((model) => model.id === m.activeModelId)
+        ?.supportsTools,
+    });
   } catch {
     return [];
   }
@@ -471,20 +666,56 @@ async function defaultJinja(): Promise<boolean> {
  *  pointer afterwards, so reading the pointer here would resolve the
  *  previous conversation's tuning — or none at all.
  *
- *  Precedence is session override, then the global preset — a conversation
- *  that never overrode anything follows the preset. */
+ *  Chain: built-in defaults → global preset (from KV) → bound persona's tuning
+ *  → session custom snapshot replaces wholesale when source is 'custom'. */
 async function defaultSampler(sessionId: string | null): Promise<SamplerParams | null> {
   try {
-    const [{ useInference }, { useModelStore }, sessionStore] = await Promise.all([
-      import("../inference.ts"),
+    const [{ useModelStore }, sessionStore] = await Promise.all([
       import("../model-store.ts"),
       defaultGetStore(),
     ]);
     if (useModelStore.getState().activeProviderType === "remote") return null;
-    const global = useInference.getState().sampler;
-    if (!sessionStore || !sessionId) return global;
-    const override = await sessionCustomOverride(sessionId);
-    return resolveSampler(global, override?.sampler ?? null);
+    if (!sessionStore) return DEFAULT_SAMPLER;
+
+    // Read global preset from KV store
+    let global: SamplerParams = DEFAULT_SAMPLER;
+    try {
+      const globalFromKv = await sessionStore.getGlobalChatSettings();
+      if (globalFromKv) {
+        global = globalFromKv;
+      }
+    } catch {
+      global = DEFAULT_SAMPLER;
+    }
+
+    if (!sessionId) return global;
+
+    // Check settings source
+    const source = await sessionStore
+      .getSessionSettingsSource(sessionId)
+      .catch(() => null);
+
+    // If custom, use session snapshot wholesale (replacing chain)
+    if (source === "custom") {
+      const override = await sessionStore.getSessionOverride(sessionId).catch(() => null);
+      if (override?.sampler) {
+        return override.sampler as SamplerParams;
+      }
+      // Fallback if no snapshot
+      return global;
+    }
+
+    // Companion/persona governed: ignore stale snapshot, apply persona tuning over global
+    let base = global;
+    try {
+      const companion = await sessionCompanion(sessionId);
+      if (companion?.completionSettings) {
+        base = resolveSampler(base, companion.completionSettings as Partial<SamplerParams>);
+      }
+    } catch {
+      // ignore
+    }
+    return base;
   } catch {
     return null;
   }

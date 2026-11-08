@@ -3,7 +3,10 @@
     "servers": {
       "donsetch": {
         "type": "local",
-        "command": [ "donsetch", "mcp", "--supervised" ]
+        "command": [
+          "D:/Scoop/persist/fnm/node-versions/v26.12.0/installation/node_modules/donsetch/binaries/donsetch.exe",
+          "mcp"
+        ]
       }
     }
   }

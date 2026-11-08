@@ -35,7 +35,10 @@ module.exports = {
     'react-native/setup-env': '<rootDir>/jest/react-native-setup-env.js',
     '@react-native-async-storage/async-storage':
       '<rootDir>/__mocks__/external/@react-native-async-storage/async-storage.ts',
-    'llama.rn': '<rootDir>/__mocks__/external/llama.rn.ts',
+    // Anchored: unanchored, the dot matched any character and the mapping
+    // hijacked every specifier containing `llama-rn` (a module named
+    // `llama-rn-errors` resolved to this mock).
+    '^llama\\.rn$': '<rootDir>/__mocks__/external/llama.rn.ts',
     'react-native-vision-camera':
       '<rootDir>/__mocks__/external/react-native-vision-camera.ts',
     'react-native-keyboard-controller':
@@ -66,14 +69,21 @@ module.exports = {
     // Anchored: subpath imports (`@expo/ui/jetpack-compose`) resolve to the
     // real platform module, not this universal stub.
     '^@expo/ui$': '<rootDir>/__mocks__/external/@expo/ui.tsx',
+    '^@expo/ui/community/menu$':
+      '<rootDir>/__mocks__/external/@expo/ui-community-menu.tsx',
+    '^@expo/ui/community/segmented-control$':
+      '<rootDir>/__mocks__/external/@expo/ui-community-segmented-control.tsx',
     '^expo-speech$': '<rootDir>/__mocks__/external/expo-speech.ts',
     '^expo-speech-recognition$':
       '<rootDir>/__mocks__/external/expo-speech-recognition.ts',
+    '^@siteed/audio-studio$':
+      '<rootDir>/__mocks__/external/@siteed/audio-studio.ts',
     '^@pocketpalai/react-native-speech$':
       '<rootDir>/__mocks__/external/@pocketpalai/react-native-speech.ts',
     '^@pocketpalai/react-native-speech-phonon$':
       '<rootDir>/__mocks__/external/@pocketpalai/react-native-speech-phonon.ts',
     '^expo-sqlite$': '<rootDir>/__mocks__/external/expo-sqlite.ts',
+    '^expo-image-picker$': '<rootDir>/__mocks__/external/expo-image-picker.ts',
     '^whisper.rn$': '<rootDir>/__mocks__/external/whisper.rn.ts',
     '^expo-linking$': '<rootDir>/__mocks__/external/expo-linking.ts',
     '^expo-font$': '<rootDir>/__mocks__/external/expo-font.ts',

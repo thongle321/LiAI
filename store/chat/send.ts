@@ -9,9 +9,21 @@ import type { ApiError } from "@/types/api.ts";
 import { type ChatMessage } from "@/types/chat.ts";
 import { newId } from "@/services/chat/messages.ts";
 import type { SessionStore } from "@/services/chat/session-store.ts";
+import {
+  effectiveNCtx,
+  remoteProviderId,
+} from "@/services/chat/context-fill.ts";
+import { LLAMA_RN_ERROR_PATTERNS } from "@/utils/llama-rn-errors.ts";
 import { useAsrStore } from "@/store/asr.ts";
+import { useInference } from "../inference.ts";
+import { useModelStore } from "../model-store.ts";
 import { useVoice } from "../voice.ts";
 import type { ChatCtx, ChatGet, ChatSet, ChatState } from "./types.ts";
+
+/** Streaming throttle (PocketParity: ChatSessionStore.ts STREAMING_THROTTLE_MS = 30).
+ *  Accumulates per-token updates and applies them at most every 30ms to
+ *  prevent "Maximum update depth exceeded" from runaway token deltas. */
+const STREAMING_THROTTLE_MS = 30;
 
 /** Pure: last user message before (excluding) a bubble. */
 export function priorUserTextIn(messages: ChatMessage[], beforeId: string): ChatMessage | null {
@@ -29,6 +41,29 @@ export function priorUserTextIn(messages: ChatMessage[], beforeId: string): Chat
 
 function llmError(message: string): ApiError {
   return { code: "llm_error", message };
+}
+
+/** The window the banner divides by, read when a turn throws before it can
+ *  report usage. PocketPal pins its abort snapshot's `used` to the effective
+ *  window for the same reason: "Context is full" is the native layer telling
+ *  us the prompt filled the window, and the banner's freshness gate compares
+ *  that number against the CURRENT window — so raising the window clears the
+ *  banner on its own, exactly as it does after a completed turn.
+ *
+ *  Undefined only when the active remote model has no probed window; a
+ *  local window is always the configured nCtx. The banner's gate then
+ *  stays shut rather than dividing by a guess. */
+function windowAtFailure(): number | undefined {
+  const model = useModelStore.getState();
+  const providerId = remoteProviderId(model.activeModelId);
+  return effectiveNCtx({
+    isRemote: model.activeProviderType === "remote",
+    localNCtx: useInference.getState().nCtx,
+    remoteContextLength:
+      providerId === undefined
+        ? undefined
+        : model.remoteCaps[providerId]?.contextLength,
+  });
 }
 
 /** Mic-parity D4 (PocketParity `chatBusyOnCpu`): whisper must WAIT while a
@@ -125,6 +160,79 @@ export function createSendSlice(
         m.id === id ? { ...m, ...(typeof patch === "function" ? patch(m) : patch) } : m,
       ),
     }));
+  }
+
+  /** Drop an assistant bubble that never produced anything. PocketPal
+   *  deletes the same empty turn; nothing was persisted for it, because
+   *  the turn only writes to the store once it has a reply. */
+  function removeBubble(id: string): void {
+    set((s) => ({ messages: s.messages.filter((m) => m.id !== id) }));
+  }
+
+  /** Release turn state after success or failure. */
+  function settle(): void {
+    set({ sending: false, turnStartedAt: null, pendingToolName: null });
+  }
+
+  // Streaming throttle state (PocketParity: ChatSessionStore.ts streamingThrottleTimer)
+  // Accumulates token/reasoning deltas and flushes at most every STREAMING_THROTTLE_MS.
+  let streamingThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingTextDelta = "";
+  let pendingReasoning = "";
+  let lastStreamingFlush = 0;
+
+  /** Schedule a throttled flush of accumulated streaming updates. */
+  function scheduleStreamingFlush(assistantId: string): void {
+    if (streamingThrottleTimer) return;
+    streamingThrottleTimer = setTimeout(() => {
+      streamingThrottleTimer = null;
+      flushStreamingUpdates(assistantId);
+      lastStreamingFlush = Date.now();
+    }, STREAMING_THROTTLE_MS);
+  }
+
+  /** Flush accumulated text and reasoning updates immediately. */
+  function flushStreamingUpdates(assistantId: string): void {
+    const textDelta = pendingTextDelta;
+    const reasoningDelta = pendingReasoning;
+    pendingTextDelta = "";
+    pendingReasoning = "";
+    if (textDelta || reasoningDelta) {
+      updateBubble(assistantId, (m) => ({
+        ...(textDelta ? { text: m.text + textDelta } : {}),
+        ...(reasoningDelta ? { reasoning: reasoningDelta } : {}),
+      }));
+    }
+  }
+
+  /** Queue a text token for throttled update. */
+  function queueTextUpdate(assistantId: string, token: string): void {
+    pendingTextDelta += token;
+    scheduleStreamingFlush(assistantId);
+  }
+
+  /** Queue a reasoning update for throttled update (replaces, not appends). */
+  function queueReasoningUpdate(assistantId: string, cumulative: string): void {
+    pendingReasoning = cumulative;
+    scheduleStreamingFlush(assistantId);
+  }
+
+  /** Handle a turn that filled the context window (or hit it mid-tool). */
+  function handleContextFull(
+    assistantId: string,
+    hasPartialContent: boolean,
+    used: number | undefined,
+  ): void {
+    updateBubble(assistantId, {
+      streaming: false,
+      ...(used !== undefined
+        ? { usage: { promptTokens: used, completionTokens: 0, totalTokens: used } }
+        : {}),
+      outcome: hasPartialContent
+        ? { contextFull: true, interrupted: true }
+        : { contextFull: true },
+    });
+    settle();
   }
 
   function adoptSession(id: string): void {
@@ -254,12 +362,12 @@ export function createSendSlice(
         },
         (token) => {
           if (gen !== ctx.streamGen) return;
-          updateBubble(opts.assistantId, (m) => ({ text: m.text + token }));
+          queueTextUpdate(opts.assistantId, token);
           useVoice.getState().onAssistantMessageChunk(opts.assistantId, token);
         },
         (cumulative) => {
           if (gen !== ctx.streamGen) return;
-          updateBubble(opts.assistantId, { reasoning: cumulative });
+          queueReasoningUpdate(opts.assistantId, cumulative);
           const delta = cumulative.startsWith(prevReasoning)
             ? cumulative.slice(prevReasoning.length)
             : cumulative;
@@ -291,6 +399,8 @@ export function createSendSlice(
         updateBubble(opts.assistantId, { streaming: false });
         return;
       }
+      // Flush any pending streaming updates before finalizing the bubble.
+      flushStreamingUpdates(opts.assistantId);
       updateBubble(opts.assistantId, {
         text: outcome.reply,
         ...(outcome.reasoning !== undefined ? { reasoning: outcome.reasoning } : {}),
@@ -322,7 +432,7 @@ export function createSendSlice(
         .onAssistantMessageComplete(opts.assistantId, outcome.reply, {
           hadReasoning: !!outcome.reasoning,
         });
-      set({ sending: false, turnStartedAt: null, pendingToolName: null });
+      settle();
       // Released with the turn. The `gen` guard above means a superseded
       // run never reaches this, so a NEW turn's lock is never stomped.
       ctx.keepAwake(false);
@@ -332,27 +442,135 @@ export function createSendSlice(
         updateBubble(opts.assistantId, { streaming: false });
         return;
       }
+      // Flush any pending streaming updates before handling the error.
+      flushStreamingUpdates(opts.assistantId);
+      // Clear the throttle timer to prevent a stale flush after error handling.
+      if (streamingThrottleTimer) {
+        clearTimeout(streamingThrottleTimer);
+        streamingThrottleTimer = null;
+      }
       const message = err instanceof Error ? err.message : "Local run failed";
-      const error = llmError(message);
-      updateBubble(opts.assistantId, {
-        streaming: false,
-        error,
-      });
-      // The reason and the retry affordance, now that a failed turn has no
-      // card of its own in the list: PocketPal surfaces failures in the
-      // snackbar (uiStore.setChatWarning -> ErrorSnackbar). `recoverable`
-      // because `retry` can re-run exactly this turn — the bubble still
-      // carries its error, which is what retry() looks for.
-      set({
-        sending: false,
-        turnStartedAt: null,
-        pendingToolName: null,
-        chatWarning: { message: error.message, severity: "error", recoverable: true },
-      });
+
+      // PocketPal parity (useChatSession.ts:995-1014). The native layer
+      // throws specific strings, and each one means something a raw
+      // "Completion failed: …" dump would hide:
+      //  - "Context is full" is prompt-processing overflow. llama.rn
+      //    throws it before a token exists (ctx_shift is off), so it never
+      //    reaches a completion result.
+      //  - The tool-call parser throws on truncated JSON when the model
+      //    ran out of context mid-arguments — the same exhaustion signal.
+      //  - The speculative draft context can fail to allocate on low-RAM
+      //    devices at the first completion.
+      const isContextFullError =
+        LLAMA_RN_ERROR_PATTERNS.contextFull.test(message);
+      const isToolArgsParseError =
+        LLAMA_RN_ERROR_PATTERNS.toolArgsParse.test(message);
+      const isSpeculativeInitError =
+        LLAMA_RN_ERROR_PATTERNS.speculativeInit.test(message);
+      const modelActiveProviderType = useModelStore.getState().activeProviderType;
+
+      // What the turn actually produced before it threw. The user's prompt
+      // is NOT the test: it says nothing about whether the model got any
+      // words out.
+      const bubble = get().messages.find((m) => m.id === opts.assistantId);
+      const hasPartialContent = (bubble?.text ?? "").trim() !== "";
+
+      // C4: a remote model's window is unknown if not probed. The banner's
+      // gate stays shut rather than dividing by a guess, so we show a
+      // fallback notice for context-full errors with no window.
+      const used = windowAtFailure();
+      const isRemoteAndUnknownWindow =
+        modelActiveProviderType === "remote" && used === undefined;
+
+      // PocketPal's logic: a truncated tool call is an n_ctx-exhaustion
+      // signal only when there is a turn to attach it to. With no content
+      // it falls back to the friendly hint below, exactly like PocketPal's
+      // `hasPartialContent` branch running before its message chain.
+      // PocketPal's string match on "Context is full" is intentional parity
+      // (their own comment labels it LLAMARN-DEP); we must match it.
+      const absorbAsContextFull =
+        isContextFullError ||
+        (isToolArgsParseError && hasPartialContent);
+
+      if (absorbAsContextFull) {
+        // The banner owns the explanation, so the raw native error is never
+        // dumped. The turn keeps whatever streamed and is tagged as cut off
+        // by the window; `used` is pinned to the effective window the same
+        // way PocketPal pins its abort snapshot's `used`, which is what lets
+        // the banner's freshness gate clear it once the window is raised.
+        // With no content the empty turn still carries the tag — it is the
+        // banner's source — and its footer reads "Cut off" if the banner is
+        // dismissed.
+        handleContextFull(opts.assistantId, hasPartialContent, used);
+        if (isRemoteAndUnknownWindow) {
+          set({
+            chatWarning: {
+              message:
+                "The model ran out of room mid-response. Try a larger context window.",
+              severity: "warning",
+              recoverable: false,
+            },
+          });
+        }
+      } else if (isToolArgsParseError) {
+        // No content to attach the hint to. The native parser's JSON dump is
+        // useless to a reader, so it becomes PocketPal's friendly message.
+        // Retry is dead because the bubble is removed.
+        removeBubble(opts.assistantId);
+        settle();
+        set({
+          chatWarning: {
+            message:
+              "Tool call cut off — the model likely ran out of room. Try a larger context or a smaller request.",
+            severity: "warning",
+            recoverable: false,
+          },
+        });
+      } else if (isSpeculativeInitError) {
+        // Low-RAM devices can fail to allocate the speculative draft context
+        // (the load-time memory check has no term for it). PocketPal turns
+        // this into a friendly system message instead of the raw dump.
+        // PocketPal shows the notice only when there is NO content.
+        if (hasPartialContent) {
+          updateBubble(opts.assistantId, {
+            streaming: false,
+            outcome: { interrupted: true },
+          });
+          settle();
+        } else {
+          removeBubble(opts.assistantId);
+          settle();
+          set({
+            chatWarning: {
+              message:
+                "This device could not start speculative decoding for this model — most likely there is not enough memory for the draft context. Turn off Speculative decoding under Settings → Advanced Settings and try again.",
+              severity: "warning",
+              recoverable: false,
+            },
+          });
+        }
+      } else {
+        // Other errors: show a raw error bubble with retry affordance.
+        const error = llmError(message);
+        updateBubble(opts.assistantId, { streaming: false, error });
+        settle();
+        // Preserve any existing warning (e.g., multimodal) from before the turn started.
+        set({
+          chatWarning: get().chatWarning ?? { message: error.message, severity: "error", recoverable: true },
+        });
+      }
       ctx.keepAwake(false);
     } finally {
       // Success, failure or supersede: idle must hold no timer.
       endStreamYield();
+      // Clear any pending streaming throttle to prevent leakage into next turn.
+      if (streamingThrottleTimer) {
+        clearTimeout(streamingThrottleTimer);
+        streamingThrottleTimer = null;
+      }
+      pendingTextDelta = "";
+      pendingReasoning = "";
+      lastStreamingFlush = 0;
       // Only THIS turn's handle leaves the slot: a newer turn already
       // installing its own must keep it.
       if (ctx.active.handle === handle) ctx.active.handle = null;
@@ -462,6 +680,7 @@ export function createSendSlice(
         // no longer in history.
         const editIndex = get().messages.findIndex((m) => m.id === editingId);
         if (editIndex < 0 || sid === null) return false;
+        const original = get().messages[editIndex];
         try {
           const store: SessionStore | null = await ctx.getStore();
           if (!store || !(await store.truncateFrom(sid, editingId))) return false;
@@ -473,6 +692,9 @@ export function createSendSlice(
         // The edited turn keeps its id, so it stays addressable.
         userId = editingId;
         assistantId = newId();
+        if (images === undefined && original?.images !== undefined) {
+          images = original.images;
+        }
       } else {
         userId = newId();
         assistantId = newId();
@@ -540,7 +762,7 @@ export function createSendSlice(
           sessionId: sid,
           ...(target.images !== undefined ? { images: target.images } : {}),
           history,
-          retry: true,
+          retry: false,
           clearOnFirst: false,
         });
         return true;

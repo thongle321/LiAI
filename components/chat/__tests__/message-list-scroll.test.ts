@@ -3,8 +3,12 @@
  *
  * A `useCallback` scroll handler wakes the JS thread once per frame, which is
  * exactly when it is busiest laying out a streaming reply. Moving the
- * hysteresis into shared values plus a reaction puts the per-frame work on the
- * UI thread and hops to JS only when the flag actually flips.
+ * hysteresis into shared values puts the per-frame work on the UI thread and
+ * hops to JS only when the flag actually flips.
+ *
+ * The hysteresis math is PocketPal's own (ChatView.tsx:492-525, the port):
+ * underflow (content shorter than viewport ⇒ reader is definitionally at the
+ * end), clamp to kill rubber-band noise on an inverted list, STICK=24 LEAVE=40.
  *
  * This is a structural assertion because that is the only honest seam here:
  * `useAnimatedReaction` re-fires off shared-value changes, and the Jest mock
@@ -18,26 +22,31 @@ import { readSource } from "@/jest/source.ts";
 
 const source = readSource("components/chat/message-list.tsx");
 
-describe("message list scroll tracker (D4-16)", () => {
+describe("message list scroll tracker (PocketPal port, D4-16)", () => {
   it("tracks the offset with a UI-thread scroll handler", () => {
     expect(source).toMatch(/const handleScroll = useAnimatedScrollHandler\(/);
     // The regression to guard is a plain JS callback reaching the same event.
     expect(source).not.toMatch(/const handleScroll = useCallback\(/);
   });
 
-  it("keeps the hysteresis off the JS thread", () => {
-    // The prepare function reads shared values, not an event object: that is
-    // what makes it a worklet body rather than a JS callback.
-    expect(source).toMatch(/useAnimatedReaction\([\s\S]*?contentHeight\.value/);
+  it("keeps the PocketPal hysteresis on the UI thread in shared values", () => {
+    // The handler reads only the event object inside the worklet and writes
+    // shared values — no JS call per frame.
+    expect(source).toMatch(/underflow\.value = contentHeight <= viewportHeight \+ EPS/);
+    expect(source).toMatch(/clampedY > LEAVE_DISTANCE/);
+    expect(source).toMatch(/clampedY < STICK_DISTANCE/);
+  });
+
+  it("hops to JS only on a flip, via scheduleOnRN", () => {
+    expect(source).toMatch(/useAnimatedReaction\(/);
+    expect(source).toMatch(/scheduleOnRN\(reportAtEnd, next === 1\)/);
     // scheduleOnRN, not runOnJS: the former is the react-native-worklets
     // spelling that Reanimated 4 deprecates runOnJS in favour of.
-    expect(source).toMatch(/scheduleOnRN\(reportAtEnd, next\)/);
     expect(source).not.toMatch(/runOnJS/);
   });
 
-  it("drops the JS-thread metrics ref it replaced", () => {
-    expect(source).not.toMatch(/metricsRef/);
-    expect(source).toMatch(/STICK_DISTANCE/);
-    expect(source).toMatch(/LEAVE_DISTANCE/);
+  it("keeps the STICK/LEAVE constants as exported seams", () => {
+    expect(source).toMatch(/export const STICK_DISTANCE = 24;/);
+    expect(source).toMatch(/export const LEAVE_DISTANCE = 40;/);
   });
 });

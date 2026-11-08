@@ -356,6 +356,9 @@ let imported = 0;
         id = await store.create();
         await store.renameSession(id, s.title);
         await store.setSessionPinned(id, s.pinned);
+        if (s.createdAt && store.setSessionCreatedAt) {
+          await store.setSessionCreatedAt(id, s.createdAt);
+        }
         for (const turn of s.turns) await store.append(id, turn);
       } catch {
         complete = false;

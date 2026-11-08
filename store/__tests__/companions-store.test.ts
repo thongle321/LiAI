@@ -33,18 +33,13 @@ function harness() {
   return { store, repo, storage };
 }
 
-it("seeds Pip once, with all five talents", async () => {
+it("seeds Pip once, with no tools enabled by default", async () => {
   const { store, storage } = harness();
   expect(await store.getState().load()).toEqual(true);
   const seeded = store.getState().companions.find((p) => p.name === "Pip");
   expect(seeded).toBeTruthy();
-  expect(seeded?.pact?.talents.map((t) => t.name)).toEqual([
-    "datetime",
-    "calculate",
-    "web_search",
-    "read_url",
-    "render_html",
-  ]);
+  // PocketPal's Pip ships with no pact, so a first-run chat sends no tools.
+  expect(seeded?.pact?.talents ?? []).toEqual([]);
   expect(JSON.parse(storage.data.get(COMPANIONS_PIP_SEEDED_KEY)!).state.pipSeeded).toEqual(true);
 });
 

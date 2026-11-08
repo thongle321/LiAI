@@ -31,6 +31,8 @@ import { Redirect } from "expo-router";
 import {
   createAutoRelease,
   restoreAutoReleasedModel,
+  warmUpLastUsedModel,
+  createLastUsedWarmUp,
 } from "@/services/inference/auto-release.ts";
 import { useAsrStore } from "@/store/asr.ts";
 import { useInference } from "@/store/inference";
@@ -82,6 +84,11 @@ export default function IndexGate() {
       // is the app's first frame, so nothing may keep it up: a failure
       // opens the app without the model.
       await restoreAutoReleasedModel(createAutoRelease()).catch(() => {});
+      // If no auto-released model was warmed (or none existed), try the
+      // last-used model for cold-launch warm-up. This runs second so the
+      // auto-release record takes precedence (spec: "auto-released record
+      // wins, otherwise the last-used downloaded model warms up").
+      await warmUpLastUsedModel(createLastUsedWarmUp()).catch(() => {});
       // The first-run gate is the STORE's, not a private read: the root
       // layout guards the drawer with the same value, and two readers of
       // one flag can disagree about whether the app is provisioned.

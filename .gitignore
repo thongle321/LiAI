@@ -29,7 +29,6 @@ expo-env.d.ts
 
 # Reference / scratch — never part of the app
 
-scratch/
 /models/
 .agents/
 /.pi/
@@ -41,9 +40,6 @@ docs/
 
 # Scratch material for prompts
 /prompt_material/
-
-# Local issue tracker (see docs/agents/issue-tracker.md) — local by design
-/.scratch/
 
 # Logs / OS / editors
 npm-debug.log*

@@ -32,6 +32,7 @@
 import type { StoredTurn } from "./session-store.ts";
 import { newId } from "./messages.ts";
 import { sanitizeBlocks } from "./blocks.ts";
+import { isAllowedChatImageUri, type ChatImageRoots } from "@/utils/chat-image-uri.ts";
 import type { AgentStep } from "@/types/chat.ts";
 
 /** Bounds. Deliberately generous -- these exist to stop a hostile or
@@ -138,6 +139,7 @@ function toStep(value: unknown, position: number): AgentStep | null {
  *  are counted and the user is told. */
 function toTurn(
   value: unknown,
+  imageRoots?: ChatImageRoots,
 ): { turn: StoredTurn; droppedRich: boolean; droppedSteps: number } | null {
   if (!isRecord(value)) return null;
   if (value.role !== "user" && value.role !== "assistant") return null;
@@ -188,8 +190,11 @@ function toTurn(
     type,
   };
   if (Array.isArray(value.images)) {
+    // PocketPal parity (importUtils.ts imageUris filter): only allowlisted
+    // file:// URIs are restored — anything else (remote URLs, traversal)
+    // is dropped, never rendered or read by the engine.
     const images = (value.images as unknown[])
-      .filter((v): v is string => typeof v === "string")
+      .filter((v): v is string => isAllowedChatImageUri(v, imageRoots))
       .slice(0, 10);
     if (images.length > 0) turn.images = images;
   }
@@ -229,7 +234,10 @@ function toTurn(
 
 /** One session, or null when even its shape is wrong. Turns inside are
  *  skipped individually. */
-function toSession(value: unknown): { session: ImportedSession; skipped: number } | null {
+function toSession(
+  value: unknown,
+  imageRoots?: ChatImageRoots,
+): { session: ImportedSession; skipped: number } | null {
   if (!isRecord(value)) return null;
   const title = str(value.title, MAX_TITLE_CHARS);
   if (title === null) return null;
@@ -243,7 +251,7 @@ function toSession(value: unknown): { session: ImportedSession; skipped: number 
       skipped += 1;
       continue;
     }
-    const turn = toTurn(raw);
+    const turn = toTurn(raw, imageRoots);
     if (turn === null) skipped += 1;
     else {
       turns.push(turn.turn);
@@ -267,7 +275,10 @@ function toSession(value: unknown): { session: ImportedSession; skipped: number 
   };
 }
 
-export function parseImport(text: string): ImportOutcome {
+export function parseImport(
+  text: string,
+  options?: { imageRoots?: ChatImageRoots },
+): ImportOutcome {
   let root: unknown;
   try {
     root = JSON.parse(text);
@@ -309,7 +320,7 @@ export function parseImport(text: string): ImportOutcome {
       skipped += 1;
       continue;
     }
-    const parsed = toSession(container);
+    const parsed = toSession(container, options?.imageRoots);
     if (parsed === null) {
       skipped += 1;
       continue;

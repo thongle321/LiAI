@@ -330,7 +330,13 @@ export function createSessionsSlice(
     // untrusted, so validation happens BEFORE anything is written and a
     // rejected file leaves the store untouched.
     importSessions: async (raw: string) => {
-      const parsed = parseImport(raw);
+      // PocketPal parity (importUtils.ts): image URIs from an untrusted
+      // backup are allowlisted against the picker cache root. Without the
+      // root (FS unreadable), parseImport still enforces the URI shape.
+      const FS = await import("expo-file-system/legacy").catch(() => null);
+      const parsed = parseImport(raw, {
+        ...(FS?.cacheDirectory ? { imageRoots: { cacheDirectory: FS.cacheDirectory } } : {}),
+      });
       if (!parsed.ok) {
         return { ok: false, imported: 0, skipped: 0, error: parsed.error };
       }

@@ -232,6 +232,58 @@ describe("export/import images persistence", () => {
   });
 });
 
+describe("export/import image URI validation (PocketPal path-guard parity)", () => {
+  function sessionWithImages(images: unknown[]): string {
+    return JSON.stringify({
+      format: "liai-chat-session",
+      version: 1,
+      id: "s-hostile",
+      title: "Hostile",
+      pinned: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: Date.now(),
+      turns: [{ role: "user", content: "look at these", at: Date.now(), images }],
+    });
+  }
+
+  it("drops non-file and traversal image URIs without roots", () => {
+    const result = parseImport(
+      sessionWithImages([
+        "file:///data/cache/ImagePicker/good.jpg",
+        "https://evil.test/x.jpg",
+        "file://../../secret.jpg",
+        "file:///data/cache/../etc/passwd",
+        42,
+      ]),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.sessions[0].turns[0].images).toEqual([
+        "file:///data/cache/ImagePicker/good.jpg",
+      ]);
+    }
+  });
+
+  it("enforces cache containment when a cache root is supplied", () => {
+    const cacheDirectory =
+      "file:///private/var/mobile/Containers/Data/Application/UUID/Library/Caches/";
+    const result = parseImport(
+      sessionWithImages([
+        "file:///private/var/mobile/Containers/Data/Application/UUID/Library/Caches/ImagePicker/abc.jpg",
+        "file:///etc/passwd",
+        "file:///private/var/mobile/Containers/Data/Application/UUID/Documents/secret.jpg",
+      ]),
+      { imageRoots: { cacheDirectory } },
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.sessions[0].turns[0].images).toEqual([
+        "file:///private/var/mobile/Containers/Data/Application/UUID/Library/Caches/ImagePicker/abc.jpg",
+      ]);
+    }
+  });
+});
+
 describe("export/import author identity", () => {
   it("imports authorId and author for display purposes", () => {
     // Author fields are preserved in export/import for imported data display

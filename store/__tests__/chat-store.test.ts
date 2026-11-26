@@ -343,6 +343,9 @@ describe("chat store turns", () => {
   });
 
   it("marks the bubble when the runner fails", async () => {
+    // PocketPal parity (l10n.chat.completionFailed): the generic fallback
+    // prefixes the native message. The bubble (and tap-to-retry) stays —
+    // our equivalent of PocketPal's system row, which has no inline retry.
     const { runTurn } = fakeRunTurn([{ fail: "boom" }]);
     const useStore = createChatStore({
       getStore: async () => fakeSessionStore([]).store,
@@ -353,8 +356,30 @@ describe("chat store turns", () => {
     expect(state.sending).toBe(false);
     expect(state.messages[1].error).toEqual({
       code: "llm_error",
-      message: "boom",
+      message: "Completion failed: boom",
     });
+  });
+
+  it("absorbs a generic failure with partial content, no raw dump", async () => {
+    // PocketPal parity (useChatSession.ts hasPartialContent): ANY error
+    // thrown after tokens streamed keeps the row as interrupted — the
+    // "Completion failed: …" system message is suppressed.
+    const runTurn: TurnRunner = async (_text, _paths, onToken) => {
+      onToken?.("half an answer");
+      throw new Error("boom");
+    };
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+    });
+    await useStore.getState().send("hi");
+    const state = useStore.getState();
+    const bubble = state.messages[1];
+    expect(bubble.text).toBe("half an answer");
+    expect(bubble.error).toBe(undefined);
+    expect(bubble.streaming).toBe(false);
+    expect(bubble.outcome).toEqual({ interrupted: true });
+    expect(state.chatWarning).toBe(null);
   });
 
   it("turns a thrown 'Context is full' into a banner turn, not a raw error", async () => {
@@ -422,6 +447,23 @@ describe("chat store turns", () => {
     expect(state.messages.map((m) => m.role)).toEqual(["user"]);
     expect(state.chatWarning?.message).toContain("speculative decoding");
     expect(state.chatWarning?.recoverable).toBe(false);
+  });
+
+  it("turns a network failure into a network notice, not an error bubble", async () => {
+    // PocketPal parity (useChatSession.ts errorMessage.includes('network')
+    // → l10n.common.networkError). Matched case-insensitively: RN fetch
+    // reports "Network request failed" with a capital N.
+    const { runTurn } = fakeRunTurn([{ fail: "Network request failed" }]);
+    const useStore = createChatStore({
+      getStore: async () => fakeSessionStore([]).store,
+      runTurn,
+    });
+    await useStore.getState().send("hi");
+    const state = useStore.getState();
+    expect(state.messages.map((m) => m.role)).toEqual(["user"]);
+    expect(state.chatWarning?.message).toBe("Network error. Please try again.");
+    expect(state.chatWarning?.severity).toBe("error");
+    expect(state.chatWarning?.recoverable).toBe(true);
   });
 
   it("retry on a failed assistant reruns the prior question", async () => {

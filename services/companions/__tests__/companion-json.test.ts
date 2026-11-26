@@ -69,6 +69,30 @@ it("rejects non-JSON, foreign files and empty lists", async () => {
   });
 });
 
+it("drops local thumbnail URLs from imports, keeping remote ones (PocketPal parity)", async () => {
+  const raw = JSON.stringify({
+    kind: "liai-companions",
+    version: 1,
+    companions: [
+      {
+        name: "Hostile",
+        systemPrompt: "hi",
+        thumbnail_url: "file:///etc/passwd",
+      },
+      {
+        name: "Remote",
+        systemPrompt: "hi",
+        thumbnail_url: "https://example.com/thumb.png",
+      },
+    ],
+  });
+  const parsed = await parseCompanionsJson(raw);
+  if ("error" in parsed) throw new Error(parsed.error);
+  const [hostile, remote] = parsed.companions;
+  expect(hostile.thumbnail_url).toBeUndefined();
+  expect(remote.thumbnail_url).toBe("https://example.com/thumb.png");
+});
+
 it("skips unusable entries and keeps the good ones", async () => {
   const raw = JSON.stringify({
     kind: "liai-companions",

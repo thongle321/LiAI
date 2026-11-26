@@ -512,6 +512,34 @@ export function createSendSlice(
             },
           });
         }
+      } else if (hasPartialContent) {
+        // PocketPal parity (useChatSession.ts hasPartialContent): ANY error
+        // thrown after tokens streamed is absorbed by the turn — the row
+        // keeps the text and is tagged interrupted, and the raw dump is
+        // suppressed. Only the context-full absorb above pins `used`; a
+        // generic absorb carries no usage. (Speculative-init with content
+        // lands here too, exactly as PocketPal's first gate precedes its
+        // speculative chain.)
+        updateBubble(opts.assistantId, {
+          streaming: false,
+          outcome: { interrupted: true },
+        });
+        settle();
+      } else if (message.toLowerCase().includes("network")) {
+        // PocketPal parity (useChatSession.ts errorMessage.includes('network')
+        // → common.networkError). Case-insensitive here because RN fetch
+        // reports "Network request failed"; pocketpal's case-sensitive match
+        // misses that casing. The empty bubble is dropped, like PocketPal's
+        // deleteMessageFromSession for the failed turn.
+        removeBubble(opts.assistantId);
+        settle();
+        set({
+          chatWarning: {
+            message: "Network error. Please try again.",
+            severity: "error",
+            recoverable: true,
+          },
+        });
       } else if (isToolArgsParseError) {
         // No content to attach the hint to. The native parser's JSON dump is
         // useless to a reader, so it becomes PocketPal's friendly message.
@@ -531,27 +559,22 @@ export function createSendSlice(
         // (the load-time memory check has no term for it). PocketPal turns
         // this into a friendly system message instead of the raw dump.
         // PocketPal shows the notice only when there is NO content.
-        if (hasPartialContent) {
-          updateBubble(opts.assistantId, {
-            streaming: false,
-            outcome: { interrupted: true },
-          });
-          settle();
-        } else {
-          removeBubble(opts.assistantId);
-          settle();
-          set({
-            chatWarning: {
-              message:
-                "This device could not start speculative decoding for this model — most likely there is not enough memory for the draft context. Turn off Speculative decoding under Settings → Advanced Settings and try again.",
-              severity: "warning",
-              recoverable: false,
-            },
-          });
-        }
+        removeBubble(opts.assistantId);
+        settle();
+        set({
+          chatWarning: {
+            message:
+              "This device could not start speculative decoding for this model — most likely there is not enough memory for the draft context. Turn off Speculative decoding under Settings → Advanced Settings and try again.",
+            severity: "warning",
+            recoverable: false,
+          },
+        });
       } else {
-        // Other errors: show a raw error bubble with retry affordance.
-        const error = llmError(message);
+        // Other errors: PocketPal's fallback is a system row reading
+        // "Completion failed: <msg>". Ours is the same wording on the
+        // error bubble, which keeps tap-to-retry (PocketPal's row has no
+        // inline retry) and the snackbar via chatWarning below.
+        const error = llmError(`Completion failed: ${message}`);
         updateBubble(opts.assistantId, { streaming: false, error });
         settle();
         // Preserve any existing warning (e.g., multimodal) from before the turn started.

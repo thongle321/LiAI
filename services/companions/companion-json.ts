@@ -18,6 +18,7 @@ import type { Companion } from "@/types/companion.ts";
 import type { SeedableCompanion } from "@/services/companions/builtins.ts";
 import {
   isLocalThumbnailPath,
+  keepRemoteThumbnailUrl,
   readThumbnailAsBase64,
   saveBase64Image,
 } from "./thumbnail.ts";
@@ -78,6 +79,10 @@ async function toSeedable(raw: unknown): Promise<SeedableCompanion | null> {
   //  field is optional, so a record missing them is a shape Companion can
   //  hold, and create-time validation (the companions store) guards again.
   const seedable = rest as unknown as SeedableCompanion;
+  // PocketPal parity: a local thumbnail_url in an untrusted backup is
+  // never honored — only remote URLs survive. Hostile or stale local
+  // paths are dropped; bytes (if any) return through thumbnail_data.
+  seedable.thumbnail_url = keepRemoteThumbnailUrl(rest.thumbnail_url);
   // Import: restore base64 thumbnail to local file
   if (typeof raw["thumbnail_data"] === "string") {
     const base64 = raw["thumbnail_data"] as string;

@@ -16,14 +16,16 @@ import {
   HfError,
   searchModels as hfSearchModels,
 } from "@/services/models/huggingface.ts";
+import * as LegacyFileSystem from "expo-file-system/legacy";
+import { isModelFilePath } from "@/utils/path-guard.ts";
 import { generateId } from "./storage.ts";
 import { DEFAULT_SEARCH_FILTERS } from "./persist-shape";
 
-/** The legacy FS module, loaded on demand like storage.ts's rnStorage().
- * A top-level import of a native module makes this whole slice unloadable
- * in node, which costs the search-race regression test; only the two file
- * operations below ever need it. */
-const legacyFs = () => import("expo-file-system/legacy");
+/** Static FS import, like downloads.ts in this folder: Jest's CJS runtime
+ *  cannot execute a raw dynamic `import()`, which left removeModel /
+ *  addLocalModel / detachProjector untestable. The per-suite
+ *  `jest.mock("expo-file-system/legacy", ...)` precedent applies. */
+const legacyFs = () => Promise.resolve(LegacyFileSystem);
 
 /** The search currently on the wire. A newer search aborts the older one,
  * and the older one is ignored even if it still resolves: Hub latency
@@ -209,6 +211,12 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
       for (const dir of ["models/", "models/local/"]) {
         for (const name of names) {
           const filePath = `${fs.documentDirectory}${dir}${name}`;
+          // PocketPal parity (pathGuard): a hostile imported name must
+          // never resolve outside the models directory.
+          if (!isModelFilePath(filePath, fs.documentDirectory)) {
+            console.warn("[ModelStore] Skipped deleting unexpected path:", filePath);
+            continue;
+          }
           try {
             await fs.deleteAsync(filePath, { idempotent: true });
           } catch {
@@ -250,14 +258,16 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
       .filter((m) => m.id !== modelId)
       .map((m) => m.name);
     const fs = await legacyFs();
-    try {
-      await fs.deleteAsync(
-        `${fs.documentDirectory}models/${projector.name}`,
-        { idempotent: true },
-      );
-    } catch {
-      // The record is what vision reads; an undeletable file is harmless
-      // (nothing loads it) and reported nowhere.
+    const projectorFile = `${fs.documentDirectory}models/${projector.name}`;
+    if (!isModelFilePath(projectorFile, fs.documentDirectory)) {
+      console.warn("[ModelStore] Skipped deleting unexpected path:", projectorFile);
+    } else {
+      try {
+        await fs.deleteAsync(projectorFile, { idempotent: true });
+      } catch {
+        // The record is what vision reads; an undeletable file is harmless
+        // (nothing loads it) and reported nowhere.
+      }
     }
     get().updateModel(modelId, {
       projector: undefined,
@@ -285,12 +295,18 @@ export const createCatalogSlice: StateCreator<ModelStore, [], [], CatalogSlice> 
     const fs = await legacyFs();
     const base = fs.documentDirectory ?? "";
     const dir = `${base}models/local/`;
+    // PocketPal parity: the picked file's name is untrusted — a traversal
+    // name must never become the copy destination.
+    const destination = `${dir}${fileName}`;
+    if (!isModelFilePath(destination, fs.documentDirectory)) {
+      throw new Error(`Invalid model file path: ${destination}`);
+    }
     try {
       const info = await fs.getInfoAsync(dir);
       if (!info.exists) {
         await fs.makeDirectoryAsync(dir, { intermediates: true });
       }
-      await fs.copyAsync({ from: sourceUri, to: `${dir}${fileName}` });
+      await fs.copyAsync({ from: sourceUri, to: destination });
     } catch (e) {
       console.warn("Failed to copy local model file:", e);
       throw e instanceof Error ? e : new Error("Copy failed");

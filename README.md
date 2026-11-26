@@ -37,7 +37,7 @@ Once the required model and voice assets are downloaded, local chat, speech, and
 
 ## Requirements
 
-LiAI targets **Android and iOS**. The web script in `package.json` is not the primary supported target.
+LiAI targets **Android**.
 
 ### Android
 
